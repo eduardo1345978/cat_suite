@@ -13,7 +13,8 @@ if(NOT TARGET cat_shared)
         ${CMAKE_CURRENT_LIST_DIR}/Source/MidiScheduler.cpp
         ${CMAKE_CURRENT_LIST_DIR}/Source/MidiExport.cpp
         ${CMAKE_CURRENT_LIST_DIR}/Source/PresetBar.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/Source/CatLink.cpp)
+        ${CMAKE_CURRENT_LIST_DIR}/Source/CatLink.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/Source/ComputerKeyboard.cpp)
 
     target_include_directories(cat_shared INTERFACE ${CMAKE_CURRENT_LIST_DIR}/Source)
 endif()

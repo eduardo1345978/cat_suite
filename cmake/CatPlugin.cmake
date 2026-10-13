@@ -7,9 +7,21 @@ include_guard(GLOBAL)
 option(CAT_CUBASE_INSTRUMENT_MODE "Build as VST3 instrument with MIDI output (required for Cubase)" ON)
 option(CAT_COPY_AFTER_BUILD "Copy the plug-ins to the system plug-in folder after building" OFF)
 set(CAT_PLUGIN_FORMATS VST3 Standalone CACHE STRING "Plug-in formats to build")
+# The plug-ins that make sound also become standalone apps (play them with the computer keyboard).
+option(CAT_SOUND_STANDALONE "Always build the sound-making plug-ins as standalone apps too" ON)
 
+function(_cat_formats out_var makes_sound)
+    set(_f ${CAT_PLUGIN_FORMATS})
+    if(makes_sound AND CAT_SOUND_STANDALONE AND NOT "Standalone" IN_LIST _f)
+        list(APPEND _f Standalone)
+    endif()
+    set(${out_var} ${_f} PARENT_SCOPE)
+endfunction()
+
+# SOUND: the plug-in also makes its own sound (Life-Cat) -> gets a standalone app.
 function(cat_add_midi_plugin target)
-    cmake_parse_arguments(ARG "" "PRODUCT_NAME;PLUGIN_CODE;DESCRIPTION" "SOURCES" ${ARGN})
+    cmake_parse_arguments(ARG "SOUND" "PRODUCT_NAME;PLUGIN_CODE;DESCRIPTION" "SOURCES" ${ARGN})
+    _cat_formats(_formats ${ARG_SOUND})
 
     if(CAT_CUBASE_INSTRUMENT_MODE)
         set(_is_synth TRUE)
@@ -29,7 +41,7 @@ function(cat_add_midi_plugin target)
         PLUGIN_CODE                ${ARG_PLUGIN_CODE}
         PRODUCT_NAME               "${ARG_PRODUCT_NAME}"
         DESCRIPTION                "${ARG_DESCRIPTION}"
-        FORMATS                    ${CAT_PLUGIN_FORMATS}
+        FORMATS                    ${_formats}
         IS_SYNTH                   ${_is_synth}
         IS_MIDI_EFFECT             ${_is_midi_fx}
         NEEDS_MIDI_INPUT           TRUE
@@ -69,6 +81,7 @@ endfunction()
 # Sing-Cat makes sound: a real VST3 instrument (MIDI in, stereo audio out, no MIDI out).
 function(cat_add_synth_plugin target)
     cmake_parse_arguments(ARG "" "PRODUCT_NAME;PLUGIN_CODE;DESCRIPTION" "SOURCES" ${ARGN})
+    _cat_formats(_formats TRUE)
 
     juce_add_plugin(${target}
         VERSION                    1.0.0
@@ -78,7 +91,7 @@ function(cat_add_synth_plugin target)
         PLUGIN_CODE                ${ARG_PLUGIN_CODE}
         PRODUCT_NAME               "${ARG_PRODUCT_NAME}"
         DESCRIPTION                "${ARG_DESCRIPTION}"
-        FORMATS                    ${CAT_PLUGIN_FORMATS}
+        FORMATS                    ${_formats}
         IS_SYNTH                   TRUE
         IS_MIDI_EFFECT             FALSE
         NEEDS_MIDI_INPUT           TRUE

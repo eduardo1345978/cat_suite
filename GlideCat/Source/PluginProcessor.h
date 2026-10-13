@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "ComputerKeyboard.h"
 #include <map>
 #include "PresetBar.h"
 #include "GlideSynth.h"
@@ -16,7 +17,7 @@
     Two preset banks: SOUND presets (synth, expression, modulation, effects - the preset bar) and
     GLIDE presets (glide behaviour + autopilot), so any sound can be tried with any glide.
 */
-class GlideCatProcessor : public juce::AudioProcessor
+class GlideCatProcessor : public juce::AudioProcessor, public cat::ComputerKeyboardTarget
 {
 public:
     GlideCatProcessor();

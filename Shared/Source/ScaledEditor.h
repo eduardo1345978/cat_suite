@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "CatLookAndFeel.h"
+#include "ComputerKeyboard.h"
 
 namespace cat
 {
@@ -22,6 +23,7 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    void parentHierarchyChanged() override;
 
     static constexpr float minScale = 0.5f, maxScale = 2.5f;
 
@@ -31,6 +33,8 @@ private:
 
     CatLookAndFeel lnf;
     std::unique_ptr<juce::Component> content;
+    std::unique_ptr<ComputerKeyboardBar> keyboardBar;     // standalone apps only
+    int barHeight = 0;
     juce::String name;
     int designWidth, designHeight;
     float currentScale = 1.0f;

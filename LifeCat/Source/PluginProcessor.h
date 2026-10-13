@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "ComputerKeyboard.h"
 #include "PresetBar.h"
 #include "HostSync.h"
 #include "MidiLearn.h"
@@ -17,7 +18,7 @@
     music evolves by itself. You are the gardener: feed, add, remove, build walls and zones,
     inspect, clone and breed. Own sound + optional MIDI out for other synths.
 */
-class LifeCatProcessor : public juce::AudioProcessor
+class LifeCatProcessor : public juce::AudioProcessor, public cat::ComputerKeyboardTarget
 {
 public:
     LifeCatProcessor();

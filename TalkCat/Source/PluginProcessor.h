@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "ComputerKeyboard.h"
 #include "PresetBar.h"
 #include "VoiceEngine.h"
 #include "Score.h"
@@ -16,7 +17,7 @@
     LIVE:  MIDI from a Cubase track or a keyboard sings the next syllable of the live lyrics.
     Both can run together. English, Slovak, Japanese (romaji) and Cat language.
 */
-class TalkCatProcessor : public juce::AudioProcessor, private juce::Timer
+class TalkCatProcessor : public juce::AudioProcessor, public cat::ComputerKeyboardTarget, private juce::Timer
 {
 public:
     TalkCatProcessor();

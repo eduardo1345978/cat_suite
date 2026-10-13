@@ -12,7 +12,7 @@ if(NOT TARGET cat_shared)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../Shared ${CMAKE_BINARY_DIR}/Shared)
 endif()
 
-cat_add_midi_plugin(LifeCat
+cat_add_midi_plugin(LifeCat SOUND
     PRODUCT_NAME "Life-Cat"
     PLUGIN_CODE  Lif1
     DESCRIPTION  "A tiny ecosystem that makes music"

@@ -296,6 +296,7 @@ void LifeCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
 {
     juce::ScopedNoDenormals noDenormals;
     const int numSamples = buffer.getNumSamples();
+    mergeComputerKeyboard (midi, numSamples);      // standalone app: notes from the computer keyboard
     buffer.clear();
     hostSync.beginBlock (getPlayHead(), numSamples);
     midiLearn.processMidi (midi);

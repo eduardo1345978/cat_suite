@@ -6,10 +6,12 @@
 2. Unzip it, close Cubase and double-click **Install-Cat-Suite.bat**.
 3. In Cubase: **Studio > VST Plug-in Manager > Rescan**.
 
+**Only the instruments that make sound, as apps** (Sing-Cat, Talk-Cat, Glide-Cat, Life-Cat): download **[Get-Cat-Sound-Apps.bat](../../releases/download/latest/Get-Cat-Sound-Apps.bat)** and double-click it (if Windows warns, click *More info > Run anyway*). It downloads just those four, installs them as standalone apps with Start menu and Desktop shortcuts, and also as VST3 plug-ins. In the apps you can play with a MIDI keyboard or your **computer keyboard**: `A S D F G H J K L` = white keys, `W E T Y U O P` = black keys (Z works as Y on Slovak / German keyboards), Left / Right arrow = octave, Down / Up arrow = velocity.
+
 Every change pushed to `main` is built automatically on GitHub (see the **Actions** tab); the newest build replaces the "latest" release.
 
 
-Six VST3 MIDI plug-ins and three instruments (a choir, a gliding synth and a vocaloid-style singer) (JUCE 8, C++20, CMake). They work on their own or chained:
+Six VST3 MIDI plug-ins and four instruments (a choir, a gliding synth, a vocaloid-style singer and a living ecosystem; also as standalone apps) (JUCE 8, C++20, CMake). They work on their own or chained:
 
 | Plug-in | What it does |
 |---|---|

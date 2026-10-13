@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "ComputerKeyboard.h"
 #include "PresetBar.h"
 #include "ChoirEngine.h"
 #include "HostSync.h"
@@ -13,7 +14,7 @@
     MIDI In -> singers (glottis + vocal tract + nose, one per singer, up to 64) -> stage -> room -> audio.
     Unlike the other Cat Suite plug-ins this one makes sound: load it as an instrument.
 */
-class SingCatProcessor : public juce::AudioProcessor
+class SingCatProcessor : public juce::AudioProcessor, public cat::ComputerKeyboardTarget
 {
 public:
     SingCatProcessor();
