@@ -7,7 +7,7 @@
 namespace cat
 {
 /** Each plug-in has its own cat: same body, its own accessory. */
-enum class CatStyle { Plain, Chord, Patt, Bend, Drum, Orbit, Talk, Bass, Glide, Sing };
+enum class CatStyle { Plain, Chord, Patt, Bend, Drum, Orbit, Talk, Bass, Glide, Sing, Life };
 
 /**
     Music-reactive cat silhouette (pure vector, stays sharp at any UI scale).

@@ -949,7 +949,7 @@ void testPresetPrograms()
 {
     std::cout << "\nFactory presets exposed to the host" << std::endl;
     struct P { const char* path; const char* name; int minCount; };
-    for (const auto& pl : { P { BENDCAT_VST3, "Bend-Cat", 25 }, P { DRUMCAT_VST3, "Drum-Cat", 24 }, P { ORBITCAT_VST3, "Orbit-Cat", 32 }, P { SINGCAT_VST3, "Sing-Cat", 48 }, P { BASSCAT_VST3, "Bass-Cat", 24 }, P { GLIDECAT_VST3, "Glide-Cat", 40 }, P { TALKCAT_VST3, "Talk-Cat", 30 } })
+    for (const auto& pl : { P { BENDCAT_VST3, "Bend-Cat", 25 }, P { DRUMCAT_VST3, "Drum-Cat", 24 }, P { ORBITCAT_VST3, "Orbit-Cat", 32 }, P { SINGCAT_VST3, "Sing-Cat", 48 }, P { BASSCAT_VST3, "Bass-Cat", 24 }, P { GLIDECAT_VST3, "Glide-Cat", 40 }, P { TALKCAT_VST3, "Talk-Cat", 30 }, P { LIFECAT_VST3, "Life-Cat", 18 } })
     {
         auto plug = loadPlugin (pl.path);
         if (plug == nullptr) { ++failures; continue; }
@@ -1332,6 +1332,149 @@ void testTalkCatSinger()
     check (state == state2 && state.getSize() > 500, "state (incl. the score) save / restore round-trip (" + juce::String ((int) state.getSize()) + " bytes)");
 }
 
+//==============================================================================
+struct LifeRun { std::vector<Event> notes; std::vector<float> mono; float peak = 0.0f; bool finite = true; double cpu = 0.0; std::vector<Event> all; };
+
+LifeRun runLife (juce::AudioPluginInstance& p, TestPlayHead& ph, int64_t length, const std::vector<Event>& in = {}, int64_t startAt = 0)
+{
+    LifeRun r;
+    juce::AudioBuffer<float> audio (2, blockSize);
+    const auto start = juce::Time::getMillisecondCounterHiRes();
+    for (int64_t t = startAt; t < startAt + length; t += blockSize)
+    {
+        ph.ppq = (double) t / samplesPerBeat;
+        audio.clear();
+        juce::MidiBuffer midi;
+        for (const auto& e : in)
+            if (e.time >= t && e.time < t + blockSize) midi.addEvent (e.msg, (int) (e.time - t));
+        p.processBlock (audio, midi);
+        for (const auto meta : midi)
+        {
+            r.all.push_back ({ t + meta.samplePosition, meta.getMessage() });
+            if (meta.getMessage().isNoteOn()) r.notes.push_back ({ t + meta.samplePosition, meta.getMessage() });
+        }
+        for (int i = 0; i < blockSize; ++i)
+        {
+            const float l = audio.getSample (0, i), rr = audio.getSample (1, i);
+            r.finite = r.finite && std::isfinite (l) && std::isfinite (rr);
+            r.peak = juce::jmax (r.peak, std::abs (l), std::abs (rr));
+            r.mono.push_back (0.5f * (l + rr));
+        }
+    }
+    r.cpu = (juce::Time::getMillisecondCounterHiRes() - start) / 1000.0 / ((double) length / sampleRate);
+    return r;
+}
+
+std::unique_ptr<juce::XmlElement> lifeWorldXml (juce::AudioPluginInstance& p)
+{
+    juce::MemoryBlock st;
+    p.getStateInformation (st);
+    auto xml = juce::AudioProcessor::getXmlFromBinary (st.getData(), (int) st.getSize());
+    if (xml != nullptr && xml->hasTagName ("VST3PluginState"))
+        if (auto* comp = xml->getChildByName ("IComponent"))
+        {
+            juce::MemoryBlock inner;
+            inner.fromBase64Encoding (comp->getAllSubText());
+            xml = juce::AudioProcessor::getXmlFromBinary (inner.getData(), (int) inner.getSize());
+        }
+    if (xml == nullptr) return nullptr;
+    if (auto* w = xml->getChildByName ("WORLD")) return std::make_unique<juce::XmlElement> (*w);
+    return nullptr;
+}
+
+void testLifeCat()
+{
+    std::cout << "\nLife-Cat: a tiny ecosystem that makes music" << std::endl;
+    auto life = loadPlugin (LIFECAT_VST3);
+    if (life == nullptr) { ++failures; return; }
+    TestPlayHead ph;
+    ph.playing = true;
+    prepare (*life, ph);
+    check (life->getTotalNumOutputChannels() == 2 && life->acceptsMidi() && life->producesMidi(), "stereo instrument with MIDI in and out");
+
+    life->setCurrentProgram (0);          // Quiet Pond: C major pentatonic, 1/8 grid
+    setParam (*life, "MIDI Out", "On");
+    const int64_t sec = (int64_t) sampleRate;
+    const auto r = runLife (*life, ph, 30 * sec);
+    int inKey = 0, onGrid = 0;
+    std::set<int> pitches;
+    for (const auto& e : r.notes)
+    {
+        const int pc = e.msg.getNoteNumber() % 12;
+        if (pc == 0 || pc == 2 || pc == 4 || pc == 7 || pc == 9) ++inKey;
+        const auto m = e.time % 12000;
+        if (m <= 1 || m >= 11999) ++onGrid;
+        pitches.insert (e.msg.getNoteNumber());
+    }
+    const int n = (int) r.notes.size();
+    std::cout << "  30 s: " << n << " notes, " << (int) pitches.size() << " different pitches, level " << juce::String (rms (r.mono, 0, 30 * sec), 3)
+              << ", peak " << juce::String (r.peak, 2) << ", CPU " << juce::String (r.cpu * 100.0, 1) << " %" << std::endl;
+    check (r.finite && r.peak < 1.0f, "own sound is finite and below clipping");
+    check (rms (r.mono, 5 * sec, 30 * sec) > 0.01f, "the creatures are clearly audible");
+    check (n >= 20 && pitches.size() >= 5, "the creatures sing a melody (MIDI out too)");
+    check (inKey == n, "every note is in the key / scale (C major pentatonic)");
+    check (onGrid == n, "every note lands on the 1/8 grid (On the Beat)");
+    check (r.cpu < 0.15, "runs comfortably in real time");
+
+    // MIDI out off: the notes still sounding get their note-offs, nothing hangs
+    setParam (*life, "MIDI Out", "Off");
+    const auto tail = runLife (*life, ph, 10 * sec, {}, 30 * sec);
+    auto everything = r.all;
+    for (auto& e : tail.all) everything.push_back (e);
+    juce::String report;
+    check (balanced (everything, report) && tail.notes.empty(), "turning MIDI Out off ends every note cleanly " + report);
+
+    // Held chord: they only sing notes of the chord you hold
+    life->setCurrentProgram (6);
+    setParam (*life, "MIDI Out", "On");
+    std::vector<Event> chord;
+    for (int nn : { 48, 52, 55 }) chord.push_back ({ 0, juce::MidiMessage::noteOn (1, nn, (juce::uint8) 100) });
+    const auto h = runLife (*life, ph, 15 * sec, chord);
+    int chordTones = 0;
+    for (const auto& e : h.notes) { const int pc = e.msg.getNoteNumber() % 12; if (pc == 0 || pc == 4 || pc == 7) ++chordTones; }
+    std::cout << "  holding C-E-G: " << chordTones << " of " << (int) h.notes.size() << " notes are chord tones" << std::endl;
+    check (! h.notes.empty() && chordTones == (int) h.notes.size(), "'Held chord' mode sings only the notes you hold");
+
+    // Same world + same settings = same music
+    auto a = loadPlugin (LIFECAT_VST3), b = loadPlugin (LIFECAT_VST3);
+    TestPlayHead pa, pb;
+    pa.playing = pb.playing = true;
+    prepare (*a, pa); prepare (*b, pb);
+    a->setCurrentProgram (1); b->setCurrentProgram (1);
+    setParam (*a, "MIDI Out", "On"); setParam (*b, "MIDI Out", "On");
+    const auto ra = runLife (*a, pa, 12 * sec), rb = runLife (*b, pb, 12 * sec);
+    bool same = ra.notes.size() == rb.notes.size() && ! ra.notes.empty();
+    for (size_t i = 0; same && i < ra.notes.size(); ++i)
+        same = ra.notes[i].time == rb.notes[i].time && ra.notes[i].msg.getNoteNumber() == rb.notes[i].msg.getNoteNumber();
+    check (same, "a world preset is deterministic (same seed -> same notes)");
+
+    // Evolution: a fast, wild world grows many generations and keeps living
+    life->setCurrentProgram (5);          // Evolution Lab
+    setParam (*life, "Life Speed", "4");
+    const auto ev = runLife (*life, ph, 120 * sec);
+    auto w = lifeWorldXml (*life);
+    const int gen = w != nullptr ? w->getIntAttribute ("gen") : -1;
+    int alive = 0;
+    std::set<juce::String> geneSets;
+    if (w != nullptr) for (auto* c : w->getChildWithTagNameIterator ("C")) { geneSets.insert (c->getStringAttribute ("genes")); ++alive; }
+    std::cout << "  Evolution Lab, 2 min at 4x: generation " << gen << ", births " << (w ? w->getIntAttribute ("births") : 0)
+              << ", " << alive << " creatures alive, " << (int) geneSets.size() << " distinct genomes" << std::endl;
+    check (ev.finite && ev.peak < 1.0f, "fast evolution stays finite and below clipping");
+    check (gen >= 5, "creatures breed over many generations");
+    check (alive >= 4 && geneSets.size() >= 4, "the ecosystem survives with varied genes");
+
+    // Save / load keeps the whole world (creatures, genes, walls)
+    juce::MemoryBlock st;
+    life->getStateInformation (st);
+    auto restored = loadPlugin (LIFECAT_VST3);
+    TestPlayHead pr;
+    prepare (*restored, pr);
+    restored->setStateInformation (st.getData(), (int) st.getSize());
+    auto w2 = lifeWorldXml (*restored);
+    check (w != nullptr && w2 != nullptr && w->isEquivalentTo (w2.get(), false),
+           "save / load restores the world exactly (" + juce::String ((int) st.getSize()) + " bytes)");
+}
+
 int main()
 {
     juce::ScopedJuceInitialiser_GUI juceInit;
@@ -1349,6 +1492,7 @@ int main()
     testChordCatStrum();
     testGlideCat();
     testTalkCatSinger();
+    testLifeCat();
 
     std::cout << "\n" << (failures == 0 ? "ALL TESTS PASSED" : juce::String (failures) + " TEST(S) FAILED") << std::endl;
     return failures == 0 ? 0 : 1;

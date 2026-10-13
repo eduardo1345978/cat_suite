@@ -460,6 +460,39 @@ void CatVisualizer::drawAccessory (juce::Graphics& g, const juce::AffineTransfor
             break;
         }
 
+        case CatStyle::Life:
+        {
+            // Gardener cat: a sprout on the head and tiny creatures swimming around it
+            juce::Path stem;
+            stem.startNewSubPath (hc.x, hc.y - 14.0f);
+            stem.quadraticTo (hc.x + 1.5f, hc.y - 20.0f, hc.x, hc.y - 25.0f);
+            g.setColour (Colours::green);
+            stroke (stem, 1.8f, headTilt);
+            juce::Path leaves;
+            const float sway = std::sin (time * 1.6f) * 0.25f;
+            leaves.addEllipse (hc.x - 9.0f, hc.y - 28.0f, 9.0f, 4.5f);
+            leaves.applyTransform (juce::AffineTransform::rotation (-0.4f + sway, hc.x, hc.y - 25.0f));
+            juce::Path leaf2;
+            leaf2.addEllipse (hc.x, hc.y - 28.0f, 9.0f, 4.5f);
+            leaf2.applyTransform (juce::AffineTransform::rotation (0.4f + sway, hc.x, hc.y - 25.0f));
+            leaves.addPath (leaf2);
+            g.fillPath (leaves, headTilt);
+
+            const juce::Colour cols[] = { Colours::green, Colours::red, Colours::teal };
+            for (int k = 0; k < 3; ++k)
+            {
+                const float a = time * (0.5f + 0.15f * (float) k) + (float) k * 2.1f;
+                const float x = 52.0f + std::cos (a) * (30.0f + 4.0f * (float) k);
+                const float y = 48.0f + std::sin (a) * 12.0f;
+                const float r = 2.6f + 1.8f * energy * (k == 1 ? 1.0f : 0.6f);
+                juce::Path blob;
+                blob.addEllipse (x - r, y - r, r * 2.0f, r * 2.0f);
+                g.setColour (cols[k].withAlpha (0.55f + 0.45f * energy));
+                g.fillPath (blob, toScreen);
+            }
+            break;
+        }
+
         case CatStyle::Plain:
         default:
             break;

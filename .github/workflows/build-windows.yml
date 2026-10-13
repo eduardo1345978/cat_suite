@@ -50,7 +50,7 @@ jobs:
           Copy-Item packaging\README-install.txt $pkg
           Compress-Archive -Path "$pkg\*" -DestinationPath Cat-Suite-Windows.zip -Force
           $count = (Get-ChildItem "$pkg\VST3" -Directory).Count
-          if ($count -lt 9) { throw "Only $count plug-ins were packed" }
+          if ($count -lt 10) { throw "Only $count plug-ins were packed" }
 
       - name: Keep the zip on the Actions page
         uses: actions/upload-artifact@v4

@@ -15,4 +15,5 @@ xcopy /E /I /Y "build\SingCat\SingCat_artefacts\Release\VST3\Sing-Cat.vst3" "%DE
 xcopy /E /I /Y "build\BassCat\BassCat_artefacts\Release\VST3\Bass-Cat.vst3" "%DEST%\Bass-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Bass-Cat (is Cubase still running?) >> "%LOG%"
 xcopy /E /I /Y "build\GlideCat\GlideCat_artefacts\Release\VST3\Glide-Cat.vst3" "%DEST%\Glide-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Glide-Cat (is Cubase still running?) >> "%LOG%"
 xcopy /E /I /Y "build\TalkCat\TalkCat_artefacts\Release\VST3\Talk-Cat.vst3" "%DEST%\Talk-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Talk-Cat (is Cubase still running?) >> "%LOG%"
+xcopy /E /I /Y "build\LifeCat\LifeCat_artefacts\Release\VST3\Life-Cat.vst3" "%DEST%\Life-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Life-Cat (is Cubase still running?) >> "%LOG%"
 echo INSTALL FINISHED >> "%LOG%"
