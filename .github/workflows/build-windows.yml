@@ -1,0 +1,74 @@
+# Builds every Cat Suite plug-in on Windows, runs the host tests, and publishes a
+# ready-to-install zip (plug-ins + Install-Cat-Suite.bat) as the "latest" release.
+name: Build Windows plug-ins
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:        # "Run workflow" button on the Actions page
+
+permissions:
+  contents: write           # needed to publish the release
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true  # a newer push replaces a build that is still running
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Reuse the JUCE download
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: juce-8.0.15-${{ hashFiles('cmake/JuceSetup.cmake') }}
+
+      - name: Configure (VST3 only, with tests)
+        run: cmake -B build -A x64 -DCAT_BUILD_TESTS=ON -DCAT_PLUGIN_FORMATS=VST3
+
+      - name: Build all plug-ins + test host
+        run: cmake --build build --config Release --parallel --target CatSuiteHostTest
+
+      - name: Run the tests
+        run: build\Tests\CatSuiteHostTest_artefacts\Release\CatSuiteHostTest.exe
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $pkg = "pkg\Cat-Suite"
+          New-Item -ItemType Directory "$pkg\VST3" -Force | Out-Null
+          Get-ChildItem build -Recurse -Directory -Filter *.vst3 |
+            Where-Object { $_.FullName -match '_artefacts\\Release\\VST3\\[^\\]+\.vst3$' } |
+            ForEach-Object { Copy-Item $_.FullName "$pkg\VST3\" -Recurse; Write-Host "packed $($_.Name)" }
+          Copy-Item packaging\Install-Cat-Suite.bat $pkg
+          Copy-Item packaging\README-install.txt $pkg
+          Compress-Archive -Path "$pkg\*" -DestinationPath Cat-Suite-Windows.zip -Force
+          $count = (Get-ChildItem "$pkg\VST3" -Directory).Count
+          if ($count -lt 9) { throw "Only $count plug-ins were packed" }
+
+      - name: Keep the zip on the Actions page
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cat-Suite-Windows
+          path: Cat-Suite-Windows.zip
+          retention-days: 30
+
+      - name: Publish as the "latest" release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release delete latest --yes --cleanup-tag 2>$null
+          $global:LASTEXITCODE = 0
+          $date = Get-Date -Format "yyyy-MM-dd HH:mm"
+          gh release create latest Cat-Suite-Windows.zip `
+            --target "${{ github.sha }}" `
+            --title "Cat Suite - latest build ($date UTC)" `
+            --notes "Download **Cat-Suite-Windows.zip**, unzip it, close Cubase and double-click **Install-Cat-Suite.bat**. Then rescan in Cubase (Studio > VST Plug-in Manager). Built from commit ${{ github.sha }}."
