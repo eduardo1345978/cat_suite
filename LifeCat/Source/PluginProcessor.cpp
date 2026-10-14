@@ -11,15 +11,27 @@ namespace
     juce::StringArray delayNames() { return { "1/8", "1/8 dotted", "1/4", "1/4 dotted", "1/2" }; }
     double delayBeatsFor (int i) { static const double b[] = { 0.5, 0.75, 1.0, 1.5, 2.0 }; return b[juce::jlimit (0, 4, i)]; }
 
+    juce::String spId (int role, const char* what) { return "sp" + juce::String (role) + what; }
+
     /** Parameters a world preset resets before applying its own values. */
     const juce::StringArray& presetParamIds()
     {
-        static const juce::StringArray ids { "lifeSpeed", "foodGrowth", "mutation", "metabolism", "breeding", "lifespan", "maxPop", "immigration",
-                                             "pitchMode", "key", "scale", "lowNote", "highNote", "quantize", "grid", "swing", "density", "maxNotes",
-                                             "noteLength", "theme", "brightness", "attack", "release", "reverbMix", "reverbSize", "delayMix",
-                                             "delayTime", "delayFb", "width" };
+        static const juce::StringArray ids = []
+        {
+            juce::StringArray a { "lifeSpeed", "foodGrowth", "mutation", "metabolism", "breeding", "lifespan", "maxPop", "immigration",
+                                  "pitchMode", "key", "scale", "lowNote", "highNote", "quantize", "grid", "swing", "density", "maxNotes",
+                                  "noteLength", "theme", "brightness", "attack", "release", "reverbMix", "reverbSize", "delayMix",
+                                  "delayTime", "delayFb", "width",
+                                  "gravity", "wind", "windDir", "dayLength", "seasonLength", "season", "weather", "ambience", "dayNightSound" };
+            for (int r = 0; r < numRoles; ++r)
+                for (auto* w : { "Sing", "Vol", "Oct", "Sound", "Speed", "Max" }) a.add (spId (r, w));
+            return a;
+        }();
         return ids;
     }
+
+    const float dayLengths[] = { 0.0f, 60.0f, 120.0f, 240.0f, 480.0f };
+    const float seasonLengths[] = { 0.0f, 60.0f, 120.0f, 300.0f, 600.0f };
 }
 
 //==============================================================================
@@ -37,6 +49,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout LifeCatProcessor::createLayo
             if (u == "x")  return String (v, 2) + "x";
             if (u == "dB") return String (v, 1) + " dB";
             if (u == "sw") return String (roundToInt (v)) + "%";
+            if (u == "deg") return String (roundToInt (v)) + juce::String (juce::CharPointer_UTF8 ("\xc2\xb0"));
             return String (v, 2);
         };
         layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, NormalisableRange<float> (lo, hi, 0.0f, skew), def,
@@ -96,10 +109,39 @@ juce::AudioProcessorValueTreeState::ParameterLayout LifeCatProcessor::createLayo
     pct ("width", "Width", 0.8f);
     fl ("volume", "Volume", -36.0f, 6.0f, 0.0f, "dB");
 
+    // World (sandbox physics)
+    pct ("gravity", "Gravity", 0.0f);
+    pct ("wind", "Wind", 0.0f);
+    fl ("windDir", "Wind Direction", -180.0f, 180.0f, 0.0f, "deg");
+    ch ("dayLength", "Day / Night", { "Off (always day)", "1 min day", "2 min day", "4 min day", "8 min day" }, 0);
+    ch ("seasonLength", "Seasons", { "Off (fixed)", "1 min each", "2 min each", "5 min each", "10 min each" }, 0);
+    ch ("season", "Season", { "Spring", "Summer", "Autumn", "Winter" }, 1);
+    ch ("weather", "Weather", { "Auto", "Clear", "Rain", "Snow", "Fog", "Storm" }, 1);
+    pct ("ambience", "Weather Sounds", 0.35f);
+    pct ("dayNightSound", "Day/Night Colour", 0.5f);
+
+    // Species (one set per kind of creature)
+    const auto roles = roleParamNames();
+    for (int r = 0; r < numRoles; ++r)
+    {
+        const auto n = roles[r];
+        bo (spId (r, "Sing"), n + " Sing", true);
+        fl (spId (r, "Vol"), n + " Volume", -30.0f, 6.0f, 0.0f, "dB");
+        in (spId (r, "Oct"), n + " Octave", -2, 2, 0, [] (int v) { return v > 0 ? "+" + String (v) : String (v); });
+        ch (spId (r, "Sound"), n + " Sound", soundTypeNames(), 0);
+        fl (spId (r, "Speed"), n + " Speed", 0.25f, 2.0f, 1.0f, "x");
+        in (spId (r, "Max"), n + " Max", 0, maxCreatures, roleInfo ((Role) r).defaultMax);
+    }
+
     // MIDI
     bo ("midiOut", "MIDI Out", false);
-    ch ("midiChannels", "MIDI Channels", { "All on channel 1", "Grazers 1, Hunters 2, Drifters 3" }, 0);
+    ch ("midiChannels", "MIDI Channels", { "All on channel 1", "One channel per kind (1-7)" }, 0);
     return layout;
+}
+
+juce::StringArray LifeCatProcessor::roleParamNames()
+{
+    return { "Grazers", "Hunters", "Drifters", "Pollinators", "Scavengers", "Giants", "Swarms" };
 }
 
 //==============================================================================
@@ -107,25 +149,39 @@ const std::vector<LifeCatProcessor::WorldPreset>& LifeCatProcessor::presets()
 {
     // scale: 0 Major 1 Minor 2 Dorian 3 Mixo 4 Lydian 5 Phrygian 6 HarmMinor 7 MajPenta 8 MinPenta 9 Japanese 10 WholeTone
     // grid: 0 1/4 1 1/8 2 1/16 3 1/8T 4 1/16T 5 1/32
+    // counts: grazers, hunters, drifters, pollinators, scavengers, giants, swarms
+    // "sp<kind>Max" 0 keeps a kind out of a world; dayLength 1..4 = 1/2/4/8 min days; weather 0 auto 1 clear 2 rain 3 snow 4 fog 5 storm
     static const std::vector<WorldPreset> list = {
-        { "Quiet Pond", 0, 11, 8, 2, 4, 40, { { "scale", 7 }, { "density", 0.45f }, { "reverbMix", 0.45f } } },
-        { "Busy Garden", 0, 23, 18, 4, 4, 80, { { "grid", 2 }, { "density", 0.7f }, { "maxNotes", 5 }, { "foodGrowth", 0.7f } } },
-        { "Kalimba Meadow", 0, 5, 12, 2, 3, 60, { { "scale", 0 }, { "key", 2 }, { "release", -0.3f }, { "brightness", 0.2f }, { "grid", 2 } } },
-        { "Two Ponds", 0, 31, 12, 3, 4, 50, { { "scale", 1 }, { "key", 9 } }, 1 },
-        { "Predator Waves", 0, 17, 20, 6, 3, 70, { { "scale", 8 }, { "key", 4 }, { "grid", 2 }, { "swing", 30.0f } } },
-        { "Evolution Lab", 0, 99, 14, 3, 5, 60, { { "mutation", 0.9f }, { "lifeSpeed", 2.0f }, { "lifespan", 0.6f }, { "scale", 2 } } },
-        { "Follow My Chords", 0, 12, 12, 3, 5, 50, { { "pitchMode", 2 }, { "grid", 2 } } },
-        { "Deep Ocean", 1, 7, 10, 3, 8, 50, { { "scale", 2 }, { "key", 2 }, { "density", 0.45f }, { "reverbMix", 0.55f } } },
-        { "Jellyfish Lullaby", 1, 42, 4, 1, 12, 30, { { "scale", 7 }, { "quantize", 0 }, { "density", 0.4f }, { "attack", 0.5f }, { "release", 0.6f } } },
-        { "River Current", 1, 21, 12, 3, 6, 60, { { "scale", 3 }, { "key", 7 } }, 3 },
-        { "Coral Reef", 1, 77, 20, 4, 6, 90, { { "grid", 2 }, { "swing", 30.0f }, { "scale", 0 }, { "key", 5 } } },
-        { "Nebula", 2, 3, 6, 2, 12, 30, { { "scale", 4 }, { "quantize", 0 }, { "reverbMix", 0.7f }, { "reverbSize", 0.9f } } },
-        { "Comet Rain", 2, 19, 16, 5, 4, 60, { { "grid", 2 }, { "delayMix", 0.3f }, { "scale", 8 }, { "key", 9 } } },
-        { "Warm Star", 2, 55, 10, 2, 8, 40, { { "scale", 4 }, { "key", 7 }, { "density", 0.5f } }, 2 },
-        { "Whole Tone Drift", 2, 61, 8, 2, 10, 40, { { "scale", 10 }, { "quantize", 0 }, { "density", 0.45f } } },
-        { "Petri Dish", 3, 8, 14, 3, 4, 70, { { "scale", 9 }, { "grid", 2 } } },
-        { "Cell Clicks", 3, 64, 22, 4, 2, 100, { { "grid", 5 }, { "maxNotes", 6 }, { "release", -0.6f }, { "scale", 8 } } },
-        { "Four Rooms", 3, 4, 14, 3, 4, 60, { { "scale", 6 }, { "key", 2 }, { "grid", 2 } }, 4 },
+        { "Quiet Pond", 0, 11, { 8, 2, 4, 2, 1, 0, 0 }, 40, { { "scale", 7 }, { "density", 0.45f }, { "reverbMix", 0.45f }, { "sp5Max", 0 }, { "sp6Max", 0 } } },
+        { "Busy Garden", 0, 23, { 16, 4, 4, 4, 2, 0, 8 }, 80, { { "grid", 2 }, { "density", 0.7f }, { "maxNotes", 5 }, { "foodGrowth", 0.7f } } },
+        { "Kalimba Meadow", 0, 5, { 10, 2, 3, 6, 0, 0, 0 }, 60, { { "scale", 0 }, { "key", 2 }, { "release", -0.3f }, { "brightness", 0.2f }, { "grid", 2 }, { "sp4Max", 0 }, { "sp5Max", 0 }, { "sp6Max", 0 } }, 8 },
+        { "Two Ponds", 0, 31, { 12, 3, 4, 2, 1, 0, 0 }, 50, { { "scale", 1 }, { "key", 9 }, { "sp5Max", 0 } }, 1 },
+        { "Predator Waves", 0, 17, { 20, 6, 3, 0, 3, 0, 10 }, 70, { { "scale", 8 }, { "key", 4 }, { "grid", 2 }, { "swing", 30.0f }, { "sp3Max", 0 } } },
+        { "Evolution Lab", 0, 99, { 14, 3, 5, 2, 2, 0, 0 }, 60, { { "mutation", 0.9f }, { "lifeSpeed", 2.0f }, { "lifespan", 0.6f }, { "scale", 2 }, { "sp5Max", 0 }, { "sp6Max", 0 } } },
+        { "Follow My Chords", 0, 12, { 12, 3, 5, 2, 0, 0, 6 }, 50, { { "pitchMode", 2 }, { "grid", 2 } } },
+        { "Deep Ocean", 1, 7, { 10, 3, 8, 0, 2, 1, 0 }, 50, { { "scale", 2 }, { "key", 2 }, { "density", 0.45f }, { "reverbMix", 0.55f }, { "sp3Max", 0 }, { "sp6Max", 0 } } },
+        { "Jellyfish Lullaby", 1, 42, { 4, 1, 12, 0, 0, 0, 0 }, 30, { { "scale", 7 }, { "quantize", 0 }, { "density", 0.4f }, { "attack", 0.5f }, { "release", 0.6f },
+                                                                    { "sp3Max", 0 }, { "sp4Max", 0 }, { "sp5Max", 0 }, { "sp6Max", 0 } } },
+        { "River Current", 1, 21, { 12, 3, 6, 0, 1, 0, 10 }, 60, { { "scale", 3 }, { "key", 7 }, { "sp3Max", 0 } }, 3 },
+        { "Coral Reef", 1, 77, { 16, 4, 6, 3, 2, 0, 12 }, 90, { { "grid", 2 }, { "swing", 30.0f }, { "scale", 0 }, { "key", 5 } } },
+        { "Nebula", 2, 3, { 6, 2, 12, 0, 0, 1, 0 }, 30, { { "scale", 4 }, { "quantize", 0 }, { "reverbMix", 0.7f }, { "reverbSize", 0.9f }, { "sp3Max", 0 }, { "sp4Max", 0 }, { "sp6Max", 0 } } },
+        { "Comet Rain", 2, 19, { 14, 5, 4, 0, 2, 0, 10 }, 60, { { "grid", 2 }, { "delayMix", 0.3f }, { "scale", 8 }, { "key", 9 }, { "sp3Max", 0 } } },
+        { "Warm Star", 2, 55, { 10, 2, 8, 2, 0, 1, 0 }, 40, { { "scale", 4 }, { "key", 7 }, { "density", 0.5f }, { "sp6Max", 0 } }, 2 },
+        { "Whole Tone Drift", 2, 61, { 8, 2, 10, 0, 0, 0, 0 }, 40, { { "scale", 10 }, { "quantize", 0 }, { "density", 0.45f }, { "sp3Max", 0 }, { "sp4Max", 0 }, { "sp5Max", 0 }, { "sp6Max", 0 } } },
+        { "Petri Dish", 3, 8, { 14, 3, 4, 0, 2, 0, 8 }, 70, { { "scale", 9 }, { "grid", 2 }, { "sp3Max", 0 } } },
+        { "Cell Clicks", 3, 64, { 18, 4, 2, 0, 4, 0, 12 }, 100, { { "grid", 5 }, { "maxNotes", 6 }, { "release", -0.6f }, { "scale", 8 }, { "sp3Max", 0 }, { "sp5Max", 0 } } },
+        { "Four Rooms", 3, 4, { 14, 3, 4, 0, 2, 0, 0 }, 60, { { "scale", 6 }, { "key", 2 }, { "grid", 2 }, { "sp3Max", 0 }, { "sp5Max", 0 }, { "sp6Max", 0 } }, 4 },
+        // ---- sandbox worlds
+        { "Bee Meadow", 0, 101, { 8, 1, 2, 8, 1, 0, 0 }, 90, { { "scale", 0 }, { "key", 7 }, { "grid", 2 }, { "density", 0.5f }, { "sp5Max", 0 }, { "sp6Max", 0 } }, 8 },
+        { "Night Forest", 0, 102, { 10, 3, 8, 3, 2, 1, 0 }, 60, { { "dayLength", 2 }, { "scale", 1 }, { "key", 9 }, { "reverbMix", 0.5f }, { "dayNightSound", 0.8f }, { "sp6Max", 0 } } },
+        { "Four Seasons", 0, 103, { 14, 3, 5, 4, 2, 1, 8 }, 80, { { "seasonLength", 2 }, { "dayLength", 2 }, { "weather", 0 }, { "scale", 7 }, { "key", 5 } } },
+        { "Rainy Garden", 0, 104, { 12, 2, 4, 3, 2, 0, 6 }, 70, { { "weather", 2 }, { "scale", 2 }, { "key", 2 }, { "ambience", 0.5f }, { "reverbMix", 0.45f } } },
+        { "Whale Song", 1, 105, { 6, 1, 6, 0, 2, 3, 14 }, 80, { { "scale", 7 }, { "key", 0 }, { "density", 0.5f }, { "reverbMix", 0.6f }, { "sp3Max", 0 } }, 5 },
+        { "Starling Swarm", 2, 106, { 4, 2, 4, 0, 0, 0, 22 }, 70, { { "grid", 2 }, { "scale", 8 }, { "key", 4 }, { "delayMix", 0.25f }, { "sp3Max", 0 } } },
+        { "Aquarium", 1, 107, { 8, 2, 4, 0, 3, 1, 12 }, 70, { { "gravity", 0.6f }, { "scale", 3 }, { "key", 2 }, { "sp3Max", 0 } }, 7 },
+        { "Windy Island", 0, 108, { 10, 2, 4, 4, 2, 1, 8 }, 70, { { "wind", 0.45f }, { "windDir", 20.0f }, { "weather", 0 }, { "scale", 4 }, { "key", 9 } }, 5 },
+        { "Bone Yard", 3, 109, { 14, 6, 2, 0, 6, 0, 6 }, 70, { { "grid", 2 }, { "swing", 20.0f }, { "scale", 5 }, { "key", 4 }, { "sp3Max", 0 } }, 9 },
+        { "Snow Globe", 2, 110, { 8, 2, 6, 0, 2, 1, 10 }, 50, { { "season", 3 }, { "weather", 3 }, { "scale", 9 }, { "key", 2 }, { "ambience", 0.5f }, { "sp3Max", 0 } } },
     };
     return list;
 }
@@ -133,6 +189,14 @@ const std::vector<LifeCatProcessor::WorldPreset>& LifeCatProcessor::presets()
 void LifeCatProcessor::applyLayout (World& w, int layout)
 {
     w.clearWallsAndZones();
+    w.clearTerrain();
+    auto box = [&w] (float x0, float y0, float x1, float y1, Terrain t)
+    {
+        const int n = terrainSize;
+        for (int cy = juce::jlimit (0, n, (int) (y0 * n)); cy < juce::jlimit (0, n, (int) std::ceil (y1 * n)); ++cy)
+            for (int cx = juce::jlimit (0, n, (int) (x0 * n)); cx < juce::jlimit (0, n, (int) std::ceil (x1 * n)); ++cx)
+                w.terrain[(size_t) (cy * n + cx)] = (uint8_t) t;
+    };
     switch (layout)
     {
         case 1: w.addWall (0.5f, 0.0f, 0.5f, 0.42f); w.addWall (0.5f, 0.58f, 0.5f, 1.0f); break;            // two ponds with a gap
@@ -142,6 +206,35 @@ void LifeCatProcessor::applyLayout (World& w, int layout)
                 w.addZone (ZoneType::Warm, 0.85f, 0.2f, 0.12f, 0, 0); break;
         case 4: w.addWall (0.5f, 0.0f, 0.5f, 0.4f); w.addWall (0.5f, 0.6f, 0.5f, 1.0f);
                 w.addWall (0.0f, 0.5f, 0.4f, 0.5f); w.addWall (0.6f, 0.5f, 1.0f, 0.5f); break;
+        case 5:   // island: water all around a meadow
+            box (0.0f, 0.0f, 1.0f, 1.0f, Terrain::Water);
+            w.paintTerrain (0.5f, 0.5f, 0.33f, Terrain::Ground);
+            w.paintTerrain (0.5f, 0.5f, 0.18f, Terrain::Meadow);
+            w.paintTerrain (0.62f, 0.4f, 0.06f, Terrain::Rock);
+            break;
+        case 6:   // river with stepping stones
+            for (float t = 0.0f; t <= 1.0f; t += 0.02f) w.paintTerrain (t, 0.35f + 0.3f * t, 0.07f, Terrain::Water);
+            w.paintTerrain (0.3f, 0.45f, 0.03f, Terrain::Rock);
+            w.paintTerrain (0.7f, 0.57f, 0.03f, Terrain::Rock);
+            break;
+        case 7:   // aquarium: sand floor, rocks, weed
+            box (0.0f, 0.0f, 1.0f, 1.0f, Terrain::Water);
+            box (0.0f, 0.9f, 1.0f, 1.0f, Terrain::Ground);
+            w.paintTerrain (0.25f, 0.88f, 0.07f, Terrain::Rock);
+            w.paintTerrain (0.72f, 0.9f, 0.09f, Terrain::Rock);
+            w.paintTerrain (0.5f, 0.86f, 0.08f, Terrain::Meadow);
+            break;
+        case 8:   // sunny glade: meadow with patches of sunlight
+            w.paintTerrain (0.5f, 0.5f, 0.38f, Terrain::Meadow);
+            w.paintTerrain (0.35f, 0.4f, 0.09f, Terrain::Light);
+            w.paintTerrain (0.66f, 0.62f, 0.08f, Terrain::Light);
+            break;
+        case 9:   // canyon: rocks with paths between
+            box (0.0f, 0.2f, 0.35f, 0.32f, Terrain::Rock);
+            box (0.65f, 0.2f, 1.0f, 0.32f, Terrain::Rock);
+            box (0.2f, 0.62f, 0.8f, 0.72f, Terrain::Rock);
+            w.paintTerrain (0.5f, 0.45f, 0.08f, Terrain::Meadow);
+            break;
         default: break;
     }
 }
@@ -154,11 +247,21 @@ LifeCatProcessor::LifeCatProcessor()
     for (auto* prm : getParameters())
         if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (prm))
             refs[r->getParameterID()] = apvts.getRawParameterValue (r->getParameterID());
+    for (int r = 0; r < numRoles; ++r)
+    {
+        auto& sr = speciesRefs[(size_t) r];
+        sr.sing = apvts.getRawParameterValue (spId (r, "Sing"));
+        sr.vol = apvts.getRawParameterValue (spId (r, "Vol"));
+        sr.oct = apvts.getRawParameterValue (spId (r, "Oct"));
+        sr.sound = apvts.getRawParameterValue (spId (r, "Sound"));
+        sr.speed = apvts.getRawParameterValue (spId (r, "Speed"));
+        sr.max = apvts.getRawParameterValue (spId (r, "Max"));
+    }
 
     world = std::make_unique<World>();
     snapshot = std::make_unique<World>();
     const auto& p0 = presets()[0];
-    world->reset (p0.seed, p0.grazers, p0.hunters, p0.drifters, p0.plants);
+    world->reset (p0.seed, p0.counts, p0.plants);
     *snapshot = *world;
     hasSnapshot = true;
     conductor.seed (p0.seed);
@@ -208,6 +311,18 @@ LifeSettings LifeCatProcessor::lifeSettings() const
     s.lifespan = p ("lifespan");
     s.maxPopulation = juce::roundToInt (p ("maxPop"));
     s.immigration = p ("immigration") > 0.5f;
+    for (int r = 0; r < numRoles; ++r)
+    {
+        s.species[(size_t) r].speed = speciesRefs[(size_t) r].speed->load();
+        s.species[(size_t) r].maxCount = juce::roundToInt (speciesRefs[(size_t) r].max->load());
+    }
+    s.gravity = p ("gravity");
+    s.wind = p ("wind");
+    s.windDirection = juce::degreesToRadians (p ("windDir"));
+    s.dayLength = dayLengths[juce::jlimit (0, 4, juce::roundToInt (p ("dayLength")))];
+    s.seasonLength = seasonLengths[juce::jlimit (0, 4, juce::roundToInt (p ("seasonLength")))];
+    s.fixedSeason = juce::roundToInt (p ("season"));
+    s.weatherMode = juce::roundToInt (p ("weather"));
     return s;
 }
 
@@ -225,10 +340,15 @@ MusicSettings LifeCatProcessor::musicSettings() const
     m.density = p ("density");
     m.maxNotes = juce::roundToInt (p ("maxNotes"));
     m.lengthScale = p ("noteLength");
+    for (int r = 0; r < numRoles; ++r)
+    {
+        m.speciesSing[(size_t) r] = speciesRefs[(size_t) r].sing->load() > 0.5f;
+        m.speciesOctave[(size_t) r] = juce::roundToInt (speciesRefs[(size_t) r].oct->load());
+    }
     return m;
 }
 
-SoundSettings LifeCatProcessor::soundSettings (double bpm) const
+SoundSettings LifeCatProcessor::soundSettings (double bpm, const World& w) const
 {
     SoundSettings s;
     s.theme = (Theme) juce::roundToInt (p ("theme"));
@@ -243,6 +363,17 @@ SoundSettings LifeCatProcessor::soundSettings (double bpm) const
     s.width = p ("width");
     s.volume = juce::Decibels::decibelsToGain (p ("volume"));
     s.bpm = bpm;
+
+    // the world colours the sound: night is darker and wetter, fog is wetter, winter is darker
+    const float dn = p ("dayNightSound");
+    const float night = 1.0f - w.light;
+    const float fog = w.weather == Weather::Fog ? w.weatherAmount : 0.0f;
+    s.brightness = juce::jlimit (-1.0f, 1.0f, s.brightness - dn * (0.45f * night + 0.2f * std::max (0.0f, -w.temperature)));
+    s.reverbMix = juce::jlimit (0.0f, 1.0f, s.reverbMix + dn * 0.2f * night + 0.25f * fog);
+    s.ambience = p ("ambience");
+    s.rain = (w.weather == Weather::Rain ? 1.0f : (w.weather == Weather::Storm ? 1.3f : 0.0f)) * w.weatherAmount;
+    s.wind = juce::jlimit (0.0f, 1.0f, p ("wind") * 0.8f + (w.weather == Weather::Storm ? w.weatherAmount : 0.0f));
+    s.snow = w.weather == Weather::Snow ? w.weatherAmount : 0.0f;
     return s;
 }
 
@@ -269,10 +400,32 @@ void LifeCatProcessor::apply (const Command& c)
         case Command::Favourite: w.setFavourite (c.id, c.flag); break;
         case Command::RemoveId:  w.removeId (c.id); break;
         case Command::NewWorld:
-            w.reset (c.seed, c.counts[0], c.counts[1], c.counts[2], c.counts[3]);
+            w.reset (c.seed, c.counts, c.plants);
             applyLayout (w, c.layout);
             conductor.seed (c.seed);
             break;
+        case Command::Paint:        w.paintTerrain (c.x, c.y, c.r, (Terrain) juce::jlimit (0, numTerrains - 1, c.terrain)); break;
+        case Command::ClearTerrain: w.clearTerrain(); break;
+        case Command::SetGenes:     w.setGenes (c.id, c.genes); break;
+        case Command::AddGenes:     w.addCreature ((Role) juce::jlimit (0, numRoles - 1, c.role), c.x, c.y, &c.genes); break;
+        case Command::ListenGenes:
+        {
+            Creature tmp;
+            tmp.role = (Role) juce::jlimit (0, numRoles - 1, c.role);
+            tmp.genes = c.genes;
+            tmp.y = 0.5f;
+            const auto ms = musicSettings();
+            NoteRequest r;
+            r.midiNote = conductor.pitchFor (tmp, ms, held.data(), numHeld);
+            r.velocity = 0.8f;
+            r.lengthSec = 0.8f;
+            r.genes = c.genes;
+            r.role = tmp.role;
+            const int snd = juce::roundToInt (speciesRefs[(size_t) tmp.role].sound->load());
+            r.sound = snd == 0 ? naturalSound (tmp.role) : (SoundType) (snd - 1);
+            synth.noteOn (r);
+            break;
+        }
         case Command::Listen:
             if (auto* cr = w.find (c.id))
             {
@@ -284,6 +437,9 @@ void LifeCatProcessor::apply (const Command& c)
                 r.pan = cr->x * 2.0f - 1.0f;
                 r.genes = cr->genes;
                 r.role = cr->role;
+                const int snd = juce::roundToInt (speciesRefs[(size_t) cr->role].sound->load());
+                r.sound = snd == 0 ? naturalSound (cr->role) : (SoundType) (snd - 1);
+                r.gain = juce::Decibels::decibelsToGain (speciesRefs[(size_t) cr->role].vol->load());
                 synth.noteOn (r);
                 cr->singFlash = 1.0f;
             }
@@ -380,7 +536,7 @@ void LifeCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     if (singing)
         conductor.process (*world, musicSettings(), ppq0, ppqPerSample, numSamples, held.data(), numHeld, sung);
 
-    synth.setSettings (soundSettings (t.bpm));
+    synth.setSettings (soundSettings (t.bpm, *world));
     const bool ownSound = p ("sound") > 0.5f;
     const bool midiOut = p ("midiOut") > 0.5f;
     const bool byRole = juce::roundToInt (p ("midiChannels")) == 1;
@@ -403,9 +559,13 @@ void LifeCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
             req.pan = s.pan;
             req.genes = c.genes;
             req.role = c.role;
+            const auto& sr = speciesRefs[(size_t) c.role];
+            const int snd = juce::roundToInt (sr.sound->load());
+            req.sound = snd == 0 ? naturalSound (c.role) : (SoundType) (snd - 1);
+            req.gain = juce::Decibels::decibelsToGain (sr.vol->load(), -30.0f);
             synth.noteOn (req);
         }
-        const int channel = byRole ? 1 + (int) c.role : 1;
+        const int channel = byRole ? 1 + (int) c.role : 1;          // 1..7
         const int note = juce::jlimit (0, 127, juce::roundToInt (s.midiNote));
         if (midiOut)
             midi.addEvent (juce::MidiMessage::noteOn (channel, note, juce::jlimit (0.05f, 1.0f, s.velocity)), s.sample);
@@ -519,11 +679,12 @@ void LifeCatProcessor::applyPreset (int index)
     Command c;
     c.type = Command::NewWorld;
     c.seed = pr.seed;
-    c.counts[0] = pr.grazers; c.counts[1] = pr.hunters; c.counts[2] = pr.drifters; c.counts[3] = pr.plants;
+    c.counts = pr.counts;
+    c.plants = pr.plants;
     c.layout = pr.layout;
     // apply directly too, so the screen shows the new world at once (even before audio runs)
     auto fresh = std::make_unique<World>();
-    fresh->reset (c.seed, c.counts[0], c.counts[1], c.counts[2], c.counts[3]);
+    fresh->reset (c.seed, c.counts, c.plants);
     applyLayout (*fresh, c.layout);
     {
         const juce::SpinLock::ScopedLockType sl (snapLock);
@@ -559,8 +720,11 @@ void LifeCatProcessor::surprise()
     Command c;
     c.type = Command::NewWorld;
     c.seed = (uint32_t) r.nextInt (1 << 30) + 1u;
-    c.counts[0] = 6 + r.nextInt (14); c.counts[1] = 1 + r.nextInt (4); c.counts[2] = 2 + r.nextInt (8); c.counts[3] = 30 + r.nextInt (60);
-    c.layout = r.nextInt (5);
+    c.counts = { 6 + r.nextInt (14), 1 + r.nextInt (4), 2 + r.nextInt (8), r.nextInt (5), r.nextInt (3), r.nextInt (2), r.nextInt (12) };
+    c.plants = 30 + r.nextInt (60);
+    c.layout = r.nextInt (10);
+    set ("weather", r.nextFloat() < 0.6f ? 1.0f : (float) r.nextInt (6));
+    set ("dayLength", r.nextFloat() < 0.6f ? 0.0f : (float) (1 + r.nextInt (3)));
     send (c);
     currentPreset = -1;
 }
@@ -616,12 +780,27 @@ juce::ValueTree LifeCatProcessor::worldToTree (const World& w)
               << juce::String (z.dx, 3) << "," << juce::String (z.dy, 3) << " ";
     }
     t.setProperty ("zones", zones.trim(), nullptr);
+
+    // v2: terrain, what has died, the sky
+    juce::String terrain;
+    for (auto v : w.terrain) terrain << (char) ('0' + v);
+    t.setProperty ("terrain", terrain, nullptr);
+    juce::String corpses;
+    for (const auto& k : w.corpses)
+        if (k.alive) corpses << juce::String (k.x, 3) << "," << juce::String (k.y, 3) << "," << juce::String (k.food, 3) << "," << juce::String (k.age, 1) << "," << (int) k.role << " ";
+    t.setProperty ("corpses", corpses.trim(), nullptr);
+    t.setProperty ("day", w.dayPhase, nullptr);
+    t.setProperty ("season", w.season, nullptr);
+    t.setProperty ("weather", (int) w.weather, nullptr);
+    t.setProperty ("weatherTarget", (int) w.weatherTarget, nullptr);
+    t.setProperty ("weatherAmount", w.weatherAmount, nullptr);
+    t.setProperty ("weatherTimer", w.weatherTimer, nullptr);
     return t;
 }
 
 void LifeCatProcessor::worldFromTree (const juce::ValueTree& t, World& w)
 {
-    w.reset ((uint32_t) (int) t.getProperty ("seed", 1), 0, 0, 0, 0);
+    w.reset ((uint32_t) (int) t.getProperty ("seed", 1), {}, 0);
     w.nextId = (uint32_t) (int) t.getProperty ("nextId", 1);
     w.rng.s = (uint32_t) (int) t.getProperty ("rng", 12345);
     w.time = (double) t.getProperty ("time", 0.0);
@@ -636,14 +815,18 @@ void LifeCatProcessor::worldFromTree (const juce::ValueTree& t, World& w)
         c = Creature();
         c.alive = true;
         c.id = (uint32_t) (int) n.getProperty ("id", 1);
-        c.role = (Role) juce::jlimit (0, 2, (int) n.getProperty ("r", 0));
+        c.role = (Role) juce::jlimit (0, numRoles - 1, (int) n.getProperty ("r", 0));
         c.x = (float) n.getProperty ("x", 0.5f); c.y = (float) n.getProperty ("y", 0.5f);
         c.energy = (float) n.getProperty ("e", 0.6f); c.age = (float) n.getProperty ("a", 0.0f);
         c.generation = (int) n.getProperty ("g", 0);
         c.favourite = (bool) n.getProperty ("fav", false);
         c.parentA = (uint32_t) (int) n.getProperty ("pa", 0); c.parentB = (uint32_t) (int) n.getProperty ("pb", 0);
         const auto genes = juce::StringArray::fromTokens (n.getProperty ("genes", "").toString(), " ", "");
-        for (int i = 0; i < numGenes && i < genes.size(); ++i) c.genes[i] = juce::jlimit (0.0f, 1.0f, genes[i].getFloatValue());
+        // worlds saved before the v2 genes get gentle defaults for them
+        static const float v2Defaults[numGenes - numGenesV1] = { 0.5f, 0.3f, 0.5f, 0.5f, 0.5f, 0.3f, 0.15f, 0.1f, 0.4f, 0.2f };
+        for (int i = 0; i < numGenes; ++i)
+            c.genes[i] = i < genes.size() ? juce::jlimit (0.0f, 1.0f, genes[i].getFloatValue()) : (i >= numGenesV1 ? v2Defaults[i - numGenesV1] : 0.5f);
+        c.group = c.id;
     }
     int pi = 0;
     for (const auto& tok : juce::StringArray::fromTokens (t.getProperty ("plants", "").toString(), " ", ""))
@@ -663,6 +846,23 @@ void LifeCatProcessor::worldFromTree (const juce::ValueTree& t, World& w)
         if (v.size() >= 6) w.addZone ((ZoneType) juce::jlimit (0, 2, v[0].getIntValue()), v[1].getFloatValue(), v[2].getFloatValue(),
                                       v[3].getFloatValue(), v[4].getFloatValue(), v[5].getFloatValue());
     }
+    const auto terrain = t.getProperty ("terrain", "").toString();
+    for (int i = 0; i < (int) w.terrain.size() && i < terrain.length(); ++i)
+        w.terrain[(size_t) i] = (uint8_t) juce::jlimit (0, numTerrains - 1, (int) (terrain[i] - '0'));
+    int ki = 0;
+    for (const auto& tok : juce::StringArray::fromTokens (t.getProperty ("corpses", "").toString(), " ", ""))
+    {
+        const auto v = juce::StringArray::fromTokens (tok, ",", "");
+        if (v.size() < 5 || ki >= maxCorpses) continue;
+        w.corpses[(size_t) ki++] = { true, v[0].getFloatValue(), v[1].getFloatValue(), v[2].getFloatValue(), v[3].getFloatValue(),
+                                     (Role) juce::jlimit (0, numRoles - 1, v[4].getIntValue()) };
+    }
+    w.dayPhase = (float) t.getProperty ("day", 0.4f);
+    w.season = (float) t.getProperty ("season", 1.0f);
+    w.weather = (Weather) juce::jlimit (0, numWeathers - 1, (int) t.getProperty ("weather", 0));
+    w.weatherTarget = (Weather) juce::jlimit (0, numWeathers - 1, (int) t.getProperty ("weatherTarget", (int) w.weather));
+    w.weatherAmount = (float) t.getProperty ("weatherAmount", 0.0f);
+    w.weatherTimer = (float) t.getProperty ("weatherTimer", 20.0f);
 }
 
 void LifeCatProcessor::getStateInformation (juce::MemoryBlock& destData)

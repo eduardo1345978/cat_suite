@@ -58,6 +58,16 @@ juce::StringArray pitchModeNames() { return { "Position (height)", "Species", "H
 juce::StringArray gridNames() { return { "1/4", "1/8", "1/16", "1/8 T", "1/16 T", "1/32" }; }
 double gridBeats (int i) { static const double g[] = { 1.0, 0.5, 0.25, 1.0 / 3.0, 1.0 / 6.0, 0.125 }; return g[juce::jlimit (0, 5, i)]; }
 
+int Conductor::scaleStep (int note, int steps, int key, int scale)
+{
+    int notes[128];
+    const int n = scaleNotes (key, scale, 0, 127, notes, 128);
+    if (n == 0) return note;
+    int idx = 0;
+    while (idx < n - 1 && notes[idx] < note) ++idx;
+    return notes[juce::jlimit (0, n - 1, idx + steps)];
+}
+
 double Conductor::divisionFor (const Creature& c)
 {
     static const double d[] = { 8.0, 4.0, 2.0, 1.0, 0.5, 0.25 };
@@ -79,6 +89,7 @@ float Conductor::pitchFor (const Creature& c, const MusicSettings& m, const int*
         if (n == 0) return 60.0f;
         const float h = 1.0f - c.y;
         int idx = juce::roundToInt (h * (float) (n - 1)) + juce::roundToInt ((g[gPitch] - 0.5f) * 4.0f);
+        if (c.role == Role::Swarm) idx += 2 * (c.groupRank % 4);
         idx = juce::jlimit (0, n - 1, idx);
         note = notes[idx];
         if (octShift != 0 && note + octShift >= m.lowNote && note + octShift <= m.highNote) note += octShift;
@@ -87,22 +98,35 @@ float Conductor::pitchFor (const Creature& c, const MusicSettings& m, const int*
     {
         // chord tones per role (scale degrees): grazers 1-3-5 in the middle, hunters root / fifth low,
         // drifters 5-7-9 high
-        static const int grazer[] = { 0, 2, 4, 7 }, hunter[] = { 0, 4, 0, 7 }, drifter[] = { 4, 6, 8, 9 };
-        const int* table = c.role == Role::Grazer ? grazer : (c.role == Role::Hunter ? hunter : drifter);
-        const int pick = juce::jlimit (0, 3, (int) (g[gPitch] * 4.0f));
-        const int base = c.role == Role::Hunter ? 36 : (c.role == Role::Drifter ? 60 : 48);
-        note = degreeNote (m.key, m.scale, base, table[pick]) + octShift;
+        static const int tables[numRoles][4] = {
+            { 0, 2, 4, 7 },      // grazers: 1-3-5 in the middle
+            { 0, 4, 0, 7 },      // hunters: root / fifth, low
+            { 4, 6, 8, 9 },      // drifters: 5-7-9 high
+            { 7, 9, 11, 14 },    // pollinators: high sparkle
+            { 0, 4, 2, 7 },      // scavengers: percussion around the root
+            { 0, 0, 4, 0 },      // giants: deep root drones
+            { 0, 2, 4, 7 } };    // swarms: arpeggio of the chord
+        static const int bases[numRoles] = { 48, 36, 60, 60, 48, 24, 60 };
+        const int ri = (int) c.role;
+        int degree = tables[ri][juce::jlimit (0, 3, (int) (g[gPitch] * 4.0f))];
+        if (c.role == Role::Swarm) degree = tables[ri][c.groupRank % 4] + 7 * ((c.groupRank / 4) % 2);
+        note = degreeNote (m.key, m.scale, bases[ri], degree) + octShift;
     }
     else
     {
         // a tone of the held chord; height in the world adds octaves
-        const int pick = juce::jlimit (0, numHeld - 1, (int) (g[gPitch] * (float) numHeld));
-        const int octaves = juce::roundToInt ((1.0f - c.y) * 2.0f) - 1;
+        int pick = juce::jlimit (0, numHeld - 1, (int) (g[gPitch] * (float) numHeld));
+        int octaves = juce::roundToInt ((1.0f - c.y) * 2.0f) - 1;
+        if (c.role == Role::Swarm) { pick = c.groupRank % numHeld; octaves = (c.groupRank / numHeld) % 2; }
+        if (c.role == Role::Giant) { pick = 0; octaves = -2; }
         note = held[pick] + 12 * octaves + octShift;
     }
+    if (c.role == Role::Giant)
+        while (note > m.lowNote + 12) note -= 12;      // giants stay at the bottom of the range
     while (note < m.lowNote) note += 12;
     while (note > m.highNote) note -= 12;
-    return (float) note;
+    note += 12 * m.speciesOctave[(size_t) c.role];
+    return (float) juce::jlimit (0, 127, note);
 }
 
 void Conductor::process (World& w, const MusicSettings& m, double ppqStart, double ppqPerSample, int numSamples,
@@ -122,14 +146,50 @@ void Conductor::process (World& w, const MusicSettings& m, double ppqStart, doub
         s.velocity = juce::jlimit (0.1f, 1.0f, 0.3f + 0.45f * juce::jlimit (0.0f, 1.0f, c.energy) + 0.25f * c.genes[gSize]);
         s.lengthBeats = (float) (juce::jmax (grid, divisionBeats) * (0.35 + 1.2 * c.genes[gRelease]) * m.lengthScale);
         s.pan = c.x * 2.0f - 1.0f;
+        // accents: louder on the beat, a little random variety
+        const bool onBeat = std::abs (atPpq - std::round (atPpq)) < 1.0e-3;
+        s.velocity = juce::jlimit (0.08f, 1.0f, s.velocity * (1.0f + c.genes[gAccent] * (0.35f * rng.bi() + (onBeat ? 0.25f : -0.12f))));
         c.singFlash = 1.0f;
         out.push_back (s);
+        // interval gene: now and then a second note, a third or a fifth above
+        if (rng.uni() < c.genes[gInterval] * 0.5f)
+        {
+            auto s2 = s;
+            const int base = juce::roundToInt (s.midiNote);
+            int second = scaleStep (base, c.genes[gHarm] < 0.5f ? 2 : 4, m.key, m.scale);
+            if (m.pitchMode == 2 && numHeld > 0)
+            {
+                // following a chord: the next chord tone above instead
+                second = base + 12;
+                for (int k = 0; k < numHeld; ++k)
+                    for (int o = -1; o <= 2; ++o)
+                    {
+                        const int cand = held[k] + 12 * (o + (base - held[k]) / 12);
+                        if (cand > base && cand < second) second = cand;
+                    }
+            }
+            s2.midiNote = (float) juce::jlimit (0, 127, second);
+            s2.velocity *= 0.8f;
+            out.push_back (s2);
+        }
     };
     auto wants = [&] (const Creature& c)
     {
-        const float p = m.density * (0.2f + 0.8f * c.genes[gDensity]) * (0.5f + 0.5f * juce::jlimit (0.0f, 1.0f, c.energy));
+        if (! m.speciesSing[(size_t) c.role]) return false;
+        const float p = m.density * (0.2f + 0.8f * c.genes[gDensity]) * (0.5f + 0.5f * juce::jlimit (0.0f, 1.0f, c.energy))
+                      * (0.15f + 0.85f * c.activity);              // sleepers sing rarely
         return rng.uni() < p;
     };
+
+    // swarm flocks play arpeggios: one member per grid step, in flock order
+    for (int i = 0; i < maxCreatures; ++i)
+    {
+        const auto& c = w.creatures[(size_t) i];
+        int n = 0;
+        if (c.alive && c.role == Role::Swarm)
+            for (const auto& o : w.creatures) n += (o.alive && o.role == Role::Swarm && o.group == c.group) ? 1 : 0;
+        flockSize[(size_t) i] = n;
+    }
 
     if (m.quantize)
     {
@@ -148,8 +208,13 @@ void Conductor::process (World& w, const MusicSettings& m, double ppqStart, doub
                 const auto& c = w.creatures[(size_t) i];
                 if (! c.alive) continue;
                 const double d = juce::jmax (grid, divisionFor (c));
-                const long long stepsPer = juce::jmax (1LL, (long long) std::llround (d / grid));
-                const long long offset = (long long) ((c.id * 7u + (uint32_t) (c.genes[gPitch] * 5.0f)) % (uint32_t) stepsPer);
+                long long stepsPer = juce::jmax (1LL, (long long) std::llround (d / grid));
+                long long offset = (long long) ((c.id * 7u + (uint32_t) (c.genes[gPitch] * 5.0f)) % (uint32_t) stepsPer);
+                if (c.role == Role::Swarm && flockSize[(size_t) i] > 1)
+                {
+                    stepsPer = juce::jlimit (2LL, 16LL, (long long) flockSize[(size_t) i]);
+                    offset = c.groupRank % stepsPer;
+                }
                 if (((k - offset) % stepsPer + stepsPer) % stepsPer != 0) continue;
                 if (wants (c)) candidates.push_back (i);
             }

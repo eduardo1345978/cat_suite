@@ -20,5 +20,6 @@ cat_add_midi_plugin(LifeCat SOUND
         Source/LifeWorld.cpp
         Source/LifeMusic.cpp
         Source/LifeSynth.cpp
+        Source/LifeArt.cpp
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp)

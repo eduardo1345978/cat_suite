@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <array>
 #include "LifeWorld.h"
 
 /**
@@ -30,6 +31,8 @@ struct MusicSettings
     float density = 0.6f;       // 0..1
     int maxNotes = 4;           // per grid step
     float lengthScale = 1.0f;
+    std::array<bool, numRoles> speciesSing { true, true, true, true, true, true, true };
+    std::array<int, numRoles> speciesOctave {};
 };
 
 struct SungNote
@@ -52,11 +55,14 @@ public:
                   const int* heldNotes, int numHeld, std::vector<SungNote>& out);
 
     float pitchFor (const Creature&, const MusicSettings&, const int* heldNotes, int numHeld) const;
+    /** Moves a note `steps` scale steps up (diatonic third = 2, fifth = 4). */
+    static int scaleStep (int note, int steps, int key, int scale);
     static double divisionFor (const Creature&);
 
 private:
     Rng rng;
     std::vector<int> candidates;
+    std::array<int, maxCreatures> flockSize {};
 };
 
 } // namespace lifecat

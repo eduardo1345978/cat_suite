@@ -59,9 +59,10 @@ public:
         const char* name;
         int theme;
         uint32_t seed;
-        int grazers, hunters, drifters, plants;
+        std::array<int, lifecat::numRoles> counts;   // grazers, hunters, drifters, pollinators, scavengers, giants, swarms
+        int plants;
         std::vector<std::pair<const char*, float>> values;
-        int layout = 0;          // 0 open, 1 two ponds (wall), 2 warm centre, 3 river current, 4 four rooms
+        int layout = 0;          // see applyLayout
     };
     static const std::vector<WorldPreset>& presets();
     void applyPreset (int index);
@@ -75,14 +76,18 @@ public:
     // ---- gardener commands (message thread -> audio thread)
     struct Command
     {
-        enum Type { Food, Add, Remove, Wall, Zone, EraseZone, ClearZones, Breed, Clone, Favourite, RemoveId, NewWorld, Listen };
+        enum Type { Food, Add, Remove, Wall, Zone, EraseZone, ClearZones, Breed, Clone, Favourite, RemoveId, NewWorld, Listen,
+                    Paint, ClearTerrain, SetGenes, AddGenes, ListenGenes };
         Type type = Food;
         float x = 0, y = 0, x2 = 0, y2 = 0, r = 0;
         int role = 0, zone = 0;
         uint32_t id = 0, id2 = 0, seed = 0;
         bool flag = false;
-        int counts[4] { 10, 3, 4, 40 };
+        std::array<int, lifecat::numRoles> counts { 10, 3, 4, 0, 0, 0, 0 };
+        int plants = 40;
         int layout = 0;
+        int terrain = 0;
+        lifecat::Genes genes;
     };
     void send (const Command&);
 
@@ -95,18 +100,22 @@ public:
     std::atomic<bool> uiTransportRunning { false };
 
     static void applyLayout (lifecat::World&, int layout);
+    bool bigView = false;                           // editor: world fills the window (kept while the plug-in lives)
+    static juce::StringArray roleParamNames();     // "Grazers", "Hunters", ...
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
     float p (const char* id) const;
     lifecat::LifeSettings lifeSettings() const;
     lifecat::MusicSettings musicSettings() const;
-    lifecat::SoundSettings soundSettings (double bpm) const;
+    lifecat::SoundSettings soundSettings (double bpm, const lifecat::World&) const;
     void apply (const Command&);
     static juce::ValueTree worldToTree (const lifecat::World&);
     static void worldFromTree (const juce::ValueTree&, lifecat::World&);
 
     std::map<juce::String, std::atomic<float>*> refs;
+    struct SpeciesRefs { std::atomic<float>* sing = nullptr, *vol = nullptr, *oct = nullptr, *sound = nullptr, *speed = nullptr, *max = nullptr; };
+    std::array<SpeciesRefs, lifecat::numRoles> speciesRefs;
     cat::HostSync hostSync;
     juce::AudioBuffer<float> work;
 

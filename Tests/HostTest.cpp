@@ -949,7 +949,7 @@ void testPresetPrograms()
 {
     std::cout << "\nFactory presets exposed to the host" << std::endl;
     struct P { const char* path; const char* name; int minCount; };
-    for (const auto& pl : { P { BENDCAT_VST3, "Bend-Cat", 25 }, P { DRUMCAT_VST3, "Drum-Cat", 24 }, P { ORBITCAT_VST3, "Orbit-Cat", 32 }, P { SINGCAT_VST3, "Sing-Cat", 48 }, P { BASSCAT_VST3, "Bass-Cat", 24 }, P { GLIDECAT_VST3, "Glide-Cat", 40 }, P { TALKCAT_VST3, "Talk-Cat", 30 }, P { LIFECAT_VST3, "Life-Cat", 18 } })
+    for (const auto& pl : { P { BENDCAT_VST3, "Bend-Cat", 25 }, P { DRUMCAT_VST3, "Drum-Cat", 24 }, P { ORBITCAT_VST3, "Orbit-Cat", 32 }, P { SINGCAT_VST3, "Sing-Cat", 48 }, P { BASSCAT_VST3, "Bass-Cat", 24 }, P { GLIDECAT_VST3, "Glide-Cat", 40 }, P { TALKCAT_VST3, "Talk-Cat", 30 }, P { LIFECAT_VST3, "Life-Cat", 27 } })
     {
         auto plug = loadPlugin (pl.path);
         if (plug == nullptr) { ++failures; continue; }
@@ -1494,6 +1494,48 @@ void testLifeCat()
         check (st.finite && st.peak <= 1.0f, "a crowded, loud world never clips (safety limiter)");
         check (jumps == 0, "no sudden jumps / clicks when many voices pile up");
         check (st.cpu < 0.35, "a crowded world still runs in real time");
+    }
+
+    // The new animals all sing, each on its own channel (pollinators 4, scavengers 5, swarms 7)
+    {
+        auto zoo = loadPlugin (LIFECAT_VST3);
+        TestPlayHead pz;
+        pz.playing = true;
+        prepare (*zoo, pz);
+        zoo->setCurrentProgram (1);           // Busy Garden: grazers, hunters, drifters, bees, snails, ants
+        setParam (*zoo, "MIDI Out", "On");
+        setParam (*zoo, "MIDI Channels", "One channel per kind (1-7)");
+        const auto zr = runLife (*zoo, pz, 40 * sec);
+        std::array<int, 17> perChannel {};
+        for (const auto& e : zr.notes) ++perChannel[(size_t) juce::jlimit (0, 16, e.msg.getChannel())];
+        std::cout << "  Busy Garden, notes per kind: grazers " << perChannel[1] << ", hunters " << perChannel[2] << ", drifters " << perChannel[3]
+                  << ", pollinators " << perChannel[4] << ", scavengers " << perChannel[5] << ", swarms " << perChannel[7] << std::endl;
+        check (perChannel[4] > 0 && perChannel[5] > 0 && perChannel[7] > 0, "pollinators, scavengers and swarms all sing (own MIDI channels)");
+        check (zr.finite && zr.peak <= 1.0f, "seven kinds together stay clean");
+
+        // a kind can be silenced
+        setParam (*zoo, "Swarms Sing", "Off");
+        const auto zq = runLife (*zoo, pz, 20 * sec, {}, 40 * sec);
+        int swarmNotes = 0;
+        for (const auto& e : zq.notes) swarmNotes += e.msg.getChannel() == 7 ? 1 : 0;
+        check (swarmNotes == 0 && ! zq.notes.empty(), "Sing off silences just that kind");
+    }
+
+    // You can hear the weather: rain with every creature silent
+    {
+        auto wet = loadPlugin (LIFECAT_VST3);
+        TestPlayHead pw;
+        pw.playing = true;
+        prepare (*wet, pw);
+        for (const auto& n : { "Grazers", "Hunters", "Drifters", "Pollinators", "Scavengers", "Giants", "Swarms" }) setParam (*wet, juce::String (n) + " Sing", "Off");
+        setParam (*wet, "Weather", "Rain");
+        setParam (*wet, "Weather Sounds", "1");
+        const auto rainy = runLife (*wet, pw, 12 * sec);
+        setParam (*wet, "Weather Sounds", "0");
+        const auto dry = runLife (*wet, pw, 6 * sec, {}, 12 * sec);
+        const float rainLevel = rms (rainy.mono, 8 * sec, 12 * sec), dryLevel = rms (dry.mono, 4 * sec, 6 * sec);
+        std::cout << "  rain sound level " << juce::String (rainLevel, 4) << ", with weather sounds off " << juce::String (dryLevel, 5) << std::endl;
+        check (rainy.finite && rainLevel > 0.003f && dryLevel < rainLevel * 0.2f, "rain can be heard (and turned off)");
     }
 
     // Save / load keeps the whole world (creatures, genes, walls)

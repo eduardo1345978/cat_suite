@@ -14,12 +14,22 @@
 
     The world theme colours the sound: Garden = bells / kalimba, Ocean = watery pads,
     Space = shimmering textures, Cells = glassy clicks. Then a stereo delay and a big reverb.
+
+    Each kind of creature can also use a fixed sound type (Pad, Bell, Pluck, Percussion,
+    Drone, Texture). Glide slides into notes, Echo sends the voice into the delay, and the
+    weather can be heard (rain, wind, snow hush).
 */
 namespace lifecat
 {
 enum class Theme { Garden = 0, Ocean, Space, Cells };
 juce::StringArray themeNames();
 constexpr int maxVoices = 32;
+
+/** What a voice is made of. Natural = the kind's own sound (bells for pollinators, percussion for
+    scavengers, drones for giants...), Genes = the gene mix. */
+enum class SoundType { Genes = 0, Pad, Bell, Pluck, Percussion, Drone, Texture };
+juce::StringArray soundTypeNames();          // "Natural", then the SoundType names
+SoundType naturalSound (Role) noexcept;
 
 struct SoundSettings
 {
@@ -33,6 +43,9 @@ struct SoundSettings
     float width = 0.8f;
     float volume = 1.0f;
     double bpm = 120.0;
+    // weather you can hear
+    float ambience = 0.35f;      // 0..1 level of the weather sounds
+    float rain = 0.0f, wind = 0.0f, snow = 0.0f;    // 0..1 from the world
 };
 
 struct NoteRequest
@@ -43,6 +56,8 @@ struct NoteRequest
     float pan = 0.0f;            // -1..1
     Genes genes;
     Role role = Role::Grazer;
+    SoundType sound = SoundType::Genes;
+    float gain = 1.0f;           // species volume
 };
 
 class Synth
@@ -76,6 +91,9 @@ private:
         uint32_t noise = 22222u;
         float gain = 0.5f, panL = 0.7f, panR = 0.7f;
         float bellAmp = 1.0f, bellMul = 0.9999f, idxAmp = 1.0f, idxMul = 0.9999f;   // decays without exp() per sample
+        float wPerc = 0.0f, wSub = 0.0f;                  // percussion burst, drone sub-octave
+        float percAmp = 0.0f, percMul = 0.999f, percBodyPh = 0.0f, percBodyMul = 1.5f, subPh = 0.0f;
+        float glideMul = 1.0f, glideCoef = 1.0f, echo = 0.0f;
         bool fading = false;                    // stolen: fades out in a few ms instead of being cut (no click)
         float fadeGain = 1.0f, fadeStep = 0.005f;
     };
@@ -93,7 +111,10 @@ private:
     float delaySamples = 0.0f;
     juce::Reverb reverb;
     float lastSize = -1.0f;
-    std::vector<float> wetL, wetR;
+    std::vector<float> wetL, wetR, echoL, echoR;
+    // weather noises
+    uint32_t ambNoise = 0x2468ace1u;
+    float rainLp = 0.0f, rainHp = 0.0f, windLp1 = 0.0f, windLp2 = 0.0f, windPhase = 0.0f, snowLp = 0.0f, dropEnv = 0.0f, dropPh = 0.0f, dropFreq = 2000.0f;
     cat::SafetyLimiter limiter;
 };
 
