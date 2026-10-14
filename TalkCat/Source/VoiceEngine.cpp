@@ -94,6 +94,7 @@ Engine::Engine()
 
 void Engine::prepare (double sr, int maxBlock)
 {
+    limiter.prepare (sr);
     sampleRate = sr;
     stepRate = (float) (sr < 70000.0 && ! getenv ("ONEX") ? sr * 2.0 : sr);
     maxBlockSize = juce::jmax (512, maxBlock);
@@ -1024,8 +1025,7 @@ void Engine::renderFx (float* left, float* right, int n)
     for (int i = 0; i < n; ++i)
     {
         float l = left[i] * settings.volume, r = right[i] * settings.volume;
-        if (std::abs (l) > 0.8f) l = std::tanh (l);
-        if (std::abs (r) > 0.8f) r = std::tanh (r);
+        limiter.processSample (l, r);
         left[i] = l;
         right[i] = r;
         peak = juce::jmax (peak, std::abs (l), std::abs (r));

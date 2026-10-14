@@ -1,4 +1,5 @@
 #pragma once
+#include "SafetyLimiter.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_graphics/juce_graphics.h>
@@ -123,6 +124,7 @@ public:
     std::array<SingerView, maxSingers> views;
     std::atomic<float> uiVowelX { 0.5f }, uiVowelY { 0.5f };   // where the choir is singing (chart)
     std::atomic<float> uiLevel { 0.0f };
+    cat::SafetyLimiter limiter;
     int numActiveSingers() const noexcept;
 
     /** Lyrics: parsed on the message thread, handed to the audio thread with a try-lock. */

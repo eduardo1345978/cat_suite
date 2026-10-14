@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "ComputerKeyboard.h"
+#include "SafetyLimiter.h"
 #include <map>
 #include "PresetBar.h"
 #include "GlideSynth.h"
@@ -91,5 +92,6 @@ private:
     cat::HostSync hostSync;
     juce::AudioBuffer<float> work;
 
+    cat::SafetyLimiter limiter;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GlideCatProcessor)
 };

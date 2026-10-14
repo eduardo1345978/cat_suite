@@ -401,6 +401,7 @@ bool GlideCatProcessor::isBusesLayoutSupported (const BusesLayout& layouts) cons
 
 void GlideCatProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    limiter.prepare (sampleRate);
     hostSync.prepare (sampleRate);
     synth.prepare (sampleRate, samplesPerBlock);
     effects.prepare (sampleRate, samplesPerBlock);
@@ -563,8 +564,7 @@ void GlideCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     for (int i = 0; i < numSamples; ++i)
     {
         float a = l[i] * vol, b = r[i] * vol;
-        if (std::abs (a) > 0.8f) a = std::tanh (a);
-        if (std::abs (b) > 0.8f) b = std::tanh (b);
+        limiter.processSample (a, b);
         l[i] = a; r[i] = b;
     }
     if (buffer.getNumChannels() >= 2)

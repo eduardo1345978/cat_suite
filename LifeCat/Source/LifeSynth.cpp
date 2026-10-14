@@ -28,6 +28,7 @@ namespace
 
 void Synth::prepare (double sr, int maxBlock)
 {
+    limiter.prepare (sr);
     sampleRate = sr;
     for (auto& v : voices) v.active = false;
     delayL.assign ((size_t) (sr * 4.0) + 2, 0.0f);
@@ -82,6 +83,9 @@ void Synth::setupVoice (Voice& v, const NoteRequest& r)
     v.attackSec = juce::jlimit (0.001f, 4.0f, 0.002f * std::pow (1000.0f, g[gAttack]) * atkScale * (th == 3 ? 0.3f : 1.0f));
     v.releaseSec = juce::jlimit (0.03f, 10.0f, 0.08f * std::pow (60.0f, g[gRelease]) * relScale * (th == 1 || th == 2 ? 1.6f : 1.0f) * (th == 3 ? 0.5f : 1.0f));
     v.bellDecay = (0.15f + 2.5f * g[gRelease]) * (th == 3 ? 0.35f : (th == 0 ? 0.8f : 1.2f)) * relScale;
+    v.bellAmp = v.idxAmp = 1.0f;
+    v.bellMul = std::exp (-1.0f / (v.bellDecay * (float) sampleRate));
+    v.idxMul = std::exp (-1.0f / ((v.bellDecay * 0.35f + 0.02f) * (float) sampleRate));
 
     static const float ratios[] = { 1.0f, 2.0f, 2.76f, 3.0f, 3.5f, 4.2f, 5.4f, 7.1f };
     v.fmRatio = lerpTable (ratios, 8, g[gHarm]) + (th == 3 ? 1.5f : 0.0f);
@@ -105,15 +109,36 @@ void Synth::setupVoice (Voice& v, const NoteRequest& r)
 
 void Synth::noteOn (const NoteRequest& r)
 {
+    // polyphony counts only voices that are not fading out
+    int sounding = 0;
+    for (const auto& v : voices) if (v.active && ! v.fading) ++sounding;
+    if (sounding >= maxVoices)
+    {
+        // steal the quietest releasing voice, else the oldest - and fade it out instead of cutting it
+        Voice* victim = nullptr;
+        float best = 1.0e9f;
+        for (auto& v : voices)
+            if (v.active && ! v.fading && v.releasing && v.env * v.gain < best) { best = v.env * v.gain; victim = &v; }
+        if (victim == nullptr)
+            for (auto& v : voices)
+                if (v.active && ! v.fading && (victim == nullptr || v.age < victim->age)) victim = &v;
+        if (victim != nullptr)
+        {
+            victim->fading = true;
+            victim->fadeGain = 1.0f;
+            victim->fadeStep = 1.0f / (0.008f * (float) sampleRate);
+        }
+    }
+
     Voice* target = nullptr;
     for (auto& v : voices) if (! v.active) { target = &v; break; }
-    if (target == nullptr)
-    {
-        // steal the oldest
-        target = &voices[0];
-        for (auto& v : voices) if (v.age < target->age) target = &v;
-    }
+    if (target == nullptr)   // every slot busy (many steals at once): reuse the most faded one
+        for (auto& v : voices)
+            if (v.fading && (target == nullptr || v.fadeGain < target->fadeGain)) target = &v;
+    if (target == nullptr) return;
     setupVoice (*target, r);
+    target->fading = false;
+    target->fadeGain = 1.0f;
     target->active = true;
 }
 
@@ -201,8 +226,10 @@ void Synth::render (float* left, float* right, int n)
             if (v.wBell > 0.001f)
             {
                 const float tt = (float) v.t;
-                const float bellEnv = std::exp (-tt / v.bellDecay) * juce::jmin (1.0f, tt / 0.002f) * (v.releasing ? v.env : 1.0f);
-                const float idx = v.fmIndex * std::exp (-tt / (v.bellDecay * 0.35f + 0.02f));
+                const float bellEnv = v.bellAmp * juce::jmin (1.0f, tt / 0.002f) * (v.releasing ? v.env : 1.0f);
+                const float idx = v.fmIndex * v.idxAmp;
+                v.bellAmp *= v.bellMul;
+                v.idxAmp *= v.idxMul;
                 v.fmMod += twoPi * inc * v.fmRatio;
                 v.fmCar += twoPi * inc;
                 if (v.fmMod > twoPi) v.fmMod -= twoPi;
@@ -229,13 +256,19 @@ void Synth::render (float* left, float* right, int n)
             }
 
             out *= v.gain;
+            if (v.fading)
+            {
+                out *= v.fadeGain;
+                v.fadeGain -= v.fadeStep;
+                if (v.fadeGain <= 0.0f) { v.active = false; break; }
+            }
             const float drift = 0.25f * g[gPan] * std::sin (v.panPh);
             left[i] += out * juce::jlimit (0.0f, 1.5f, v.panL - drift);
             right[i] += out * juce::jlimit (0.0f, 1.5f, v.panR + drift);
             v.t += dtSec;
         }
 
-        if (v.releasing && v.env < 1.0e-4f && (v.wBell < 0.001f || std::exp (-(float) v.t / v.bellDecay) < 1.0e-3f || v.env < 1.0e-5f))
+        if (v.releasing && v.env < 1.0e-4f && (v.wBell < 0.001f || v.bellAmp < 1.0e-3f || v.env < 1.0e-5f))
             v.active = false;
         if (v.t > v.req.lengthSec + v.releaseSec * 3.0f + 0.5f && v.env < 1.0e-3f) v.active = false;
     }
@@ -282,8 +315,7 @@ void Synth::render (float* left, float* right, int n)
         {
             float l = (left[done + i] * (1.0f - 0.4f * settings.reverbMix) + wetL[(size_t) i] * settings.reverbMix * 0.7f) * settings.volume;
             float r = (right[done + i] * (1.0f - 0.4f * settings.reverbMix) + wetR[(size_t) i] * settings.reverbMix * 0.7f) * settings.volume;
-            if (std::abs (l) > 0.8f) l = std::tanh (l);
-            if (std::abs (r) > 0.8f) r = std::tanh (r);
+            limiter.processSample (l, r);
             left[done + i] = l;
             right[done + i] = r;
         }

@@ -107,6 +107,7 @@ Engine::Engine()
 
 void Engine::prepare (double sr, int maxBlock)
 {
+    limiter.prepare (sr);
     sampleRate = sr;
     stepsPerSample = settings.highQuality && sr < 70000.0 ? 2 : 1;
     stepRate = (float) (sr * stepsPerSample);
@@ -1115,9 +1116,8 @@ void Engine::render (float* left, float* right, int numSamples)
         {
             float l = (outL[j] + wetL[(size_t) j] * wetGain) * settings.volume;
             float r = (outR[j] + wetR[(size_t) j] * wetGain) * settings.volume;
-            // Gentle safety saturation
-            if (std::abs (l) > 0.7f) l = std::tanh (l);
-            if (std::abs (r) > 0.7f) r = std::tanh (r);
+            // safety: smooth level riding + soft knee (never jumps, never clips)
+            limiter.processSample (l, r);
             outL[j] = l;
             outR[j] = r;
             peak = juce::jmax (peak, std::abs (l), std::abs (r));

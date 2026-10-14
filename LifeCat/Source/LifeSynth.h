@@ -2,6 +2,7 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include "LifeWorld.h"
+#include "SafetyLimiter.h"
 
 /**
     Life-Cat sound: every note is built from the singing creature's genes.
@@ -74,10 +75,14 @@ private:
         float bp1a = 0.0f, bp1b = 0.0f, bp2a = 0.0f, bp2b = 0.0f;
         uint32_t noise = 22222u;
         float gain = 0.5f, panL = 0.7f, panR = 0.7f;
+        float bellAmp = 1.0f, bellMul = 0.9999f, idxAmp = 1.0f, idxMul = 0.9999f;   // decays without exp() per sample
+        bool fading = false;                    // stolen: fades out in a few ms instead of being cut (no click)
+        float fadeGain = 1.0f, fadeStep = 0.005f;
     };
 
     void setupVoice (Voice&, const NoteRequest&);
-    std::array<Voice, maxVoices> voices;
+    static constexpr int fadeSlots = 12;     // extra slots where stolen voices fade out
+    std::array<Voice, maxVoices + fadeSlots> voices;
     uint32_t ageCounter = 0;
     SoundSettings settings;
     double sampleRate = 48000.0;
@@ -89,6 +94,7 @@ private:
     juce::Reverb reverb;
     float lastSize = -1.0f;
     std::vector<float> wetL, wetR;
+    cat::SafetyLimiter limiter;
 };
 
 } // namespace lifecat

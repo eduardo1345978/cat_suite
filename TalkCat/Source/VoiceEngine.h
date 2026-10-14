@@ -1,4 +1,5 @@
 #pragma once
+#include "SafetyLimiter.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <atomic>
@@ -112,6 +113,7 @@ public:
     // UI read-outs
     std::array<std::atomic<float>, numGroups> uiPitch, uiLevel;
     std::atomic<float> uiMouthOpen { 0.0f }, uiMouthWidth { 0.6f }, uiOutLevel { 0.0f };
+    cat::SafetyLimiter limiter;
     std::atomic<int> uiGroup { 0 };
     std::array<std::atomic<float>, numCtrl> uiArea;
 

@@ -1463,6 +1463,39 @@ void testLifeCat()
     check (gen >= 5, "creatures breed over many generations");
     check (alive >= 4 && geneSets.size() >= 4, "the ecosystem survives with varied genes");
 
+    // Stress: a crowded world singing many long notes at once must stay clean (no clipping,
+    // no jumps from the safety stage, no clicks from voice stealing) and run in real time
+    {
+        auto busy = loadPlugin (LIFECAT_VST3);
+        TestPlayHead pb2;
+        pb2.playing = true;
+        prepare (*busy, pb2);
+        busy->setCurrentProgram (1);          // Busy Garden
+        for (auto [nm, val] : { std::pair { "Max Notes per Step", "12" }, { "Density", "1" }, { "Grid", "1/16" }, { "Release", "1" },
+                                { "Max Population", "64" }, { "Food Growth", "1" }, { "Volume", "6" }, { "Reverb", "0.8" }, { "Delay", "0.6" } })
+            setParam (*busy, nm, val);
+        const auto st = runLife (*busy, pb2, 30 * sec);
+        // a click = one sample step far bigger than the steps around it
+        const size_t N = st.mono.size();
+        std::vector<double> sq (N + 1, 0.0);
+        for (size_t i = 1; i < N; ++i) { const double d = st.mono[i] - st.mono[i - 1]; sq[i + 1] = sq[i] + d * d; }
+        int jumps = 0;
+        float maxStep = 0.0f;
+        for (size_t i = 200; i + 200 < N; ++i)
+        {
+            const float d = std::abs (st.mono[i] - st.mono[i - 1]);
+            maxStep = juce::jmax (maxStep, d);
+            const double local = std::sqrt ((sq[i + 128] - sq[i - 128]) / 256.0);
+            if (d > 0.05f && d > 6.0 * local) ++jumps;
+        }
+        std::cout << "  crowded world, 12 notes per 1/16, long tails, +6 dB: " << (int) st.notes.size() << " notes, peak " << juce::String (st.peak, 3)
+                  << ", level " << juce::String (rms (st.mono, 5 * sec, 30 * sec), 3) << ", largest sample step " << juce::String (maxStep, 3) << ", clicks " << jumps
+                  << ", CPU " << juce::String (st.cpu * 100.0, 1) << " %" << std::endl;
+        check (st.finite && st.peak <= 1.0f, "a crowded, loud world never clips (safety limiter)");
+        check (jumps == 0, "no sudden jumps / clicks when many voices pile up");
+        check (st.cpu < 0.35, "a crowded world still runs in real time");
+    }
+
     // Save / load keeps the whole world (creatures, genes, walls)
     juce::MemoryBlock st;
     life->getStateInformation (st);
