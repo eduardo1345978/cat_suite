@@ -6,7 +6,8 @@ juce::StringArray getDegreeNames() { return { "Root", "5th", "Oct", "3rd", "7th"
 
 juce::StringArray getStyleNames()
 {
-    return { "Pop Roots", "Walking", "Neo Soul", "Funk", "Boom Bap", "Dilla", "808", "Reggae", "House", "Disco Octaves", "Latin", "Drone" };
+    return { "Pop Roots", "Walking", "Neo Soul", "Funk", "Boom Bap", "Dilla", "808", "Reggae", "House", "Disco Octaves", "Latin", "Drone",
+             "Rock", "Dub", "Country", "Afrobeats", "Drill", "Synth Arp" };
 }
 
 StyleHints getStyleHints (int style)
@@ -19,6 +20,10 @@ StyleHints getStyleHints (int style)
         case BoomBap:  return { 10.0f, 4.0f };
         case Trap808:  return { 0.0f, 0.0f };
         case House:    return { 0.0f, 1.0f };
+        case Drill:
+        case SynthArp: return { 0.0f, 0.0f };
+        case Afrobeats: return { 15.0f, 4.0f };
+        case Dub:      return { 0.0f, 5.0f };
         default:       return { 0.0f, 3.0f };
     }
 }
@@ -92,6 +97,12 @@ namespace
             case DiscoOctaves:return { { 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 },                  0.4f, 0.3f, 0.3f, 0.0f, 0.0f, 0.003f };
             case Latin:       return { { 0, 0, 0, .3f, 0, 0, 1, 0, 0, 0, .3f, 0, 1, 0, .25f, 0 },           0.9f, 0.6f, 0.2f, 0.1f, 0.0f, 0.006f };
             case Drone:       return { { 1, 0, 0, 0, 0, 0, 0, 0, .3f, 0, 0, 0, 0, 0, 0, 0 },                1.0f, 4.0f, 0.0f, 0.3f, 0.0f, 0.0f };
+            case Rock:        return { { 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, .2f },                  0.75f, 0.42f, 0.1f, 0.0f, 0.0f, 0.004f };
+            case Dub:         return { { 1, 0, 0, 0, 0, 0, .5f, 0, .95f, 0, 0, 0, 0, 0, .4f, .3f },         0.95f, 0.9f, 0.2f, 0.3f, 0.03f, 0.012f };
+            case Country:     return { { 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, .25f, 0 },               0.6f, 0.8f, 0.1f, 0.0f, 0.0f, 0.006f };
+            case Afrobeats:   return { { 1, 0, 0, .5f, 0, 0, .7f, 0, .4f, 0, .6f, 0, 0, .4f, .3f, 0 },       0.55f, 0.3f, 0.5f, 0.2f, 0.01f, 0.01f };
+            case Drill:       return { { 1, 0, 0, .35f, 0, 0, .55f, 0, 0, .3f, .5f, 0, 0, .4f, .3f, 0 },     1.0f, 1.0f, 0.0f, 1.4f, 0.0f, 0.0f };
+            case SynthArp:    return { { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 },                  0.3f, 0.2f, 0.0f, 0.0f, 0.0f, 0.0f };
             default:          return model (PopRoots);
         }
     }
@@ -133,6 +144,25 @@ namespace
                 return x < 0.5f ? Octave : Fifth;
             case Drone:
                 return step == 0 ? Root : Fifth;
+            case Rock:
+                if (step == 14 || step == 15) return x < 0.5f ? Approach : WalkUp;
+                return x < 0.85f ? Root : (x < 0.95f ? Fifth : Octave);
+            case Dub:
+                if (down) return Root;
+                return x < 0.45f ? Root : (x < 0.7f ? Fifth : (x < 0.85f ? Seventh : Octave));
+            case Country:
+                return step == 0 ? Root : (step == 8 ? Fifth : (x < 0.5f ? WalkUp : Approach));
+            case Afrobeats:
+                if (down) return Root;
+                return x < 0.45f ? Root : (x < 0.65f ? Octave : (x < 0.85f ? Fifth : Third));
+            case Drill:
+                if (down) return Root;
+                return x < 0.45f ? Root : (x < 0.75f ? Octave : (x < 0.9f ? Third : Fifth));
+            case SynthArp:
+            {
+                static const int arp[] = { Root, Fifth, Octave, Fifth, Root, Third, Octave, Third };
+                return arp[step % 8];
+            }
             case BoomBap:
             case Dilla:
                 if (down) return Root;
@@ -229,7 +259,7 @@ namespace
         bar.erase (std::remove_if (bar.begin(), bar.end(), [] (const BassNote& n) { return n.pos >= 3.0; }), bar.end());
         if (! bar.empty() && bar.back().pos + bar.back().len > 3.0)
             bar.back().len = juce::jmax (0.1, 3.0 - bar.back().pos);
-        const bool eighths = style == Trap808 || style == Reggae || r.nextBool();
+        const bool eighths = style == Trap808 || style == Drill || style == Reggae || r.nextBool();
         const int count = eighths ? 2 : 4;
         for (int k = 0; k < count; ++k)
         {

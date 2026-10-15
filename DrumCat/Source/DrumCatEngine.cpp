@@ -5,7 +5,8 @@
 namespace drumcat
 {
 juce::StringArray getLaneNames()  { return { "Kick", "Snare", "Rim", "Hat", "Open Hat", "Ride", "Crash", "Tom", "Perc" }; }
-juce::StringArray getStyleNames() { return { "Boom Bap", "Dilla", "Neo Soul", "Lo-Fi", "Funky", "Trap", "Detroit" }; }
+juce::StringArray getStyleNames() { return { "Boom Bap", "Dilla", "Neo Soul", "Lo-Fi", "Funky", "Trap", "Detroit",
+                                             "House", "Drill", "Dembow", "Afrobeats", "Jungle", "Rock" }; }
 juce::StringArray getMapNames()   { return { "General MIDI", "Sequential C1", "Sequential C2" }; }
 juce::StringArray getGridNames()  { return { "1/8", "1/16", "1/32" }; }
 
@@ -133,6 +134,30 @@ namespace
                 return { { 0.97f, 0, 0.2f, 0.3f, 0, 0.15f, 0.2f, 0.4f, 0.2f, 0.4f, 0.2f, 0.2f, 0, 0.2f, 0.3f, 0.2f },
                          { 4, 12 }, 0.1f, Sixteenths, 0.1f, 0.3f, 0.05f, 0.05f, 0.1f, 0.0f, 0.1f,
                          0.02f, 0.02f, 0.025f, 0.5f, 1.0f };
+            case 7: // House: four on the floor, claps on 2 and 4, open hats on the off-beats
+                return { { 0.97f, 0, 0, 0, 0.97f, 0, 0, 0, 0.97f, 0, 0, 0, 0.97f, 0, 0.1f, 0 },
+                         { 4, 12 }, 0.02f, Sixteenths, 0.3f, 0.85f, 0.0f, 0.05f, 0.3f, 0.0f, 0.1f,
+                         0.0f, 0.0f, 0.004f, 0.1f, 1.0f };
+            case 8: // Drill: half-time, sliding syncopated kicks, rolling hats
+                return { { 0.97f, 0, 0, 0.3f, 0, 0, 0.45f, 0, 0, 0.3f, 0.4f, 0, 0, 0.35f, 0.2f, 0 },
+                         { 8, 8 }, 0.14f, TrapRolls, 0.12f, 0.05f, 0.0f, 0.0f, 0.0f, 0.0f, 0.05f,
+                         0.0f, 0.0f, 0.003f, 0.12f, 1.0f };
+            case 9: // Dembow: kick on every beat, the snare answers in between
+                return { { 0.97f, 0, 0, 0, 0.97f, 0, 0, 0, 0.97f, 0, 0, 0, 0.97f, 0, 0, 0 },
+                         { 6, 14 }, 0.4f, Eighths, 0.1f, 0.1f, 0.0f, 0.15f, 0.45f, 0.0f, 0.05f,
+                         0.0f, 0.004f, 0.006f, 0.05f, 1.0f };
+            case 10: // Afrobeats: bouncing kicks, rim clicks, shakers, swung 16ths
+                return { { 0.97f, 0, 0, 0.5f, 0, 0, 0.6f, 0, 0.6f, 0, 0.3f, 0, 0, 0, 0.5f, 0 },
+                         { 4, 12 }, 0.08f, Sixteenths, 0.25f, 0.15f, 0.6f, 0.4f, 0.6f, 0.0f, 0.05f,
+                         0.005f, 0.008f, 0.012f, 0.3f, 0.95f };
+            case 11: // Jungle: two-step kick, busy ghost snares, fast 16ths
+                return { { 0.97f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.97f, 0, 0, 0, 0, 0.15f },
+                         { 4, 12 }, 0.35f, Sixteenths, 0.1f, 0.15f, 0.0f, 0.05f, 0.1f, 0.15f, 0.2f,
+                         0.004f, 0.004f, 0.006f, 0.05f, 1.0f };
+            case 12: // Rock: straight 8ths, big backbeat, crashes
+                return { { 0.97f, 0, 0, 0, 0, 0, 0, 0.3f, 0.97f, 0, 0.4f, 0, 0, 0, 0, 0.2f },
+                         { 4, 12 }, 0.03f, Eighths, 0.02f, 0.1f, 0.0f, 0.0f, 0.0f, 0.3f, 0.5f,
+                         0.004f, 0.004f, 0.004f, 0.0f, 1.0f };
             case 0: // Boom Bap: hard kick/snare, swung 8th hats, pickup kicks
             default:
                 return { { 0.97f, 0, 0.25f, 0.15f, 0, 0, 0.1f, 0.55f, 0.2f, 0.45f, 0.35f, 0.1f, 0, 0, 0.3f, 0.15f },
@@ -343,7 +368,12 @@ StyleHints getStyleHints (int style)
     {
         case 1:  return { 0.0f, 6.0f };   // Dilla: the looseness is in the pattern, plus a little more
         case 3:  return { 0.0f, 5.0f };
-        case 5:  return { 0.0f, 0.0f };
+        case 5:
+        case 8:  return { 0.0f, 0.0f };
+        case 7:
+        case 9:
+        case 12: return { 0.0f, 1.5f };
+        case 10: return { 0.0f, 4.0f };
         default: return { 0.0f, 3.0f };
     }
 }

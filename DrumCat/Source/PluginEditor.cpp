@@ -233,7 +233,7 @@ DrumCatEditor::DrumCatEditor (DrumCatProcessor& p)
       catView (p.noteMonitor, [&p] { return p.uiPpq.load(); }, [&p] { return p.uiTransportRunning.load(); }, cat::CatStyle::Drum),
       surpriseControls (p, p.surpriseUndo, [&p] { p.surprise(); }),
       bootScreen (p.noteMonitor, [&p] { return p.uiPpq.load(); }, [&p] { return p.uiTransportRunning.load(); },
-                  "DRUM", "-cat", "HIP-HOP DRUM GENERATOR", cat::CatStyle::Drum)
+                  "DRUM", "-cat", "DRUM PATTERN GENERATOR", cat::CatStyle::Drum)
 {
     setLookAndFeel (&lnf);
 
@@ -294,7 +294,7 @@ DrumCatEditor::DrumCatEditor (DrumCatProcessor& p)
     for (int l = 0; l < NumLanes; ++l)
         seenHits[(size_t) l] = p.laneHits[(size_t) l].load();
 
-    setSize (1180, 720);
+    setSize (1180, 756);
     startTimerHz (30);
 }
 
@@ -340,7 +340,6 @@ void DrumCatEditor::resized()
         catView.setBounds (logo.removeFromRight (40).expanded (0, 6));
         juce::FlexBox fb;
         fb.alignItems = juce::FlexBox::AlignItems::center;
-        for (auto* b : styleButtons) fb.items.add (item (*b, 76));
         fb.items.add (juce::FlexItem().withFlex (1.0f));
         fb.items.add (item (generateButton, 90));
         fb.items.add (item (*variationStepper, 116));
@@ -348,7 +347,16 @@ void DrumCatEditor::resized()
         fb.items.add (item (dragButton, 92));
         fb.performLayout (top);
     }
-    r.removeFromTop (10);
+    r.removeFromTop (8);
+    {
+        // styles: one row of buttons
+        auto row = r.removeFromTop (30);
+        juce::FlexBox fb;
+        fb.alignItems = juce::FlexBox::AlignItems::center;
+        for (auto* b : styleButtons) fb.items.add (item (*b, 70, 28).withFlex (1.0f));
+        fb.performLayout (row);
+    }
+    r.removeFromTop (8);
 
     // Feel
     {

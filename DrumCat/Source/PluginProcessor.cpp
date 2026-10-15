@@ -302,7 +302,7 @@ void DrumCatProcessor::selectStyle (int style)
 //==============================================================================
 const std::vector<DrumCatProcessor::Preset>& DrumCatProcessor::presets()
 {
-    // style: 0 Boom Bap, 1 Dilla, 2 Neo Soul, 3 Lo-Fi, 4 Funky, 5 Trap, 6 Detroit   bars: 0 = 1, 1 = 2, 2 = 4   grid: 0 1/8, 1 1/16, 2 1/32
+    // style: 0 Boom Bap, 1 Dilla, 2 Neo Soul, 3 Lo-Fi, 4 Funky, 5 Trap, 6 Detroit, 7 House .. 12 Rock   bars: 0 = 1, 1 = 2, 2 = 4   grid: 0 1/8, 1 1/16, 2 1/32
     static const std::vector<Preset> list = {
         { "Golden Era",      101,  { { "style", 0 }, { "density", 50 }, { "fills", 30 }, { "swing", 15 }, { "human", 4 }, { "velRandom", 6 }, { "open", 10 } } },
         { "Dusty Breakbeat", 202,  { { "style", 0 }, { "density", 65 }, { "fills", 45 }, { "swing", 25 }, { "human", 6 }, { "velRandom", 10 }, { "open", 20 } } },
@@ -328,6 +328,23 @@ const std::vector<DrumCatProcessor::Preset>& DrumCatProcessor::presets()
         { "Motor City",      1919, { { "style", 6 }, { "density", 60 }, { "fills", 35 }, { "swing", 20 }, { "human", 5 }, { "open", 20 } } },
         { "Basement Jam",    2020, { { "style", 6 }, { "density", 70 }, { "fills", 50 }, { "human", 7 }, { "velRandom", 10 } } },
         { "Minimal Detroit", 2121, { { "style", 6 }, { "density", 35 }, { "fills", 15 }, { "human", 4 } } },
+        // styles 7 House, 8 Drill, 9 Dembow, 10 Afrobeats, 11 Jungle, 12 Rock
+        { "Deep House",      3101, { { "style", 7 }, { "density", 45 }, { "fills", 15 }, { "swing", 10 }, { "open", 40 } } },
+        { "Disco Floor",     3102, { { "style", 7 }, { "density", 70 }, { "fills", 30 }, { "open", 60 }, { "velRandom", 6 } } },
+        { "Minimal Tech",    3103, { { "style", 7 }, { "density", 30 }, { "fills", 5 }, { "human", 1 } } },
+        { "London Drill",    3201, { { "style", 8 }, { "density", 60 }, { "fills", 40 }, { "grid", 2 }, { "human", 1 } } },
+        { "Night Drill",     3202, { { "style", 8 }, { "density", 45 }, { "fills", 25 }, { "grid", 2 }, { "human", 1 }, { "velocity", 90 } } },
+        { "Perreo",          3301, { { "style", 9 }, { "density", 55 }, { "fills", 25 }, { "human", 2 } } },
+        { "Dembow Lite",     3302, { { "style", 9 }, { "density", 35 }, { "fills", 10 }, { "human", 2 }, { "velocity", 90 } } },
+        { "Lagos Bounce",    3401, { { "style", 10 }, { "density", 60 }, { "fills", 30 }, { "swing", 15 }, { "human", 4 } } },
+        { "Afro Shuffle",    3402, { { "style", 10 }, { "density", 45 }, { "fills", 20 }, { "swing", 25 }, { "human", 5 }, { "open", 15 } } },
+        { "Amen Break",      3501, { { "style", 11 }, { "density", 75 }, { "fills", 50 }, { "human", 2 }, { "velRandom", 10 } } },
+        { "Liquid Rollers",  3502, { { "style", 11 }, { "density", 50 }, { "fills", 25 }, { "human", 2 }, { "velocity", 90 } } },
+        { "Garage Rock",     3601, { { "style", 12 }, { "density", 55 }, { "fills", 40 }, { "human", 3 }, { "velRandom", 8 } } },
+        { "Stadium Rock",    3602, { { "style", 12 }, { "density", 70 }, { "fills", 55 }, { "human", 2 }, { "open", 20 } } },
+        { "Ballad Rock",     3603, { { "style", 12 }, { "density", 35 }, { "fills", 20 }, { "human", 3 }, { "velocity", 85 } } },
+        { "8-Bar House Ride", 3104, { { "style", 7 }, { "bars", 2 }, { "density", 55 }, { "fills", 35 }, { "open", 50 } } },
+        { "Jungle 4-Bar",    3503, { { "style", 11 }, { "bars", 2 }, { "density", 65 }, { "fills", 60 }, { "human", 2 } } },
     };
     return list;
 }

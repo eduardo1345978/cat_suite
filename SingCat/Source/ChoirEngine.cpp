@@ -48,7 +48,8 @@ const TypeInfo& typeInfo (SingerType t)
 
 juce::StringArray castNames()
 {
-    return { "Mixed Choir", "Women", "Men", "Children", "Elders", "Kittens", "Tomcats", "Alley Cats", "Cats & Humans" };
+    return { "Mixed Choir", "Women", "Men", "Children", "Elders", "Kittens", "Tomcats", "Alley Cats", "Cats & Humans",
+             "Opera Stars", "Low Voices", "High Voices", "Family", "Cat Family" };
 }
 
 SingerType castMember (int cast, int i)
@@ -64,6 +65,11 @@ SingerType castMember (int cast, int i)
         case 6:  return T::Tomcat;
         case 7:  { static const T c[] = { T::Cat, T::Kitten, T::Tomcat };         return c[i % 3]; }
         case 8:  { static const T c[] = { T::Soprano, T::Cat, T::Tenor, T::Kitten, T::Alto, T::Tomcat, T::Bass, T::Cat }; return c[i % 8]; }
+        case 9:  { static const T c[] = { T::Soprano, T::Tenor };                 return c[i % 2]; }
+        case 10: { static const T c[] = { T::Bass, T::Alto, T::Tenor, T::Bass };  return c[i % 4]; }
+        case 11: { static const T c[] = { T::Soprano, T::Child, T::Alto, T::Soprano }; return c[i % 4]; }
+        case 12: { static const T c[] = { T::Bass, T::Alto, T::Child, T::ElderWoman, T::Tenor, T::Child }; return c[i % 6]; }
+        case 13: { static const T c[] = { T::Tomcat, T::Cat, T::Kitten, T::Kitten };      return c[i % 4]; }
         default: { static const T c[] = { T::Soprano, T::Alto, T::Tenor, T::Bass }; return c[i % 4]; }
     }
 }
@@ -80,15 +86,20 @@ const StyleInfo& styleInfo (int style)
         { "Breathy",   0.22f, 0.60f, 12.0f, 5.0f, 0.50f, -0.3f, 0.06f, 0.00f, 0.04f, 0.00f, 1.0f },
         { "Pansori",   0.86f, 0.14f, 70.0f, 4.2f, 0.18f,  1.3f, 0.13f, 0.60f, 0.28f, 0.20f, 0.9f },
         { "Chant",     0.60f, 0.06f,  0.0f, 5.0f, 1.00f,  0.0f, 0.06f, 0.00f, 0.25f, 0.25f, 0.6f },
+        { "Opera",     0.78f, 0.03f, 85.0f, 5.8f, 0.15f,  0.4f, 0.07f, 0.00f, 0.00f, 0.80f, 0.4f },
+        { "Bulgarian", 0.90f, 0.05f,  6.0f, 6.2f, 0.80f, -0.2f, 0.04f, 0.10f, 0.40f, 0.10f, 0.5f },
+        { "Soul",      0.68f, 0.12f, 30.0f, 5.4f, 0.35f, -2.0f, 0.12f, 0.25f, 0.05f, 0.25f, 1.0f },
+        { "Robot",     0.62f, 0.00f,  0.0f, 5.0f, 1.00f,  0.0f, 0.00f, 0.00f, 0.10f, 0.00f, 0.0f },
+        { "Lullaby",   0.30f, 0.35f, 10.0f, 4.6f, 0.60f, -0.4f, 0.10f, 0.00f, 0.02f, 0.05f, 0.8f },
     };
-    return styles[(size_t) juce::jlimit (0, 7, style)];
+    return styles[(size_t) juce::jlimit (0, (int) (sizeof (styles) / sizeof (styles[0])) - 1, style)];
 }
 
-juce::StringArray styleNames()  { return { "Classical", "Gospel", "Pop", "Folk", "Jazz", "Breathy", "Pansori", "Chant" }; }
+juce::StringArray styleNames()  { return { "Classical", "Gospel", "Pop", "Folk", "Jazz", "Breathy", "Pansori", "Chant", "Opera", "Bulgarian", "Soul", "Robot", "Lullaby" }; }
 juce::StringArray modeNames()   { return { "Solo", "Choir", "Tutti" }; }
 juce::StringArray moveNames()   { return { "Fixed", "Wave", "Envelope", "Steps", "Path", "Random" }; }
 juce::StringArray onsetNames()  { return { "Auto", "Vowel", "Hum (m)", "N", "Meow" }; }
-juce::StringArray roomNames()   { return { "Studio", "Room", "Hall", "Cathedral" }; }
+juce::StringArray roomNames()   { return { "Studio", "Room", "Hall", "Cathedral", "Plate", "Cave", "Forest" }; }
 
 //==============================================================================
 Engine::Engine()
@@ -956,17 +967,19 @@ void Engine::render (float* left, float* right, int numSamples)
     if (settings.room != lastRoom)
     {
         lastRoom = settings.room;
-        static const float sizes[] = { 0.30f, 0.52f, 0.78f, 0.95f };
-        static const float damps[] = { 0.60f, 0.45f, 0.30f, 0.12f };
-        static const float preMs[] = { 4.0f, 10.0f, 22.0f, 38.0f };
+        //                            Studio Room   Hall   Cathedral Plate Cave   Forest
+        static const float sizes[] = { 0.30f, 0.52f, 0.78f, 0.95f,  0.66f, 0.90f, 0.60f };
+        static const float damps[] = { 0.60f, 0.45f, 0.30f, 0.12f,  0.05f, 0.75f, 0.85f };
+        static const float preMs[] = { 4.0f, 10.0f, 22.0f, 38.0f,   2.0f, 30.0f, 35.0f };
+        const int ri = juce::jlimit (0, 6, lastRoom);
         juce::Reverb::Parameters rp;
-        rp.roomSize = sizes[juce::jlimit (0, 3, lastRoom)];
-        rp.damping = damps[juce::jlimit (0, 3, lastRoom)];
+        rp.roomSize = sizes[ri];
+        rp.damping = damps[ri];
         rp.wetLevel = 1.0f;
         rp.dryLevel = 0.0f;
         rp.width = 1.0f;
         reverb.setParameters (rp);
-        preDelayLength = juce::jlimit (1, (int) preDelay.size() - 1, (int) (preMs[juce::jlimit (0, 3, lastRoom)] * 0.001 * sampleRate));
+        preDelayLength = juce::jlimit (1, (int) preDelay.size() - 1, (int) (preMs[ri] * 0.001 * sampleRate));
     }
 
     pullLyrics();

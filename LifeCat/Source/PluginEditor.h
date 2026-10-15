@@ -23,6 +23,7 @@ struct LifeViewState
     GardenTool tool = GardenTool::Inspect;
     lifecat::Role addRole = lifecat::Role::Grazer;
     lifecat::Terrain paintType = lifecat::Terrain::Water;
+    int foodType = 0;               // 0 plants, 1 fruit tree, 2 mushrooms
     float brush = 0.06f;
     // gene lab
     lifecat::Role labRole = lifecat::Role::Grazer;
@@ -250,7 +251,8 @@ private:
     cat::BarSlider gravity, wind, windDir, ambience, dayNightSound;
     cat::ParamCombo dayLength, seasonLength, season, weather;
     juce::TextButton clearWalls { "Clear walls & zones" }, clearTerrain { "Clear painted terrain" };
-    juce::Label skyLabel;
+    juce::Label skyLabel, eventsLabel;
+    juce::OwnedArray<juce::TextButton> eventButtons;
     // MUSIC
     cat::ParamCombo pitchMode, key, scale, grid;
     std::unique_ptr<cat::Stepper> lowNote, highNote, maxNotes;

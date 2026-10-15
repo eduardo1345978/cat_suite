@@ -4,6 +4,12 @@ namespace glidecat
 {
 juce::StringArray ensembleModeNames() { return { "Off", "Chorus", "Strings" }; }
 juce::StringArray roomTypeNames()     { return { "Room", "Hall", "Plate", "Cathedral", "Shimmer", "Bloom" }; }
+juce::StringArray echoTimeNames()     { return { "1/16", "1/8", "1/8 dotted", "1/4", "1/4 dotted", "1/2", "1/8 T", "1/4 T" }; }
+float echoTimeBeats (int i)
+{
+    static const float b[] = { 0.25f, 0.5f, 0.75f, 1.0f, 1.5f, 2.0f, 1.0f / 3.0f, 2.0f / 3.0f };
+    return b[juce::jlimit (0, 7, i)];
+}
 juce::StringArray intervalNames()
 {
     return { "-24", "-12", "-7", "-5", "0", "+3", "+4", "+5", "+7", "+12", "+19", "+24" };
@@ -63,6 +69,10 @@ void Effects::prepare (double sampleRate, int maxBlock)
     for (auto& s : shifters) s.prepare (sr);
     shimmer.prepare (sr);
     preDelay.assign ((size_t) (sr * 0.2) + 4, 0.0f);
+    echoL.assign ((size_t) (sr * 4.2) + 4, 0.0f);
+    echoR.assign (echoL.size(), 0.0f);
+    tapeL.assign ((size_t) (sr * 0.05) + 4, 0.0f);
+    tapeR.assign (tapeL.size(), 0.0f);
     wetL.assign ((size_t) juce::jmax (512, maxBlock), 0.0f);
     wetR.assign (wetL.size(), 0.0f);
     reverb.setSampleRate (sr);
@@ -78,6 +88,13 @@ void Effects::reset()
     for (auto& s : shifters) s.reset();
     shimmer.reset();
     reverb.reset();
+    std::fill (echoL.begin(), echoL.end(), 0.0f);
+    std::fill (echoR.begin(), echoR.end(), 0.0f);
+    std::fill (tapeL.begin(), tapeL.end(), 0.0f);
+    std::fill (tapeR.begin(), tapeR.end(), 0.0f);
+    echoWrite = tapeWrite = 0;
+    echoSamples = 0.0f;
+    driveLpL = driveLpR = echoLpL = echoLpR = ageLpL = ageLpR = 0.0f;
     ensWrite = prismWrite = preWrite = 0;
     prismFbState = shimmerState = bloomEnv = 0.0f;
     lastRoom = -1;
@@ -86,6 +103,24 @@ void Effects::reset()
 void Effects::process (float* left, float* right, int numSamples, const FxSettings& fx)
 {
     const float srf = (float) sr;
+
+    // ---- Drive: asymmetric soft saturation, level-compensated, then a tone filter
+    if (fx.drive > 0.001f)
+    {
+        const float k = 1.0f + 14.0f * fx.drive * fx.drive;
+        const float comp = 1.0f / std::tanh (k * 0.5f) * 0.5f;
+        const float cutoff = 800.0f + 14000.0f * fx.driveTone;
+        const float a = 1.0f - std::exp (-6.2831853f * cutoff / srf);
+        for (int i = 0; i < numSamples; ++i)
+        {
+            auto shape = [k, comp] (float x) { return std::tanh (k * x + 0.08f * k * x * x) * comp; };
+            const float dl = shape (left[i]), dr = shape (right[i]);
+            driveLpL += (dl - driveLpL) * a;
+            driveLpR += (dr - driveLpR) * a;
+            left[i] = left[i] + (driveLpL - left[i]) * juce::jmin (1.0f, fx.drive * 1.5f);
+            right[i] = right[i] + (driveLpR - right[i]) * juce::jmin (1.0f, fx.drive * 1.5f);
+        }
+    }
 
     // ---- Ensemble
     if (fx.ensembleMode > 0 && fx.ensembleMix > 0.0f)
@@ -148,6 +183,63 @@ void Effects::process (float* left, float* right, int numSamples, const FxSettin
             prismWrite = (prismWrite + 1) % size;
             left[i] += fx.prismMix * (a * 0.8f + c * 0.4f) * 0.6f;
             right[i] += fx.prismMix * (b * 0.8f + c * 0.4f) * 0.6f;
+        }
+    }
+
+    // ---- Echo: ping-pong, tempo synced, each repeat a little darker
+    if (fx.echoMix > 0.001f)
+    {
+        const int size = (int) echoL.size();
+        const float target = juce::jlimit (2.0f, (float) size - 4.0f, (float) (fx.echoBeats * 60.0 / juce::jmax (30.0, fx.bpm)) * srf);
+        if (echoSamples < 1.0f) echoSamples = target;
+        const float lpA = 1.0f - std::exp (-6.2831853f * (1200.0f + 9000.0f * fx.echoTone) / srf);
+        for (int i = 0; i < numSamples; ++i)
+        {
+            echoSamples += (target - echoSamples) * 0.0004f;
+            float rp = (float) echoWrite - echoSamples;
+            while (rp < 0.0f) rp += (float) size;
+            const int i0 = (int) rp;
+            const float fr = rp - (float) i0;
+            const float dl = echoL[(size_t) i0] + (echoL[(size_t) ((i0 + 1) % size)] - echoL[(size_t) i0]) * fr;
+            const float dr = echoR[(size_t) i0] + (echoR[(size_t) ((i0 + 1) % size)] - echoR[(size_t) i0]) * fr;
+            echoLpL += (dl - echoLpL) * lpA;
+            echoLpR += (dr - echoLpR) * lpA;
+            echoL[(size_t) echoWrite] = 0.5f * (left[i] + right[i]) + echoLpR * fx.echoFeedback;
+            echoR[(size_t) echoWrite] = echoLpL * fx.echoFeedback;
+            echoWrite = (echoWrite + 1) % size;
+            left[i] += dl * fx.echoMix;
+            right[i] += dr * fx.echoMix;
+        }
+    }
+
+    // ---- Tape: wow + flutter (a gently wobbling delay), age (bandwidth + hiss)
+    if (fx.tapeWow > 0.001f || fx.tapeFlutter > 0.001f || fx.tapeAge > 0.001f)
+    {
+        const int size = (int) tapeL.size();
+        const float base = 0.012f * srf;
+        const float ageA = 1.0f - std::exp (-6.2831853f * (16000.0f - 12500.0f * fx.tapeAge) / srf);
+        for (int i = 0; i < numSamples; ++i)
+        {
+            tapeL[(size_t) tapeWrite] = left[i];
+            tapeR[(size_t) tapeWrite] = right[i];
+            wowPh += 0.55f / srf;
+            flutPh += 7.3f / srf;
+            if (wowPh > 1.0f) wowPh -= 1.0f;
+            if (flutPh > 1.0f) flutPh -= 1.0f;
+            const float d = base + (0.004f * fx.tapeWow * std::sin (6.2831853f * wowPh) + 0.0004f * fx.tapeFlutter * std::sin (6.2831853f * flutPh)) * srf;
+            float rp = (float) tapeWrite - d;
+            while (rp < 0.0f) rp += (float) size;
+            const int i0 = (int) rp;
+            const float fr = rp - (float) i0;
+            const float tl = tapeL[(size_t) i0] + (tapeL[(size_t) ((i0 + 1) % size)] - tapeL[(size_t) i0]) * fr;
+            const float tr = tapeR[(size_t) i0] + (tapeR[(size_t) ((i0 + 1) % size)] - tapeR[(size_t) i0]) * fr;
+            tapeWrite = (tapeWrite + 1) % size;
+            ageLpL += (tl - ageLpL) * ageA;
+            ageLpR += (tr - ageLpR) * ageA;
+            hiss ^= hiss << 13; hiss ^= hiss >> 17; hiss ^= hiss << 5;
+            const float h = (float) (int32_t) hiss * (1.0f / 2147483648.0f) * 0.004f * fx.tapeAge;
+            left[i] = ageLpL + h;
+            right[i] = ageLpR + h;
         }
     }
 

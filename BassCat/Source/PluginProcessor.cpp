@@ -341,7 +341,7 @@ juce::MidiMessageSequence BassCatProcessor::buildPatternSequence() const
 //==============================================================================
 const std::vector<BassCatProcessor::Preset>& BassCatProcessor::presets()
 {
-    // style: 0 Pop Roots, 1 Walking, 2 Neo Soul, 3 Funk, 4 Boom Bap, 5 Dilla, 6 808, 7 Reggae, 8 House, 9 Disco Octaves, 10 Latin, 11 Drone
+    // style: 0 Pop Roots, 1 Walking, 2 Neo Soul, 3 Funk, 4 Boom Bap, 5 Dilla, 6 808, 7 Reggae, 8 House, 9 Disco Octaves, 10 Latin, 11 Drone, 12 Rock .. 17 Synth Arp
     // bars: 0 = 1, 1 = 2, 2 = 4
     static const std::vector<Preset> list = {
         { "Pop Root Eighths", 11,  { { "style", 0 }, { "density", 50 }, { "fills", 30 }, { "gate", 80 } } },
@@ -368,6 +368,19 @@ const std::vector<BassCatProcessor::Preset>& BassCatProcessor::presets()
         { "Latin Tumbao",     111, { { "style", 10 }, { "density", 50 }, { "fills", 25 } } },
         { "Cinematic Drone",  121, { { "style", 11 }, { "bars", 2 }, { "slides", 50 }, { "octave", -1 }, { "velocity", 90 } } },
         { "Sparse Sub",       122, { { "style", 11 }, { "density", 10 }, { "octave", -1 }, { "slides", 0 } } },
+        // 12 Rock, 13 Dub, 14 Country, 15 Afrobeats, 16 Drill, 17 Synth Arp
+        { "Rock Eighths",     131, { { "style", 12 }, { "density", 70 }, { "fills", 30 }, { "gate", 85 } } },
+        { "Punk Drive",       132, { { "style", 12 }, { "density", 90 }, { "fills", 10 }, { "gate", 70 }, { "velocity", 115 }, { "human", 1 } } },
+        { "Dub Pressure",     141, { { "style", 13 }, { "density", 45 }, { "slides", 30 }, { "octave", -1 }, { "human", 5 } } },
+        { "Steppers",         142, { { "style", 13 }, { "density", 65 }, { "fills", 20 }, { "human", 3 } } },
+        { "Country Two-Step", 151, { { "style", 14 }, { "density", 55 }, { "fills", 40 }, { "human", 3 } } },
+        { "Afro Groove",      161, { { "style", 15 }, { "density", 60 }, { "ghosts", 30 }, { "swing", 15 }, { "human", 4 } } },
+        { "Amapiano Log",     162, { { "style", 15 }, { "density", 40 }, { "slides", 40 }, { "lowNote", 28 }, { "human", 2 } } },
+        { "Drill Slides",     171, { { "style", 16 }, { "density", 60 }, { "slides", 75 }, { "lowNote", 24 }, { "human", 0 } } },
+        { "Dark Drill",       172, { { "style", 16 }, { "density", 40 }, { "slides", 60 }, { "lowNote", 24 }, { "fills", 15 } } },
+        { "Synth Arp",        181, { { "style", 17 }, { "density", 100 }, { "gate", 60 }, { "human", 0 } } },
+        { "Arcade Arp",       182, { { "style", 17 }, { "density", 100 }, { "gate", 40 }, { "octave", 1 }, { "human", 0 } } },
+        { "Night Drive Arp",  183, { { "style", 17 }, { "density", 100 }, { "gate", 70 }, { "slides", 20 }, { "human", 0 } } },
     };
     return list;
 }

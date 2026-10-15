@@ -591,6 +591,22 @@ const std::vector<BendCatProcessor::Preset>& BendCatProcessor::presets()
         { "Blue Notes",       -1, { { "mode", 4 }, { "patDivision", 3 }, { "patSmoothing", 0.5f } },
                                   { 0, 0, 0, -30, 0, 0, -50, 0, 0, 0, -30, 0, 0, -50, 0, 0 } },
         { "Analog Choir",     -1, { { "mode", 0 }, { "detune", 8 }, { "driftCents", 6 }, { "driftRate", 0.08f } }, {} },
+        // ---- v3
+        { "Siren Rise",       1,  { { "mode", 2 }, { "bendAmount", 12 }, { "envDuration", 1500 } }, {} },
+        { "Laser Zap",        5,  { { "mode", 2 }, { "bendAmount", 24 }, { "envDuration", 120 } }, {} },
+        { "Steel Guitar",     3,  { { "mode", 2 }, { "bendAmount", 2 }, { "envDuration", 450 }, { "envDepth", 0.8f } }, {} },
+        { "Sitar Meend",      2,  { { "mode", 2 }, { "bendAmount", 3 }, { "envDuration", 350 }, { "envRandom", 0.2f } }, {} },
+        { "Koto Pull",        10, { { "mode", 2 }, { "bendAmount", 2 }, { "envDuration", 300 } }, {} },
+        { "Drunk Tape",       -1, { { "mode", 3 }, { "bendAmount", 1 }, { "lfoWave", 3 }, { "lfoRate", 0.25f }, { "lfoDepth", 0.25f },
+                                    { "lfoVoiceRandom", 0.8f }, { "lfoPhaseRandom", 1 }, { "driftCents", 8 } }, {} },
+        { "Dubstep Wobble",   -1, { { "mode", 3 }, { "bendAmount", 2 }, { "lfoWave", 0 }, { "lfoSync", 1 }, { "lfoDivision", 4 }, { "lfoDepth", 0.6f } }, {} },
+        { "Leslie Shimmer",   -1, { { "mode", 3 }, { "bendAmount", 1 }, { "lfoWave", 0 }, { "lfoRate", 6.5f }, { "lfoDepth", 0.08f },
+                                    { "lfoVoiceRandom", 0.5f }, { "lfoPhaseRandom", 1 } }, {} },
+        { "Rubber Glide",     -1, { { "mode", 1 }, { "glideTime", 400 }, { "glideCurve", 2 } }, {} },
+        { "Arabic Scale",     -1, { { "mode", 4 }, { "patDivision", 4 }, { "patSmoothing", 0.3f } },
+                                  { 0, 0, -50, 0, 0, 0, 0, -50, 0, 0, -50, 0, 0, 0, 0, 0 } },
+        { "Detuned Unison",   -1, { { "mode", 0 }, { "detune", 18 }, { "driftCents", 4 }, { "driftRate", 0.15f } }, {} },
+        { "Bouncing Ball",    21, { { "mode", 2 }, { "bendAmount", 5 }, { "envDuration", 1200 } }, {} },
     };
     return list;
 }

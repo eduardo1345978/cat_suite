@@ -74,7 +74,8 @@ juce::StringArray GlideCatProcessor::soundParamIds()
     }
     for (auto* id : { "ring", "panSpread", "swell", "swellTime", "brighten", "drift", "wander", "vibDepth", "vibRate", "vibDelay",
                       "ensMode", "ensMix", "ensRate", "ensDepth", "prismMix", "prismTime", "prismFb", "prismI1", "prismI2", "prismI3",
-                      "roomType", "roomMix", "roomSize" })
+                      "roomType", "roomMix", "roomSize", "drive", "driveTone", "echoMix", "echoTime", "echoFb", "echoTone",
+                      "tapeWow", "tapeFlutter", "tapeAge" })
         ids.add (id);
     for (int m = 1; m <= 4; ++m)
         for (auto* k : { "Type", "Mode", "Rate" }) ids.add ("m" + juce::String (m) + k);
@@ -218,6 +219,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout GlideCatProcessor::createLay
     ch ("roomType", "Room", roomTypeNames(), 1);
     pct ("roomMix", "Room Mix", 0.25f);
     pct ("roomSize", "Room Size", 0.6f);
+    pct ("drive", "Drive", 0.0f);
+    pct ("driveTone", "Drive Tone", 0.55f);
+    pct ("echoMix", "Echo Mix", 0.0f);
+    ch ("echoTime", "Echo Time", echoTimeNames(), 2);
+    fl ("echoFb", "Echo Feedback", 0.0f, 0.92f, 0.4f, 1.0f, "%");
+    pct ("echoTone", "Echo Tone", 0.5f);
+    pct ("tapeWow", "Tape Wow", 0.0f);
+    pct ("tapeFlutter", "Tape Flutter", 0.0f);
+    pct ("tapeAge", "Tape Age", 0.0f);
     return layout;
 }
 
@@ -327,6 +337,46 @@ const std::vector<GlideCatProcessor::Preset>& GlideCatProcessor::soundPresets()
                                        G ({ { "mx1Src", 1 }, { "mx1Dst", 1 }, { "mx1Amt", 0.15f }, { "m1Rate", 0.3f }, { "prismMix", 0.3f }, { "roomType", 4 }, { "roomMix", 0.5f } }) }) },
         { "Cathedral Drone", "FX", join ({ L (1, { { "feet", 0 }, { "lpf", 500 }, { "attack", 3.0f }, { "release", 6.0f } }), L (2, { { "feet", 2 }, { "lpf", 900 }, { "attack", 4.0f }, { "level", 0.5f } }),
                                           G ({ { "drift", 0.4f }, { "roomType", 3 }, { "roomMix", 0.6f }, { "roomSize", 0.9f } }) }) },
+        // ---------------- Lo-Fi (tape)
+        { "Cassette Strings", "Lo-Fi", join ({ L (1, { { "pulse", 0.1f }, { "lpf", 1300 }, { "attack", 0.6f }, { "release", 2.0f } }), L (2, { { "feet", 2 }, { "level", 0.3f } }),
+                                                G ({ { "ensMode", 2 }, { "ensMix", 0.5f }, { "tapeWow", 0.45f }, { "tapeFlutter", 0.3f }, { "tapeAge", 0.5f }, { "roomType", 1 }, { "roomMix", 0.3f } }) }) },
+        { "Warped Keys", "Lo-Fi", join ({ L (1, { { "saw", 0.0f }, { "pulse", 0.3f }, { "sine", 0.8f }, { "attack", 0.004f }, { "decay", 2.0f }, { "sustain", 0.25f }, { "release", 0.9f }, { "lpf", 900 } }),
+                                           L (2, { { "on", 0 } }), G ({ { "swell", 0.0f }, { "tapeWow", 0.7f }, { "tapeFlutter", 0.4f }, { "tapeAge", 0.6f }, { "roomType", 0 }, { "roomMix", 0.25f } }) }) },
+        { "VHS Pad", "Lo-Fi", join ({ L (1, { { "lpf", 800 }, { "attack", 1.5f }, { "release", 3.0f }, { "noise", 0.04f } }), L (2, { { "feet", 2 }, { "sine", 0.5f }, { "level", 0.3f } }),
+                                       G ({ { "drift", 0.4f }, { "tapeWow", 0.55f }, { "tapeAge", 0.8f }, { "ensMix", 0.4f }, { "roomType", 1 }, { "roomMix", 0.35f } }) }) },
+        { "Dusty Music Box", "Lo-Fi", join ({ L (1, { { "saw", 0.0f }, { "pulse", 0.0f }, { "sine", 1.0f }, { "attack", 0.001f }, { "decay", 1.4f }, { "sustain", 0.0f }, { "release", 1.0f } }),
+                                               L (2, { { "feet", 3 }, { "saw", 0.0f }, { "sine", 0.35f }, { "attack", 0.001f }, { "decay", 0.3f }, { "sustain", 0.0f } }),
+                                               G ({ { "ring", 0.2f }, { "swell", 0.0f }, { "tapeWow", 0.35f }, { "tapeFlutter", 0.6f }, { "tapeAge", 0.7f }, { "roomType", 0 }, { "roomMix", 0.3f } }) }) },
+        // ---------------- Driven
+        { "Tube Lead", "Driven", join ({ L (1, { { "lpf", 1800 }, { "attack", 0.01f }, { "egDepth", 1.5f }, { "unison", 2 } }), L (2, { { "on", 0 } }),
+                                         G ({ { "drive", 0.55f }, { "driveTone", 0.6f }, { "vibDepth", 0.22f }, { "echoMix", 0.25f }, { "echoTime", 2 }, { "roomType", 2 }, { "roomMix", 0.2f } }) }) },
+        { "Fuzz Brass", "Driven", join ({ L (1, { { "lpf", 1000 }, { "egDepth", 3.0f }, { "attack", 0.08f } }), L (2, { { "feet", 0 }, { "level", 0.4f } }),
+                                          G ({ { "drive", 0.8f }, { "driveTone", 0.45f }, { "ensMix", 0.3f }, { "roomType", 1 }, { "roomMix", 0.25f } }) }) },
+        { "Growl Bass", "Driven", join ({ L (1, { { "feet", 0 }, { "lpf", 500 }, { "lpRes", 3.0f }, { "egDepth", 3.0f }, { "egAtk", 0.004f }, { "egDec", 0.35f }, { "attack", 0.004f }, { "unison", 1 } }),
+                                          L (2, { { "feet", 0 }, { "saw", 0.0f }, { "sine", 0.8f }, { "level", 0.4f } }),
+                                          G ({ { "drive", 0.7f }, { "driveTone", 0.35f }, { "swell", 0.0f }, { "vibDepth", 0.0f }, { "ensMix", 0.0f }, { "roomMix", 0.05f } }) }) },
+        { "Overdriven Organ", "Driven", join ({ L (1, { { "saw", 0.0f }, { "pulse", 0.0f }, { "sine", 0.9f }, { "attack", 0.01f }, { "sustain", 1.0f }, { "release", 0.15f }, { "lpf", 6000 } }),
+                                                L (2, { { "feet", 2 }, { "saw", 0.0f }, { "sine", 0.6f }, { "attack", 0.01f }, { "sustain", 1.0f }, { "release", 0.15f } }),
+                                                G ({ { "drive", 0.6f }, { "driveTone", 0.5f }, { "swell", 0.0f }, { "ensMode", 1 }, { "ensMix", 0.6f }, { "roomMix", 0.2f } }) }) },
+        // ---------------- Echoes
+        { "Echo Pluck", "Echoes", join ({ L (1, { { "attack", 0.002f }, { "decay", 0.45f }, { "sustain", 0.0f }, { "release", 0.4f }, { "egAtk", 0.002f }, { "egDec", 0.3f }, { "egDepth", 3.5f } }),
+                                          L (2, { { "on", 0 } }), G ({ { "swell", 0.0f }, { "echoMix", 0.45f }, { "echoTime", 2 }, { "echoFb", 0.55f }, { "roomType", 1 }, { "roomMix", 0.25f } }) }) },
+        { "Dub Chords", "Echoes", join ({ L (1, { { "saw", 0.4f }, { "pulse", 0.5f }, { "attack", 0.003f }, { "decay", 0.25f }, { "sustain", 0.0f }, { "release", 0.2f }, { "hpf", 250 }, { "lpf", 1600 } }),
+                                          L (2, { { "on", 0 } }), G ({ { "swell", 0.0f }, { "echoMix", 0.55f }, { "echoTime", 3 }, { "echoFb", 0.7f }, { "echoTone", 0.25f }, { "roomType", 2 }, { "roomMix", 0.3f } }) }) },
+        { "Dotted Lead", "Echoes", join ({ L (1, { { "lpf", 2200 }, { "attack", 0.01f }, { "unison", 2 } }), L (2, { { "on", 0 } }),
+                                           G ({ { "vibDepth", 0.2f }, { "echoMix", 0.4f }, { "echoTime", 2 }, { "echoFb", 0.5f }, { "roomType", 1 }, { "roomMix", 0.25f } }) }) },
+        { "Infinite Bells", "Echoes", join ({ L (1, { { "saw", 0.0f }, { "pulse", 0.0f }, { "sine", 1.0f }, { "attack", 0.002f }, { "decay", 2.5f }, { "sustain", 0.0f }, { "release", 2.0f } }),
+                                              L (2, { { "feet", 2 }, { "fine", 25 }, { "saw", 0.0f }, { "sine", 1.0f }, { "attack", 0.002f }, { "decay", 1.5f }, { "sustain", 0.0f } }),
+                                              G ({ { "ring", 0.6f }, { "swell", 0.0f }, { "echoMix", 0.5f }, { "echoTime", 4 }, { "echoFb", 0.8f }, { "roomType", 4 }, { "roomMix", 0.45f } }) }) },
+        // ---------------- More pads and leads
+        { "Aurora", "Pads", join ({ L (1, { { "lpf", 1200 }, { "attack", 2.0f }, { "release", 5.0f } }), L (2, { { "feet", 3 }, { "saw", 0.0f }, { "sine", 0.5f }, { "level", 0.3f } }),
+                                     G ({ { "prismMix", 0.3f }, { "echoMix", 0.25f }, { "echoTime", 5 }, { "echoFb", 0.6f }, { "roomType", 4 }, { "roomMix", 0.55f }, { "roomSize", 0.9f } }) }) },
+        { "Velvet Night", "Pads", join ({ L (1, { { "lpf", 650 }, { "attack", 1.6f }, { "release", 3.5f }, { "detune", 18 } }), L (2, { { "feet", 0 }, { "level", 0.45f } }),
+                                           G ({ { "drive", 0.2f }, { "tapeWow", 0.2f }, { "ensMix", 0.6f }, { "roomType", 1 }, { "roomMix", 0.45f } }) }) },
+        { "Silk Flute", "Leads", join ({ L (1, { { "saw", 0.0f }, { "pulse", 0.0f }, { "sine", 0.9f }, { "noise", 0.12f }, { "lpf", 2500 }, { "attack", 0.08f } }), L (2, { { "on", 0 } }),
+                                         G ({ { "vibDepth", 0.25f }, { "vibDelay", 0.3f }, { "echoMix", 0.2f }, { "echoTime", 2 }, { "roomType", 1 }, { "roomMix", 0.35f } }) }) },
+        { "Chiptune Glide", "Leads", join ({ L (1, { { "saw", 0.0f }, { "pulse", 1.0f }, { "pw", 0.25f }, { "pwm", 0.0f }, { "lpf", 12000 }, { "attack", 0.002f }, { "unison", 1 } }),
+                                             L (2, { { "on", 0 } }), G ({ { "swell", 0.0f }, { "vibDepth", 0.3f }, { "vibDelay", 0.2f }, { "ensMix", 0.0f }, { "echoMix", 0.3f }, { "echoTime", 1 }, { "roomMix", 0.1f } }) }) },
     };
     return list;
 }
@@ -370,6 +420,14 @@ const std::vector<GlideCatProcessor::Preset>& GlideCatProcessor::glidePresets()
         { "Mirror World", "Autopilot", G ({ { "pilot", 8 }, { "pilotRate", 0.5f }, { "pilotSmooth", 0.6f }, { "pilotDensity", 1.0f } }) },
         { "Step Sequence", "Autopilot", G ({ { "pilot", 9 }, { "pilotSync", 5 }, { "pilotSmooth", 0.15f }, { "pilotDensity", 1.0f } }) },
         { "Evolving Loop", "Autopilot", G ({ { "pilot", 10 }, { "pilotSync", 4 }, { "pilotRange", 12 }, { "pilotScale", 7 }, { "pilotSmooth", 0.3f } }) },
+        { "Rubber Band", "Glide", G ({ { "glideMs", 520 }, { "curve", 3 }, { "path", 1 }, { "pathDepth", 2 } }) },
+        { "Lazy River", "Glide", G ({ { "glideMs", 2600 }, { "curve", 2 }, { "glideSpread", 0.5f }, { "path", 4 }, { "pathDepth", 1.5f } }) },
+        { "Sharp Turns", "Glide", G ({ { "glideMs", 60 }, { "curve", 1 }, { "staggerMs", 25 }, { "staggerOrd", 3 } }) },
+        { "Dive Bomb", "Glide", G ({ { "newVoices", 1 }, { "startFrom", 1 }, { "startDepth", 24 }, { "glideMs", 400 }, { "curve", 1 } }) },
+        { "Tidal", "Glide", G ({ { "path", 3 }, { "pathDepth", 5 }, { "glideMs", 1600 }, { "releaseBend", -5 } }) },
+        { "Fifths Walker", "Autopilot", G ({ { "pilot", 2 }, { "pilotSync", 3 }, { "pilotScale", 8 }, { "pilotDensity", 0.7f }, { "pilotSmooth", 0.4f } }) },
+        { "Octave Rain", "Autopilot", G ({ { "pilot", 3 }, { "pilotSync", 5 }, { "pilotScale", 9 }, { "pilotRange", 24 }, { "pilotSmooth", 0.2f } }) },
+        { "Sleepy Drift", "Autopilot", G ({ { "pilot", 7 }, { "pilotRate", 0.15f }, { "pilotRange", 5 }, { "pilotScale", 6 }, { "pilotSmooth", 0.95f } }) },
     };
     return list;
 }
@@ -497,6 +555,10 @@ void GlideCatProcessor::readSettings()
     f.prismI1 = juce::roundToInt (p ("prismI1")); f.prismI2 = juce::roundToInt (p ("prismI2")); f.prismI3 = juce::roundToInt (p ("prismI3"));
     f.roomType = juce::roundToInt (p ("roomType"));
     f.roomMix = p ("roomMix"); f.roomSize = p ("roomSize");
+    f.drive = p ("drive"); f.driveTone = p ("driveTone");
+    f.echoMix = p ("echoMix"); f.echoFeedback = p ("echoFb"); f.echoTone = p ("echoTone");
+    f.echoBeats = echoTimeBeats (juce::roundToInt (p ("echoTime")));
+    f.tapeWow = p ("tapeWow"); f.tapeFlutter = p ("tapeFlutter"); f.tapeAge = p ("tapeAge");
 }
 
 void GlideCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
@@ -566,6 +628,7 @@ void GlideCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     if (pos < numSamples) synth.render (l + pos, r + pos, numSamples - pos);
     midi.clear();
 
+    fxSettings.bpm = hostSync.get().bpm;
     effects.process (l, r, numSamples, fxSettings);
     const float vol = settings.volume;
     for (int i = 0; i < numSamples; ++i)

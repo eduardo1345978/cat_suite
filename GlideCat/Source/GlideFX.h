@@ -8,6 +8,9 @@
       Ensemble - chorus (2 voices) or string ensemble (3 voices, slow + fast modulation)
       Prism    - delay whose repeats are pitch-shifted to three intervals; the feedback goes
                  through the shifters again, so the intervals cascade (+7 -> +14 -> ...)
+      Drive    - warm tube-like saturation with a tone control (before everything else)
+      Echo     - stereo ping-pong delay, synced to the tempo, with a darkening feedback path
+      Tape     - wow, flutter and age (gentle lo-fi: bandwidth, hiss)
       Rooms    - room, hall, plate, cathedral, shimmer (octave-up feedback) and bloom (slow swell)
 */
 namespace glidecat
@@ -25,7 +28,13 @@ struct FxSettings
     int prismI1 = 6, prismI2 = 8, prismI3 = 4;
     int roomType = 1;
     float roomMix = 0.25f, roomSize = 0.6f;
+    float drive = 0.0f, driveTone = 0.5f;
+    float echoMix = 0.0f, echoFeedback = 0.4f, echoBeats = 0.75f, echoTone = 0.5f;
+    double bpm = 120.0;
+    float tapeWow = 0.0f, tapeFlutter = 0.0f, tapeAge = 0.0f;
 };
+juce::StringArray echoTimeNames();       // 1/16 .. 1/2 dotted
+float echoTimeBeats (int index);
 
 class PitchShifter
 {
@@ -68,6 +77,17 @@ private:
     int preWrite = 0;
     float bloomEnv = 0.0f;
     std::vector<float> wetL, wetR;
+    // drive
+    float driveLpL = 0.0f, driveLpR = 0.0f;
+    // echo
+    std::vector<float> echoL, echoR;
+    int echoWrite = 0;
+    float echoSamples = 0.0f, echoLpL = 0.0f, echoLpR = 0.0f;
+    // tape
+    std::vector<float> tapeL, tapeR;
+    int tapeWrite = 0;
+    float wowPh = 0.0f, flutPh = 0.0f, ageLpL = 0.0f, ageLpR = 0.0f;
+    uint32_t hiss = 12345u;
 };
 
 } // namespace glidecat

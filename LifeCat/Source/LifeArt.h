@@ -42,6 +42,12 @@ juce::Image renderTerrain (const lifecat::World&, int theme, int size);
 void drawPlant (juce::Graphics&, juce::Point<float> pos, float size, float growth, int index, const Scene&);
 void drawCorpse (juce::Graphics&, juce::Point<float> pos, float r, const lifecat::Corpse&, const Scene&);
 void drawNest (juce::Graphics&, juce::Point<float> pos, float r, const lifecat::Nest&, const Scene&);
+/** Fruit trees (an apple tree, a coral tree, a crystal spire, a cell colony). */
+void drawTree (juce::Graphics&, juce::Point<float> pos, float r, const lifecat::Tree&, int index, const Scene&);
+void drawFruit (juce::Graphics&, juce::Point<float> pos, float s, int index, const Scene&);
+/** Mushrooms (anemones, crystals, spore puffs): they glow a little at night. */
+void drawMushroom (juce::Graphics&, juce::Point<float> pos, float s, int index, const Scene&);
+juce::String eventName (int theme, lifecat::WorldEvent);
 void drawCreature (juce::Graphics&, const lifecat::Creature&, juce::Point<float> pos, float r, const Scene&);
 /** Light that shines through the night: glowing creatures, singing rings. Drawn after the sky. */
 void drawGlow (juce::Graphics&, const lifecat::Creature&, juce::Point<float> pos, float r, const Scene&);

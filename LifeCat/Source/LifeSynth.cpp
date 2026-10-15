@@ -3,7 +3,7 @@
 namespace lifecat
 {
 juce::StringArray themeNames() { return { "Garden", "Ocean", "Space", "Cells" }; }
-juce::StringArray soundTypeNames() { return { "Natural", "Gene Mix", "Pad", "Bell", "Pluck", "Percussion", "Drone", "Texture" }; }
+juce::StringArray soundTypeNames() { return { "Natural", "Gene Mix", "Pad", "Bell", "Pluck", "Percussion", "Drone", "Texture", "Choir", "Flute", "Glass" }; }
 
 SoundType naturalSound (Role r) noexcept
 {
@@ -15,7 +15,8 @@ SoundType naturalSound (Role r) noexcept
         case Role::Swarm:      return SoundType::Pluck;
         case Role::Drummer:    return SoundType::Percussion;
         case Role::Builder:    return SoundType::Bell;
-        default:               return SoundType::Genes;      // singers: their genes (with glide + vibrato)
+        case Role::Singer:     return SoundType::Flute;
+        default:               return SoundType::Genes;
     }
 }
 
@@ -102,11 +103,36 @@ void Synth::setupVoice (Voice& v, const NoteRequest& r)
         case SoundType::Percussion: wperc = 1.0f; wp = wb = 0.0f; wt = 0.15f; break;
         case SoundType::Drone:      wp = 0.8f; wb = 0.0f; wt = 0.2f; wsub = 0.7f; break;
         case SoundType::Texture:    wt = 1.0f; wp = wb = 0.0f; break;
+        case SoundType::Choir:
+        case SoundType::Flute:
+        case SoundType::Glass:      wp = wb = wt = 0.0f; break;
         case SoundType::Genes:
         default: break;
     }
     const float sum = juce::jmax (0.001f, wp + wb + wt);
     v.wPad = wp / sum; v.wBell = wb / sum; v.wTex = wt / sum;
+    v.wChoir = r.sound == SoundType::Choir ? 1.0f : 0.0f;
+    v.wFlute = r.sound == SoundType::Flute ? 1.0f : 0.0f;
+    v.wGlass = r.sound == SoundType::Glass ? 1.0f : 0.0f;
+    {
+        // vowel for the choir from the Harmonics gene: oo - oh - ah - eh - ee
+        static const float f1s[] = { 330.0f, 450.0f, 760.0f, 530.0f, 300.0f }, f2s[] = { 760.0f, 830.0f, 1180.0f, 1800.0f, 2250.0f };
+        const float pos = juce::jlimit (0.0f, 3.999f, g[gHarm] * 4.0f);
+        const int i0 = (int) pos;
+        const float fr = pos - (float) i0;
+        const float F1 = f1s[i0] + (f1s[i0 + 1] - f1s[i0]) * fr, F2 = f2s[i0] + (f2s[i0 + 1] - f2s[i0]) * fr;
+        const float srf = (float) sampleRate;
+        v.fr1 = std::exp (-juce::MathConstants<float>::pi * 90.0f / srf);
+        v.fr2 = std::exp (-juce::MathConstants<float>::pi * 120.0f / srf);
+        v.fc1 = 2.0f * v.fr1 * std::cos (twoPi * F1 / srf);
+        v.fc2 = 2.0f * v.fr2 * std::cos (twoPi * F2 / srf);
+        v.fa = v.fb = v.fc = v.fd = 0.0f;
+        v.flutePh = 0.0f;
+        v.breathLp = 0.0f;
+        for (int i = 0; i < 3; ++i) v.glassPh[i] = 0.0f;
+        v.glassAmp = 1.0f;
+        v.glassMul = std::exp (-1.0f / ((0.8f + 3.5f * g[gRelease]) * srf));
+    }
     v.wPerc = wperc; v.wSub = wsub;
 
     const float atkScale = std::pow (4.0f, settings.attack), relScale = std::pow (4.0f, settings.release);
@@ -318,6 +344,53 @@ void Synth::render (float* left, float* right, int n)
                 if (v.percBodyPh > twoPi) v.percBodyPh -= twoPi;
                 out += v.wPerc * v.percAmp * (0.33f * y1 + 0.38f * std::sin (v.percBodyPh) + 0.15f * white * v.percAmp);
                 v.percAmp *= v.percMul;
+            }
+            // choir: the pad's saws through two vowel formants, with a little breath
+            if (v.wChoir > 0.001f)
+            {
+                float saw = 0.0f;
+                for (int s = 0; s < 3; ++s)
+                {
+                    const float di = inc * v.detune[s];
+                    v.ph[s] += di;
+                    if (v.ph[s] >= 1.0f) v.ph[s] -= 1.0f;
+                    saw += 2.0f * v.ph[s] - 1.0f - polyBlep (v.ph[s], di);
+                }
+                v.noise ^= v.noise << 13; v.noise ^= v.noise >> 17; v.noise ^= v.noise << 5;
+                const float in = saw * 0.33f + 0.05f * (float) (int32_t) v.noise * (1.0f / 2147483648.0f);
+                const float y1 = (1.0f - v.fr1) * in + v.fc1 * v.fa - v.fr1 * v.fr1 * v.fb;
+                v.fb = v.fa; v.fa = y1;
+                const float y2 = (1.0f - v.fr2) * in + v.fc2 * v.fc - v.fr2 * v.fr2 * v.fd;
+                v.fd = v.fc; v.fc = y2;
+                out += v.wChoir * (y1 * 0.9f + y2 * 0.55f) * v.env;
+            }
+            // flute: sine with a soft second harmonic and breath noise that is strongest at the start
+            if (v.wFlute > 0.001f)
+            {
+                v.flutePh += twoPi * inc;
+                if (v.flutePh > twoPi) v.flutePh -= twoPi;
+                v.noise ^= v.noise << 13; v.noise ^= v.noise >> 17; v.noise ^= v.noise << 5;
+                const float white = (float) (int32_t) v.noise * (1.0f / 2147483648.0f);
+                v.breathLp += (white - v.breathLp) * 0.25f;
+                const float chiff = juce::jmax (0.0f, 1.0f - (float) v.t * 12.0f);
+                const float tone = std::sin (v.flutePh) + 0.18f * std::sin (2.0f * v.flutePh) * bright;
+                out += v.wFlute * (tone * 0.45f + v.breathLp * (0.08f + 0.35f * chiff)) * v.env;
+            }
+            // glass: three inharmonic partials ringing like a glass harmonica
+            if (v.wGlass > 0.001f)
+            {
+                static const float ratios[3] = { 1.0f, 2.756f, 5.404f };
+                static const float amps[3] = { 0.6f, 0.28f, 0.14f };
+                float sum = 0.0f;
+                for (int pI = 0; pI < 3; ++pI)
+                {
+                    v.glassPh[pI] += twoPi * inc * ratios[pI];
+                    if (v.glassPh[pI] > twoPi) v.glassPh[pI] -= twoPi;
+                    sum += amps[pI] * std::sin (v.glassPh[pI]) * (pI == 0 ? 1.0f : v.glassAmp);
+                }
+                const float onset = juce::jmin (1.0f, (float) v.t / 0.004f);
+                out += v.wGlass * 0.55f * sum * onset * juce::jmax (v.glassAmp, 0.35f) * (v.releasing ? v.env : 1.0f) * (0.6f + 0.4f * v.env);
+                v.glassAmp *= v.glassMul;
             }
             // drone: a sub-octave sine under the pad
             if (v.wSub > 0.001f)

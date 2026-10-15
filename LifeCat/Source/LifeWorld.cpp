@@ -124,6 +124,9 @@ void World::reset (uint32_t seed, const std::array<int, numRoles>& counts, int n
     for (auto& p : plants) p.alive = false;
     for (auto& k : corpses) k.alive = false;
     for (auto& n : nests) n.alive = false;
+    for (auto& tr : trees) tr.alive = false;
+    lastEvent = -1;
+    lastEventAge = 1000.0f;
     terrain.fill (0);
     nextId = 1;
     maxGeneration = births = deaths = 0;
@@ -298,6 +301,8 @@ void World::removeNear (float x, float y, float radius)
         if (k.alive && dist2 (k.x, k.y, x, y) < radius * radius) k.alive = false;
     for (auto& n : nests)
         if (n.alive && dist2 (n.x, n.y, x, y) < radius * radius) n.alive = false;
+    for (auto& tr : trees)
+        if (tr.alive && dist2 (tr.x, tr.y, x, y) < radius * radius) tr.alive = false;
 }
 
 void World::removeId (uint32_t id)
@@ -305,7 +310,7 @@ void World::removeId (uint32_t id)
     if (auto* c = find (id)) { c->alive = false; ++deaths; pushEvent (1, c->x, c->y, c->role); }
 }
 
-void World::addFood (float x, float y, int n, float spread)
+void World::addFood (float x, float y, int n, float spread, uint8_t kind)
 {
     for (int k = 0; k < n; ++k)
         for (auto& p : plants)
@@ -314,9 +319,103 @@ void World::addFood (float x, float y, int n, float spread)
                 p.alive = true;
                 p.x = juce::jlimit (0.01f, 0.99f, x + spread * rng.bi());
                 p.y = juce::jlimit (0.01f, 0.99f, y + spread * rng.bi());
-                p.size = 0.6f + 0.4f * rng.uni();
+                p.size = kind == 1 ? 1.0f : 0.6f + 0.4f * rng.uni();
+                p.kind = kind;
                 break;
             }
+}
+
+void World::addTree (float x, float y)
+{
+    if (terrainAt (x, y) == Terrain::Rock || terrainAt (x, y) == Terrain::Lava) return;
+    for (auto& tr : trees)
+        if (! tr.alive)
+        {
+            tr = { true, juce::jlimit (0.03f, 0.97f, x), juce::jlimit (0.03f, 0.97f, y), 0.25f, 2.0f + 3.0f * rng.uni() };
+            return;
+        }
+}
+
+void World::triggerEvent (WorldEvent e, float x, float y)
+{
+    lastEvent = (int) e;
+    lastEventAge = 0.0f;
+    switch (e)
+    {
+        case WorldEvent::Meteors:
+            for (int k = 0; k < 5; ++k)
+            {
+                const float mx = 0.08f + 0.84f * rng.uni(), my = 0.08f + 0.84f * rng.uni();
+                for (auto& c : creatures)
+                    if (c.alive && ! c.favourite && dist2 (c.x, c.y, mx, my) < 0.045f * 0.045f) die (c, 6, 0.0f);
+                for (auto& p : plants) if (p.alive && dist2 (p.x, p.y, mx, my) < 0.05f * 0.05f) p.alive = false;
+                paintTerrain (mx, my, 0.035f, Terrain::Rock);
+                paintTerrain (mx + 0.04f * rng.bi(), my + 0.04f * rng.bi(), 0.02f, Terrain::Light);       // glowing stardust
+                pushEvent (7, mx, my, Role::Grazer);
+            }
+            break;
+        case WorldEvent::Flood:
+        {
+            // rivers rise: every water cell spreads; with no water yet, a lake appears
+            bool any = false;
+            for (auto v : terrain) any = any || v == (uint8_t) Terrain::Water;
+            if (! any) paintTerrain (x, y, 0.2f, Terrain::Water);
+            else
+            {
+                auto copy = terrain;
+                for (int cy = 0; cy < terrainSize; ++cy)
+                    for (int cx = 0; cx < terrainSize; ++cx)
+                    {
+                        if (copy[(size_t) (cy * terrainSize + cx)] != (uint8_t) Terrain::Water) continue;
+                        for (int dy = -2; dy <= 2; ++dy)
+                            for (int dx = -2; dx <= 2; ++dx)
+                            {
+                                const int nx = cx + dx, ny = cy + dy;
+                                if (nx < 0 || ny < 0 || nx >= terrainSize || ny >= terrainSize || dx * dx + dy * dy > 5) continue;
+                                auto& t = terrain[(size_t) (ny * terrainSize + nx)];
+                                if (t != (uint8_t) Terrain::Rock) t = (uint8_t) Terrain::Water;
+                            }
+                    }
+            }
+            for (auto& p : plants) if (p.alive && terrainAt (p.x, p.y) == Terrain::Water && rng.uni() < 0.7f) p.alive = false;
+            break;
+        }
+        case WorldEvent::Drought:
+            for (auto& p : plants) if (p.alive && rng.uni() < 0.65f) p.alive = false;
+            for (auto& t : terrain)
+            {
+                if (t == (uint8_t) Terrain::Meadow) t = (uint8_t) Terrain::Ground;
+                else if (t == (uint8_t) Terrain::Water && rng.uni() < 0.6f) t = (uint8_t) Terrain::Sand;
+            }
+            for (auto& c : creatures) if (c.alive) c.energy -= 0.15f;
+            break;
+        case WorldEvent::Bloom:
+            for (int k = 0; k < 90; ++k)
+            {
+                const float bx = 0.03f + 0.94f * rng.uni(), by = 0.03f + 0.94f * rng.uni();
+                if (plantAllowedAt (bx, by)) addFood (bx, by, 1, 0.0f);
+            }
+            for (int k = 0; k < 6; ++k) paintTerrain (0.1f + 0.8f * rng.uni(), 0.1f + 0.8f * rng.uni(), 0.06f, Terrain::Meadow);
+            if (rng.uni() < 0.6f) addTree (0.15f + 0.7f * rng.uni(), 0.15f + 0.7f * rng.uni());
+            break;
+        case WorldEvent::Migration:
+        {
+            const Role r = (Role) std::min (numRoles - 1, (int) (rng.uni() * (float) numRoles));
+            const float side = rng.uni() < 0.5f ? 0.04f : 0.96f, y0 = 0.2f + 0.6f * rng.uni();
+            const int n = r == Role::Giant ? 2 : 6;
+            for (int k = 0; k < n; ++k) addCreature (r, side, juce::jlimit (0.05f, 0.95f, y0 + 0.04f * rng.bi()));
+            break;
+        }
+        case WorldEvent::Plague:
+        {
+            // the most crowded kind falls ill
+            int best = 0, bestCount = -1;
+            for (int r = 0; r < numRoles; ++r) { const int n = count ((Role) r); if (n > bestCount) { bestCount = n; best = r; } }
+            for (auto& c : creatures)
+                if (c.alive && (int) c.role == best && ! c.favourite && rng.uni() < 0.6f) c.energy = std::min (c.energy, 0.12f);
+            break;
+        }
+    }
 }
 
 void World::addWall (float x1, float y1, float x2, float y2)
@@ -599,8 +698,31 @@ void World::step (float dt, const LifeSettings& s)
         if (k.age > 25.0f)
         {
             k.alive = false;
-            if (rng.uni() < 0.7f && plantAllowedAt (k.x, k.y)) addFood (k.x, k.y, 1 + (rng.uni() < 0.4f ? 1 : 0), 0.02f);
+            if (rng.uni() < 0.7f && plantAllowedAt (k.x, k.y))
+                addFood (k.x, k.y, 1 + (rng.uni() < 0.4f ? 1 : 0), 0.02f, rng.uni() < 0.55f ? 2 : 0);      // mushrooms grow on what died
         }
+    }
+
+    // fruit trees grow and drop fruit (more in summer, none in winter)
+    lastEventAge += sdt;
+    for (auto& tr : trees)
+    {
+        if (! tr.alive) continue;
+        tr.size = std::min (1.0f, tr.size + 0.01f * growth * sdt);
+        tr.fruitTimer -= sdt * growth;
+        if (tr.fruitTimer <= 0.0f && tr.size > 0.4f)
+        {
+            tr.fruitTimer = 3.0f + 4.0f * rng.uni();
+            const float fx = juce::jlimit (0.02f, 0.98f, tr.x + 0.06f * rng.bi()), fy = juce::jlimit (0.02f, 0.98f, tr.y + 0.06f * rng.bi());
+            if (plantCount() < maxPlants - 4 && terrainAt (fx, fy) != Terrain::Lava) { addFood (fx, fy, 1, 0.0f, 1); pushEvent (8, fx, fy, Role::Grazer); }
+        }
+        if (terrainAt (tr.x, tr.y) == Terrain::Lava || terrainAt (tr.x, tr.y) == Terrain::Water) tr.alive = false;
+    }
+    // mushrooms pop up in the dark
+    if (light < 0.3f && rng.uni() < 0.15f * sdt)
+    {
+        const float mx = 0.04f + 0.92f * rng.uni(), my = 0.04f + 0.92f * rng.uni();
+        if (plantAllowedAt (mx, my) && plantCount() < maxPlants * 3 / 4) addFood (mx, my, 1 + (int) (rng.uni() * 3.0f), 0.015f, 2);
     }
 
     // nests: grow while their builder is home, crumble without one

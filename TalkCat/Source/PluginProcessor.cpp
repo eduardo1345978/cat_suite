@@ -166,6 +166,39 @@ const std::vector<TalkCatProcessor::VoicePreset>& TalkCatProcessor::voicePresets
         { "Half Cat Half Human", "Cat", { { "style", 1 }, { "cat", 0.45f }, { "size", 15.5f }, { "gender", 0.3f }, { "vibDepth", 30 } } },
         { "Cat Choir", "Cat", { { "style", 14 }, { "cat", 0.85f }, { "h1", 1 }, { "h2", 6 }, { "h3", 10 }, { "h1Level", 0.6f }, { "h2Level", 0.5f }, { "h3Level", 0.4f }, { "width", 0.9f }, { "reverb", 4 } } },
         { "Big Lion", "Cat", { { "style", 6 }, { "cat", 0.5f }, { "size", 20.0f }, { "gender", -1.0f }, { "rasp", 0.6f }, { "drive", 0.3f } } },
+        // ---- v2
+        { "Bedroom Lo-Fi", "Human", { { "style", 2 }, { "size", 15.4f }, { "gender", 0.2f }, { "breath", 0.4f }, { "tension", -0.4f }, { "lowCut", 160 }, { "air", -3 },
+                                      { "comp", 0.6f }, { "delayMix", 0.18f }, { "reverb", 1 }, { "reverbMix", 0.15f } } },
+        { "Stadium Anthem", "Human", { { "style", 6 }, { "size", 16.6f }, { "gender", -0.2f }, { "tension", 0.3f }, { "h1", 9 }, { "h1Level", 0.4f }, { "dblLevel", 0.5f },
+                                       { "reverb", 3 }, { "reverbMix", 0.35f }, { "reverbSize", 0.9f } } },
+        { "K-Pop Bright", "Human", { { "style", 5 }, { "size", 14.0f }, { "gender", 0.7f }, { "bright", 0.4f }, { "air", 6 }, { "presence", 5 }, { "dblLevel", 0.4f },
+                                     { "comp", 0.7f }, { "delayMix", 0.12f } } },
+        { "Lullaby Mum", "Human", { { "style", 2 }, { "size", 14.8f }, { "gender", 0.6f }, { "breath", 0.35f }, { "tension", -0.5f }, { "vibDepth", 14 }, { "porta", 140 },
+                                    { "reverb", 1 }, { "reverbMix", 0.25f } } },
+        { "Telephone", "Synthetic", { { "style", 0 }, { "size", 16.0f }, { "lowCut", 380 }, { "presence", 9 }, { "air", -6 }, { "drive", 0.3f }, { "comp", 0.8f },
+                                      { "reverb", 0 } } },
+        { "Megaphone", "Synthetic", { { "style", 6 }, { "size", 16.5f }, { "lowCut", 400 }, { "presence", 9 }, { "drive", 0.8f }, { "comp", 0.9f }, { "reverb", 1 },
+                                      { "reverbMix", 0.1f } } },
+        { "Ghost", "Synthetic", { { "style", 11 }, { "size", 15.5f }, { "breath", 0.8f }, { "tension", -0.7f }, { "vibDepth", 60 }, { "vibRate", 3.5f },
+                                  { "delayMix", 0.35f }, { "delayFb", 0.6f }, { "reverb", 4 }, { "reverbMix", 0.55f } } },
+        { "Giant", "Synthetic", { { "style", 0 }, { "size", 20.0f }, { "gender", -1.0f }, { "throat", 0.6f }, { "ring", 0.6f }, { "porta", 200 }, { "reverb", 4 },
+                                  { "reverbMix", 0.4f } } },
+        { "Fairy", "Synthetic", { { "style", 5 }, { "size", 9.0f }, { "gender", 1.0f }, { "bright", 0.5f }, { "breath", 0.3f }, { "vibDepth", 35 }, { "vibRate", 7.5f },
+                                  { "h1", 9 }, { "h1Level", 0.35f }, { "delayMix", 0.25f }, { "reverb", 3 }, { "reverbMix", 0.35f } } },
+        { "Elf Choir", "Synthetic", { { "style", 0 }, { "size", 11.0f }, { "gender", 0.8f }, { "h1", 1 }, { "h2", 5 }, { "h3", 9 }, { "h1Level", 0.55f }, { "h2Level", 0.5f },
+                                      { "h3Level", 0.35f }, { "width", 1.0f }, { "reverb", 4 }, { "reverbMix", 0.45f } } },
+        { "Duet Partner", "Human", { { "style", 1 }, { "size", 15.6f }, { "gender", 0.1f }, { "h1", 2 }, { "h1Level", 0.7f }, { "h1Pan", 0.6f }, { "width", 0.8f },
+                                     { "reverbMix", 0.25f } } },
+        { "Barbershop Lead", "Human", { { "style", 8 }, { "size", 17.0f }, { "gender", -0.4f }, { "h1", 1 }, { "h2", 4 }, { "h3", 10 }, { "h1Level", 0.6f },
+                                        { "h2Level", 0.55f }, { "h3Level", 0.5f }, { "vibDepth", 30 } } },
+        { "Breathy Pop Girl", "Human", { { "style", 1 }, { "size", 14.2f }, { "gender", 0.8f }, { "breath", 0.5f }, { "air", 7 }, { "comp", 0.65f }, { "dblLevel", 0.25f } } },
+        { "Space Cat", "Cat", { { "style", 14 }, { "cat", 0.8f }, { "size", 14.0f }, { "vibDepth", 60 }, { "vibRate", 7.0f }, { "delayMix", 0.35f }, { "delayFb", 0.55f },
+                                { "reverb", 4 }, { "reverbMix", 0.5f } } },
+        { "Sleepy Cat", "Cat", { { "style", 11 }, { "cat", 0.9f }, { "size", 15.0f }, { "breath", 0.6f }, { "tension", -0.6f }, { "porta", 220 }, { "vibDepth", 20 } } },
+        { "Angry Alley Cat", "Cat", { { "style", 7 }, { "cat", 0.85f }, { "size", 16.0f }, { "rasp", 0.7f }, { "tension", 0.7f }, { "drive", 0.4f } } },
+        { "Kitten Choir", "Cat", { { "style", 14 }, { "cat", 1.0f }, { "size", 12.5f }, { "age", 0.05f }, { "h1", 1 }, { "h2", 5 }, { "h1Level", 0.6f }, { "h2Level", 0.5f },
+                                   { "width", 0.9f }, { "reverb", 3 }, { "reverbMix", 0.3f } } },
+        { "Cat Rocker", "Cat", { { "style", 6 }, { "cat", 0.6f }, { "size", 17.0f }, { "rasp", 0.35f }, { "drive", 0.35f }, { "dblLevel", 0.5f }, { "comp", 0.7f } } },
     };
     return list;
 }
@@ -198,6 +231,35 @@ const std::vector<TalkCatProcessor::DemoSong>& TalkCatProcessor::demoSongs()
         { "Scale Exercise (do re mi)", 0, 0, 100.0,
           "60:1 62:1 64:1 65:1 67:1 69:1 71:1 72:2 71:1 69:1 67:1 65:1 64:1 62:1 60:2"
           "|do re mi fa so la ti do do ti la so fa mi re do" },
+        { "Ode to Joy (English)", 0, 1, 104.0,
+          "64:1 64:1 65:1 67:1 67:1 65:1 64:1 62:1 60:1 60:1 62:1 64:1 64:1.5 62:0.5 62:2 "
+          "64:1 64:1 65:1 67:1 67:1 65:1 64:1 62:1 60:1 60:1 62:1 64:1 62:1.5 60:0.5 60:2"
+          "|sing a song of joy to-ge-ther all the world is shi-ning bright "
+          "hand in hand we sing for-e-ver from the mor-ning to the night" },
+        { "Are You Sleeping (round)", 0, 9, 108.0,
+          "60:1 62:1 64:1 60:1 60:1 62:1 64:1 60:1 64:1 65:1 67:2 64:1 65:1 67:2 "
+          "67:0.5 69:0.5 67:0.5 65:0.5 64:1 60:1 67:0.5 69:0.5 67:0.5 65:0.5 64:1 60:1 60:1 55:1 60:2 60:1 55:1 60:2"
+          "|are you slee-ping are you slee-ping bro-ther john bro-ther john "
+          "mor-ning bells are rin-ging mor-ning bells are rin-ging ding dang dong ding dang dong" },
+        { "Slnko svieti (Slovak)", 1, 9, 96.0,
+          "60:1 64:1 67:1 67:1 69:1 67:1 64:2 65:1 64:1 62:1 64:1 60:4 "
+          "67:1 67:1 69:1 72:1 71:1 69:1 67:2 65:1 64:1 62:1 62:1 60:4"
+          "|slnko svieti na l\xc3\xbake ma\xc4\x8dka spieva pesni\xc4\x8dku "
+          "vt\xc3\xa1\xc4\x8dik let\xc3\xad do neba spievame si spolu" },
+        { "Hoshi no Uta (Japanese)", 2, 2, 88.0,
+          "60:1 62:1 64:1 65:1 64:1 62:1 60:2 64:1 65:1 67:1 69:1 67:1 65:1 64:2 "
+          "60:1 r:1 60:1 r:1 60:1 r:1 60:1 r:1 60:0.5 60:0.5 62:0.5 62:0.5 64:0.5 64:0.5 65:0.5 65:0.5 64:1 62:1 60:2"
+          "|ho-shi ga hi-ka-ru yo-ru no so-ra ni min-na de u-ta-ou "
+          "ra ra ra ra ki-ra ki-ra ki-ra ki-ra hi-ka-re" },
+        { "Meow Blues (Cat)", 3, 8, 84.0,
+          "60:1 63:1 65:1 66:0.5 67:1.5 r:1 67:1 70:1 67:1 65:1 63:2 r:1 "
+          "65:1 65:1 68:1 65:1 63:1 60:1 r:1 63:1 60:1 58:1 60:3"
+          "|meow meow mrrp purr meow nya meow mrrp meow yowl purr purr meow meow mrrp purr nya meow" },
+        { "Rainy Window (English)", 0, 2, 72.0,
+          "r:1 67:0.5 69:0.5 71:1 69:1 67:1 64:1 67:2 r:1 67:0.5 69:0.5 71:1 72:1 74:1 71:1 69:3 r:1 "
+          "72:1 71:1 69:1 67:1 69:1.5 71:0.5 67:2 r:1 64:1 67:1 69:1 67:1 64:1 62:1 60:4"
+          "|rain is fal-ling on my win-dow drops are dan-cing in the light "
+          "I will wait here for the morn-ing hum-ming soft-ly through the night" },
     };
     return list;
 }

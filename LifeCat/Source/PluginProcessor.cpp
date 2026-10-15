@@ -192,6 +192,22 @@ const std::vector<LifeCatProcessor::WorldPreset>& LifeCatProcessor::presets()
         { "Pulsar Band", 2, 206, { 6, 1, 4, 0, 0, 0, 6, 3, 6, 2 }, 50, { { "grid", 2 }, { "scale", 1 }, { "key", 9 }, { "delayMix", 0.3f }, { "sp3Max", 0 } }, 11 },
         { "Desert Drums", 3, 207, { 10, 2, 2, 0, 2, 0, 6, 1, 5, 3 }, 60, { { "grid", 2 }, { "swing", 15.0f }, { "scale", 6 }, { "key", 2 }, { "sp3Max", 0 } }, 11 },
         { "Sandbox (empty)", 0, 208, { 4, 0, 1, 0, 0, 0, 0, 1, 1, 1 }, 30, { { "scale", 7 }, { "immigration", 0 } } },
+
+        // v4: fruit trees, mushrooms, choir / flute / glass sounds
+        // "sp<kind>Sound": 0 Natural 1 Gene Mix 2 Pad 3 Bell 4 Pluck 5 Percussion 6 Drone 7 Texture 8 Choir 9 Flute 10 Glass
+        { "Orchard", 0, 301, { 10, 1, 2, 4, 1, 0, 0, 2, 1, 2 }, 30, { { "scale", 0 }, { "key", 5 }, { "grid", 1 }, { "sp6Max", 0 } }, 12 },
+        { "Mushroom Night", 0, 302, { 8, 2, 6, 0, 3, 0, 0, 1, 0, 1 }, 40, { { "dayLength", 2 }, { "scale", 9 }, { "key", 4 }, { "reverbMix", 0.55f },
+                                                                       { "sp2Sound", 10 }, { "sp3Max", 0 }, { "sp6Max", 0 } }, 13 },
+        { "Whale Choir", 1, 303, { 6, 1, 4, 0, 1, 3, 6, 3, 0, 1 }, 50, { { "scale", 2 }, { "key", 2 }, { "density", 0.4f }, { "reverbMix", 0.65f },
+                                                                    { "sp5Sound", 8 }, { "sp7Sound", 8 }, { "sp2Sound", 8 }, { "sp3Max", 0 }, { "sp8Max", 0 } }, 7 },
+        { "Glass Garden", 3, 304, { 12, 2, 4, 0, 2, 0, 6, 2, 2, 2 }, 60, { { "scale", 4 }, { "key", 7 }, { "grid", 2 }, { "sp0Sound", 10 }, { "sp6Sound", 10 },
+                                                                       { "sp7Sound", 10 }, { "sp3Max", 0 } } },
+        { "Flute Meadow", 0, 305, { 8, 1, 2, 4, 1, 0, 0, 5, 0, 2 }, 70, { { "scale", 7 }, { "key", 2 }, { "grid", 1 }, { "sp0Sound", 9 }, { "sp3Sound", 9 },
+                                                                       { "sp5Max", 0 }, { "sp6Max", 0 } }, 8 },
+        { "Cathedral of Stars", 2, 306, { 4, 1, 8, 0, 0, 2, 0, 3, 1, 1 }, 30, { { "scale", 1 }, { "key", 9 }, { "quantize", 0 }, { "reverbMix", 0.8f },
+                                                                             { "reverbSize", 0.95f }, { "sp2Sound", 8 }, { "sp5Sound", 8 }, { "sp7Sound", 8 }, { "sp3Max", 0 } } },
+        { "Dark Forest", 0, 307, { 12, 3, 4, 2, 2, 1, 6, 2, 2, 2 }, 50, { { "dayLength", 1 }, { "seasonLength", 2 }, { "weather", 0 }, { "scale", 1 }, { "key", 4 } }, 13 },
+        { "Event Storm", 0, 308, { 14, 3, 3, 3, 2, 0, 6, 2, 2, 2 }, 60, { { "weather", 5 }, { "scale", 8 }, { "key", 0 }, { "grid", 2 }, { "sp5Max", 0 } }, 6 },
     };
     return list;
 }
@@ -234,8 +250,9 @@ void LifeCatProcessor::applyLayout (World& w, int layout)
             w.paintTerrain (0.72f, 0.9f, 0.09f, Terrain::Rock);
             w.paintTerrain (0.5f, 0.86f, 0.08f, Terrain::Meadow);
             break;
-        case 8:   // sunny glade: meadow with patches of sunlight
+        case 8:   // sunny glade: meadow with patches of sunlight and fruit trees
             w.paintTerrain (0.5f, 0.5f, 0.38f, Terrain::Meadow);
+            w.addTree (0.28f, 0.62f); w.addTree (0.72f, 0.3f);
             w.paintTerrain (0.35f, 0.4f, 0.09f, Terrain::Light);
             w.paintTerrain (0.66f, 0.62f, 0.08f, Terrain::Light);
             break;
@@ -255,6 +272,15 @@ void LifeCatProcessor::applyLayout (World& w, int layout)
             w.paintTerrain (0.7f, 0.65f, 0.07f, Terrain::Rock);
             w.paintTerrain (0.55f, 0.35f, 0.14f, Terrain::Meadow);
             w.paintTerrain (0.25f, 0.75f, 0.1f, Terrain::Water);
+            break;
+        case 12:  // orchard: rows of fruit trees on a meadow, a pond
+            w.paintTerrain (0.5f, 0.5f, 0.45f, Terrain::Meadow);
+            for (int k = 0; k < 3; ++k) { w.addTree (0.2f + 0.3f * (float) k, 0.25f); w.addTree (0.2f + 0.3f * (float) k, 0.75f); }
+            w.paintTerrain (0.5f, 0.5f, 0.08f, Terrain::Water);
+            break;
+        case 13:  // dark forest: trees, shade, mushrooms come out at night
+            for (int k = 0; k < 7; ++k) w.addTree (0.12f + 0.12f * (float) k, 0.3f + 0.4f * (float) (k % 2));
+            w.paintTerrain (0.5f, 0.85f, 0.1f, Terrain::Water);
             break;
         case 9:   // canyon: rocks with paths between
             box (0.0f, 0.2f, 0.35f, 0.32f, Terrain::Rock);
@@ -436,8 +462,12 @@ void LifeCatProcessor::apply (const Command& c)
     auto& w = *world;
     switch (c.type)
     {
-        case Command::Food:      w.addFood (c.x, c.y, juce::jmax (1, (int) c.r), 0.035f); break;
-        case Command::Add:       w.addCreature ((Role) juce::jlimit (0, 2, c.role), c.x, c.y); break;
+        case Command::Food:
+            if (c.food == 1) w.addTree (c.x, c.y);
+            else w.addFood (c.x, c.y, juce::jmax (1, (int) c.r), 0.035f, (uint8_t) (c.food == 2 ? 2 : 0));
+            break;
+        case Command::Add:       w.addCreature ((Role) juce::jlimit (0, numRoles - 1, c.role), c.x, c.y); break;
+        case Command::Event:     w.triggerEvent ((WorldEvent) juce::jlimit (0, numWorldEvents - 1, c.food), c.x, c.y); break;
         case Command::Remove:    w.removeNear (c.x, c.y, c.r); break;
         case Command::Wall:      w.addWall (c.x, c.y, c.x2, c.y2); break;
         case Command::Zone:      w.addZone ((ZoneType) juce::jlimit (0, 2, c.zone), c.x, c.y, c.r, c.x2, c.y2); break;
@@ -786,7 +816,7 @@ void LifeCatProcessor::surprise()
     c.counts = { 6 + r.nextInt (14), 1 + r.nextInt (4), 2 + r.nextInt (8), r.nextInt (5), r.nextInt (3), r.nextInt (2), r.nextInt (12),
                  r.nextInt (4), r.nextInt (4), r.nextInt (4) };
     c.plants = 30 + r.nextInt (60);
-    c.layout = r.nextInt (12);
+    c.layout = r.nextInt (14);
     set ("weather", r.nextFloat() < 0.6f ? 1.0f : (float) r.nextInt (6));
     set ("dayLength", r.nextFloat() < 0.6f ? 0.0f : (float) (1 + r.nextInt (3)));
     send (c);
@@ -828,7 +858,8 @@ juce::ValueTree LifeCatProcessor::worldToTree (const World& w)
         t.appendChild (n, nullptr);
     }
     juce::String plants;
-    for (const auto& pl : w.plants) if (pl.alive) plants << juce::String (pl.x, 3) << "," << juce::String (pl.y, 3) << "," << juce::String (pl.size, 2) << " ";
+    for (const auto& pl : w.plants)
+        if (pl.alive) plants << juce::String (pl.x, 3) << "," << juce::String (pl.y, 3) << "," << juce::String (pl.size, 2) << (pl.kind != 0 ? "," + juce::String ((int) pl.kind) : juce::String()) << " ";
     t.setProperty ("plants", plants.trim(), nullptr);
     juce::String walls;
     for (int i = 0; i < w.numWalls; ++i)
@@ -858,6 +889,10 @@ juce::ValueTree LifeCatProcessor::worldToTree (const World& w)
     for (const auto& n : w.nests)
         nests << (n.alive ? 1 : 0) << "," << juce::String (n.x, 3) << "," << juce::String (n.y, 3) << "," << juce::String (n.size, 3) << "," << (int) n.owner << " ";
     t.setProperty ("nests", nests.trim(), nullptr);
+    juce::String trees;
+    for (const auto& tr : w.trees)
+        if (tr.alive) trees << juce::String (tr.x, 3) << "," << juce::String (tr.y, 3) << "," << juce::String (tr.size, 3) << "," << juce::String (tr.fruitTimer, 2) << " ";
+    t.setProperty ("trees", trees.trim(), nullptr);
     t.setProperty ("day", w.dayPhase, nullptr);
     t.setProperty ("season", w.season, nullptr);
     t.setProperty ("weather", (int) w.weather, nullptr);
@@ -903,7 +938,7 @@ void LifeCatProcessor::worldFromTree (const juce::ValueTree& t, World& w)
     {
         const auto v = juce::StringArray::fromTokens (tok, ",", "");
         if (v.size() < 3 || pi >= maxPlants) continue;
-        w.plants[(size_t) pi++] = { true, v[0].getFloatValue(), v[1].getFloatValue(), v[2].getFloatValue() };
+        w.plants[(size_t) pi++] = { true, v[0].getFloatValue(), v[1].getFloatValue(), v[2].getFloatValue(), (uint8_t) juce::jlimit (0, 2, v.size() > 3 ? v[3].getIntValue() : 0) };
     }
     for (const auto& tok : juce::StringArray::fromTokens (t.getProperty ("walls", "").toString(), " ", ""))
     {
@@ -933,6 +968,13 @@ void LifeCatProcessor::worldFromTree (const juce::ValueTree& t, World& w)
         const auto v = juce::StringArray::fromTokens (tok, ",", "");
         if (v.size() < 5 || ni >= maxNests) continue;
         w.nests[(size_t) ni++] = { v[0].getIntValue() != 0, v[1].getFloatValue(), v[2].getFloatValue(), v[3].getFloatValue(), (uint32_t) v[4].getIntValue() };
+    }
+    int ti = 0;
+    for (const auto& tok : juce::StringArray::fromTokens (t.getProperty ("trees", "").toString(), " ", ""))
+    {
+        const auto v = juce::StringArray::fromTokens (tok, ",", "");
+        if (v.size() < 4 || ti >= maxTrees) continue;
+        w.trees[(size_t) ti++] = { true, v[0].getFloatValue(), v[1].getFloatValue(), v[2].getFloatValue(), v[3].getFloatValue() };
     }
     w.dayPhase = (float) t.getProperty ("day", 0.4f);
     w.season = (float) t.getProperty ("season", 1.0f);

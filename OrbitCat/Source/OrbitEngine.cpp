@@ -192,6 +192,32 @@ const std::vector<OrbitPreset>& getOrbitPresets()
         // Speeds 1, 1.5, 2: interlocking hocket on 16ths
         make ("Hocket", 0.5f, 0.0f, 0.0f, 90.0f, 1, 25.0f, 0.6f, 3,
               [] (int i) { return body (50, 8.0f, 0.0f, 1.0f + 0.5f * (float) (i % 3), i / 3, 1.0f, 0.1f, 0.0f); }),
+        // ---- v3
+        // A ring of small moons around one heavy planet: bass pulse plus a halo of notes
+        make ("Saturn Rings", 0.55f, 0.0f, 0.05f, 90.0f, 3, 15.0f, 0.8f, 3,
+              [] (int i) { return i == 0 ? body (100, 18.0f, 0.05f, 0.8f, -1, 0.9f, 0.5f, 0.0f)
+                                         : body (12, 4.0f + 0.35f * (float) i, 0.05f, 1.3f, 1, 0.8f, 0.06f, 0.2f); }),
+        // Slow wide ellipses on the quarter grid: big, simple chord tones
+        make ("Grand Tour", 0.4f, 0.0f, 0.0f, 0.0f, 1, 30.0f, 0.55f, 1,
+              [] (int i) { return body (60, 10.0f + 2.5f * (float) i, 0.5f, 0.8f, 0, 0.8f, 0.6f, 0.2f); }),
+        // Fast orbits on the 16th-triplet grid: rolling trap hats feel
+        make ("Rolling Moons", 0.6f, 0.0f, 0.15f, 30.0f, 2, 40.0f, 0.9f, 6,
+              [] (int i) { return body (20, 2.0f + 0.6f * (float) i, 0.2f, 1.7f, 1, 0.6f, 0.05f, 0.3f); }),
+        // Equal masses, slight eccentricity, eighth notes: a gentle music box
+        make ("Music Box", 0.45f, 0.0f, 0.0f, 90.0f, 1, 20.0f, 0.6f, 2,
+              [] (int i) { return body (40, 5.0f + 1.3f * (float) i, 0.15f, 1.0f, 1, 0.9f, 0.12f, 0.1f); }),
+        // Lots of drag: the system spirals in and speeds up (a riser)
+        make ("Event Horizon", 0.8f, 1.0f, 0.1f, 180.0f, 2, 60.0f, 1.0f, 3,
+              [] (int i) { return body (50, 18.0f + 1.5f * (float) i, 0.25f, 1.0f, (i % 2), 0.5f, 0.1f, 0.5f); }),
+        // Two bodies only matter: a call and response
+        make ("Call and Response", 0.5f, 0.0f, 0.05f, 0.0f, 2, 30.0f, 0.7f, 2,
+              [] (int i) { return body (i < 2 ? 70.0f : 10.0f, i < 2 ? 7.0f + 4.0f * (float) i : 25.0f + (float) i, 0.4f, 1.0f, i == 1 ? 1 : 0, 0.7f, 0.2f, 0.4f); }),
+        // Turbulent light bodies, free timing: wind chimes
+        make ("Wind Chimes", 0.3f, 0.0f, 0.8f, 270.0f, 1, 70.0f, 0.9f, 0,
+              [] (int i) { return body (10, 3.0f + 1.1f * (float) i, 0.3f, 1.1f, 1 + (i % 2), 0.3f, 0.4f, 0.3f); }),
+        // Bodies in 3 : 4 : 5 resonance on 16ths: a clockwork polyrhythm
+        make ("Gear Train", 0.5f, 0.0f, 0.0f, 90.0f, 1, 20.0f, 0.6f, 3,
+              [] (int i) { return body (50, 7.0f * std::pow (3.0f + (float) (i % 3), 2.0f / 3.0f), 0.0f, 1.0f, i / 3 - 1, 1.0f, 0.12f, 0.0f); }),
     };
     return presets;
 }

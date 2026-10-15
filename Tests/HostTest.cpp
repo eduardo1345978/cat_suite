@@ -1570,6 +1570,41 @@ void testLifeCat()
         check (drumNotes >= 20, "drummers drum steadily");
     }
 
+    // v4: fruit trees drop fruit, sounds Choir / Flute / Glass play cleanly
+    {
+        auto orch = loadPlugin (LIFECAT_VST3);
+        TestPlayHead po;
+        po.playing = true;
+        prepare (*orch, po);
+        int orchard = -1, glass = -1, whales = -1;
+        for (int i = 0; i < orch->getNumPrograms(); ++i)
+        {
+            if (orch->getProgramName (i) == "Orchard") orchard = i;
+            if (orch->getProgramName (i) == "Glass Garden") glass = i;
+            if (orch->getProgramName (i) == "Whale Choir") whales = i;
+        }
+        check (orchard >= 0 && glass >= 0 && whales >= 0, "new worlds: Orchard, Glass Garden, Whale Choir ...");
+        orch->setCurrentProgram (juce::jmax (0, orchard));
+        runLife (*orch, po, 40 * sec);
+        auto wo = lifeWorldXml (*orch);
+        int trees = 0, fruit = 0;
+        if (wo != nullptr)
+        {
+            trees = juce::StringArray::fromTokens (wo->getStringAttribute ("trees"), " ", "").size();
+            for (const auto& tok : juce::StringArray::fromTokens (wo->getStringAttribute ("plants"), " ", ""))
+                fruit += tok.endsWith (",1") ? 1 : 0;
+        }
+        std::cout << "  Orchard after 40 s: " << trees << " fruit trees, " << fruit << " fruit on the ground" << std::endl;
+        check (trees == 6 && fruit >= 3, "fruit trees grow and drop fruit");
+        for (int pr : { glass, whales })
+        {
+            orch->setCurrentProgram (juce::jmax (0, pr));
+            const auto r = runLife (*orch, po, 20 * sec, {}, 40 * sec);
+            std::cout << "  " << orch->getProgramName (pr) << ": level " << juce::String (rms (r.mono, 5 * sec, 20 * sec), 3) << ", peak " << juce::String (r.peak, 2) << std::endl;
+            check (r.finite && r.peak <= 1.0f && rms (r.mono, 5 * sec, 20 * sec) > 0.005f, orch->getProgramName (pr) + " (new sound types) is audible and clean");
+        }
+    }
+
     // You can hear the weather: rain with every creature silent
     {
         auto wet = loadPlugin (LIFECAT_VST3);

@@ -77,7 +77,7 @@ public:
     struct Command
     {
         enum Type { Food, Add, Remove, Wall, Zone, EraseZone, ClearZones, Breed, Clone, Favourite, RemoveId, NewWorld, Listen,
-                    Paint, ClearTerrain, SetGenes, AddGenes, ListenGenes };
+                    Paint, ClearTerrain, SetGenes, AddGenes, ListenGenes, Event };
         Type type = Food;
         float x = 0, y = 0, x2 = 0, y2 = 0, r = 0;
         int role = 0, zone = 0;
@@ -87,6 +87,7 @@ public:
         int plants = 40;
         int layout = 0;
         int terrain = 0;
+        int food = 0;            // Food: 0 plants, 1 fruit tree, 2 mushrooms;  Event: which WorldEvent
         lifecat::Genes genes;
     };
     void send (const Command&);

@@ -9,7 +9,7 @@ namespace drumcat
 enum Lane { Kick = 0, Snare, Rim, Hat, OpenHat, Ride, Crash, Tom, Perc, NumLanes };
 
 juce::StringArray getLaneNames();
-juce::StringArray getStyleNames();          // Boom Bap, Dilla, Neo Soul, Lo-Fi, Funky, Trap, Detroit
+juce::StringArray getStyleNames();          // Boom Bap, Dilla, Neo Soul, Lo-Fi, Funky, Trap, Detroit, House, Drill, Dembow, Afrobeats, Jungle, Rock
 juce::StringArray getMapNames();            // General MIDI, Sequential C1, Sequential C2
 juce::StringArray getGridNames();           // 1/8, 1/16, 1/32
 double gridToPpq (int index);

@@ -23,7 +23,8 @@ juce::StringArray getStyleNames();
 
 enum Style
 {
-    PopRoots = 0, Walking, NeoSoul, Funk, BoomBap, Dilla, Trap808, Reggae, House, DiscoOctaves, Latin, Drone, NumStyles
+    PopRoots = 0, Walking, NeoSoul, Funk, BoomBap, Dilla, Trap808, Reggae, House, DiscoOctaves, Latin, Drone,
+    Rock, Dub, Country, Afrobeats, Drill, SynthArp, NumStyles
 };
 
 struct BassNote

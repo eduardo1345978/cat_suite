@@ -651,6 +651,20 @@ namespace
             rooms->addLeft (combo ("roomType", "", 0));
             for (auto [id, cap] : { std::pair { "roomMix", "Mix" }, { "roomSize", "Size" } })
                 rooms->addKnob (knob (id, cap, C::purple));
+
+            drive = section ("DRIVE", C::red);
+            for (auto [id, cap] : { std::pair { "drive", "Drive" }, { "driveTone", "Tone" } })
+                drive->addKnob (knob (id, cap, C::red));
+
+            echo = section ("ECHO  (ping-pong, synced)", C::green);
+            echo->leftWidth = 110;
+            echo->addLeft (combo ("echoTime", "", 0));
+            for (auto [id, cap] : { std::pair { "echoMix", "Mix" }, { "echoFb", "Feedback" }, { "echoTone", "Tone" } })
+                echo->addKnob (knob (id, cap, C::green));
+
+            tape = section ("TAPE", C::slate);
+            for (auto [id, cap] : { std::pair { "tapeWow", "Wow" }, { "tapeFlutter", "Flutter" }, { "tapeAge", "Age" } })
+                tape->addKnob (knob (id, cap, C::slate));
         }
 
         void resized() override
@@ -663,20 +677,31 @@ namespace
             prism->setBounds (top.removeFromLeft (w + 40));
             top.removeFromLeft (6);
             rooms->setBounds (top);
+            r.removeFromTop (8);
+            auto second = r.removeFromTop (juce::jmin (r.getHeight(), 150));
+            const int w2 = (second.getWidth() - 12) / 3;
+            drive->setBounds (second.removeFromLeft (w2 - 60));
+            second.removeFromLeft (6);
+            echo->setBounds (second.removeFromLeft (w2 + 90));
+            second.removeFromLeft (6);
+            tape->setBounds (second);
         }
 
         void paint (juce::Graphics& g) override
         {
             g.setColour (C::textDim);
             g.setFont (cat::catFont (12.0f));
-            g.drawText ("Signal flow:  Synth  ->  Ensemble  ->  Prism  ->  Rooms  ->  Out.     Shimmer = octave-up feedback;  Bloom = a slow swelling tail.",
-                        getLocalBounds().reduced (14).withTrimmedTop (170), juce::Justification::topLeft);
+            g.drawText ("Signal flow:  Synth  ->  Drive  ->  Ensemble  ->  Prism  ->  Echo  ->  Tape  ->  Rooms  ->  Out.     Shimmer = octave-up feedback;  Bloom = a slow swelling tail.",
+                        getLocalBounds().reduced (14).withTrimmedTop (328), juce::Justification::topLeft);
         }
 
     private:
         GlideSection* ens = nullptr;
         GlideSection* prism = nullptr;
         GlideSection* rooms = nullptr;
+        GlideSection* drive = nullptr;
+        GlideSection* echo = nullptr;
+        GlideSection* tape = nullptr;
     };
 }
 

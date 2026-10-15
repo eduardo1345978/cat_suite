@@ -27,7 +27,7 @@ constexpr int maxVoices = 32;
 
 /** What a voice is made of. Natural = the kind's own sound (bells for pollinators, percussion for
     scavengers, drones for giants...), Genes = the gene mix. */
-enum class SoundType { Genes = 0, Pad, Bell, Pluck, Percussion, Drone, Texture };
+enum class SoundType { Genes = 0, Pad, Bell, Pluck, Percussion, Drone, Texture, Choir, Flute, Glass };
 juce::StringArray soundTypeNames();          // "Natural", then the SoundType names
 SoundType naturalSound (Role) noexcept;
 
@@ -94,6 +94,11 @@ private:
         float wPerc = 0.0f, wSub = 0.0f;                  // percussion burst, drone sub-octave
         float percAmp = 0.0f, percMul = 0.999f, percBodyPh = 0.0f, percBodyMul = 1.5f, subPh = 0.0f;
         float glideMul = 1.0f, glideCoef = 1.0f, echo = 0.0f;
+        // choir (saw through two vowel formants), flute (sine + breath), glass (inharmonic partials)
+        float wChoir = 0.0f, wFlute = 0.0f, wGlass = 0.0f;
+        float fc1 = 0.0f, fr1 = 0.0f, fc2 = 0.0f, fr2 = 0.0f, fa = 0.0f, fb = 0.0f, fc = 0.0f, fd = 0.0f;
+        float flutePh = 0.0f, breathLp = 0.0f;
+        float glassPh[3] {}, glassAmp = 1.0f, glassMul = 0.9999f;
         bool fading = false;                    // stolen: fades out in a few ms instead of being cut (no click)
         float fadeGain = 1.0f, fadeStep = 0.005f;
     };

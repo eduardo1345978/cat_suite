@@ -103,7 +103,15 @@ struct Creature
     float phraseTimer = 0.0f;     // singers: time until the next phrase
 };
 
-struct Plant { bool alive = false; float x = 0.5f, y = 0.5f, size = 0.3f; };
+/** kind: 0 plant, 1 fruit (dropped by a tree), 2 mushroom (grows from what died, glows at night) */
+struct Plant { bool alive = false; float x = 0.5f, y = 0.5f, size = 0.3f; uint8_t kind = 0; };
+/** Fruit trees are not eaten: they keep dropping fruit around them. */
+struct Tree { bool alive = false; float x = 0.5f, y = 0.5f, size = 0.2f, fruitTimer = 3.0f; };
+constexpr int maxTrees = 12;
+
+/** World events you can trigger (the EVENTS buttons). */
+enum class WorldEvent : uint8_t { Meteors = 0, Flood, Drought, Bloom, Migration, Plague };
+constexpr int numWorldEvents = 6;
 struct Corpse { bool alive = false; float x = 0.5f, y = 0.5f, food = 0.5f, age = 0.0f; Role role = Role::Grazer; };
 struct Wall { float x1 = 0, y1 = 0, x2 = 0, y2 = 0; };
 /** Built by builders: plants grow around it, builders rest and breed there. */
@@ -162,7 +170,7 @@ struct Rng
     float gauss() noexcept { return (uni() + uni() + uni() + uni() - 2.0f) * 0.866f; }     // ~N(0,0.5)
 };
 
-/** kind: 0 born, 1 died, 2 eaten, 3 pollinated (a new plant), 4 scavenged, 5 nest built, 6 burnt (lava) */
+/** kind: 0 born, 1 died, 2 eaten, 3 pollinated (a new plant), 4 scavenged, 5 nest built, 6 burnt (lava / meteor), 7 meteor impact, 8 fruit fell */
 struct Event { uint8_t kind; float x, y; Role role; };
 
 /** Fixed facts about each kind of creature. */
@@ -185,7 +193,9 @@ public:
     // gardener
     uint32_t addCreature (Role, float x, float y, const Genes* genes = nullptr, int generation = 0);
     void removeNear (float x, float y, float radius);
-    void addFood (float x, float y, int count, float spread);
+    void addFood (float x, float y, int count, float spread, uint8_t kind = 0);
+    void addTree (float x, float y);
+    void triggerEvent (WorldEvent, float x, float y);
     void addWall (float x1, float y1, float x2, float y2);
     void addZone (ZoneType, float x, float y, float r, float dx, float dy);
     void removeZoneOrWallNear (float x, float y, float radius);
@@ -216,6 +226,9 @@ public:
     std::array<Plant, maxPlants> plants;
     std::array<Corpse, maxCorpses> corpses;
     std::array<Nest, maxNests> nests;
+    std::array<Tree, maxTrees> trees;
+    int lastEvent = -1;                // last world event (for the screen), and how long ago
+    float lastEventAge = 1000.0f;
     std::array<Wall, maxWalls> walls;
     int numWalls = 0;
     std::array<Zone, maxZones> zones;

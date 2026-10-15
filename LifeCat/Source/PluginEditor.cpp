@@ -33,7 +33,7 @@ namespace
         switch (t)
         {
             case GardenTool::Inspect: return "Click a creature to inspect it";
-            case GardenTool::Food:    return "Click or drag to drop food";
+            case GardenTool::Food:    return v.foodType == 1 ? juce::String ("Click to plant a fruit tree") : (v.foodType == 2 ? "Click or drag to grow mushrooms" : "Click or drag to drop food");
             case GardenTool::Add:     return "Click to add a " + lifeart::roleName (v.theme, v.addRole);
             case GardenTool::Remove:  return "Click or drag to remove";
             case GardenTool::Wall:    return "Drag to build a wall";
@@ -231,7 +231,16 @@ void WorldView::paint (juce::Graphics& g)
                 if (! pl.alive) continue;
                 const auto c = toScreen (pl.x, pl.y);
                 if (! a.expanded (20.0f).contains (c)) continue;
-                lifeart::drawPlant (g, c, units * (0.0035f + 0.007f * juce::jlimit (0.0f, 1.0f, pl.size)), pl.size, idx, sc);
+                const float ps = units * (0.0035f + 0.007f * juce::jlimit (0.0f, 1.0f, pl.size));
+                if (pl.kind == 1) lifeart::drawFruit (g, c, ps, idx, sc);
+                else if (pl.kind == 2) lifeart::drawMushroom (g, c, ps * 1.2f, idx, sc);
+                else lifeart::drawPlant (g, c, ps, pl.size, idx, sc);
+            }
+            int ti = 0;
+            for (const auto& tr : w.trees)
+            {
+                ++ti;
+                if (tr.alive) lifeart::drawTree (g, toScreen (tr.x, tr.y), units * 0.05f, tr, ti, sc);
             }
             for (const auto& n : w.nests)
                 if (n.alive) lifeart::drawNest (g, toScreen (n.x, n.y), units * 0.028f, n, sc);
@@ -429,6 +438,23 @@ void WorldView::drawEffects (juce::Graphics& g, double time)
                 g.setColour ((f.kind == 3 ? juce::Colour (0xfff5e08a) : col.brighter (0.5f)).withAlpha (1.0f - age));
                 g.fillEllipse (pos.x + std::cos (th) * d - 1.5f, pos.y + std::sin (th) * d - 1.5f, 3.0f, 3.0f);
             }
+        }
+        else if (f.kind == 7)             // meteor impact: a bright flash and a shock ring
+        {
+            const float rr = 6.0f + age * 46.0f;
+            g.setColour (juce::Colour (0xffffc070).withAlpha (0.8f * (1.0f - age)));
+            g.drawEllipse (pos.x - rr, pos.y - rr, rr * 2.0f, rr * 2.0f, 2.5f);
+            if (age < 0.25f)
+            {
+                g.setColour (juce::Colours::white.withAlpha (0.8f * (1.0f - age * 4.0f)));
+                g.fillEllipse (pos.x - 12.0f, pos.y - 12.0f, 24.0f, 24.0f);
+            }
+        }
+        else if (f.kind == 8)             // fruit falls: a little drop and bounce
+        {
+            const float bounce = std::abs (std::sin (age * 6.0f)) * (1.0f - age) * 8.0f;
+            g.setColour (juce::Colour (0xffe8483a).withAlpha (0.6f * (1.0f - age)));
+            g.drawEllipse (pos.x - 4.0f, pos.y - 4.0f - bounce, 8.0f, 8.0f, 1.0f);
         }
         else if (f.kind == 5)             // nest built: a little burst of twigs / bubbles
         {
@@ -659,7 +685,8 @@ void WorldView::mouseDown (const juce::MouseEvent& e)
             break;
         }
         case GardenTool::Food:
-            c.type = Cmd::Food; c.r = 6.0f; processor.send (c); lastDrop = now();
+            c.type = Cmd::Food; c.r = view.foodType == 2 ? 3.0f : 6.0f; c.food = view.foodType; processor.send (c); lastDrop = now();
+            if (view.foodType == 1) view.say ("A fruit tree is planted");
             break;
         case GardenTool::Add:
             c.type = Cmd::Add; c.role = (int) view.addRole; processor.send (c);
@@ -704,9 +731,9 @@ void WorldView::mouseDrag (const juce::MouseEvent& e)
     hovering = true;
     using Cmd = LifeCatProcessor::Command;
     const double t = now();
-    if (view.tool == GardenTool::Food && t - lastDrop > 0.07)
+    if (view.tool == GardenTool::Food && view.foodType != 1 && t - lastDrop > 0.07)
     {
-        Cmd c; c.type = Cmd::Food; c.x = curW.x; c.y = curW.y; c.r = 2.0f;
+        Cmd c; c.type = Cmd::Food; c.x = curW.x; c.y = curW.y; c.r = view.foodType == 2 ? 1.0f : 2.0f; c.food = view.foodType;
         processor.send (c);
         lastDrop = t;
     }
@@ -933,6 +960,7 @@ void ToolPanel::timerCallback()
 int ToolPanel::numChoices() const
 {
     if (view.tool == GardenTool::Add) return numRoles;
+    if (view.tool == GardenTool::Food) return 3;
     if (view.tool == GardenTool::Paint) return numTerrains;
     return 0;
 }
@@ -978,7 +1006,8 @@ void ToolPanel::paint (juce::Graphics& g)
     g.fillRoundedRectangle (a, 8.0f);
     g.setFont (cat::catFont (10.0f, true));
     g.setColour (C::textDim);
-    const char* title = view.tool == GardenTool::Add ? "ANIMAL" : (view.tool == GardenTool::Paint ? "TERRAIN" : (view.tool == GardenTool::PlaceLab ? "LAB" : ""));
+    const char* title = view.tool == GardenTool::Add ? "ANIMAL" : (view.tool == GardenTool::Paint ? "TERRAIN" : (view.tool == GardenTool::PlaceLab ? "LAB"
+                      : (view.tool == GardenTool::Food ? "FOOD" : "")));
     g.drawText (title, a.withHeight (16.0f), juce::Justification::centred);
 
     if (view.tool == GardenTool::Add)
@@ -1009,6 +1038,30 @@ void ToolPanel::paint (juce::Graphics& g)
             g.setFont (cat::catFont (10.5f));
             g.drawText (i == 0 ? juce::String ("Rub out") : lifeart::terrainName (view.theme, (Terrain) i), box.withTrimmedLeft (28.0f), juce::Justification::centredLeft);
         }
+    else if (view.tool == GardenTool::Food)
+    {
+        static const char* names[4][3] = { { "Plants", "Fruit tree", "Mushrooms" }, { "Seagrass", "Coral tree", "Anemones" },
+                                           { "Stardust", "Crystal spire", "Crystals" }, { "Nutrients", "Colony", "Spores" } };
+        for (int i = 0; i < 3; ++i)
+        {
+            const auto box = choiceBox (i).reduced (2.0f, 1.0f);
+            const bool on = view.foodType == i;
+            g.setColour (on ? C::accent.withAlpha (0.25f) : C::raised);
+            g.fillRoundedRectangle (box, 5.0f);
+            if (on) { g.setColour (C::accent); g.drawRoundedRectangle (box, 5.0f, 1.2f); }
+            lifeart::Scene sc;
+            sc.theme = view.theme;
+            sc.time = juce::Time::getMillisecondCounterHiRes() * 0.001;
+            sc.light = 1.0f;
+            const auto icon = box.reduced (4.0f).removeFromLeft (18.0f).getCentre();
+            if (i == 0) lifeart::drawPlant (g, icon, 6.0f, 1.0f, 3, sc);
+            else if (i == 1) { lifecat::Tree tr; tr.size = 1.0f; lifeart::drawTree (g, icon, 9.0f, tr, 1, sc); }
+            else lifeart::drawMushroom (g, icon, 7.0f, 1, sc);
+            g.setColour (C::text);
+            g.setFont (cat::catFont (10.5f));
+            g.drawText (names[juce::jlimit (0, 3, view.theme)][i], box.withTrimmedLeft (28.0f), juce::Justification::centredLeft);
+        }
+    }
     else if (view.tool == GardenTool::PlaceLab)
     {
         lifeart::drawIcon (g, a.withTrimmedTop (18.0f).withHeight (60.0f), view.theme, view.labRole);
@@ -1037,6 +1090,7 @@ void ToolPanel::mouseDown (const juce::MouseEvent& e)
         if (choiceBox (i).contains (e.position))
         {
             if (view.tool == GardenTool::Add) view.addRole = (Role) i;
+            else if (view.tool == GardenTool::Food) view.foodType = i;
             else view.paintType = (Terrain) i;
             repaint();
             return;
@@ -1433,7 +1487,33 @@ LifeCatEditor::LifeCatEditor (LifeCatProcessor& p)
                       juce::dontSendNotification);
 
     tabContent[0] = { &speciesPanel };
-    tabContent[1] = { &gravity, &wind, &windDir, &dayLength, &seasonLength, &season, &weather, &ambience, &dayNightSound, &clearWalls, &clearTerrain, &skyLabel };
+    eventsLabel.setText ("EVENTS", juce::dontSendNotification);
+    eventsLabel.setFont (cat::catFont (11.0f, true));
+    eventsLabel.setColour (juce::Label::textColourId, C::textDim);
+    static const char* eventTips[numWorldEvents] = {
+        "Meteors crash down: craters, glowing stardust - and whoever stood there is gone",
+        "The water rises (or a lake appears)",
+        "Plants wither, water dries to sand, everyone goes hungry",
+        "Plants everywhere, new meadows, maybe a new fruit tree",
+        "A group of animals arrives from outside",
+        "The most crowded kind falls ill" };
+    for (int i = 0; i < numWorldEvents; ++i)
+    {
+        auto* b = eventButtons.add (new juce::TextButton());
+        b->setTooltip (eventTips[i]);
+        b->onClick = [this, i]
+        {
+            LifeCatProcessor::Command c;
+            c.type = LifeCatProcessor::Command::Event;
+            c.food = i;
+            c.x = view.camX; c.y = view.camY;
+            processor.send (c);
+            view.say (lifeart::eventName (view.theme, (WorldEvent) i) + "!");
+        };
+    }
+    tabContent[1] = { &gravity, &wind, &windDir, &dayLength, &seasonLength, &season, &weather, &ambience, &dayNightSound, &clearWalls, &clearTerrain, &skyLabel,
+                      &eventsLabel };
+    for (auto* b : eventButtons) tabContent[1].push_back (b);
     tabContent[2] = { &geneLab };
     tabContent[3] = { &pitchMode, &key, &scale, lowNote.get(), highNote.get(), &quantize, &grid, &swing, &density, maxNotes.get(),
                       &noteLength, &followGroove, &playStopped };
@@ -1527,6 +1607,7 @@ void LifeCatEditor::timerCallback()
     if (view.theme != lastTheme)
     {
         lastTheme = view.theme;
+        for (int i = 0; i < eventButtons.size(); ++i) eventButtons[i]->setButtonText (lifeart::eventName (view.theme, (WorldEvent) i));
         toolPanel.updateNames();
         geneLab.resized();
         speciesPanel.repaint();
@@ -1617,7 +1698,15 @@ void LifeCatEditor::resized()
                 two (season, weather);
                 two (ambience, dayNightSound);
                 two (clearWalls, clearTerrain);
-                content.removeFromTop (6);
+                content.removeFromTop (4);
+                eventsLabel.setBounds (content.removeFromTop (16).reduced (4, 0));
+                for (int row = 0; row < 2; ++row)
+                {
+                    auto l = line();
+                    const int w3 = l.getWidth() / 3;
+                    for (int k = 0; k < 3; ++k) eventButtons[row * 3 + k]->setBounds (l.removeFromLeft (w3).reduced (2, 1));
+                }
+                content.removeFromTop (4);
                 skyLabel.setBounds (content.removeFromTop (40).reduced (4, 0));
                 break;
             case 2: geneLab.setBounds (content); break;

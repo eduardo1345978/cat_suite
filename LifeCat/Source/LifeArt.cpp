@@ -1152,6 +1152,175 @@ void drawNest (juce::Graphics& g, juce::Point<float> pos, float r, const lifecat
     }
 }
 
+//==============================================================================
+juce::String eventName (int theme, lifecat::WorldEvent e)
+{
+    static const char* n[4][lifecat::numWorldEvents] = {
+        { "Meteor shower", "Flood", "Drought", "Bloom", "Migration", "Plague" },
+        { "Falling stars", "High tide", "Low tide", "Plankton bloom", "Migration", "Red tide" },
+        { "Meteor shower", "Nebula surge", "Solar wind", "Star birth", "Migration", "Space virus" },
+        { "Radiation", "Flooding", "Drying out", "Nutrient boost", "New arrivals", "Infection" } };
+    return n[juce::jlimit (0, 3, theme)][juce::jlimit (0, lifecat::numWorldEvents - 1, (int) e)];
+}
+
+void drawTree (juce::Graphics& g, juce::Point<float> c, float r, const lifecat::Tree& tr, int idx, const Scene& sc)
+{
+    const float s = r * (0.45f + 0.55f * tr.size);
+    const float ft = (float) sc.time;
+    const float sway = 0.04f * std::sin (ft * 0.6f + (float) idx);
+    const float winter = clamp01 (1.0f - std::abs (std::fmod (sc.season + 4.0f, 4.0f) - 3.0f));
+    const float autumn = clamp01 (1.0f - std::abs (std::fmod (sc.season + 4.0f, 4.0f) - 2.0f));
+    switch (sc.theme)
+    {
+        case 0:   // round leafy crown with apples, seen from above
+        {
+            g.setColour (juce::Colours::black.withAlpha (0.25f));
+            g.fillEllipse (c.x - s * 0.9f + s * 0.25f, c.y - s * 0.9f + s * 0.35f, s * 1.9f, s * 1.9f);
+            const auto leaf = Colour (0xff3f8a3a).interpolatedWith (Colour (0xffc88a30), autumn * 0.8f).interpolatedWith (Colour (0xffd8e2e6), winter * 0.7f);
+            juce::Random rnd (idx * 31 + 7);
+            for (int k = 0; k < 7; ++k)
+            {
+                const float a = (float) k * 0.9f + sway * 4.0f, d = k == 0 ? 0.0f : s * 0.45f;
+                const float rr = s * (0.5f + 0.15f * rnd.nextFloat());
+                g.setColour (leaf.withMultipliedBrightness (0.85f + 0.3f * rnd.nextFloat()));
+                g.fillEllipse (c.x + std::cos (a) * d - rr, c.y + std::sin (a) * d - rr, rr * 2.0f, rr * 2.0f);
+            }
+            if (winter < 0.5f)
+                for (int k = 0; k < 5; ++k)
+                {
+                    const float a = (float) k * 1.3f + 0.4f, d = s * (0.3f + 0.35f * (float) (k % 2));
+                    g.setColour (Colour (0xffe04a3a));
+                    g.fillEllipse (c.x + std::cos (a) * d - s * 0.09f, c.y + std::sin (a) * d - s * 0.09f, s * 0.18f, s * 0.18f);
+                }
+            break;
+        }
+        case 1:   // branching coral tree, swaying
+        {
+            Path branches;
+            for (int k = 0; k < 6; ++k)
+            {
+                const float a = -1.57f + ((float) k - 2.5f) * 0.38f + sway * 3.0f;
+                branches.startNewSubPath (c.x, c.y + s * 0.6f);
+                const float mx = c.x + std::cos (a) * s * 0.5f, my = c.y + s * 0.1f + std::sin (a) * s * 0.4f;
+                branches.quadraticTo (mx, my, c.x + std::cos (a) * s * 1.0f, c.y + std::sin (a) * s * 0.9f);
+            }
+            g.setColour (Colour (0xffe06a7a));
+            g.strokePath (branches, roundStroke (juce::jmax (2.0f, s * 0.16f)));
+            softGlow (g, c, s * 1.3f, Colour (0xffff9ab0), 0.18f);
+            break;
+        }
+        case 2:   // crystal spire that hums with light
+        {
+            Path crystal;
+            for (int k = 0; k < 3; ++k)
+            {
+                const float w = s * (0.22f - 0.05f * (float) k), h = s * (1.1f - 0.25f * (float) k);
+                const float ox = ((float) k - 1.0f) * s * 0.3f;
+                crystal.addTriangle (c.x + ox - w, c.y + s * 0.4f, c.x + ox + w, c.y + s * 0.4f, c.x + ox, c.y + s * 0.4f - h);
+            }
+            softGlow (g, c, s * 1.5f, Colour (0xff9ad8ff), 0.25f + 0.15f * std::sin (ft * 1.2f + (float) idx));
+            g.setColour (Colour (0xffbfe8ff).withAlpha (0.85f));
+            g.fillPath (crystal);
+            g.setColour (juce::Colours::white.withAlpha (0.6f));
+            g.strokePath (crystal, juce::PathStrokeType (1.0f));
+            break;
+        }
+        default:  // a colony: cluster of large cells budding off food
+        {
+            for (int k = 0; k < 6; ++k)
+            {
+                const float a = (float) k * 1.047f + ft * 0.1f, d = s * 0.5f;
+                const float rr = s * (0.32f + 0.05f * std::sin (ft + (float) k));
+                g.setColour (Colour (0xffb8e0a0).withAlpha (0.35f));
+                g.fillEllipse (c.x + std::cos (a) * d - rr, c.y + std::sin (a) * d - rr, rr * 2.0f, rr * 2.0f);
+                g.setColour (Colour (0xffb8e0a0).withAlpha (0.8f));
+                g.drawEllipse (c.x + std::cos (a) * d - rr, c.y + std::sin (a) * d - rr, rr * 2.0f, rr * 2.0f, 1.2f);
+            }
+            g.setColour (Colour (0xff6a9a50));
+            g.fillEllipse (c.x - s * 0.25f, c.y - s * 0.25f, s * 0.5f, s * 0.5f);
+            break;
+        }
+    }
+}
+
+void drawFruit (juce::Graphics& g, juce::Point<float> c, float s, int idx, const Scene& sc)
+{
+    static const juce::uint32 cols[4] = { 0xffe8483a, 0xfff0e8f8, 0xffb0f0ff, 0xfff0d050 };
+    const auto col = Colour (cols[juce::jlimit (0, 3, sc.theme)]);
+    const float r = s * 0.75f;
+    if (sc.theme == 1)   // pearls in an open shell
+    {
+        g.setColour (Colour (0xffc8a890));
+        Path shell; shell.addPieSegment (c.x - r * 1.4f, c.y - r * 0.9f, r * 2.8f, r * 1.8f, 1.9f, 4.4f, 0.0f);
+        g.fillPath (shell);
+    }
+    if (sc.theme == 2) softGlow (g, c, r * 2.5f, col, 0.35f);
+    g.setColour (col);
+    g.fillEllipse (c.x - r, c.y - r, 2.0f * r, 2.0f * r);
+    g.setColour (juce::Colours::white.withAlpha (0.55f));
+    g.fillEllipse (c.x - r * 0.45f, c.y - r * 0.55f, r * 0.55f, r * 0.45f);
+    if (sc.theme == 0)
+    {
+        g.setColour (Colour (0xff4f9c45));
+        g.fillEllipse (c.x + r * 0.1f, c.y - r * 1.25f, r * 0.8f, r * 0.45f);
+    }
+    juce::ignoreUnused (idx);
+}
+
+void drawMushroom (juce::Graphics& g, juce::Point<float> c, float s, int idx, const Scene& sc)
+{
+    const float night = 1.0f - sc.light;
+    const float ft = (float) sc.time;
+    switch (sc.theme)
+    {
+        case 0:   // toadstool: red cap with white dots, glowing a little at night
+        {
+            const auto cap = idx % 3 == 0 ? Colour (0xffd8c8a0) : Colour (0xffd8483a);
+            softGlow (g, c, s * 2.4f, Colour (0xff9affc8), 0.3f * night);
+            g.setColour (Colour (0xfff0e8d8));
+            g.fillRoundedRectangle (c.x - s * 0.22f, c.y - s * 0.1f, s * 0.44f, s * 0.8f, s * 0.15f);
+            g.setColour (cap);
+            g.fillEllipse (c.x - s * 0.8f, c.y - s * 0.65f, s * 1.6f, s * 1.0f);
+            g.setColour (juce::Colours::white.withAlpha (0.85f));
+            for (int k = 0; k < 3; ++k) g.fillEllipse (c.x - s * 0.5f + s * 0.38f * (float) k, c.y - s * (0.45f - 0.15f * (float) (k % 2)), s * 0.18f, s * 0.18f);
+            break;
+        }
+        case 1:   // anemone: waving tentacles
+        {
+            Path t;
+            for (int k = 0; k < 8; ++k)
+            {
+                const float a = (float) k * 0.785f, wob = 0.3f * std::sin (ft * 1.5f + (float) k + (float) idx);
+                t.startNewSubPath (c);
+                t.quadraticTo (c.x + std::cos (a + wob) * s * 0.6f, c.y + std::sin (a + wob) * s * 0.6f, c.x + std::cos (a) * s, c.y + std::sin (a) * s);
+            }
+            g.setColour (Colour (0xffff8ad0).withAlpha (0.85f));
+            g.strokePath (t, roundStroke (juce::jmax (1.2f, s * 0.14f)));
+            softGlow (g, c, s * 1.8f, Colour (0xffff8ad0), 0.2f + 0.3f * night);
+            break;
+        }
+        case 2:   // small glowing crystal shard
+        {
+            Path shard; shard.addTriangle (c.x - s * 0.3f, c.y + s * 0.4f, c.x + s * 0.3f, c.y + s * 0.4f, c.x, c.y - s * 0.8f);
+            softGlow (g, c, s * 2.0f, Colour (0xffc8a0ff), 0.3f + 0.2f * night);
+            g.setColour (Colour (0xffd8c0ff));
+            g.fillPath (shard);
+            break;
+        }
+        default:  // spore puff
+        {
+            for (int k = 0; k < 5; ++k)
+            {
+                const float a = (float) k * 1.256f + ft * 0.3f, rr = s * 0.32f;
+                g.setColour (Colour (0xffd0b8f0).withAlpha (0.6f));
+                g.fillEllipse (c.x + std::cos (a) * s * 0.35f - rr, c.y + std::sin (a) * s * 0.35f - rr, rr * 2.0f, rr * 2.0f);
+            }
+            softGlow (g, c, s * 1.6f, Colour (0xffd0b8f0), 0.15f + 0.3f * night);
+            break;
+        }
+    }
+}
+
 void drawGlow (juce::Graphics& g, const Creature& c, juce::Point<float> pos, float r, const Scene& sc)
 {
     const float flash = clamp01 (c.singFlash);

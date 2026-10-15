@@ -397,6 +397,27 @@ namespace
             { "Reich Pulse",        { { 0, "x.x.x.x.", "0", DivSixteenth, 0.4f, 0, 1, 0, true }, { 1, "x..", "t", DivSixteenth, 0.4f, 1, 1, 0, true } } },
             { "Euclid 5-12",        {}, [] (PattCatEngine& e) { euclidLayer (e, 0, 5, 12, 0, "a", 0.5f); euclidLayer (e, 1, 2, 8, 0, "b", 0.8f, 2, -1); } },
             { "Tresillo Euclid",    {}, [] (PattCatEngine& e) { euclidLayer (e, 1, 3, 8, 0, "b", 0.7f, 2, -1); euclidLayer (e, 0, 9, 16, 0, "a", 0.35f); } },
+            // ---- v3
+            { "Music Box",          { { 0, "x.x.x.x.x.x.x.x.", "t.2.1.2.t.2.1.0.", DivSixteenth, 0.9f, 1 } } },
+            { "Harp Glissando",     { { 0, "xxxxxxxx", "0123t+++", DivThirtySecond, 1.0f }, { 1, "x-------", "b", DivEighth, 1.0f, -1, 2 } } },
+            { "Rolling Piano",      { { 0, "xxxxxxxxxxxxxxxx", "b1t1b2t2b1t1b2t2", DivSixteenth, 0.55f } } },
+            { "Ostinato 3-3-2",     { { 0, "x..x..x.x..x..x.", "t", DivSixteenth, 0.4f }, { 1, "x..x..x.x..x..x.", "b", DivSixteenth, 0.4f, -1, 2 } } },
+            { "Pulsing Pad",        { { 0, "x-x-x-x-x-x-x-x-", "a", DivSixteenth, 0.95f } } },
+            { "Gated Trance",       { { 0, "xxx.xx.xxx.xx.x.", "a", DivSixteenth, 0.45f } } },
+            { "Dub Chops",          { { 0, "....X.......X..o", "a", DivSixteenth, 0.15f }, { 1, "x.......x..x....", "b", DivSixteenth, 0.9f, -1, 2 } } },
+            { "Hip-Hop Keys",       { { 0, "x--.....x-.x....", "a", DivSixteenth, 0.9f, 0, 1, 25 }, { 1, "x.......x.......", "b", DivSixteenth, 0.9f, -1, 2, 25 } } },
+            { "Jersey Club",        { { 0, "x..x..x...x.x.x.", "a", DivSixteenth, 0.25f }, { 1, "x...x...x..xx...", "b", DivSixteenth, 0.4f, -1, 2 } } },
+            { "Phonk Cowbell",      { { 0, "x.xx.x.xx.x.x.xx", "t", DivSixteenth, 0.25f, 1 }, { 1, "x.......x.......", "b", DivSixteenth, 1.4f, -1, 2 } } },
+            { "Bachata Arp",        { { 0, "xxxxxxxx", "b1t1b2t1", DivEighth, 0.5f }, { 1, "x...x...", "b", DivEighth, 0.6f, -1, 2 } } },
+            { "Tango Accents",      { { 0, "X..X..X.X.......", "a", DivSixteenth, 0.3f }, { 1, "x...x...x...x...", "b", DivSixteenth, 0.4f, -1, 2 } } },
+            { "Bolero",             { { 0, "x..xxxx..xxxx.x.", "a", DivSixteenth, 0.4f } } },
+            { "Kalimba Pattern",    { { 0, "x.xx.x.xx.x.x.xx", "0t1t2t1t", DivSixteenth, 0.5f, 1 } } },
+            { "Gamelan Pulse",      { { 0, "xxxxxxxxxxxxxxxx", "0202t2t2", DivSixteenth, 0.4f, 1 }, { 1, "x.......x.......", "b", DivSixteenth, 1.5f, -1, 2 } } },
+            { "Ambient Drops",      { { 0, "x?..?...x?..?...", "t", DivSixteenth, 1.5f, 1, 1, 0, false, 0.6f }, { 1, "x---------------", "a", DivSixteenth, 1.0f } } },
+            { "Stutter Edit",       { { 0, "x.2.x.3.x.4.x.x.", "a", DivSixteenth, 0.3f } } },
+            { "Euclid 4-9",         {}, [] (PattCatEngine& e) { euclidLayer (e, 0, 4, 9, 0, "a", 0.5f); euclidLayer (e, 1, 2, 9, 1, "b", 0.8f, 2, -1); } },
+            { "Euclid 11-24",       {}, [] (PattCatEngine& e) { euclidLayer (e, 0, 11, 24, 0, "0123", 0.4f); } },
+            { "Poly 7 vs 4",        { { 0, "x.x.x..", "a", DivSixteenth, 0.5f, 0, 1, 0, true }, { 1, "x...", "b", DivSixteenth, 0.6f, -1, 2, 0, true } } },
         };
         return list;
     }
@@ -407,7 +428,7 @@ juce::StringArray getPatternPresetNames()
     juce::StringArray names;
     for (const auto& p : presets())
         names.add (p.name);
-    jassert (names.size() == 80);
+    jassert (names.size() == 100);
     return names;
 }
 
