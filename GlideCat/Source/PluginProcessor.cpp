@@ -631,11 +631,22 @@ void GlideCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     fxSettings.bpm = hostSync.get().bpm;
     effects.process (l, r, numSamples, fxSettings);
     const float vol = settings.volume;
+    int overloaded = 0;
     for (int i = 0; i < numSamples; ++i)
     {
         float a = l[i] * vol, b = r[i] * vol;
         limiter.processSample (a, b);
         l[i] = a; r[i] = b;
+        overloaded += limiter.isOverloaded() ? 1 : 0;
+    }
+    // Last line of defence: if the effects ever blow up (the limiter has had to hold the
+    // level down by more than 20 dB for a quarter of a second), clear their memory.
+    overloadSamples = overloaded == numSamples ? overloadSamples + numSamples : 0;
+    if (overloadSamples > (int) (getSampleRate() * 0.25))
+    {
+        effects.reset();
+        limiter.reset();
+        overloadSamples = 0;
     }
     if (buffer.getNumChannels() >= 2)
     {

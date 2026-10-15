@@ -76,6 +76,8 @@ void Effects::prepare (double sampleRate, int maxBlock)
     wetL.assign ((size_t) juce::jmax (512, maxBlock), 0.0f);
     wetR.assign (wetL.size(), 0.0f);
     reverb.setSampleRate (sr);
+    for (auto* d : { &prismDc, &echoDcL, &echoDcR, &driveDcL, &driveDcR }) d->setCutoff (sr, 20.0f);
+    shimmerDc.setCutoff (sr, 150.0f);   // the octave-up shimmer has nothing down there anyway
     reset();
 }
 
@@ -97,6 +99,7 @@ void Effects::reset()
     driveLpL = driveLpR = echoLpL = echoLpR = ageLpL = ageLpR = 0.0f;
     ensWrite = prismWrite = preWrite = 0;
     prismFbState = shimmerState = bloomEnv = 0.0f;
+    for (auto* d : { &prismDc, &shimmerDc, &echoDcL, &echoDcR, &driveDcL, &driveDcR }) d->reset();
     lastRoom = -1;
 }
 
@@ -117,8 +120,9 @@ void Effects::process (float* left, float* right, int numSamples, const FxSettin
             const float dl = shape (left[i]), dr = shape (right[i]);
             driveLpL += (dl - driveLpL) * a;
             driveLpR += (dr - driveLpR) * a;
-            left[i] = left[i] + (driveLpL - left[i]) * juce::jmin (1.0f, fx.drive * 1.5f);
-            right[i] = right[i] + (driveLpR - right[i]) * juce::jmin (1.0f, fx.drive * 1.5f);
+            // the asymmetric curve makes DC: take it out again
+            left[i] = left[i] + (driveDcL.process (driveLpL) - left[i]) * juce::jmin (1.0f, fx.drive * 1.5f);
+            right[i] = right[i] + (driveDcR.process (driveLpR) - right[i]) * juce::jmin (1.0f, fx.drive * 1.5f);
         }
     }
 
@@ -179,7 +183,10 @@ void Effects::process (float* left, float* right, int numSamples, const FxSettin
             const float c = shifters[2].process (delayed, i3);
             const float shifted = (a + b + c) * 0.45f;
             prismFbState += 0.3f * (shifted - prismFbState);      // darker repeats
-            prismBuf[(size_t) prismWrite] = 0.5f * (left[i] + right[i]) + fx.prismFeedback * prismFbState;
+            // Three shifted copies can add up to more than the input, so the loop is scaled to stay
+            // below 1, DC is removed and the fed-back level is soft-limited: it can never run away.
+            const float fb = prismDc.process (prismFbState * (0.95f / 1.35f));
+            prismBuf[(size_t) prismWrite] = 0.5f * (left[i] + right[i]) + fx.prismFeedback * std::tanh (fb);
             prismWrite = (prismWrite + 1) % size;
             left[i] += fx.prismMix * (a * 0.8f + c * 0.4f) * 0.6f;
             right[i] += fx.prismMix * (b * 0.8f + c * 0.4f) * 0.6f;
@@ -198,14 +205,16 @@ void Effects::process (float* left, float* right, int numSamples, const FxSettin
             echoSamples += (target - echoSamples) * 0.0004f;
             float rp = (float) echoWrite - echoSamples;
             while (rp < 0.0f) rp += (float) size;
-            const int i0 = (int) rp;
+            int i0 = (int) rp;
             const float fr = rp - (float) i0;
+            if (i0 >= size) i0 -= size;          // float rounding can land exactly on the end
+            if (i0 < 0 || i0 >= size) i0 = 0;
             const float dl = echoL[(size_t) i0] + (echoL[(size_t) ((i0 + 1) % size)] - echoL[(size_t) i0]) * fr;
             const float dr = echoR[(size_t) i0] + (echoR[(size_t) ((i0 + 1) % size)] - echoR[(size_t) i0]) * fr;
             echoLpL += (dl - echoLpL) * lpA;
             echoLpR += (dr - echoLpR) * lpA;
-            echoL[(size_t) echoWrite] = 0.5f * (left[i] + right[i]) + echoLpR * fx.echoFeedback;
-            echoR[(size_t) echoWrite] = echoLpL * fx.echoFeedback;
+            echoL[(size_t) echoWrite] = 0.5f * (left[i] + right[i]) + std::tanh (echoDcR.process (echoLpR)) * juce::jmin (0.95f, fx.echoFeedback);
+            echoR[(size_t) echoWrite] = std::tanh (echoDcL.process (echoLpL)) * juce::jmin (0.95f, fx.echoFeedback);
             echoWrite = (echoWrite + 1) % size;
             left[i] += dl * fx.echoMix;
             right[i] += dr * fx.echoMix;
@@ -229,8 +238,10 @@ void Effects::process (float* left, float* right, int numSamples, const FxSettin
             const float d = base + (0.004f * fx.tapeWow * std::sin (6.2831853f * wowPh) + 0.0004f * fx.tapeFlutter * std::sin (6.2831853f * flutPh)) * srf;
             float rp = (float) tapeWrite - d;
             while (rp < 0.0f) rp += (float) size;
-            const int i0 = (int) rp;
+            int i0 = (int) rp;
             const float fr = rp - (float) i0;
+            if (i0 >= size) i0 -= size;          // float rounding can land exactly on the end
+            if (i0 < 0 || i0 >= size) i0 = 0;
             const float tl = tapeL[(size_t) i0] + (tapeL[(size_t) ((i0 + 1) % size)] - tapeL[(size_t) i0]) * fr;
             const float tr = tapeR[(size_t) i0] + (tapeR[(size_t) ((i0 + 1) % size)] - tapeR[(size_t) i0]) * fr;
             tapeWrite = (tapeWrite + 1) % size;
@@ -284,7 +295,9 @@ void Effects::process (float* left, float* right, int numSamples, const FxSettin
         for (int i = 0; i < n; ++i)
         {
             if (fx.roomType == 4)
-                shimmerState = shimmer.process (0.5f * (wetL[(size_t) i] + wetR[(size_t) i]), 12.0f);
+                // octave-up feedback into the reverb: high-passed (a reverb boosts DC enormously)
+                // and soft-limited, so the loop can never build up
+                shimmerState = std::tanh (shimmerDc.process (shimmer.process (0.5f * (wetL[(size_t) i] + wetR[(size_t) i]), 12.0f)));
             left[i] = left[i] * (1.0f - 0.4f * fx.roomMix) + wetL[(size_t) i] * fx.roomMix;
             right[i] = right[i] * (1.0f - 0.4f * fx.roomMix) + wetR[(size_t) i] * fx.roomMix;
         }

@@ -1004,8 +1004,8 @@ void Engine::renderFx (float* left, float* right, int n)
             while (rp < 0.0f) rp += (float) dsize;
             const int i0 = (int) rp;
             const float fr = rp - (float) i0;
-            const float dl = delayL[(size_t) i0] * (1.0f - fr) + delayL[(size_t) ((i0 + 1) % dsize)] * fr;
-            const float dr = delayR[(size_t) i0] * (1.0f - fr) + delayR[(size_t) ((i0 + 1) % dsize)] * fr;
+            const float dl = delayL[(size_t) (i0 % dsize)] * (1.0f - fr) + delayL[(size_t) ((i0 + 1) % dsize)] * fr;
+            const float dr = delayR[(size_t) (i0 % dsize)] * (1.0f - fr) + delayR[(size_t) ((i0 + 1) % dsize)] * fr;
             delayL[(size_t) delayPos] = 0.5f * (l + r) * 0.7f + dr * settings.delayFeedback;
             delayR[(size_t) delayPos] = dl * settings.delayFeedback;
             delayPos = (delayPos + 1) % dsize;

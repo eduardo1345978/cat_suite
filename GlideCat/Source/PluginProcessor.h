@@ -89,6 +89,7 @@ private:
     glidecat::Settings settings;
     glidecat::FxSettings fxSettings;
     glidecat::Effects effects;
+    int overloadSamples = 0;
     cat::HostSync hostSync;
     juce::AudioBuffer<float> work;
 

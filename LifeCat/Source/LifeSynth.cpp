@@ -432,8 +432,8 @@ void Synth::render (float* left, float* right, int n)
         while (rp < 0.0f) rp += (float) dsize;
         const int i0 = (int) rp;
         const float fr = rp - (float) i0;
-        const float dl = delayL[(size_t) i0] * (1.0f - fr) + delayL[(size_t) ((i0 + 1) % dsize)] * fr;
-        const float dr = delayR[(size_t) i0] * (1.0f - fr) + delayR[(size_t) ((i0 + 1) % dsize)] * fr;
+        const float dl = delayL[(size_t) (i0 % dsize)] * (1.0f - fr) + delayL[(size_t) ((i0 + 1) % dsize)] * fr;
+        const float dr = delayR[(size_t) (i0 % dsize)] * (1.0f - fr) + delayR[(size_t) ((i0 + 1) % dsize)] * fr;
         const float sendL = i < echoN ? echoL[(size_t) i] : 0.0f, sendR = i < echoN ? echoR[(size_t) i] : 0.0f;
         delayL[(size_t) delayPos] = (0.5f * (left[i] + right[i]) * 0.8f * settings.delayMix + 0.6f * (sendL + sendR)) + dr * settings.delayFeedback;
         delayR[(size_t) delayPos] = dl * settings.delayFeedback;

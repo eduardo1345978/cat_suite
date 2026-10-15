@@ -49,6 +49,22 @@ private:
     float phase = 0.0f, window = 3000.0f;
 };
 
+/** Removes DC and rumble (one-pole high-pass). Used inside every feedback loop: a loop that
+    passes DC (reverb, pitch shifters, delays) turns the tiniest offset into a roaring sub-bass. */
+struct DcBlock
+{
+    float x1 = 0.0f, y1 = 0.0f, r = 0.995f;
+    void setCutoff (double sr, float hz) noexcept { r = 1.0f - 6.2831853f * hz / (float) (sr > 0.0 ? sr : 48000.0); }
+    void reset() noexcept { x1 = y1 = 0.0f; }
+    inline float process (float x) noexcept
+    {
+        const float y = x - x1 + r * y1;
+        x1 = x;
+        y1 = std::isfinite (y) ? y : 0.0f;
+        return y1;
+    }
+};
+
 class Effects
 {
 public:
@@ -67,6 +83,7 @@ private:
     int prismWrite = 0;
     PitchShifter shifters[3];
     float prismFbState = 0.0f;
+    DcBlock prismDc, shimmerDc, echoDcL, echoDcR, driveDcL, driveDcR;
     // rooms
     juce::Reverb reverb;
     int lastRoom = -1;

@@ -287,11 +287,13 @@ void PresetBar::showMenu()
     add (menu, "Open presets folder", false, [this] { manager.folder().startAsProcess(); });
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&name),
-                        [this, actions] (int result)
+                        [safe = juce::Component::SafePointer<PresetBar> (this), actions] (int result)
                         {
+                            // the window may have been closed while the menu was open
+                            if (safe == nullptr) return;
                             if (result > 0 && result <= (int) actions.size())
                                 actions[(size_t) result - 1]();
-                            timerCallback();
+                            if (safe != nullptr) safe->timerCallback();
                         });
 }
 

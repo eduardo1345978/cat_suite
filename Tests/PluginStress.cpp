@@ -75,34 +75,96 @@ int main (int argc, char** argv)
 
     std::atomic<bool> stop { false };
     CriticalSection stateLock;  // hosts never call setState during processBlock... Cubase can, but keep it as hosts do: callbackLock
+    std::atomic<int> maxBlock { bs };
     std::thread audio ([&]
     {
         Random r (seed * 7 + 1);
-        AudioBuffer<float> buf (jmax (2, p->getTotalNumOutputChannels()), bs);
+        AudioBuffer<float> buf (jmax (2, jmax (p->getTotalNumInputChannels(), p->getTotalNumOutputChannels())), 2048);
         MidiBuffer midi;
         int held = -1;
+        double rate = sr;
         while (! stop)
         {
+            // Cubase: buffer size / sample rate changes (never while processing)
+            if (r.nextInt (3000) == 0)
+            {
+                const double rates[] = { 44100.0, 48000.0, 96000.0 };
+                const int sizes[] = { 64, 256, 512, 1024, 2048 };
+                rate = rates[r.nextInt (3)];
+                maxBlock = sizes[r.nextInt (5)];
+                const ScopedLock sl (p->getCallbackLock());
+                p->releaseResources();
+                p->setRateAndBufferSizeDetails (rate, maxBlock);
+                p->prepareToPlay (rate, maxBlock);
+            }
+            // hosts often send smaller (and odd-sized) blocks than prepared
+            const int n = r.nextInt (4) == 0 ? 1 + r.nextInt (maxBlock.load()) : maxBlock.load();
+            buf.setSize (buf.getNumChannels(), n, false, false, true);
             buf.clear();
             midi.clear();
             if (r.nextInt (40) == 0)
             {
-                if (held >= 0) midi.addEvent (MidiMessage::noteOff (1, held), r.nextInt (bs));
+                if (held >= 0) midi.addEvent (MidiMessage::noteOff (1, held), r.nextInt (n));
                 held = 36 + r.nextInt (60);
-                midi.addEvent (MidiMessage::noteOn (1, held, (uint8) (1 + r.nextInt (127))), r.nextInt (bs));
+                midi.addEvent (MidiMessage::noteOn (1, held, (uint8) (1 + r.nextInt (127))), r.nextInt (n));
             }
+            if (r.nextInt (500) == 0) midi.addEvent (MidiMessage::allNotesOff (1), 0);
+            if (r.nextInt (300) == 0) midi.addEvent (MidiMessage::controllerEvent (1, r.nextInt (128), r.nextInt (128)), r.nextInt (n));
+            if (r.nextInt (300) == 0) midi.addEvent (MidiMessage::pitchWheel (1, r.nextInt (16384)), r.nextInt (n));
             if (r.nextInt (2000) == 0) ph.playing = ! ph.playing.load();
+            if (r.nextInt (4000) == 0) ph.ppq = r.nextDouble() * 400.0;     // the user moves the song position
             {
                 const ScopedLock sl (p->getCallbackLock());
                 p->processBlock (buf, midi);
             }
             for (int ch = 0; ch < buf.getNumChannels(); ++ch)
-                for (int i = 0; i < bs; ++i)
+                for (int i = 0; i < n; ++i)
                     if (! std::isfinite (buf.getSample (ch, i))) { std::cout << "!! non-finite audio" << std::endl; std::abort(); }
-            ph.ppq = ph.ppq.load() + (ph.playing ? bs / (sr * 0.5) : 0.0);
+            ph.ppq = ph.ppq.load() + (ph.playing ? n / (rate * 0.5) : 0.0);
             std::this_thread::sleep_for (std::chrono::microseconds (r.nextInt (2) == 0 ? 0 : 500));
         }
     });
+
+    // a second copy of the same Cat (Cubase: two tracks with this plug-in) - shares the Cat Link bus
+    std::unique_ptr<AudioProcessor> q;
+    std::unique_ptr<AudioProcessorEditor> qed;
+    auto openSecond = [&]
+    {
+        q.reset (createPluginFilter());
+        q->setPlayConfigDetails (q->getTotalNumInputChannels(), q->getTotalNumOutputChannels(), sr, bs);
+        q->prepareToPlay (sr, bs);
+        q->setPlayHead (&ph);
+        qed.reset (q->createEditorIfNeeded());
+        if (qed != nullptr) { qed->addToDesktop (0); qed->setVisible (true); }
+    };
+    auto closeSecond = [&]
+    {
+        if (q == nullptr) return;
+        if (qed != nullptr && rng.nextBool())
+        {
+            // sometimes with its LINK panel or a menu still open
+            Array<Component*> comps;
+            for (auto* ch : qed->getChildren()) comps.add (ch);
+            for (int i = 0; i < comps.size(); ++i) for (auto* ch : comps[i]->getChildren()) comps.add (ch);
+            for (auto* c : comps)
+                if (auto* b = dynamic_cast<Button*> (c))
+                    if (b->getName() == "Link" || rng.nextInt (20) == 0) { b->triggerClick(); break; }
+            pump (30);
+        }
+        if (qed != nullptr) { q->editorBeingDeleted (qed.get()); qed.reset(); }
+        if (rng.nextBool()) pump (20);
+        q->releaseResources();
+        q.reset();
+    };
+    auto runSecond = [&]
+    {
+        if (q == nullptr) return;
+        AudioBuffer<float> b (jmax (2, jmax (q->getTotalNumInputChannels(), q->getTotalNumOutputChannels())), bs);
+        MidiBuffer m;
+        if (rng.nextInt (3) == 0) m.addEvent (MidiMessage::noteOn (1, 40 + rng.nextInt (40), (uint8) 100), 0);
+        const ScopedLock sl (q->getCallbackLock());
+        q->processBlock (b, m);
+    };
 
     std::unique_ptr<AudioProcessorEditor> ed (p->createEditorIfNeeded());
     std::unique_ptr<Component> window;
@@ -125,6 +187,22 @@ int main (int argc, char** argv)
             Graphics g (img);
             ed->paintEntireComponent (g, true);
         }
+
+        runSecond();
+
+        // close the window at any moment, even with a menu / pop-up open (Cubase does this)
+        if (rng.nextInt (40) == 0)
+        {
+            p->editorBeingDeleted (ed.get());
+            ed.reset();
+            if (rng.nextBool()) pump (rng.nextInt (60));
+            ed.reset (p->createEditorIfNeeded());
+            if (ed == nullptr) break;
+            ed->addToDesktop (0);
+            ed->setVisible (true);
+            continue;
+        }
+        if (rng.nextInt (60) == 0) { if (q == nullptr) openSecond(); else closeSecond(); continue; }
 
         // close any popup menus that our clicks opened
         if (rng.nextInt (3) == 0) PopupMenu::dismissAllActiveMenus();
@@ -173,6 +251,13 @@ int main (int argc, char** argv)
                 {
                     return MouseEvent (src, pos, m, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, c, c, now, down, now, 1, dragged);
                 };
+                // like a real click: a component behind a modal window (e.g. the open LINK pop-up)
+                // does not get it; the modal window is told instead (and usually closes)
+                if (c->isCurrentlyBlockedByAnotherModalComponent())
+                {
+                    if (auto* m = juce::Component::getCurrentlyModalComponent()) m->inputAttemptWhenModal();
+                    continue;
+                }
                 Component::SafePointer<Component> safe (c);
                 c->mouseEnter (ev (down, ModifierKeys(), false));
                 if (safe) c->mouseMove (ev (down, ModifierKeys(), false));
@@ -217,6 +302,7 @@ int main (int argc, char** argv)
         pump (100);
     }
 
+    closeSecond();
     stop = true;
     audio.join();
 
