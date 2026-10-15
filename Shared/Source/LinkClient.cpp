@@ -30,6 +30,7 @@ LinkClient::LinkClient (juce::AudioProcessor& p, juce::AudioProcessorValueTreeSt
 
 LinkClient::~LinkClient()
 {
+    closePanel();
     stopTimer();
     bus->leave (slot, id);
 }
@@ -349,6 +350,7 @@ private:
     }
     void timerCallback() override
     {
+        if (! isShowing()) return;   // closed pop-up: nothing to refresh
         onButton.setToggleState (client.option (LinkClient::On), juce::dontSendNotification);
         keyButton.setToggleState (client.option (LinkClient::Key), juce::dontSendNotification);
         chordButton.setToggleState (client.option (LinkClient::Chords), juce::dontSendNotification);
@@ -395,9 +397,39 @@ void LinkButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
     g.drawText (others > 0 ? juce::String (others) : juce::String ("-"), r.withTrimmedLeft (24.0f), juce::Justification::centred);
 }
 
+LinkButton::~LinkButton()
+{
+    client.closePanel();
+}
+
 void LinkButton::clicked()
 {
-    juce::CallOutBox::launchAsynchronously (createLinkPanel (client), getScreenBounds(), nullptr);
+    client.showPanel (*this);
+}
+
+void LinkClient::showPanel (juce::Component& nextTo)
+{
+    closePanel();
+    // Owned here (not by JUCE's launchAsynchronously helper), so the pop-up, its timer and
+    // its parameter attachment are always deleted before the plug-in is.
+    panelContent = createLinkPanel (*this);
+    panelBox = std::make_unique<juce::CallOutBox> (*panelContent, nextTo.getScreenBounds(), nullptr);
+    panelBox->setVisible (true);
+    panelBox->enterModalState (true, nullptr, false);
+}
+
+void LinkClient::closePanel()
+{
+    if (panelBox == nullptr && panelContent == nullptr) return;
+    if (! juce::MessageManager::existsAndIsCurrentThread())
+    {
+        // never delete UI off the message thread; leaking is better than crashing
+        panelBox.release();
+        panelContent.release();
+        return;
+    }
+    panelBox.reset();
+    panelContent.reset();
 }
 
 std::unique_ptr<juce::Component> createLinkPanel (LinkClient& c) { return std::make_unique<LinkPanel> (c); }

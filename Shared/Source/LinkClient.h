@@ -73,9 +73,16 @@ public:
     juce::String lastChordText() const;
     bool busOk() const noexcept { return bus->isValid(); }
 
+    // ---- the Link panel pop-up (message thread). It is closed again when the LINK
+    // button or this client goes away, so it can never outlive the plug-in.
+    void showPanel (juce::Component& nextTo);
+    void closePanel();
+
 private:
     void timerCallback() override;
     void readOptions();
+    std::unique_ptr<juce::Component> panelContent;
+    std::unique_ptr<juce::CallOutBox> panelBox;
     void releaseInjected (juce::MidiBuffer&);
 
     juce::AudioProcessor& processor;
@@ -139,6 +146,7 @@ class LinkButton : public juce::Button, private juce::Timer
 {
 public:
     explicit LinkButton (LinkClient&);
+    ~LinkButton() override;
     void paintButton (juce::Graphics&, bool highlighted, bool down) override;
     void clicked() override;
 
