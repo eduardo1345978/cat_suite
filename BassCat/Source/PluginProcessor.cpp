@@ -54,6 +54,13 @@ BassCatProcessor::BassCatProcessor()
                       ),
       apvts (*this, nullptr, "PARAMS", createLayout())
 {
+    {
+        cat::LinkClient::Caps caps;
+        caps.receiveChords = true;
+        caps.receiveChordsText = "Follow Chord-Cat's chords";
+        caps.grooveParam = "followGroove";
+        presetManager.enableLink (apvts, caps);
+    }
     scheduler.monitor = &noteMonitor;
     held.reserve (128);
     seedBase = 0xba55;
@@ -112,6 +119,7 @@ float BassCatProcessor::hash (int64_t loop, int index, int salt) const
 void BassCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
+    presetManager.linkClient->processInput (midi, buffer.getNumSamples());     // Cat Link: Chord-Cat's chord
     buffer.clear();
     const int numSamples = buffer.getNumSamples();
 

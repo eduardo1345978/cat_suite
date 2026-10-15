@@ -100,6 +100,7 @@ private:
     int heldKeys = 0;
 
     std::atomic<int64_t> seedBase { 1 };
+    std::array<double, drumcat::NumLanes> nextLifeHit {};      // Cat Link: Life-Cat hits, at most one per beat per drum
     std::atomic<int> variation { 1 };
     std::atomic<double> lastBpm { 90.0 };
 

@@ -210,6 +210,12 @@ SingCatProcessor::SingCatProcessor()
     : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "PARAMS", createLayout())
 {
+    {
+        cat::LinkClient::Caps caps;
+        caps.receiveChords = true;
+        caps.receiveChordsText = "Sing Chord-Cat's chords";
+        presetManager.enableLink (apvts, caps);
+    }
     for (int i = 0; i < numParams; ++i)
     {
         refs[(size_t) i] = apvts.getRawParameterValue (paramIds[i]);
@@ -316,6 +322,7 @@ void SingCatProcessor::handleMidi (const juce::MidiMessage& m)
 void SingCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
+    presetManager.linkClient->processInput (midi, buffer.getNumSamples());     // Cat Link: Chord-Cat's chord
     const int numSamples = buffer.getNumSamples();
     mergeComputerKeyboard (midi, numSamples);      // standalone app: notes from the computer keyboard
     buffer.clear();

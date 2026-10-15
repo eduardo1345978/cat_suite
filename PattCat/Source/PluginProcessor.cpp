@@ -78,7 +78,15 @@ PattCatProcessor::PattCatProcessor()
 #endif
                       ),
       apvts (*this, nullptr, "PARAMS", createLayout())
-{    cat::followDrumGroove (presetManager, apvts, [this] (const cat::CatLink::Groove& g)
+{
+    {
+        cat::LinkClient::Caps caps;
+        caps.receiveChords = true;
+        caps.receiveChordsText = "Play Chord-Cat's chords";
+        caps.grooveParam = "followGroove";
+        presetManager.enableLink (apvts, caps);
+    }
+    cat::followDrumGroove (presetManager, apvts, [this] (const cat::CatLink::Groove& g)
     {
         cat::SurpriseControls::setParam (*this, "globalSwing", (float) juce::roundToInt (g.swing));
     });
@@ -146,6 +154,7 @@ void PattCatProcessor::syncMixerFromParams()
 void PattCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
+    presetManager.linkClient->processInput (midi, buffer.getNumSamples());     // Cat Link: Chord-Cat's chord
     buffer.clear();
     const int numSamples = buffer.getNumSamples();
 

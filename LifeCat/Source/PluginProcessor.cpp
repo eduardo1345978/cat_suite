@@ -244,6 +244,27 @@ LifeCatProcessor::LifeCatProcessor()
     : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "PARAMS", createLayout())
 {
+    {
+        cat::LinkClient::Caps caps;
+        caps.key = true;
+        caps.receiveChords = true;
+        caps.receiveChordsText = "Use Chord-Cat's chords (Held chord notes)";
+        caps.sendLife = true;
+        caps.grooveParam = "followGroove";
+        auto& link = presetManager.enableLink (apvts, caps);
+        link.getKey = [this]
+        {
+            const int root = juce::roundToInt (p ("key"));
+            const auto masks = scaleMasks();
+            return std::pair<int, juce::uint16> { root, cat::keys::rotate (masks[(size_t) juce::jlimit (0, (int) masks.size() - 1, juce::roundToInt (p ("scale")))], root) };
+        };
+        link.applyKey = [this] (int root, juce::uint16 absMask)
+        {
+            const int sc = cat::keys::nearestScale (cat::keys::rotate (absMask, -root), scaleMasks());
+            if (auto* k = apvts.getParameter ("key")) k->setValueNotifyingHost (k->convertTo0to1 ((float) root));
+            if (auto* s = apvts.getParameter ("scale"); s != nullptr && sc >= 0) s->setValueNotifyingHost (s->convertTo0to1 ((float) sc));
+        };
+    }
     for (auto* prm : getParameters())
         if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (prm))
             refs[r->getParameterID()] = apvts.getRawParameterValue (r->getParameterID());
@@ -451,6 +472,7 @@ void LifeCatProcessor::apply (const Command& c)
 void LifeCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
+    presetManager.linkClient->processInput (midi, buffer.getNumSamples());     // Cat Link: Chord-Cat's chord
     const int numSamples = buffer.getNumSamples();
     mergeComputerKeyboard (midi, numSamples);      // standalone app: notes from the computer keyboard
     buffer.clear();
@@ -468,6 +490,7 @@ void LifeCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
             std::swap (world, pendingWorld);      // the old world is freed later on the message thread
             hasPendingWorld = false;
             conductor.seed (world->seedValue);
+            linkEventsSeen = world->eventCount;
         }
         worldSwapLock.exit();
     }
@@ -513,6 +536,19 @@ void LifeCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
             world->step (0.01f, ls);
             stepAccumulator -= 0.01f;
         }
+    }
+
+    // Cat Link: tell the other Cats about births and deaths
+    if (world->eventCount != linkEventsSeen)
+    {
+        const int n = (int) world->events.size();
+        const uint32_t fresh = std::min<uint32_t> (world->eventCount - linkEventsSeen, (uint32_t) n);
+        for (uint32_t k = fresh; k > 0; --k)
+        {
+            const auto& e = world->events[(size_t) (((world->eventPos - (int) k) % n + n) % n)];
+            if (e.kind <= 2) presetManager.linkClient->publishLifeEvent (e.kind, (int) e.role);
+        }
+        linkEventsSeen = world->eventCount;
     }
 
     // song position: the host transport, or our own clock while stopped

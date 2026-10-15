@@ -385,6 +385,12 @@ GlideCatProcessor::GlideCatProcessor()
     : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "PARAMS", createLayout())
 {
+    {
+        cat::LinkClient::Caps caps;
+        caps.receiveChords = true;
+        caps.receiveChordsText = "Play Chord-Cat's chords";
+        presetManager.enableLink (apvts, caps);
+    }
     for (auto* prm : getParameters())
         if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (prm))
             refs[r->getParameterID().toStdString()] = apvts.getRawParameterValue (r->getParameterID());
@@ -496,6 +502,7 @@ void GlideCatProcessor::readSettings()
 void GlideCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
+    presetManager.linkClient->processInput (midi, buffer.getNumSamples());     // Cat Link: Chord-Cat's chord
     const int numSamples = buffer.getNumSamples();
     mergeComputerKeyboard (midi, numSamples);      // standalone app: notes from the computer keyboard
     buffer.clear();

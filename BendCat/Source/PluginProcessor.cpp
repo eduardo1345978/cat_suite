@@ -82,6 +82,7 @@ BendCatProcessor::BendCatProcessor()
                       ),
       apvts (*this, nullptr, "PARAMS", createLayout())
 {
+    presetManager.enableLink (apvts, {});
     for (auto* v : { &heldPitches, &previousChord, &groupUsed, &lastReleasedChord })
         v->reserve (128);
     leadVoiceForChannel.fill (-1);

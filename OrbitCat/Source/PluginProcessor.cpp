@@ -58,6 +58,13 @@ OrbitCatProcessor::OrbitCatProcessor()
                       ),
       apvts (*this, nullptr, "PARAMS", createLayout())
 {
+    {
+        cat::LinkClient::Caps caps;
+        caps.receiveChords = true;
+        caps.receiveChordsText = "Orbit Chord-Cat's chords";
+        caps.grooveParam = "followGroove";
+        presetManager.enableLink (apvts, caps);
+    }
     scheduler.monitor = &noteMonitor;
     heldKeys.reserve (64);
 
@@ -133,6 +140,7 @@ void OrbitCatProcessor::readParams()
 void OrbitCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
+    presetManager.linkClient->processInput (midi, buffer.getNumSamples());     // Cat Link: Chord-Cat's chord
     buffer.clear();
     const int numSamples = buffer.getNumSamples();
 

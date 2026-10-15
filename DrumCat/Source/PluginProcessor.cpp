@@ -54,6 +54,12 @@ DrumCatProcessor::DrumCatProcessor()
                       ),
       apvts (*this, nullptr, "PARAMS", createLayout())
 {
+    {
+        cat::LinkClient::Caps caps;
+        caps.receiveLife = true;
+        caps.receiveLifeText = "Answer Life-Cat with hits";
+        presetManager.enableLink (apvts, caps);
+    }
     scheduler.monitor = &noteMonitor;
     seedBase = 0x5eed;
     pattern = generatePattern (currentSettings());
@@ -147,6 +153,24 @@ void DrumCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
         lastPos = pos;
     }
     render (lastPos, numSamples);
+
+    // Cat Link: births and deaths in Life-Cat answered with hits on the next 16th
+    presetManager.linkClient->pollLifeEvents ([this] (int kind, int role)
+    {
+        if (! hostSync.isRunning()) return;
+        const double t = std::ceil (hostSync.ppqAt (0) * 4.0 + 1.0e-6) / 4.0;
+        int lane = kind == 0 ? Perc : (kind == 2 ? Crash : Tom);
+        if (role == 5 && kind != 0) lane = Crash;            // a giant falls
+        auto& next = nextLifeHit[(size_t) lane];
+        if (t < next) return;
+        next = t + 1.0;
+        const int map = juce::roundToInt (apvts.getRawParameterValue ("map")->load());
+        const int channel = juce::roundToInt (apvts.getRawParameterValue ("outChannel")->load());
+        if (apvts.getRawParameterValue (muteId (lane))->load() > 0.5f) return;
+        const int64_t on = sampleCounter + (int64_t) std::llround (hostSync.sampleForPpq (t));
+        scheduler.scheduleNote (on, on + juce::jmax ((int64_t) 1, (int64_t) (0.1 * hostSync.samplesPerPpq())), channel, noteFor (map, lane, 0), kind == 0 ? 72 : 96);
+        laneHits[(size_t) lane].fetch_add (1, std::memory_order_relaxed);
+    });
 
     outBuffer.clear();
     scheduler.emit (outBuffer, sampleCounter, numSamples);

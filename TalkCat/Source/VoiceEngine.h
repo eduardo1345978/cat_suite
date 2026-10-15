@@ -22,6 +22,7 @@ constexpr int voicesPerGroup = 5;     // lead, double, harmony 1-3
 
 juce::StringArray styleNames();
 juce::StringArray scaleNames();
+std::vector<juce::uint16> scaleMasks();          // relative pitch-class masks (bit 0 = root); the last one is Chromatic
 juce::StringArray harmonyNames();     // intervals in scale steps
 juce::StringArray reverbNames();
 juce::StringArray attackNames();

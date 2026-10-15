@@ -173,6 +173,11 @@ PresetBar::PresetBar (PresetManager& m, const juce::String& c) : manager (m), ca
     save.onClick = [this] { askSaveName(); };
     for (auto* b : { &star, &prev, &next, &name, &save })
         addAndMakeVisible (b);
+    if (manager.linkClient != nullptr)
+    {
+        linkButton = std::make_unique<LinkButton> (*manager.linkClient);
+        addAndMakeVisible (*linkButton);
+    }
     startTimerHz (8);
     timerCallback();
 }
@@ -197,6 +202,7 @@ void PresetBar::resized()
     auto r = getLocalBounds();
     if (caption.isNotEmpty()) r.removeFromLeft (52);
     star.setBounds (r.removeFromLeft (r.getHeight()).reduced (1));
+    if (linkButton != nullptr) linkButton->setBounds (r.removeFromRight (44).reduced (1));
     save.setBounds (r.removeFromRight (46).reduced (1));
     const bool arrows = r.getWidth() >= 150;     // narrow bars drop the arrows (the menu still has everything)
     prev.setVisible (arrows);

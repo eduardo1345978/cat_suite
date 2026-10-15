@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "CatLookAndFeel.h"
 #include "CatLink.h"
+#include "LinkClient.h"
 
 namespace cat
 {
@@ -58,6 +59,14 @@ public:
     juce::String lastChain;
     bool followChains = true;           // accept chains picked in other Cats
 
+    /** Cat Link 2 (key, chords, Life-Cat events, the LINK button). Call once from the processor. */
+    LinkClient& enableLink (juce::AudioProcessorValueTreeState& state, LinkClient::Caps caps)
+    {
+        linkClient = std::make_unique<LinkClient> (processor, state, plugin, std::move (caps));
+        return *linkClient;
+    }
+    std::unique_ptr<LinkClient> linkClient;
+
     CatLink link;                       // shared with the other Cats in the host (chains, groove)
     const juce::String& pluginName() const { return plugin; }
 
@@ -100,6 +109,7 @@ class PresetBar : public juce::Component, private juce::Timer
 public:
     explicit PresetBar (PresetManager& manager, const juce::String& caption = "Preset");
     ~PresetBar() override;
+    PresetManager& getManager() noexcept { return manager; }
     void paint (juce::Graphics&) override;
     void resized() override;
 
@@ -111,6 +121,7 @@ private:
     PresetManager& manager;
     juce::String caption;
     juce::TextButton star { juce::String::fromUTF8 ("\xe2\x98\x86") }, prev { "<" }, next { ">" }, name, save { "Save" };
+    std::unique_ptr<LinkButton> linkButton;
     juce::String shownName;
     std::unique_ptr<juce::AlertWindow> saveWindow;
     std::unique_ptr<juce::FileChooser> chooser;

@@ -116,7 +116,30 @@ ChordCatProcessor::ChordCatProcessor()
 #endif
                       ),
       apvts (*this, nullptr, "PARAMS", createLayout())
-{    cat::followDrumGroove (presetManager, apvts, [this] (const cat::CatLink::Groove& g)
+{
+    {
+        cat::LinkClient::Caps caps;
+        caps.key = true;
+        caps.sendChords = true;
+        caps.grooveParam = "followGroove";
+        auto& link = presetManager.enableLink (apvts, caps);
+        link.getKey = [this]
+        {
+            const int root = juce::roundToInt (apvts.getRawParameterValue ("keyRoot")->load());
+            const int sc = juce::roundToInt (apvts.getRawParameterValue ("scale")->load());
+            return std::pair<int, juce::uint16> { root, cat::keys::rotate (chordcat::getScaleMask (sc, (uint16_t) customScaleMask.load()), root) };
+        };
+        link.applyKey = [this] (int root, juce::uint16 absMask)
+        {
+            std::vector<juce::uint16> masks;
+            for (int i = 0; i < chordcat::getScaleNames().size(); ++i)
+                masks.push_back (i == chordcat::getCustomScaleIndex() ? (juce::uint16) 0 : chordcat::getScaleMask (i, 0));
+            const int sc = cat::keys::nearestScale (cat::keys::rotate (absMask, -root), masks);
+            if (auto* k = apvts.getParameter ("keyRoot")) k->setValueNotifyingHost (k->convertTo0to1 ((float) root));
+            if (auto* s = apvts.getParameter ("scale"); s != nullptr && sc >= 0) s->setValueNotifyingHost (s->convertTo0to1 ((float) sc));
+        };
+    }
+    cat::followDrumGroove (presetManager, apvts, [this] (const cat::CatLink::Groove& g)
     {
         // Same swing as Drum-Cat: off-beat 16th later by swing% of half a 16th = MPC swing 50..75 %
         cat::SurpriseControls::setParam (*this, "swing", (float) juce::roundToInt (50.0f + g.swing * 0.25f));
@@ -286,6 +309,7 @@ void ChordCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     outBuffer.clear();
     scheduler.emit (outBuffer, sampleCounter, numSamples);
     midi.swapWith (outBuffer);
+    presetManager.linkClient->processOutput (midi, numSamples, hostSync.getSampleRate());    // Cat Link: share the chord
 
     uiPpq = hostSync.ppqAt (0);
     uiRunning = hostSync.isRunning() && current.active;

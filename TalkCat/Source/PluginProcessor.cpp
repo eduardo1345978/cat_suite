@@ -207,6 +207,24 @@ TalkCatProcessor::TalkCatProcessor()
     : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "PARAMS", createLayout())
 {
+    {
+        cat::LinkClient::Caps caps;
+        caps.key = true;
+        auto& link = presetManager.enableLink (apvts, caps);
+        link.getKey = [this]
+        {
+            const int root = juce::roundToInt (apvts.getRawParameterValue ("key")->load());
+            const int sc = juce::roundToInt (apvts.getRawParameterValue ("scale")->load());
+            const auto masks = talkcat::scaleMasks();
+            return std::pair<int, juce::uint16> { root, cat::keys::rotate (masks[(size_t) juce::jlimit (0, (int) masks.size() - 1, sc)], root) };
+        };
+        link.applyKey = [this] (int root, juce::uint16 absMask)
+        {
+            const int sc = cat::keys::nearestScale (cat::keys::rotate (absMask, -root), talkcat::scaleMasks());
+            if (auto* k = apvts.getParameter ("key")) k->setValueNotifyingHost (k->convertTo0to1 ((float) root));
+            if (auto* s = apvts.getParameter ("scale"); s != nullptr && sc >= 0) s->setValueNotifyingHost (s->convertTo0to1 ((float) sc));
+        };
+    }
     for (auto* prm : getParameters())
         if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (prm))
             refs[r->getParameterID()] = apvts.getRawParameterValue (r->getParameterID());

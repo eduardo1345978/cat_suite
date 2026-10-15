@@ -1550,6 +1550,103 @@ void testLifeCat()
            "save / load restores the world exactly (" + juce::String ((int) st.getSize()) + " bytes)");
 }
 
+//==============================================================================
+/** Sets a Cat Link switch (catLinkOn / catLinkKey / catLinkChords / catLinkLife) through the plug-in state, like a saved project would. */
+void setLinkOption (juce::AudioPluginInstance& p, const juce::String& option, bool on)
+{
+    juce::MemoryBlock st;
+    p.getStateInformation (st);
+    auto outer = juce::AudioProcessor::getXmlFromBinary (st.getData(), (int) st.getSize());
+    if (outer == nullptr || ! outer->hasTagName ("VST3PluginState")) { ++failures; return; }
+    auto* comp = outer->getChildByName ("IComponent");
+    juce::MemoryBlock inner;
+    inner.fromBase64Encoding (comp->getAllSubText());
+    auto xml = juce::AudioProcessor::getXmlFromBinary (inner.getData(), (int) inner.getSize());
+    if (xml == nullptr) { ++failures; return; }
+    if (auto* params = xml->getChildByName ("PARAMS")) params->setAttribute (option, on ? 1 : 0);
+    juce::MemoryBlock newInner;
+    juce::AudioProcessor::copyXmlToBinary (*xml, newInner);
+    comp->deleteAllTextElements();
+    comp->addTextElement (newInner.toBase64Encoding());
+    juce::MemoryBlock newOuter;
+    juce::AudioProcessor::copyXmlToBinary (*outer, newOuter);
+    p.setStateInformation (newOuter.getData(), (int) newOuter.getSize());
+}
+
+void pumpMessages (int ms) { juce::MessageManager::getInstance()->runDispatchLoopUntil (ms); }
+
+void testCatLink2()
+{
+    std::cout << "\nCat Link: key, chords and Life-Cat events between Cats" << std::endl;
+    auto chord = loadPlugin (CHORDCAT_VST3), life = loadPlugin (LIFECAT_VST3), talk = loadPlugin (TALKCAT_VST3), drum = loadPlugin (DRUMCAT_VST3);
+    if (chord == nullptr || life == nullptr || talk == nullptr || drum == nullptr) { ++failures; return; }
+    TestPlayHead ph;
+    ph.playing = true;
+    for (auto* pl : { chord.get(), life.get(), talk.get(), drum.get() }) prepare (*pl, ph);
+    pumpMessages (400);
+
+    // ---- key + scale: change it in Chord-Cat, Life-Cat and Talk-Cat follow
+    setParam (*chord, "Scale", "Natural Minor");
+    setParam (*chord, "Key", "D");
+    pumpMessages (600);
+    std::cout << "  Chord-Cat set to " << paramText (*chord, "Key") << " " << paramText (*chord, "Scale") << "  ->  Life-Cat " << paramText (*life, "Key") << " "
+              << paramText (*life, "Scale") << ",  Talk-Cat " << paramText (*talk, "Key") << " " << paramText (*talk, "Scale") << std::endl;
+    check (paramText (*life, "Key") == "D" && paramText (*life, "Scale") == "Natural Minor", "Life-Cat follows Chord-Cat's key and scale");
+    check (paramText (*talk, "Key") == "D" && paramText (*talk, "Scale") == "Minor", "Talk-Cat follows too (nearest of its own scales)");
+    setParam (*life, "Key", "G");
+    pumpMessages (600);
+    check (paramText (*chord, "Key") == "G" && paramText (*talk, "Key") == "G", "and the other way round: Life-Cat's key change reaches the others");
+
+    // ---- chords: Chord-Cat plays, Life-Cat (Held chord mode) sings those notes - no MIDI routing
+    setLinkOption (*life, "catLinkChords", true);
+    pumpMessages (300);
+    setParam (*life, "Notes From", "Held chord");
+    setParam (*life, "MIDI Out", "On");
+    const int64_t sec = (int64_t) sampleRate;
+    std::vector<Event> keys { { 0, juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100) }, { 8 * sec, juce::MidiMessage::noteOff (1, 60) } };
+    std::set<int> chordPcs, lifePcs;
+    int lifeNotes = 0;
+    for (int64_t t = 0; t < 8 * sec; t += blockSize)
+    {
+        ph.ppq = (double) t / samplesPerBeat;
+        for (auto& e : runBlock (*chord, keys, t)) if (e.msg.isNoteOn()) chordPcs.insert (e.msg.getNoteNumber() % 12);
+        for (auto& e : runBlock (*life, {}, t)) if (e.msg.isNoteOn() && t > sec) { lifePcs.insert (e.msg.getNoteNumber() % 12); ++lifeNotes; }
+    }
+    bool inside = ! lifePcs.empty();
+    for (int pc : lifePcs) inside = inside && chordPcs.count (pc) > 0;
+    juce::String a, b;
+    for (int pc : chordPcs) a << pc << " ";
+    for (int pc : lifePcs) b << pc << " ";
+    std::cout << "  Chord-Cat pitch classes { " << a << "},  Life-Cat sang " << lifeNotes << " notes on { " << b << "}" << std::endl;
+    check (inside, "Life-Cat sings Chord-Cat's chord through Cat Link (no MIDI routing)");
+
+    // ---- Life-Cat events: Drum-Cat answers births / deaths with extra hits
+    auto countDrum = [&] (bool react)
+    {
+        auto d = loadPlugin (DRUMCAT_VST3);
+        auto l = loadPlugin (LIFECAT_VST3);
+        TestPlayHead p2;
+        p2.playing = true;
+        prepare (*d, p2); prepare (*l, p2);
+        pumpMessages (300);
+        setLinkOption (*d, "catLinkLife", react);
+        l->setCurrentProgram (5);                                // Evolution Lab: lots of births and deaths
+        setParam (*l, "Life Speed", "4");
+        pumpMessages (300);
+        int n = 0;
+        for (int64_t t = 0; t < 20 * sec; t += blockSize)
+        {
+            p2.ppq = (double) t / samplesPerBeat;
+            runBlock (*l, {}, t);
+            for (auto& e : runBlock (*d, {}, t)) n += e.msg.isNoteOn() ? 1 : 0;
+        }
+        return n;
+    };
+    const int plain = countDrum (false), reacting = countDrum (true);
+    std::cout << "  Drum-Cat hits in 20 s: " << plain << " alone, " << reacting << " answering Life-Cat" << std::endl;
+    check (reacting > plain, "Drum-Cat answers Life-Cat's births and deaths");
+}
+
 int main()
 {
     juce::ScopedJuceInitialiser_GUI juceInit;
@@ -1568,6 +1665,7 @@ int main()
     testGlideCat();
     testTalkCatSinger();
     testLifeCat();
+    testCatLink2();
 
     std::cout << "\n" << (failures == 0 ? "ALL TESTS PASSED" : juce::String (failures) + " TEST(S) FAILED") << std::endl;
     return failures == 0 ? 0 : 1;

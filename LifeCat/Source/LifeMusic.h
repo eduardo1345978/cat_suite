@@ -16,6 +16,7 @@
 namespace lifecat
 {
 juce::StringArray scaleNames();
+std::vector<juce::uint16> scaleMasks();          // relative pitch-class masks (bit 0 = root)
 juce::StringArray pitchModeNames();
 juce::StringArray gridNames();
 double gridBeats (int index);

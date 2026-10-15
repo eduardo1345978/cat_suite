@@ -14,7 +14,9 @@ if(NOT TARGET cat_shared)
         ${CMAKE_CURRENT_LIST_DIR}/Source/MidiExport.cpp
         ${CMAKE_CURRENT_LIST_DIR}/Source/PresetBar.cpp
         ${CMAKE_CURRENT_LIST_DIR}/Source/CatLink.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/Source/ComputerKeyboard.cpp)
+        ${CMAKE_CURRENT_LIST_DIR}/Source/ComputerKeyboard.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/Source/LinkBus.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/Source/LinkClient.cpp)
 
     target_include_directories(cat_shared INTERFACE ${CMAKE_CURRENT_LIST_DIR}/Source)
 endif()

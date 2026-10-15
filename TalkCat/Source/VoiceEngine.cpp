@@ -69,6 +69,19 @@ juce::StringArray styleNames()
     for (int i = 0; i < 15; ++i) n.add (style (i).name);
     return n;
 }
+std::vector<juce::uint16> scaleMasks()
+{
+    std::vector<juce::uint16> m;
+    for (const auto& sc : scales())
+    {
+        juce::uint16 v = 0;
+        for (int st : sc) v |= (juce::uint16) (1u << (((st % 12) + 12) % 12));
+        m.push_back (v);
+    }
+    m.push_back (0x0fff);    // Chromatic
+    return m;
+}
+
 juce::StringArray scaleNames()   { return { "Major", "Minor", "Dorian", "Mixolydian", "Harmonic Minor", "Lydian", "Phrygian", "Chromatic" }; }
 juce::StringArray harmonyNames() { return { "Off", "3rd above", "3rd below", "4th above", "4th below", "5th above", "5th below",
                                             "6th above", "6th below", "Octave above", "Octave below", "Unison" }; }

@@ -54,6 +54,18 @@ juce::StringArray scaleNames()
     for (const auto& s : scales()) n.add (s.name);
     return n;
 }
+std::vector<juce::uint16> scaleMasks()
+{
+    std::vector<juce::uint16> m;
+    for (const auto& sc : scales())
+    {
+        juce::uint16 v = 0;
+        for (int st : sc.steps) v |= (juce::uint16) (1u << st);
+        m.push_back (v);
+    }
+    return m;
+}
+
 juce::StringArray pitchModeNames() { return { "Position (height)", "Species", "Held chord" }; }
 juce::StringArray gridNames() { return { "1/4", "1/8", "1/16", "1/8 T", "1/16 T", "1/32" }; }
 double gridBeats (int i) { static const double g[] = { 1.0, 0.5, 0.25, 1.0 / 3.0, 1.0 / 6.0, 0.125 }; return g[juce::jlimit (0, 5, i)]; }

@@ -126,6 +126,7 @@ private:
     lifecat::Synth synth;
     std::vector<lifecat::SungNote> sung;
     float stepAccumulator = 0.0f;
+    uint32_t linkEventsSeen = 0;          // Cat Link: world events already sent
     double freePpq = 0.0;
 
     juce::SpinLock commandLock;
