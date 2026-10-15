@@ -8,6 +8,8 @@
 
 **Only the instruments that make sound, as apps** (Sing-Cat, Talk-Cat, Glide-Cat, Life-Cat): download **[Get-Cat-Sound-Apps.bat](../../releases/download/latest/Get-Cat-Sound-Apps.bat)** and double-click it (if Windows warns, click *More info > Run anyway*). It downloads just those four, installs them as standalone apps with Start menu and Desktop shortcuts, and also as VST3 plug-ins. In the apps you can play with a MIDI keyboard or your **computer keyboard**: `A S D F G H J K L` = white keys, `W E T Y U O P` = black keys (Z works as Y on Slovak / German keyboards), Left / Right arrow = octave, Down / Up arrow = velocity.
 
+**Cat Hub** (comes with Get-Cat-Sound-Apps.bat): one window where **Chord-Cat, Bass-Cat, Drum-Cat and Life-Cat jam together** without Cubase. Press **Play**: the Hub walks through Chord-Cat's pads (1, 2 or 4 bars per chord), Bass-Cat plays a bass line to those chords, Drum-Cat plays the drums and Life-Cat's creatures sing along, all at one tempo. The Jam page has a card per Cat (sound, volume, room reverb, mute / solo, level), the pads (hold one with the mouse or keys `1`-`8`, `Space` = play / stop) and **Rec** to record a WAV into *Music\Cat Hub*. Every Cat's own window is a tab, so all their settings are there. Built-in sounds play the MIDI Cats: keys (Soft Pad, E-Piano, Pluck, Strings, or Glide-Cat), bass (Sub, Saw, Reese, Pluck) and a drum kit (Boom Bap, 808, Lo-fi, Live). Everything, including each Cat's settings, is remembered for next time.
+
 Every change pushed to `main` is built automatically on GitHub (see the **Actions** tab); the newest build replaces the "latest" release.
 
 

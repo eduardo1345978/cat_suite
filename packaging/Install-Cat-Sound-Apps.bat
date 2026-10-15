@@ -11,12 +11,12 @@ set "VST=%LOCALAPPDATA%\Programs\Common\VST3"
 
 echo.
 echo   =====  Cat Suite - sound apps  =====
-echo   Sing-Cat, Talk-Cat, Glide-Cat and Life-Cat
+echo   Sing-Cat, Talk-Cat, Glide-Cat, Life-Cat and the Cat Hub
 echo.
 
 :checkRunning
 set "RUNNING="
-for %%A in (Sing-Cat Talk-Cat Glide-Cat Life-Cat) do (
+for %%A in (Sing-Cat Talk-Cat Glide-Cat Life-Cat Cat-Hub) do (
     tasklist /FI "IMAGENAME eq %%A.exe" 2>nul | find /I "%%A.exe" >nul && set "RUNNING=%%A"
 )
 tasklist /FI "IMAGENAME eq Cubase*" 2>nul | find /I "Cubase" >nul && set "RUNNING=Cubase"
@@ -34,6 +34,13 @@ for %%F in ("Apps\*.exe") do (
     echo   Installing app %%~nF ...
     copy /Y "%%F" "%APPS%\" >nul || set FAILED=1
 )
+if exist "Hub Cats" (
+    echo   Installing the Cats for the Cat Hub ...
+    if not exist "%APPS%\Hub Cats" mkdir "%APPS%\Hub Cats"
+    for /D %%P in ("Hub Cats\*.vst3") do (
+        xcopy /E /I /Y /Q "%%P" "%APPS%\Hub Cats\%%~nxP" >nul || set FAILED=1
+    )
+)
 for /D %%P in ("VST3\*.vst3") do (
     echo   Installing plug-in %%~nP ...
     xcopy /E /I /Y /Q "%%P" "%VST%\%%~nxP" >nul || set FAILED=1
@@ -47,7 +54,10 @@ echo.
 if "%FAILED%"=="1" (
     echo   Something could not be copied. Close all Cat apps and Cubase, then run this again.
 ) else (
-    echo   Done! Start Sing-Cat, Talk-Cat, Glide-Cat or Life-Cat from the Start menu or your Desktop.
+    echo   Done! Start Sing-Cat, Talk-Cat, Glide-Cat, Life-Cat or the Cat Hub from the Start menu or your Desktop.
+    echo.
+    echo   Cat Hub: Chord-Cat, Bass-Cat, Drum-Cat and Life-Cat play together - just press Play.
+    echo       Space = play / stop       keys 1-8 = hold a chord pad
     echo.
     echo   Play them with your computer keyboard:
     echo       A S D F G H J K L  = white keys      W E T Y U O P = black keys
