@@ -16,6 +16,9 @@
       Scavengers  eat what dies (and leftovers), play percussion
       Giants      slow, huge, rare; eat plants as they walk; deep drones
       Swarms      move as a flock and sing arpeggios together
+      Singers     birds / whales: roam far, gather, and sing whole melodic phrases
+      Drummers    woodpeckers / crabs: tap out steady rhythms (percussion)
+      Builders    beavers / corals: plant seeds, lay meadow trails and build nests
 
     Every creature carries genes (0..1). Babies get a blend of both parents' genes plus a
     small mutation, so body, behaviour and SOUND slowly evolve over the generations.
@@ -25,16 +28,17 @@
 */
 namespace lifecat
 {
-constexpr int maxCreatures = 64;
-constexpr int maxPlants = 200;
+constexpr int maxCreatures = 128;
+constexpr int maxPlants = 260;
+constexpr int maxNests = 16;
 constexpr int maxCorpses = 48;
 constexpr int maxWalls = 48;
 constexpr int maxZones = 16;
 constexpr int historyLength = 240;
 constexpr int terrainSize = 32;
 
-enum class Role : uint8_t { Grazer = 0, Hunter, Drifter, Pollinator, Scavenger, Giant, Swarm };
-constexpr int numRoles = 7;
+enum class Role : uint8_t { Grazer = 0, Hunter, Drifter, Pollinator, Scavenger, Giant, Swarm, Singer, Drummer, Builder };
+constexpr int numRoles = 10;
 
 enum Gene
 {
@@ -94,17 +98,22 @@ struct Creature
     uint32_t group = 0;           // swarm flock id (smallest id in the flock)
     int groupRank = 0;            // place in the flock (for arpeggios)
     float visitCooldown = 0.0f;   // pollinators: time until the next flower
+    float blink = 0.0f;           // eyes closing (display)
+    uint32_t nest = 0;            // builders: their nest (index + 1)
+    float phraseTimer = 0.0f;     // singers: time until the next phrase
 };
 
 struct Plant { bool alive = false; float x = 0.5f, y = 0.5f, size = 0.3f; };
 struct Corpse { bool alive = false; float x = 0.5f, y = 0.5f, food = 0.5f, age = 0.0f; Role role = Role::Grazer; };
 struct Wall { float x1 = 0, y1 = 0, x2 = 0, y2 = 0; };
+/** Built by builders: plants grow around it, builders rest and breed there. */
+struct Nest { bool alive = false; float x = 0.5f, y = 0.5f, size = 0.0f; uint32_t owner = 0; };
 
 enum class ZoneType : uint8_t { Warm = 0, Cold, Current };
 struct Zone { ZoneType type = ZoneType::Warm; float x = 0.5f, y = 0.5f, r = 0.1f, dx = 0.0f, dy = 0.0f; };
 
-enum class Terrain : uint8_t { Ground = 0, Water, Rock, Meadow, Light };
-constexpr int numTerrains = 5;
+enum class Terrain : uint8_t { Ground = 0, Water, Rock, Meadow, Light, Sand, Lava };
+constexpr int numTerrains = 7;
 
 enum class Weather : uint8_t { Clear = 0, Rain, Snow, Fog, Storm };
 constexpr int numWeathers = 5;
@@ -153,7 +162,7 @@ struct Rng
     float gauss() noexcept { return (uni() + uni() + uni() + uni() - 2.0f) * 0.866f; }     // ~N(0,0.5)
 };
 
-/** kind: 0 born, 1 died, 2 eaten, 3 pollinated (a new plant), 4 scavenged */
+/** kind: 0 born, 1 died, 2 eaten, 3 pollinated (a new plant), 4 scavenged, 5 nest built, 6 burnt (lava) */
 struct Event { uint8_t kind; float x, y; Role role; };
 
 /** Fixed facts about each kind of creature. */
@@ -194,6 +203,7 @@ public:
     int population() const noexcept;
     int plantCount() const noexcept;
     int corpseCount() const noexcept;
+    int nestCount() const noexcept;
     int roleCap (Role, const LifeSettings&) const noexcept;
     Terrain terrainAt (float x, float y) const noexcept;
     static float radiusOf (const Creature&) noexcept;
@@ -205,6 +215,7 @@ public:
     std::array<Creature, maxCreatures> creatures;
     std::array<Plant, maxPlants> plants;
     std::array<Corpse, maxCorpses> corpses;
+    std::array<Nest, maxNests> nests;
     std::array<Wall, maxWalls> walls;
     int numWalls = 0;
     std::array<Zone, maxZones> zones;
@@ -225,7 +236,7 @@ public:
     float weatherTimer = 0.0f;
 
     // population history (one sample every 2 s) for the graph
-    std::array<std::array<uint8_t, numRoles>, historyLength> history {};
+    std::array<std::array<uint8_t, numRoles>, historyLength> history {};      // counts (max 128 fit in a byte)
     int historyPos = 0;
     float historyTimer = 0.0f;
 

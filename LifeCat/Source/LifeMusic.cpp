@@ -117,8 +117,11 @@ float Conductor::pitchFor (const Creature& c, const MusicSettings& m, const int*
             { 7, 9, 11, 14 },    // pollinators: high sparkle
             { 0, 4, 2, 7 },      // scavengers: percussion around the root
             { 0, 0, 4, 0 },      // giants: deep root drones
-            { 0, 2, 4, 7 } };    // swarms: arpeggio of the chord
-        static const int bases[numRoles] = { 48, 36, 60, 60, 48, 24, 60 };
+            { 0, 2, 4, 7 },      // swarms: arpeggio of the chord
+            { 0, 2, 4, 7 },      // singers: phrases start on a chord tone
+            { 0, 0, 4, 7 },      // drummers: tuned around the root, low
+            { 0, 4, 2, 5 } };    // builders: wooden middle notes
+        static const int bases[numRoles] = { 48, 36, 60, 60, 48, 24, 60, 60, 36, 48 };
         const int ri = (int) c.role;
         int degree = tables[ri][juce::jlimit (0, 3, (int) (g[gPitch] * 4.0f))];
         if (c.role == Role::Swarm) degree = tables[ri][c.groupRank % 4] + 7 * ((c.groupRank / 4) % 2);
@@ -148,13 +151,13 @@ void Conductor::process (World& w, const MusicSettings& m, double ppqStart, doub
     const double ppqEnd = ppqStart + ppqPerSample * numSamples;
     const double grid = gridBeats (m.grid);
 
-    auto sing = [&] (int ci, double atPpq, double divisionBeats)
+    auto sing = [&] (int ci, double atPpq, double divisionBeats, int forcedNote = -1)
     {
         auto& c = w.creatures[(size_t) ci];
         SungNote s;
         s.sample = juce::jlimit (0, numSamples - 1, (int) ((atPpq - ppqStart) / ppqPerSample));
         s.creature = ci;
-        s.midiNote = pitchFor (c, m, held, numHeld);
+        s.midiNote = forcedNote >= 0 ? (float) forcedNote : pitchFor (c, m, held, numHeld);
         s.velocity = juce::jlimit (0.1f, 1.0f, 0.3f + 0.45f * juce::jlimit (0.0f, 1.0f, c.energy) + 0.25f * c.genes[gSize]);
         s.lengthBeats = (float) (juce::jmax (grid, divisionBeats) * (0.35 + 1.2 * c.genes[gRelease]) * m.lengthScale);
         s.pan = c.x * 2.0f - 1.0f;
@@ -163,6 +166,7 @@ void Conductor::process (World& w, const MusicSettings& m, double ppqStart, doub
         s.velocity = juce::jlimit (0.08f, 1.0f, s.velocity * (1.0f + c.genes[gAccent] * (0.35f * rng.bi() + (onBeat ? 0.25f : -0.12f))));
         c.singFlash = 1.0f;
         out.push_back (s);
+        if (forcedNote >= 0) return;     // phrase notes: no extra interval
         // interval gene: now and then a second note, a third or a fifth above
         if (rng.uni() < c.genes[gInterval] * 0.5f)
         {
@@ -215,10 +219,47 @@ void Conductor::process (World& w, const MusicSettings& m, double ppqStart, doub
             if (at < ppqStart) continue;
 
             candidates.clear();
+            int sungHere = 0;
             for (int i = 0; i < maxCreatures; ++i)
             {
                 const auto& c = w.creatures[(size_t) i];
                 if (! c.alive) continue;
+                auto& ph = phrases[(size_t) i];
+                if (ph.id != c.id) ph = Phrase { c.id };
+
+                // singers: a phrase in progress goes on, note by note, stepping through the scale
+                if (c.role == Role::Singer && ph.left > 0)
+                {
+                    if (k >= ph.nextK && m.speciesSing[(size_t) c.role])
+                    {
+                        int step = rng.uni() < 0.3f + 0.4f * c.genes[gHarm] ? 2 : 1;
+                        if (ph.note + 2 > m.highNote) ph.dir = -1;
+                        if (ph.note - 2 < m.lowNote) ph.dir = 1;
+                        if (rng.uni() < 0.25f) ph.dir = -ph.dir;
+                        ph.note = scaleStep (ph.note, ph.dir * step, m.key, m.scale);
+                        if (m.pitchMode == 2 && numHeld > 0 && ph.left == 1)
+                            ph.note = juce::roundToInt (pitchFor (c, m, held, numHeld));      // end on a chord tone
+                        --ph.left;
+                        ph.nextK = k + ph.stride;
+                        sing (i, at, grid * ph.stride * 1.3, juce::jlimit (0, 127, ph.note));
+                        ++sungHere;
+                    }
+                    continue;
+                }
+                // drummers: an euclidean pattern on the grid
+                if (c.role == Role::Drummer)
+                {
+                    const long long nSteps = grid <= 0.25 ? 16 : 8;
+                    const long long hits = 2 + (long long) (c.genes[gDensity] * 5.0f);
+                    const long long pos = ((k + (long long) (c.id % (uint32_t) nSteps)) % nSteps + nSteps) % nSteps;
+                    if ((pos * hits) % nSteps < hits && m.speciesSing[(size_t) c.role]
+                        && rng.uni() < 0.35f + 0.65f * m.density * (0.4f + 0.6f * c.activity))
+                    {
+                        sing (i, at, grid);
+                        ++sungHere;
+                    }
+                    continue;
+                }
                 const double d = juce::jmax (grid, divisionFor (c));
                 long long stepsPer = juce::jmax (1LL, (long long) std::llround (d / grid));
                 long long offset = (long long) ((c.id * 7u + (uint32_t) (c.genes[gPitch] * 5.0f)) % (uint32_t) stepsPer);
@@ -232,8 +273,24 @@ void Conductor::process (World& w, const MusicSettings& m, double ppqStart, doub
             }
             // the strongest sing first
             std::sort (candidates.begin(), candidates.end(), [&w] (int a, int b) { return w.creatures[(size_t) a].energy > w.creatures[(size_t) b].energy; });
-            for (int j = 0; j < (int) candidates.size() && j < m.maxNotes; ++j)
-                sing (candidates[(size_t) j], at, divisionFor (w.creatures[(size_t) candidates[(size_t) j]]));
+            for (int j = 0; j < (int) candidates.size() && j < juce::jmax (1, m.maxNotes - sungHere / 2); ++j)
+            {
+                const int ci = candidates[(size_t) j];
+                auto& c = w.creatures[(size_t) ci];
+                if (c.role == Role::Singer)
+                {
+                    // start a phrase: 3..8 notes, one every 1 or 2 grid steps
+                    auto& ph = phrases[(size_t) ci];
+                    ph.note = juce::roundToInt (pitchFor (c, m, held, numHeld));
+                    ph.left = 2 + (int) (c.genes[gDensity] * 6.0f);
+                    ph.stride = c.genes[gRhythm] > 0.6f ? 1 : 2;
+                    ph.dir = rng.uni() < 0.5f ? 1 : -1;
+                    ph.nextK = k + ph.stride;
+                    sing (ci, at, grid * ph.stride * 1.3, ph.note);
+                    continue;
+                }
+                sing (ci, at, divisionFor (c));
+            }
         }
     }
     else

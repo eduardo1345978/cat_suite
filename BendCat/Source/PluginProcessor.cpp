@@ -219,7 +219,7 @@ void BendCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     const int numSamples = buffer.getNumSamples();
 
     outBuffer.clear();
-    hostSync.beginBlock (getPlayHead(), numSamples);
+    hostSync.beginBlock (presetManager.linkClient->playHead (getPlayHead(), numSamples, getSampleRate()), numSamples);   // Cat Link: shared tempo in the apps
     midiLearn.processMidi (midi);
     blockSize = numSamples;
 

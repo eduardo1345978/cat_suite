@@ -135,13 +135,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout LifeCatProcessor::createLayo
 
     // MIDI
     bo ("midiOut", "MIDI Out", false);
-    ch ("midiChannels", "MIDI Channels", { "All on channel 1", "One channel per kind (1-7)" }, 0);
+    ch ("midiChannels", "MIDI Channels", { "All on channel 1", "One channel per kind (1-10)" }, 0);
     return layout;
 }
 
 juce::StringArray LifeCatProcessor::roleParamNames()
 {
-    return { "Grazers", "Hunters", "Drifters", "Pollinators", "Scavengers", "Giants", "Swarms" };
+    return { "Grazers", "Hunters", "Drifters", "Pollinators", "Scavengers", "Giants", "Swarms", "Singers", "Drummers", "Builders" };
 }
 
 //==============================================================================
@@ -149,39 +149,49 @@ const std::vector<LifeCatProcessor::WorldPreset>& LifeCatProcessor::presets()
 {
     // scale: 0 Major 1 Minor 2 Dorian 3 Mixo 4 Lydian 5 Phrygian 6 HarmMinor 7 MajPenta 8 MinPenta 9 Japanese 10 WholeTone
     // grid: 0 1/4 1 1/8 2 1/16 3 1/8T 4 1/16T 5 1/32
-    // counts: grazers, hunters, drifters, pollinators, scavengers, giants, swarms
+    // counts: grazers, hunters, drifters, pollinators, scavengers, giants, swarms, singers, drummers, builders
     // "sp<kind>Max" 0 keeps a kind out of a world; dayLength 1..4 = 1/2/4/8 min days; weather 0 auto 1 clear 2 rain 3 snow 4 fog 5 storm
     static const std::vector<WorldPreset> list = {
-        { "Quiet Pond", 0, 11, { 8, 2, 4, 2, 1, 0, 0 }, 40, { { "scale", 7 }, { "density", 0.45f }, { "reverbMix", 0.45f }, { "sp5Max", 0 }, { "sp6Max", 0 } } },
-        { "Busy Garden", 0, 23, { 16, 4, 4, 4, 2, 0, 8 }, 80, { { "grid", 2 }, { "density", 0.7f }, { "maxNotes", 5 }, { "foodGrowth", 0.7f } } },
-        { "Kalimba Meadow", 0, 5, { 10, 2, 3, 6, 0, 0, 0 }, 60, { { "scale", 0 }, { "key", 2 }, { "release", -0.3f }, { "brightness", 0.2f }, { "grid", 2 }, { "sp4Max", 0 }, { "sp5Max", 0 }, { "sp6Max", 0 } }, 8 },
-        { "Two Ponds", 0, 31, { 12, 3, 4, 2, 1, 0, 0 }, 50, { { "scale", 1 }, { "key", 9 }, { "sp5Max", 0 } }, 1 },
-        { "Predator Waves", 0, 17, { 20, 6, 3, 0, 3, 0, 10 }, 70, { { "scale", 8 }, { "key", 4 }, { "grid", 2 }, { "swing", 30.0f }, { "sp3Max", 0 } } },
-        { "Evolution Lab", 0, 99, { 14, 3, 5, 2, 2, 0, 0 }, 60, { { "mutation", 0.9f }, { "lifeSpeed", 2.0f }, { "lifespan", 0.6f }, { "scale", 2 }, { "sp5Max", 0 }, { "sp6Max", 0 } } },
-        { "Follow My Chords", 0, 12, { 12, 3, 5, 2, 0, 0, 6 }, 50, { { "pitchMode", 2 }, { "grid", 2 } } },
-        { "Deep Ocean", 1, 7, { 10, 3, 8, 0, 2, 1, 0 }, 50, { { "scale", 2 }, { "key", 2 }, { "density", 0.45f }, { "reverbMix", 0.55f }, { "sp3Max", 0 }, { "sp6Max", 0 } } },
-        { "Jellyfish Lullaby", 1, 42, { 4, 1, 12, 0, 0, 0, 0 }, 30, { { "scale", 7 }, { "quantize", 0 }, { "density", 0.4f }, { "attack", 0.5f }, { "release", 0.6f },
+        { "Quiet Pond", 0, 11, { 8, 2, 4, 2, 1, 0, 0 }, 40, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "scale", 7 }, { "density", 0.45f }, { "reverbMix", 0.45f }, { "sp5Max", 0 }, { "sp6Max", 0 } } },
+        { "Busy Garden", 0, 23, { 16, 4, 4, 4, 2, 0, 8 }, 80, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "grid", 2 }, { "density", 0.7f }, { "maxNotes", 5 }, { "foodGrowth", 0.7f } } },
+        { "Kalimba Meadow", 0, 5, { 10, 2, 3, 6, 0, 0, 0 }, 60, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "scale", 0 }, { "key", 2 }, { "release", -0.3f }, { "brightness", 0.2f }, { "grid", 2 }, { "sp4Max", 0 }, { "sp5Max", 0 }, { "sp6Max", 0 } }, 8 },
+        { "Two Ponds", 0, 31, { 12, 3, 4, 2, 1, 0, 0 }, 50, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "scale", 1 }, { "key", 9 }, { "sp5Max", 0 } }, 1 },
+        { "Predator Waves", 0, 17, { 20, 6, 3, 0, 3, 0, 10 }, 70, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "scale", 8 }, { "key", 4 }, { "grid", 2 }, { "swing", 30.0f }, { "sp3Max", 0 } } },
+        { "Evolution Lab", 0, 99, { 14, 3, 5, 2, 2, 0, 0 }, 60, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "mutation", 0.9f }, { "lifeSpeed", 2.0f }, { "lifespan", 0.6f }, { "scale", 2 }, { "sp5Max", 0 }, { "sp6Max", 0 } } },
+        { "Follow My Chords", 0, 12, { 12, 3, 5, 2, 0, 0, 6 }, 50, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "pitchMode", 2 }, { "grid", 2 } } },
+        { "Deep Ocean", 1, 7, { 10, 3, 8, 0, 2, 1, 0 }, 50, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "scale", 2 }, { "key", 2 }, { "density", 0.45f }, { "reverbMix", 0.55f }, { "sp3Max", 0 }, { "sp6Max", 0 } } },
+        { "Jellyfish Lullaby", 1, 42, { 4, 1, 12, 0, 0, 0, 0 }, 30, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "scale", 7 }, { "quantize", 0 }, { "density", 0.4f }, { "attack", 0.5f }, { "release", 0.6f },
                                                                     { "sp3Max", 0 }, { "sp4Max", 0 }, { "sp5Max", 0 }, { "sp6Max", 0 } } },
-        { "River Current", 1, 21, { 12, 3, 6, 0, 1, 0, 10 }, 60, { { "scale", 3 }, { "key", 7 }, { "sp3Max", 0 } }, 3 },
-        { "Coral Reef", 1, 77, { 16, 4, 6, 3, 2, 0, 12 }, 90, { { "grid", 2 }, { "swing", 30.0f }, { "scale", 0 }, { "key", 5 } } },
-        { "Nebula", 2, 3, { 6, 2, 12, 0, 0, 1, 0 }, 30, { { "scale", 4 }, { "quantize", 0 }, { "reverbMix", 0.7f }, { "reverbSize", 0.9f }, { "sp3Max", 0 }, { "sp4Max", 0 }, { "sp6Max", 0 } } },
-        { "Comet Rain", 2, 19, { 14, 5, 4, 0, 2, 0, 10 }, 60, { { "grid", 2 }, { "delayMix", 0.3f }, { "scale", 8 }, { "key", 9 }, { "sp3Max", 0 } } },
-        { "Warm Star", 2, 55, { 10, 2, 8, 2, 0, 1, 0 }, 40, { { "scale", 4 }, { "key", 7 }, { "density", 0.5f }, { "sp6Max", 0 } }, 2 },
-        { "Whole Tone Drift", 2, 61, { 8, 2, 10, 0, 0, 0, 0 }, 40, { { "scale", 10 }, { "quantize", 0 }, { "density", 0.45f }, { "sp3Max", 0 }, { "sp4Max", 0 }, { "sp5Max", 0 }, { "sp6Max", 0 } } },
-        { "Petri Dish", 3, 8, { 14, 3, 4, 0, 2, 0, 8 }, 70, { { "scale", 9 }, { "grid", 2 }, { "sp3Max", 0 } } },
-        { "Cell Clicks", 3, 64, { 18, 4, 2, 0, 4, 0, 12 }, 100, { { "grid", 5 }, { "maxNotes", 6 }, { "release", -0.6f }, { "scale", 8 }, { "sp3Max", 0 }, { "sp5Max", 0 } } },
-        { "Four Rooms", 3, 4, { 14, 3, 4, 0, 2, 0, 0 }, 60, { { "scale", 6 }, { "key", 2 }, { "grid", 2 }, { "sp3Max", 0 }, { "sp5Max", 0 }, { "sp6Max", 0 } }, 4 },
+        { "River Current", 1, 21, { 12, 3, 6, 0, 1, 0, 10 }, 60, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "scale", 3 }, { "key", 7 }, { "sp3Max", 0 } }, 3 },
+        { "Coral Reef", 1, 77, { 16, 4, 6, 3, 2, 0, 12 }, 90, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "grid", 2 }, { "swing", 30.0f }, { "scale", 0 }, { "key", 5 } } },
+        { "Nebula", 2, 3, { 6, 2, 12, 0, 0, 1, 0 }, 30, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "scale", 4 }, { "quantize", 0 }, { "reverbMix", 0.7f }, { "reverbSize", 0.9f }, { "sp3Max", 0 }, { "sp4Max", 0 }, { "sp6Max", 0 } } },
+        { "Comet Rain", 2, 19, { 14, 5, 4, 0, 2, 0, 10 }, 60, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "grid", 2 }, { "delayMix", 0.3f }, { "scale", 8 }, { "key", 9 }, { "sp3Max", 0 } } },
+        { "Warm Star", 2, 55, { 10, 2, 8, 2, 0, 1, 0 }, 40, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "scale", 4 }, { "key", 7 }, { "density", 0.5f }, { "sp6Max", 0 } }, 2 },
+        { "Whole Tone Drift", 2, 61, { 8, 2, 10, 0, 0, 0, 0 }, 40, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "scale", 10 }, { "quantize", 0 }, { "density", 0.45f }, { "sp3Max", 0 }, { "sp4Max", 0 }, { "sp5Max", 0 }, { "sp6Max", 0 } } },
+        { "Petri Dish", 3, 8, { 14, 3, 4, 0, 2, 0, 8 }, 70, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "scale", 9 }, { "grid", 2 }, { "sp3Max", 0 } } },
+        { "Cell Clicks", 3, 64, { 18, 4, 2, 0, 4, 0, 12 }, 100, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "grid", 5 }, { "maxNotes", 6 }, { "release", -0.6f }, { "scale", 8 }, { "sp3Max", 0 }, { "sp5Max", 0 } } },
+        { "Four Rooms", 3, 4, { 14, 3, 4, 0, 2, 0, 0 }, 60, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "scale", 6 }, { "key", 2 }, { "grid", 2 }, { "sp3Max", 0 }, { "sp5Max", 0 }, { "sp6Max", 0 } }, 4 },
         // ---- sandbox worlds
-        { "Bee Meadow", 0, 101, { 8, 1, 2, 8, 1, 0, 0 }, 90, { { "scale", 0 }, { "key", 7 }, { "grid", 2 }, { "density", 0.5f }, { "sp5Max", 0 }, { "sp6Max", 0 } }, 8 },
-        { "Night Forest", 0, 102, { 10, 3, 8, 3, 2, 1, 0 }, 60, { { "dayLength", 2 }, { "scale", 1 }, { "key", 9 }, { "reverbMix", 0.5f }, { "dayNightSound", 0.8f }, { "sp6Max", 0 } } },
-        { "Four Seasons", 0, 103, { 14, 3, 5, 4, 2, 1, 8 }, 80, { { "seasonLength", 2 }, { "dayLength", 2 }, { "weather", 0 }, { "scale", 7 }, { "key", 5 } } },
-        { "Rainy Garden", 0, 104, { 12, 2, 4, 3, 2, 0, 6 }, 70, { { "weather", 2 }, { "scale", 2 }, { "key", 2 }, { "ambience", 0.5f }, { "reverbMix", 0.45f } } },
-        { "Whale Song", 1, 105, { 6, 1, 6, 0, 2, 3, 14 }, 80, { { "scale", 7 }, { "key", 0 }, { "density", 0.5f }, { "reverbMix", 0.6f }, { "sp3Max", 0 } }, 5 },
-        { "Starling Swarm", 2, 106, { 4, 2, 4, 0, 0, 0, 22 }, 70, { { "grid", 2 }, { "scale", 8 }, { "key", 4 }, { "delayMix", 0.25f }, { "sp3Max", 0 } } },
-        { "Aquarium", 1, 107, { 8, 2, 4, 0, 3, 1, 12 }, 70, { { "gravity", 0.6f }, { "scale", 3 }, { "key", 2 }, { "sp3Max", 0 } }, 7 },
-        { "Windy Island", 0, 108, { 10, 2, 4, 4, 2, 1, 8 }, 70, { { "wind", 0.45f }, { "windDir", 20.0f }, { "weather", 0 }, { "scale", 4 }, { "key", 9 } }, 5 },
-        { "Bone Yard", 3, 109, { 14, 6, 2, 0, 6, 0, 6 }, 70, { { "grid", 2 }, { "swing", 20.0f }, { "scale", 5 }, { "key", 4 }, { "sp3Max", 0 } }, 9 },
-        { "Snow Globe", 2, 110, { 8, 2, 6, 0, 2, 1, 10 }, 50, { { "season", 3 }, { "weather", 3 }, { "scale", 9 }, { "key", 2 }, { "ambience", 0.5f }, { "sp3Max", 0 } } },
+        { "Bee Meadow", 0, 101, { 8, 1, 2, 8, 1, 0, 0 }, 90, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "scale", 0 }, { "key", 7 }, { "grid", 2 }, { "density", 0.5f }, { "sp5Max", 0 }, { "sp6Max", 0 } }, 8 },
+        { "Night Forest", 0, 102, { 10, 3, 8, 3, 2, 1, 0 }, 60, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "dayLength", 2 }, { "scale", 1 }, { "key", 9 }, { "reverbMix", 0.5f }, { "dayNightSound", 0.8f }, { "sp6Max", 0 } } },
+        { "Four Seasons", 0, 103, { 14, 3, 5, 4, 2, 1, 8 }, 80, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "seasonLength", 2 }, { "dayLength", 2 }, { "weather", 0 }, { "scale", 7 }, { "key", 5 } } },
+        { "Rainy Garden", 0, 104, { 12, 2, 4, 3, 2, 0, 6 }, 70, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "weather", 2 }, { "scale", 2 }, { "key", 2 }, { "ambience", 0.5f }, { "reverbMix", 0.45f } } },
+        { "Whale Song", 1, 105, { 6, 1, 6, 0, 2, 3, 14 }, 80, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "scale", 7 }, { "key", 0 }, { "density", 0.5f }, { "reverbMix", 0.6f }, { "sp3Max", 0 } }, 5 },
+        { "Starling Swarm", 2, 106, { 4, 2, 4, 0, 0, 0, 22 }, 70, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "grid", 2 }, { "scale", 8 }, { "key", 4 }, { "delayMix", 0.25f }, { "sp3Max", 0 } } },
+        { "Aquarium", 1, 107, { 8, 2, 4, 0, 3, 1, 12 }, 70, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "gravity", 0.6f }, { "scale", 3 }, { "key", 2 }, { "sp3Max", 0 } }, 7 },
+        { "Windy Island", 0, 108, { 10, 2, 4, 4, 2, 1, 8 }, 70, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "wind", 0.45f }, { "windDir", 20.0f }, { "weather", 0 }, { "scale", 4 }, { "key", 9 } }, 5 },
+        { "Bone Yard", 3, 109, { 14, 6, 2, 0, 6, 0, 6 }, 70, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "grid", 2 }, { "swing", 20.0f }, { "scale", 5 }, { "key", 4 }, { "sp3Max", 0 } }, 9 },
+        { "Snow Globe", 2, 110, { 8, 2, 6, 0, 2, 1, 10 }, 50, { { "sp7Max", 0 }, { "sp8Max", 0 }, { "sp9Max", 0 }, { "season", 3 }, { "weather", 3 }, { "scale", 9 }, { "key", 2 }, { "ambience", 0.5f }, { "sp3Max", 0 } } },
+
+        // v3: singers, drummers, builders, sand and lava
+        { "Birdsong Morning", 0, 201, { 10, 1, 2, 3, 1, 0, 0, 4, 1, 2 }, 70, { { "scale", 7 }, { "key", 7 }, { "grid", 2 }, { "dayLength", 2 }, { "density", 0.5f }, { "sp5Max", 0 }, { "sp6Max", 0 } }, 8 },
+        { "Woodpecker Groove", 0, 202, { 10, 2, 2, 0, 1, 0, 0, 1, 6, 1 }, 60, { { "grid", 2 }, { "swing", 25.0f }, { "scale", 8 }, { "key", 9 }, { "sp3Max", 0 }, { "sp5Max", 0 }, { "sp6Max", 0 } }, 9 },
+        { "Beaver Valley", 0, 203, { 8, 2, 2, 2, 1, 0, 0, 2, 1, 5 }, 40, { { "scale", 3 }, { "key", 2 }, { "foodGrowth", 0.4f }, { "sp5Max", 0 }, { "sp6Max", 0 } }, 6 },
+        { "Lava Garden", 0, 204, { 12, 2, 3, 3, 2, 0, 0, 2, 2, 2 }, 60, { { "scale", 5 }, { "key", 4 }, { "grid", 2 }, { "sp5Max", 0 }, { "sp6Max", 0 } }, 10 },
+        { "Dolphin Bay", 1, 205, { 10, 2, 4, 0, 1, 1, 8, 4, 3, 2 }, 70, { { "scale", 2 }, { "key", 7 }, { "reverbMix", 0.55f }, { "density", 0.5f }, { "sp3Max", 0 } }, 7 },
+        { "Pulsar Band", 2, 206, { 6, 1, 4, 0, 0, 0, 6, 3, 6, 2 }, 50, { { "grid", 2 }, { "scale", 1 }, { "key", 9 }, { "delayMix", 0.3f }, { "sp3Max", 0 } }, 11 },
+        { "Desert Drums", 3, 207, { 10, 2, 2, 0, 2, 0, 6, 1, 5, 3 }, 60, { { "grid", 2 }, { "swing", 15.0f }, { "scale", 6 }, { "key", 2 }, { "sp3Max", 0 } }, 11 },
+        { "Sandbox (empty)", 0, 208, { 4, 0, 1, 0, 0, 0, 0, 1, 1, 1 }, 30, { { "scale", 7 }, { "immigration", 0 } } },
     };
     return list;
 }
@@ -228,6 +238,23 @@ void LifeCatProcessor::applyLayout (World& w, int layout)
             w.paintTerrain (0.5f, 0.5f, 0.38f, Terrain::Meadow);
             w.paintTerrain (0.35f, 0.4f, 0.09f, Terrain::Light);
             w.paintTerrain (0.66f, 0.62f, 0.08f, Terrain::Light);
+            break;
+        case 10:  // volcano: a lava river with sandy banks
+            for (float t = 0.0f; t <= 1.0f; t += 0.02f)
+            {
+                const float y = 0.5f + 0.18f * std::sin (t * 5.0f);
+                w.paintTerrain (t, y, 0.09f, Terrain::Sand);
+            }
+            for (float t = 0.0f; t <= 1.0f; t += 0.02f) w.paintTerrain (t, 0.5f + 0.18f * std::sin (t * 5.0f), 0.035f, Terrain::Lava);
+            w.paintTerrain (0.2f, 0.2f, 0.12f, Terrain::Meadow);
+            w.paintTerrain (0.8f, 0.85f, 0.1f, Terrain::Meadow);
+            break;
+        case 11:  // dunes: sand with a few rocks to drum on
+            box (0.0f, 0.0f, 1.0f, 1.0f, Terrain::Sand);
+            w.paintTerrain (0.3f, 0.3f, 0.06f, Terrain::Rock);
+            w.paintTerrain (0.7f, 0.65f, 0.07f, Terrain::Rock);
+            w.paintTerrain (0.55f, 0.35f, 0.14f, Terrain::Meadow);
+            w.paintTerrain (0.25f, 0.75f, 0.1f, Terrain::Water);
             break;
         case 9:   // canyon: rocks with paths between
             box (0.0f, 0.2f, 0.35f, 0.32f, Terrain::Rock);
@@ -476,7 +503,7 @@ void LifeCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     const int numSamples = buffer.getNumSamples();
     mergeComputerKeyboard (midi, numSamples);      // standalone app: notes from the computer keyboard
     buffer.clear();
-    hostSync.beginBlock (getPlayHead(), numSamples);
+    hostSync.beginBlock (presetManager.linkClient->playHead (getPlayHead(), numSamples, getSampleRate()), numSamples);   // Cat Link: shared tempo in the apps
     midiLearn.processMidi (midi);
     const auto t = hostSync.get();
     lastBpm = t.bpm;
@@ -756,9 +783,10 @@ void LifeCatProcessor::surprise()
     Command c;
     c.type = Command::NewWorld;
     c.seed = (uint32_t) r.nextInt (1 << 30) + 1u;
-    c.counts = { 6 + r.nextInt (14), 1 + r.nextInt (4), 2 + r.nextInt (8), r.nextInt (5), r.nextInt (3), r.nextInt (2), r.nextInt (12) };
+    c.counts = { 6 + r.nextInt (14), 1 + r.nextInt (4), 2 + r.nextInt (8), r.nextInt (5), r.nextInt (3), r.nextInt (2), r.nextInt (12),
+                 r.nextInt (4), r.nextInt (4), r.nextInt (4) };
     c.plants = 30 + r.nextInt (60);
-    c.layout = r.nextInt (10);
+    c.layout = r.nextInt (12);
     set ("weather", r.nextFloat() < 0.6f ? 1.0f : (float) r.nextInt (6));
     set ("dayLength", r.nextFloat() < 0.6f ? 0.0f : (float) (1 + r.nextInt (3)));
     send (c);
@@ -793,6 +821,7 @@ juce::ValueTree LifeCatProcessor::worldToTree (const World& w)
         n.setProperty ("g", c.generation, nullptr);
         n.setProperty ("fav", c.favourite, nullptr);
         n.setProperty ("pa", (int) c.parentA, nullptr); n.setProperty ("pb", (int) c.parentB, nullptr);
+        if (c.nest != 0) n.setProperty ("nest", (int) c.nest, nullptr);
         juce::String genes;
         for (int i = 0; i < numGenes; ++i) genes << juce::String (c.genes[i], 4) << (i + 1 < numGenes ? " " : "");
         n.setProperty ("genes", genes, nullptr);
@@ -825,6 +854,10 @@ juce::ValueTree LifeCatProcessor::worldToTree (const World& w)
     for (const auto& k : w.corpses)
         if (k.alive) corpses << juce::String (k.x, 3) << "," << juce::String (k.y, 3) << "," << juce::String (k.food, 3) << "," << juce::String (k.age, 1) << "," << (int) k.role << " ";
     t.setProperty ("corpses", corpses.trim(), nullptr);
+    juce::String nests;
+    for (const auto& n : w.nests)
+        nests << (n.alive ? 1 : 0) << "," << juce::String (n.x, 3) << "," << juce::String (n.y, 3) << "," << juce::String (n.size, 3) << "," << (int) n.owner << " ";
+    t.setProperty ("nests", nests.trim(), nullptr);
     t.setProperty ("day", w.dayPhase, nullptr);
     t.setProperty ("season", w.season, nullptr);
     t.setProperty ("weather", (int) w.weather, nullptr);
@@ -857,6 +890,7 @@ void LifeCatProcessor::worldFromTree (const juce::ValueTree& t, World& w)
         c.generation = (int) n.getProperty ("g", 0);
         c.favourite = (bool) n.getProperty ("fav", false);
         c.parentA = (uint32_t) (int) n.getProperty ("pa", 0); c.parentB = (uint32_t) (int) n.getProperty ("pb", 0);
+        c.nest = (uint32_t) (int) n.getProperty ("nest", 0);
         const auto genes = juce::StringArray::fromTokens (n.getProperty ("genes", "").toString(), " ", "");
         // worlds saved before the v2 genes get gentle defaults for them
         static const float v2Defaults[numGenes - numGenesV1] = { 0.5f, 0.3f, 0.5f, 0.5f, 0.5f, 0.3f, 0.15f, 0.1f, 0.4f, 0.2f };
@@ -892,6 +926,13 @@ void LifeCatProcessor::worldFromTree (const juce::ValueTree& t, World& w)
         if (v.size() < 5 || ki >= maxCorpses) continue;
         w.corpses[(size_t) ki++] = { true, v[0].getFloatValue(), v[1].getFloatValue(), v[2].getFloatValue(), v[3].getFloatValue(),
                                      (Role) juce::jlimit (0, numRoles - 1, v[4].getIntValue()) };
+    }
+    int ni = 0;
+    for (const auto& tok : juce::StringArray::fromTokens (t.getProperty ("nests", "").toString(), " ", ""))
+    {
+        const auto v = juce::StringArray::fromTokens (tok, ",", "");
+        if (v.size() < 5 || ni >= maxNests) continue;
+        w.nests[(size_t) ni++] = { v[0].getIntValue() != 0, v[1].getFloatValue(), v[2].getFloatValue(), v[3].getFloatValue(), (uint32_t) v[4].getIntValue() };
     }
     w.dayPhase = (float) t.getProperty ("day", 0.4f);
     w.season = (float) t.getProperty ("season", 1.0f);

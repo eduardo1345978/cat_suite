@@ -233,12 +233,16 @@ void WorldView::paint (juce::Graphics& g)
                 if (! a.expanded (20.0f).contains (c)) continue;
                 lifeart::drawPlant (g, c, units * (0.0035f + 0.007f * juce::jlimit (0.0f, 1.0f, pl.size)), pl.size, idx, sc);
             }
+            for (const auto& n : w.nests)
+                if (n.alive) lifeart::drawNest (g, toScreen (n.x, n.y), units * 0.028f, n, sc);
             for (const auto& k : w.corpses)
                 if (k.alive) lifeart::drawCorpse (g, toScreen (k.x, k.y), units * 0.012f, k, sc);
+            drawLava (g, units, t);
             drawWalls (g);
 
             // giants under the small ones, fliers on top
-            for (auto role : { Role::Giant, Role::Grazer, Role::Scavenger, Role::Swarm, Role::Hunter, Role::Pollinator, Role::Drifter })
+            for (auto role : { Role::Giant, Role::Builder, Role::Grazer, Role::Drummer, Role::Scavenger, Role::Swarm, Role::Hunter,
+                               Role::Pollinator, Role::Singer, Role::Drifter })
                 for (const auto& c : w.creatures)
                     if (c.alive && c.role == role)
                     {
@@ -247,6 +251,7 @@ void WorldView::paint (juce::Graphics& g)
                         if (a.expanded (r * 4.0f).contains (pos)) lifeart::drawCreature (g, c, pos, r, sc);
                     }
 
+            drawMotes (g, a, t);
             lifeart::drawSky (g, a, w, sc);
             for (const auto& c : w.creatures)
                 if (c.alive) lifeart::drawGlow (g, c, toScreen (c.x, c.y), creatureRadius (c), sc);
@@ -293,6 +298,46 @@ void WorldView::paint (juce::Graphics& g)
     }
     g.setColour (C::outline);
     g.drawRoundedRectangle (a, 10.0f, 1.2f);
+}
+
+void WorldView::drawLava (juce::Graphics& g, float units, double time) const
+{
+    // painted lava breathes: a slow pulsing glow over each lava cell
+    const auto& w = view.world;
+    const auto col = lifeart::terrainColour (view.theme, Terrain::Lava);
+    const float cell = units / (float) terrainSize;
+    for (int cy = 0; cy < terrainSize; ++cy)
+        for (int cx = 0; cx < terrainSize; ++cx)
+        {
+            if (w.terrain[(size_t) (cy * terrainSize + cx)] != (uint8_t) Terrain::Lava) continue;
+            const auto c = toScreen (((float) cx + 0.5f) / (float) terrainSize, ((float) cy + 0.5f) / (float) terrainSize);
+            const float pulse = 0.5f + 0.5f * std::sin ((float) time * 1.7f + (float) (cx * 3 + cy * 5));
+            const float r = cell * (1.1f + 0.4f * pulse);
+            g.setGradientFill (juce::ColourGradient (col.brighter (0.5f).withAlpha (0.18f + 0.22f * pulse), c.x, c.y, col.withAlpha (0.0f), c.x + r, c.y, true));
+            g.fillEllipse (c.x - r, c.y - r, 2.0f * r, 2.0f * r);
+        }
+}
+
+void WorldView::drawMotes (juce::Graphics& g, juce::Rectangle<float> a, double time) const
+{
+    // drifting specks that make the world feel alive: pollen, plankton, stardust, vesicles
+    static const juce::uint32 cols[] = { 0xfffff2b0, 0xffb8f0ff, 0xffffffff, 0xffe0c8ff };
+    const auto col = juce::Colour (cols[juce::jlimit (0, 3, view.theme)]);
+    juce::Random rnd (777 + view.theme);
+    const float ft = (float) time;
+    const float night = 1.0f - view.world.light;
+    for (int i = 0; i < 46; ++i)
+    {
+        const float sx = rnd.nextFloat(), sy = rnd.nextFloat(), sp = 0.004f + 0.012f * rnd.nextFloat(), ph = rnd.nextFloat() * 6.28f;
+        float x = std::fmod (sx + ft * sp + 0.02f * std::sin (ft * 0.4f + ph), 1.0f);
+        float y = std::fmod (sy + (view.theme == 1 ? -ft * sp * 0.8f + 1.0f : 0.015f * std::sin (ft * 0.3f + ph * 2.0f) + 1.0f), 1.0f);
+        const auto p = toScreen (x, y);
+        if (! a.contains (p)) continue;
+        const float tw = 0.5f + 0.5f * std::sin (ft * (1.0f + rnd.nextFloat() * 2.0f) + ph);
+        const float s = (1.0f + 1.6f * rnd.nextFloat()) * juce::jmin (2.0f, std::sqrt (view.zoom));
+        g.setColour (col.withAlpha ((0.12f + 0.25f * tw) * (0.6f + 0.6f * night)));
+        g.fillEllipse (p.x - s * 0.5f, p.y - s * 0.5f, s, s);
+    }
 }
 
 void WorldView::drawZones (juce::Graphics& g, double time) const
@@ -383,6 +428,26 @@ void WorldView::drawEffects (juce::Graphics& g, double time)
                 const float d = 4.0f + age * (f.kind == 3 ? 10.0f : 18.0f);
                 g.setColour ((f.kind == 3 ? juce::Colour (0xfff5e08a) : col.brighter (0.5f)).withAlpha (1.0f - age));
                 g.fillEllipse (pos.x + std::cos (th) * d - 1.5f, pos.y + std::sin (th) * d - 1.5f, 3.0f, 3.0f);
+            }
+        }
+        else if (f.kind == 5)             // nest built: a little burst of twigs / bubbles
+        {
+            for (int k = 0; k < 8; ++k)
+            {
+                const float th = twoPi * (float) k / 8.0f;
+                const float d = 3.0f + age * 14.0f;
+                g.setColour (juce::Colour (0xffd8b080).withAlpha (1.0f - age));
+                g.drawLine (pos.x + std::cos (th) * d, pos.y + std::sin (th) * d, pos.x + std::cos (th) * (d + 4.0f), pos.y + std::sin (th) * (d + 4.0f), 1.4f);
+            }
+        }
+        else if (f.kind == 6)             // burnt in lava: rising embers
+        {
+            juce::Random rnd ((juce::int64) (f.t0 * 1000.0));
+            for (int k = 0; k < 7; ++k)
+            {
+                const float ex = pos.x + (rnd.nextFloat() - 0.5f) * 14.0f, ey = pos.y - age * (16.0f + 20.0f * rnd.nextFloat());
+                g.setColour (juce::Colour (0xffffa040).withAlpha (1.0f - age));
+                g.fillEllipse (ex - 1.5f, ey - 1.5f, 3.0f, 3.0f);
             }
         }
         else                              // died / eaten / eaten up: a fading ghost ring
@@ -567,6 +632,16 @@ void WorldView::mouseDown (const juce::MouseEvent& e)
         case GardenTool::Inspect:
         {
             const auto id = creatureAt (view.world, w, 0.03f / view.zoom);
+            if (id == 0 && view.zoom > 1.01f && ! view.pairing)
+            {
+                // empty space while zoomed in: drag to look around
+                panning = true;
+                panStart = e.position;
+                panCamX = view.camX;
+                panCamY = view.camY;
+                view.follow = false;
+                return;
+            }
             if (view.pairing && id != 0 && id != view.selected)
             {
                 c.type = Cmd::Breed; c.id = view.selected; c.id2 = id;

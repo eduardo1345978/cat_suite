@@ -506,7 +506,7 @@ void GlideCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const int numSamples = buffer.getNumSamples();
     mergeComputerKeyboard (midi, numSamples);      // standalone app: notes from the computer keyboard
     buffer.clear();
-    hostSync.beginBlock (getPlayHead(), numSamples);
+    hostSync.beginBlock (presetManager.linkClient->playHead (getPlayHead(), numSamples, getSampleRate()), numSamples);   // Cat Link: shared tempo in the apps
     midiLearn.processMidi (midi);
     readSettings();
     synth.setSettings (settings);

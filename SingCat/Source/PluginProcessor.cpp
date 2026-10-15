@@ -327,7 +327,7 @@ void SingCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     mergeComputerKeyboard (midi, numSamples);      // standalone app: notes from the computer keyboard
     buffer.clear();
 
-    hostSync.beginBlock (getPlayHead(), numSamples);
+    hostSync.beginBlock (presetManager.linkClient->playHead (getPlayHead(), numSamples, getSampleRate()), numSamples);   // Cat Link: shared tempo in the apps
     midiLearn.processMidi (midi);
     if (hostSync.get().hostPlaying && hostSync.get().jumped)
         engine.restartLyrics();          // song (re)starts or loops: lyrics from the top

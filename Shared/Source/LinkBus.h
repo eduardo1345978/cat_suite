@@ -16,6 +16,7 @@ namespace cat
       chord     the chord Chord-Cat is playing (up to 16 notes)
       events    births and deaths from Life-Cat (a ring of the last 64)
       linkAll   a "link everything" request from any Link panel
+      transport play / stop + tempo shared by the standalone apps (they play in sync)
 
     Every field is written with a sequence counter around it (seqlock), so readers on the audio
     thread see either the old or the new value, never half of each.
@@ -50,6 +51,11 @@ public:
     juce::uint32 eventCount() const noexcept;
     /** Calls fn (kind, role) for every event after `lastSeen` (from other sources); updates lastSeen. */
     void readEvents (juce::uint32& lastSeen, juce::uint64 self, const std::function<void (int, int)>& fn) const;
+
+    // ---- shared transport for the standalone apps (any thread)
+    void publishTransport (bool playing, double bpm, juce::uint64 source);
+    /** false if the bus is not available. startTicks: juce::Time high-resolution ticks of beat 0. */
+    bool readTransport (bool& playing, double& bpm, juce::int64& startTicks) const;
 
     // ---- link all
     void requestLinkAll();

@@ -144,7 +144,7 @@ void OrbitCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     buffer.clear();
     const int numSamples = buffer.getNumSamples();
 
-    hostSync.beginBlock (getPlayHead(), numSamples);
+    hostSync.beginBlock (presetManager.linkClient->playHead (getPlayHead(), numSamples, getSampleRate()), numSamples);   // Cat Link: shared tempo in the apps
     midiLearn.processMidi (midi);
     readParams();
 

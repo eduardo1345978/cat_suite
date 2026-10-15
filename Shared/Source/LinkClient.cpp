@@ -5,7 +5,7 @@ namespace cat
 {
 namespace
 {
-    const char* optionIds[] = { "catLinkOn", "catLinkKey", "catLinkChords", "catLinkLife" };
+    const char* optionIds[] = { "catLinkOn", "catLinkKey", "catLinkChords", "catLinkLife", "catLinkTempo" };
 
     juce::String noteNames (const int* notes, int n)
     {
@@ -36,8 +36,8 @@ LinkClient::~LinkClient()
 
 void LinkClient::readOptions()
 {
-    const bool defaults[] = { true, caps.key, caps.sendChords, caps.sendLife };
-    for (int i = 0; i < 4; ++i)
+    const bool defaults[] = { true, caps.key, caps.sendChords, caps.sendLife, true };
+    for (int i = 0; i < numOptions; ++i)
         options[(size_t) i].store ((bool) state.state.getProperty (optionIds[i], defaults[i]), std::memory_order_relaxed);
 }
 
@@ -66,6 +66,7 @@ void LinkClient::timerCallback()
         if (caps.key) setOption (Key, true);
         if (caps.sendChords || caps.receiveChords) setOption (Chords, true);
         if (caps.sendLife || caps.receiveLife) setOption (Life, true);
+        setOption (Tempo, true);
         if (caps.grooveParam.isNotEmpty())
             if (auto* prm = state.getParameter (caps.grooveParam)) prm->setValueNotifyingHost (1.0f);
     }
@@ -165,6 +166,42 @@ void LinkClient::pollLifeEvents (const std::function<void (int, int)>& fn)
     bus->readEvents (seenEvents, id, fn);
 }
 
+juce::AudioPlayHead* LinkClient::playHead (juce::AudioPlayHead* host, int numSamples, double sampleRate)
+{
+    if (! isStandalone() || ! sharing (Tempo)) return host;
+    bool playing = false;
+    double bpm = 120.0;
+    juce::int64 start = 0;
+    if (! bus->readTransport (playing, bpm, start)) return host;
+    sharedHead.bpm = bpm;
+    if (playing)
+    {
+        // where the shared clock says we are; follow it smoothly, jump if far off
+        const double expected = juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - start) * bpm / 60.0;
+        if (! sharedHead.playing || std::abs (expected - nextPpq) > 0.08) nextPpq = expected;
+        else nextPpq += (expected - nextPpq) * 0.05;
+        sharedHead.ppq = nextPpq;
+        nextPpq += (double) numSamples / juce::jmax (1.0, sampleRate) * bpm / 60.0;
+    }
+    sharedHead.playing = playing;
+    return &sharedHead;
+}
+
+void LinkClient::setTransport (bool playing, double bpm) { bus->publishTransport (playing, bpm, id); }
+
+bool LinkClient::transportPlaying() const
+{
+    bool p = false; double b = 120.0; juce::int64 t = 0;
+    return bus->readTransport (p, b, t) && p;
+}
+
+double LinkClient::transportBpm() const
+{
+    bool p = false; double b = 120.0; juce::int64 t = 0;
+    bus->readTransport (p, b, t);
+    return b;
+}
+
 std::vector<LinkBus::MemberInfo> LinkClient::members() const { return bus->members (id); }
 void LinkClient::linkAll() { bus->requestLinkAll(); }
 
@@ -200,6 +237,20 @@ public:
         else if (client.caps.receiveChords) setup (chordButton, client.caps.receiveChordsText, LinkClient::Chords, "Play along with Chord-Cat without routing MIDI in Cubase");
         if (client.caps.sendLife) setup (lifeButton, "Send births & deaths", LinkClient::Life, "Drum-Cat can answer them with hits");
         else if (client.caps.receiveLife) setup (lifeButton, client.caps.receiveLifeText, LinkClient::Life, "Births and deaths in Life-Cat play extra hits");
+        if (client.isStandalone())
+        {
+            setup (tempoButton, "Share tempo & play / stop", LinkClient::Tempo, "The Cat apps play together: same tempo, start and stop together");
+            playButton.setTooltip ("Start / stop every linked Cat app");
+            playButton.onClick = [this] { client.setTransport (! client.transportPlaying(), client.transportBpm()); refresh(); };
+            addAndMakeVisible (playButton);
+            bpm.setSliderStyle (juce::Slider::LinearBar);
+            bpm.setRange (40.0, 240.0, 1.0);
+            bpm.setTextValueSuffix (" BPM");
+            bpm.setValue (client.transportBpm(), juce::dontSendNotification);
+            bpm.onValueChange = [this] { client.setTransport (client.transportPlaying(), bpm.getValue()); };
+            bpm.setTooltip ("Tempo for all linked Cat apps");
+            addAndMakeVisible (bpm);
+        }
         if (client.caps.grooveParam.isNotEmpty() && client.state.getParameter (client.caps.grooveParam) != nullptr)
         {
             grooveButton.setButtonText ("Follow Drum-Cat's groove");
@@ -209,7 +260,7 @@ public:
             grooveAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (client.state, client.caps.grooveParam, grooveButton);
             addAndMakeVisible (grooveButton);
         }
-        for (auto* b : { &onButton, &keyButton, &chordButton, &lifeButton, &grooveButton, &allButton })
+        for (auto* b : { &onButton, &keyButton, &chordButton, &lifeButton, &tempoButton, &grooveButton, &allButton, &playButton })
         {
             b->setColour (juce::TextButton::buttonColourId, Colours::raised);
             b->setColour (juce::TextButton::buttonOnColourId, Colours::accent);
@@ -218,7 +269,7 @@ public:
         allButton.setTooltip ("Turn on every link in every open Cat");
         allButton.onClick = [this] { client.linkAll(); };
         addAndMakeVisible (allButton);
-        setSize (330, 150 + 34 * numToggles());
+        setSize (330, 150 + 34 * numToggles() + (client.isStandalone() ? 38 : 0));
         startTimerHz (4);
         refresh();
     }
@@ -272,17 +323,27 @@ public:
         r.removeFromTop (22 + 16 + 48 + 4);
         for (auto* b : toggles())
             if (b->isVisible()) b->setBounds (r.removeFromTop (34).reduced (0, 2));
+        if (client.isStandalone())
+        {
+            auto row = r.removeFromTop (36).reduced (0, 3);
+            playButton.setBounds (row.removeFromLeft (90));
+            row.removeFromLeft (8);
+            bpm.setBounds (row);
+        }
         allButton.setBounds (r.removeFromBottom (30).reduced (0, 1));
     }
 
 private:
-    std::vector<juce::Button*> toggles() { return { &onButton, &keyButton, &chordButton, &lifeButton, &grooveButton }; }
+    std::vector<juce::Button*> toggles() { return { &onButton, &keyButton, &chordButton, &lifeButton, &tempoButton, &grooveButton }; }
     int numToggles() { int n = 0; for (auto* b : toggles()) n += b->isVisible() ? 1 : 0; return n; }
     void refresh()
     {
         const bool on = client.option (LinkClient::On);
-        for (auto* b : { &keyButton, &chordButton, &lifeButton }) b->setEnabled (on);
-        for (auto* b : { &onButton, &keyButton, &chordButton, &lifeButton, &grooveButton })
+        for (auto* b : { &keyButton, &chordButton, &lifeButton, &tempoButton }) b->setEnabled (on);
+        playButton.setButtonText (client.transportPlaying() ? "Stop" : "Play");
+        playButton.setEnabled (on && client.option (LinkClient::Tempo));
+        bpm.setEnabled (on && client.option (LinkClient::Tempo));
+        for (auto* b : { &onButton, &keyButton, &chordButton, &lifeButton, &tempoButton, &grooveButton })
             if (b->getName().isNotEmpty()) b->setButtonText ((b->getToggleState() ? "ON    " : "off    ") + b->getName());
         repaint();
     }
@@ -292,12 +353,15 @@ private:
         keyButton.setToggleState (client.option (LinkClient::Key), juce::dontSendNotification);
         chordButton.setToggleState (client.option (LinkClient::Chords), juce::dontSendNotification);
         lifeButton.setToggleState (client.option (LinkClient::Life), juce::dontSendNotification);
+        tempoButton.setToggleState (client.option (LinkClient::Tempo), juce::dontSendNotification);
+        if (! bpm.isMouseButtonDown()) bpm.setValue (client.transportBpm(), juce::dontSendNotification);
         refresh();
     }
 
     CatLookAndFeel lnf;
     LinkClient& client;
-    juce::TextButton onButton, keyButton, chordButton, lifeButton, grooveButton, allButton;
+    juce::TextButton onButton, keyButton, chordButton, lifeButton, tempoButton, grooveButton, allButton, playButton { "Play" };
+    juce::Slider bpm;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> grooveAttachment;
 };
 

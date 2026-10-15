@@ -28,6 +28,9 @@ const RoleInfo& roleInfo (Role r) noexcept
         /* Scavenger  */ { 0.70f, 0.90f, 0.70f, 0.70f, 16.0f, 1.3f,  0.000f, false, false,  6 },
         /* Giant      */ { 0.30f, 1.00f, 0.55f, 0.90f, 60.0f, 3.0f,  0.022f, false, false,  3 },
         /* Swarm      */ { 1.10f, 0.30f, 0.80f, 0.60f,  7.0f, 0.6f, -0.006f, false, true,  24 },
+        /* Singer     */ { 0.90f, 0.30f, 0.75f, 0.75f, 20.0f, 1.6f,  0.004f, true,  false,  6 },
+        /* Drummer    */ { 0.80f, 0.70f, 0.80f, 0.70f, 12.0f, 1.1f,  0.000f, false, true,   8 },
+        /* Builder    */ { 0.70f, 0.80f, 0.80f, 0.72f, 16.0f, 1.3f,  0.002f, false, true,   8 },
     };
     return info[juce::jlimit (0, numRoles - 1, (int) r)];
 }
@@ -83,6 +86,12 @@ Genes World::randomGenes (Role role)
                                range (gRelease, 0.7f, 1.0f);  range (gSize, 0.7f, 1.0f);     range (gSpeed, 0.0f, 0.3f); range (gLifespan, 0.6f, 1.0f); break;
         case Role::Swarm:      range (gTimbre, 0.3f, 0.6f);   range (gRhythm, 0.8f, 1.0f);   range (gRegister, 0.4f, 0.8f); range (gRelease, 0.1f, 0.4f);
                                range (gSocial, 0.7f, 1.0f);   range (gSize, 0.0f, 0.4f);     range (gSwim, 0.6f, 1.0f); break;
+        case Role::Singer:     range (gTimbre, 0.15f, 0.55f); range (gRhythm, 0.45f, 0.75f); range (gRegister, 0.45f, 0.9f); range (gAttack, 0.05f, 0.4f);
+                               range (gRelease, 0.3f, 0.7f);  range (gGlide, 0.3f, 0.9f);    range (gVibrato, 0.4f, 1.0f); range (gSocial, 0.4f, 0.9f); break;
+        case Role::Drummer:    range (gTimbre, 0.7f, 1.0f);   range (gRhythm, 0.55f, 0.9f);  range (gRegister, 0.1f, 0.6f); range (gAttack, 0.0f, 0.05f);
+                               range (gRelease, 0.0f, 0.3f);  range (gDensity, 0.6f, 1.0f);  range (gAccent, 0.4f, 1.0f); break;
+        case Role::Builder:    range (gTimbre, 0.35f, 0.65f); range (gRhythm, 0.3f, 0.6f);   range (gRegister, 0.2f, 0.55f); range (gAttack, 0.0f, 0.15f);
+                               range (gRelease, 0.15f, 0.5f); range (gSize, 0.4f, 0.8f);     range (gHardy, 0.4f, 1.0f); break;
     }
     // the newer sound genes start gentle, evolution can push them
     range (gInterval, 0.0f, 0.5f);
@@ -114,6 +123,7 @@ void World::reset (uint32_t seed, const std::array<int, numRoles>& counts, int n
     for (auto& c : creatures) c.alive = false;
     for (auto& p : plants) p.alive = false;
     for (auto& k : corpses) k.alive = false;
+    for (auto& n : nests) n.alive = false;
     terrain.fill (0);
     nextId = 1;
     maxGeneration = births = deaths = 0;
@@ -199,6 +209,13 @@ int World::plantCount() const noexcept
     return n;
 }
 
+int World::nestCount() const noexcept
+{
+    int n = 0;
+    for (const auto& k : nests) n += k.alive ? 1 : 0;
+    return n;
+}
+
 int World::corpseCount() const noexcept
 {
     int n = 0;
@@ -243,10 +260,10 @@ void World::paintTerrain (float x, float y, float radius, Terrain t)
             if (dist2 (px, py, x, y) <= radius * radius + 0.25f / (float) (terrainSize * terrainSize))
                 terrain[(size_t) (cy * terrainSize + cx)] = (uint8_t) t;
         }
-    // nothing grows inside rock
-    if (t == Terrain::Rock)
+    // nothing grows inside rock or lava
+    if (t == Terrain::Rock || t == Terrain::Lava)
         for (auto& p : plants)
-            if (p.alive && terrainAt (p.x, p.y) == Terrain::Rock) p.alive = false;
+            if (p.alive && terrainAt (p.x, p.y) == t) p.alive = false;
 }
 
 void World::clearTerrain() { terrain.fill (0); }
@@ -255,7 +272,9 @@ bool World::plantAllowedAt (float x, float y) noexcept
 {
     switch (terrainAt (x, y))
     {
-        case Terrain::Rock:   return false;
+        case Terrain::Rock:
+        case Terrain::Lava:   return false;
+        case Terrain::Sand:   return rng.uni() < 0.12f;
         case Terrain::Water:  return rng.uni() < 0.25f;
         case Terrain::Meadow: return true;
         case Terrain::Light:  return rng.uni() < 0.9f;
@@ -277,6 +296,8 @@ void World::removeNear (float x, float y, float radius)
         if (p.alive && dist2 (p.x, p.y, x, y) < radius * radius) p.alive = false;
     for (auto& k : corpses)
         if (k.alive && dist2 (k.x, k.y, x, y) < radius * radius) k.alive = false;
+    for (auto& n : nests)
+        if (n.alive && dist2 (n.x, n.y, x, y) < radius * radius) n.alive = false;
 }
 
 void World::removeId (uint32_t id)
@@ -544,6 +565,15 @@ void World::step (float dt, const LifeSettings& s)
                             y = juce::jlimit (0.02f, 0.98f, z.y + z.r * rng.bi() * 0.8f);
                             break;
                         }
+                // builders' nests are gardens too
+                if (rng.uni() < 0.3f)
+                    for (const auto& n : nests)
+                        if (n.alive && n.size > 0.5f && rng.uni() < 0.5f)
+                        {
+                            x = juce::jlimit (0.02f, 0.98f, n.x + 0.08f * rng.bi());
+                            y = juce::jlimit (0.02f, 0.98f, n.y + 0.08f * rng.bi());
+                            break;
+                        }
                 if (plantAllowedAt (x, y)) { addFood (x, y, 1, 0.0f); break; }
             }
         }
@@ -573,6 +603,15 @@ void World::step (float dt, const LifeSettings& s)
         }
     }
 
+    // nests: grow while their builder is home, crumble without one
+    for (auto& n : nests)
+    {
+        if (! n.alive) continue;
+        const auto* owner = find (n.owner);
+        if (owner == nullptr) { n.size -= 0.01f * sdt; if (n.size <= 0.0f) n.alive = false; }
+        else if (dist2 (owner->x, owner->y, n.x, n.y) < 0.05f * 0.05f) n.size = std::min (1.0f, n.size + 0.08f * sdt);
+    }
+
     updateFlocks();
 
     // ---- creatures
@@ -592,6 +631,7 @@ void World::step (float dt, const LifeSettings& s)
         float terrainSpeed = 1.0f;
         if (here == Terrain::Water && ! info.flies)
             terrainSpeed = c.role == Role::Swarm ? 1.1f : 0.35f + 0.65f * g[gSwim];
+        if (here == Terrain::Sand && ! info.flies) terrainSpeed = 0.55f + 0.2f * g[gHardy];
         const float maxSpeed = (0.025f + 0.11f * g[gSpeed]) * info.speed * sp.speed
                              * (1.0f - 0.55f * cold) * (1.0f + 0.25f * warm) * (0.3f + 0.7f * c.activity) * terrainSpeed;
         const float sight = (0.07f + 0.25f * g[gSight]) * (1.0f - 0.5f * fog);
@@ -601,6 +641,18 @@ void World::step (float dt, const LifeSettings& s)
         c.heading += rng.bi() * 3.0f * sdt;
         ax += std::cos (c.heading) * 0.5f;
         ay += std::sin (c.heading) * 0.5f;
+
+        // keep away from lava (fliers too: it is hot up there)
+        for (int k = 0; k < 4; ++k)
+        {
+            const float a = c.heading + (float) k * 1.5707963f;
+            const float px = c.x + std::cos (a) * 0.045f, py = c.y + std::sin (a) * 0.045f;
+            if (terrainAt (px, py) == Terrain::Lava) { ax -= 2.5f * std::cos (a); ay -= 2.5f * std::sin (a); }
+        }
+
+        // blinking (and eyes shut while asleep)
+        if (rng.uni() < 0.35f * sdt) c.blink = 1.0f;
+        c.blink = std::max (0.0f, c.blink - 7.0f * sdt);
 
         auto seek = [&] (float tx, float ty, float weight)
         {
@@ -817,6 +869,99 @@ void World::step (float dt, const LifeSettings& s)
                 flee (Role::Hunter, 2.6f);
                 break;
             }
+            default: break;
+        }
+
+        switch (c.role)
+        {
+            case Role::Singer:
+            {
+                // roam, rest in the light, nibble plants (birds eat seeds, whales krill)
+                if (c.energy < 0.7f)
+                {
+                    const int bi = nearestPlant (sight * 1.4f, 0.0f);
+                    if (bi >= 0)
+                    {
+                        auto& p = plants[(size_t) bi];
+                        if (seek (p.x, p.y, 1.6f) < radiusOf (c) + 0.01f)
+                        {
+                            p.size -= 0.3f;
+                            if (p.size < 0.1f) p.alive = false;
+                            c.energy = std::min (1.2f, c.energy + 0.12f);
+                        }
+                    }
+                }
+                c.energy = std::min (1.15f, c.energy + (here == Terrain::Light ? 0.012f : 0.004f) * light * sdt);
+                flee (Role::Hunter, 1.5f);
+                break;
+            }
+            case Role::Drummer:
+            {
+                const int bi = nearestPlant (sight, 0.0f);
+                if (bi >= 0 && c.energy < 0.9f)
+                {
+                    auto& p = plants[(size_t) bi];
+                    if (seek (p.x, p.y, 1.8f) < radiusOf (c) + 0.008f)
+                    {
+                        p.alive = false;
+                        c.energy = std::min (1.2f, c.energy + 0.16f + 0.1f * p.size);
+                    }
+                }
+                // drummers like hard ground: rocks to tap on
+                if (here == Terrain::Rock || here == Terrain::Sand) c.energy = std::min (1.2f, c.energy + 0.003f * sdt);
+                flee (Role::Hunter, 2.8f);
+                break;
+            }
+            case Role::Builder:
+            {
+                Nest* home = c.nest > 0 && c.nest <= (uint32_t) maxNests && nests[(size_t) c.nest - 1].alive ? &nests[(size_t) c.nest - 1] : nullptr;
+                if (home == nullptr) c.nest = 0;
+                if (home == nullptr && c.energy > 0.7f && c.age > 4.0f
+                    && here != Terrain::Water && here != Terrain::Lava && here != Terrain::Rock)
+                {
+                    bool crowded = false;
+                    for (const auto& n : nests) crowded = crowded || (n.alive && dist2 (n.x, n.y, c.x, c.y) < 0.12f * 0.12f);
+                    if (! crowded)
+                        for (int i = 0; i < maxNests; ++i)
+                            if (! nests[(size_t) i].alive)
+                            {
+                                nests[(size_t) i] = { true, c.x, c.y, 0.05f, c.id };
+                                c.nest = (uint32_t) i + 1;
+                                c.energy -= 0.15f;
+                                pushEvent (5, c.x, c.y, c.role);
+                                break;
+                            }
+                }
+                const int bi = nearestPlant (sight, 0.0f);
+                if (bi >= 0 && c.energy < 0.85f)
+                {
+                    auto& p = plants[(size_t) bi];
+                    if (seek (p.x, p.y, 1.8f) < radiusOf (c) + 0.008f)
+                    {
+                        p.alive = false;
+                        c.energy = std::min (1.2f, c.energy + 0.15f + 0.1f * p.size);
+                    }
+                }
+                else if (home != nullptr && (c.energy > 0.85f || c.activity < 0.5f))
+                {
+                    // go home, plant seeds around it
+                    if (seek (home->x, home->y, 1.6f) < 0.04f && rng.uni() < 0.25f * sdt && plantCount() < maxPlants * 3 / 4)
+                    {
+                        const float nx = juce::jlimit (0.02f, 0.98f, home->x + 0.07f * rng.bi()), ny = juce::jlimit (0.02f, 0.98f, home->y + 0.07f * rng.bi());
+                        if (plantAllowedAt (nx, ny)) { addFood (nx, ny, 1, 0.0f); c.energy -= 0.03f; pushEvent (3, nx, ny, c.role); }
+                    }
+                }
+                // meadow trails where builders walk
+                if ((here == Terrain::Ground || here == Terrain::Sand) && rng.uni() < 0.35f * sdt)
+                {
+                    const int cx = juce::jlimit (0, terrainSize - 1, (int) (c.x * (float) terrainSize));
+                    const int cy = juce::jlimit (0, terrainSize - 1, (int) (c.y * (float) terrainSize));
+                    terrain[(size_t) (cy * terrainSize + cx)] = (uint8_t) Terrain::Meadow;
+                }
+                flee (Role::Hunter, 2.6f);
+                break;
+            }
+            default: break;
         }
 
         // the social ones stay near their own kind (swarms do this above)
@@ -895,12 +1040,13 @@ void World::step (float dt, const LifeSettings& s)
         const float burn = (0.004f + 0.022f * g[gSpeed] * g[gSpeed] + 0.010f * g[gSize]) * (0.4f + 1.2f * s.metabolism)
                          * info.burn * (1.0f + 0.6f * cold) * (0.45f + 0.55f * c.activity) * (1.0f - 0.3f * warm);
         c.energy -= burn * sdt;
+        if (here == Terrain::Lava && ! info.flies) c.energy -= 0.35f * sdt;
         c.age += sdt;
         c.breedCooldown -= sdt * (0.5f + s.breeding) * (1.0f + 0.5f * warm);
         c.singFlash = std::max (0.0f, c.singFlash - 3.0f * dt);
 
         const float lifespan = (35.0f + 110.0f * g[gLifespan]) * s.lifespan * info.lifespan;
-        if (c.energy <= 0.0f) die (c, 1, 0.2f + 0.25f * g[gSize] + (c.role == Role::Giant ? 0.6f : 0.0f));
+        if (c.energy <= 0.0f) die (c, here == Terrain::Lava ? 6 : 1, here == Terrain::Lava ? 0.0f : 0.2f + 0.25f * g[gSize] + (c.role == Role::Giant ? 0.6f : 0.0f));
         else if (! c.favourite && c.age > lifespan) die (c, 1, 0.35f + 0.3f * g[gSize] + (c.role == Role::Giant ? 0.8f : 0.0f));
     }
 
@@ -961,6 +1107,9 @@ void World::step (float dt, const LifeSettings& s)
                     case Role::Swarm:      return n < 3 && plantsNow > 20;
                     case Role::Scavenger:  return n < 1 && population() > 10;
                     case Role::Giant:      return n < 1 && plantsNow > 40 && time > 30.0;
+                    case Role::Singer:     return n < 1 && time > 20.0;
+                    case Role::Drummer:    return n < 1 && plantsNow > 15;
+                    case Role::Builder:    return n < 1 && plantsNow > 15;
                 }
                 return false;
             };

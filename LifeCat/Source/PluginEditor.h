@@ -72,6 +72,8 @@ private:
     void clampCamera();
     void zoomAt (juce::Point<float> screen, float factor);
     void drawZones (juce::Graphics&, double time) const;
+    void drawLava (juce::Graphics&, float units, double time) const;
+    void drawMotes (juce::Graphics&, juce::Rectangle<float>, double time) const;
     void drawWalls (juce::Graphics&) const;
     void drawEffects (juce::Graphics&, double time);
     void drawGesture (juce::Graphics&) const;

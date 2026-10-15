@@ -1504,7 +1504,7 @@ void testLifeCat()
         prepare (*zoo, pz);
         zoo->setCurrentProgram (1);           // Busy Garden: grazers, hunters, drifters, bees, snails, ants
         setParam (*zoo, "MIDI Out", "On");
-        setParam (*zoo, "MIDI Channels", "One channel per kind (1-7)");
+        setParam (*zoo, "MIDI Channels", "One channel per kind (1-10)");
         const auto zr = runLife (*zoo, pz, 40 * sec);
         std::array<int, 17> perChannel {};
         for (const auto& e : zr.notes) ++perChannel[(size_t) juce::jlimit (0, 16, e.msg.getChannel())];
@@ -1521,13 +1521,62 @@ void testLifeCat()
         check (swarmNotes == 0 && ! zq.notes.empty(), "Sing off silences just that kind");
     }
 
+    // v3 animals: singers sing phrases, drummers keep a beat, builders build nests
+    {
+        auto v3 = loadPlugin (LIFECAT_VST3);
+        TestPlayHead p3;
+        p3.playing = true;
+        prepare (*v3, p3);
+        int birdsong = -1, woodpecker = -1;
+        for (int i = 0; i < v3->getNumPrograms(); ++i)
+        {
+            if (v3->getProgramName (i) == "Birdsong Morning") birdsong = i;
+            if (v3->getProgramName (i) == "Woodpecker Groove") woodpecker = i;
+        }
+        check (birdsong >= 0 && woodpecker >= 0, "new worlds: Birdsong Morning, Woodpecker Groove ...");
+        v3->setCurrentProgram (juce::jmax (0, birdsong));
+        setParam (*v3, "MIDI Out", "On");
+        setParam (*v3, "MIDI Channels", "One channel per kind (1-10)");
+        const auto br = runLife (*v3, p3, 60 * sec);
+        std::array<std::vector<int64_t>, 17> times;
+        for (const auto& e : br.notes) times[(size_t) juce::jlimit (0, 16, e.msg.getChannel())].push_back (e.time);
+        // a phrase: at least 3 singer notes, each within a beat of the one before
+        int longestRun = 0, run = 1;
+        for (size_t i = 1; i < times[8].size(); ++i)
+        {
+            run = times[8][i] - times[8][i - 1] <= (int64_t) samplesPerBeat ? run + 1 : 1;
+            longestRun = juce::jmax (longestRun, run);
+        }
+        auto w3 = lifeWorldXml (*v3);
+        int nests = 0;
+        if (w3 != nullptr)
+            for (const auto& tok : juce::StringArray::fromTokens (w3->getStringAttribute ("nests"), " ", ""))
+                nests += tok.startsWith ("1,") ? 1 : 0;
+        std::cout << "  Birdsong Morning, 60 s: singer notes " << (int) times[8].size() << " (longest phrase " << longestRun << "), drummer notes "
+                  << (int) times[9].size() << ", builder notes " << (int) times[10].size() << ", nests built " << nests << std::endl;
+        check (longestRun >= 3, "singers sing melodic phrases (several notes in a row)");
+        check (! times[10].empty(), "builders sing too");
+        check (nests >= 1, "builders build nests");
+        check (br.finite && br.peak <= 1.0f, "ten kinds together stay clean");
+
+        v3->setCurrentProgram (juce::jmax (0, woodpecker));
+        setParam (*v3, "MIDI Out", "On");
+        setParam (*v3, "MIDI Channels", "One channel per kind (1-10)");
+        const auto dr = runLife (*v3, p3, 30 * sec, {}, 60 * sec);
+        int drumNotes = 0, drumOnGrid = 0;
+        for (const auto& e : dr.notes)
+            if (e.msg.getChannel() == 9) { ++drumNotes; const auto m = e.time % 6000; drumOnGrid += (m <= 1 || m >= 5999 || dr.notes.empty()) ? 1 : 0; }
+        std::cout << "  Woodpecker Groove, 30 s: " << drumNotes << " drummer hits" << std::endl;
+        check (drumNotes >= 20, "drummers drum steadily");
+    }
+
     // You can hear the weather: rain with every creature silent
     {
         auto wet = loadPlugin (LIFECAT_VST3);
         TestPlayHead pw;
         pw.playing = true;
         prepare (*wet, pw);
-        for (const auto& n : { "Grazers", "Hunters", "Drifters", "Pollinators", "Scavengers", "Giants", "Swarms" }) setParam (*wet, juce::String (n) + " Sing", "Off");
+        for (const auto& n : { "Grazers", "Hunters", "Drifters", "Pollinators", "Scavengers", "Giants", "Swarms", "Singers", "Drummers", "Builders" }) setParam (*wet, juce::String (n) + " Sing", "Off");
         setParam (*wet, "Weather", "Rain");
         setParam (*wet, "Weather Sounds", "1");
         const auto rainy = runLife (*wet, pw, 12 * sec);

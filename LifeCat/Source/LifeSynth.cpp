@@ -13,7 +13,9 @@ SoundType naturalSound (Role r) noexcept
         case Role::Scavenger:  return SoundType::Percussion;
         case Role::Giant:      return SoundType::Drone;
         case Role::Swarm:      return SoundType::Pluck;
-        default:               return SoundType::Genes;
+        case Role::Drummer:    return SoundType::Percussion;
+        case Role::Builder:    return SoundType::Bell;
+        default:               return SoundType::Genes;      // singers: their genes (with glide + vibrato)
     }
 }
 

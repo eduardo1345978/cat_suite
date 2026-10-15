@@ -123,7 +123,7 @@ void BassCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     buffer.clear();
     const int numSamples = buffer.getNumSamples();
 
-    hostSync.beginBlock (getPlayHead(), numSamples);
+    hostSync.beginBlock (presetManager.linkClient->playHead (getPlayHead(), numSamples, getSampleRate()), numSamples);   // Cat Link: shared tempo in the apps
     lastBpm = hostSync.get().bpm;
     midiLearn.processMidi (midi);
     const bool keyTrigger = apvts.getRawParameterValue ("keyTrigger")->load() > 0.5f;

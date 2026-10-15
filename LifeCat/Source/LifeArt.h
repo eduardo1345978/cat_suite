@@ -4,7 +4,7 @@
 #include "LifeWorld.h"
 
 /**
-    How Life-Cat's world looks: four themes (Garden, Ocean, Space, Cells), seven kinds of
+    How Life-Cat's world looks: four themes (Garden, Ocean, Space, Cells), ten kinds of
     creature drawn per theme, growing from baby to adult, with their genes visible (colour,
     size, spots / stripes, glow, sleepy eyes at night), plus terrain, plants, remains,
     day / night, seasons and weather.
@@ -41,6 +41,7 @@ void drawBackground (juce::Graphics&, juce::Rectangle<float> area, int theme, do
 juce::Image renderTerrain (const lifecat::World&, int theme, int size);
 void drawPlant (juce::Graphics&, juce::Point<float> pos, float size, float growth, int index, const Scene&);
 void drawCorpse (juce::Graphics&, juce::Point<float> pos, float r, const lifecat::Corpse&, const Scene&);
+void drawNest (juce::Graphics&, juce::Point<float> pos, float r, const lifecat::Nest&, const Scene&);
 void drawCreature (juce::Graphics&, const lifecat::Creature&, juce::Point<float> pos, float r, const Scene&);
 /** Light that shines through the night: glowing creatures, singing rings. Drawn after the sky. */
 void drawGlow (juce::Graphics&, const lifecat::Creature&, juce::Point<float> pos, float r, const Scene&);

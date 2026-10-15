@@ -245,7 +245,7 @@ void ChordCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const int numSamples = buffer.getNumSamples();
     const auto p = readParams();
 
-    hostSync.beginBlock (getPlayHead(), numSamples);
+    hostSync.beginBlock (presetManager.linkClient->playHead (getPlayHead(), numSamples, getSampleRate()), numSamples);   // Cat Link: shared tempo in the apps
     lastBpm = hostSync.get().bpm;
     midiLearn.processMidi (midi);
 

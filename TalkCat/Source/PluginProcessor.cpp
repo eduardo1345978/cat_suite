@@ -304,7 +304,7 @@ void TalkCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     mergeComputerKeyboard (midi, numSamples);      // standalone app: notes from the computer keyboard
     buffer.clear();
 
-    hostSync.beginBlock (getPlayHead(), numSamples);
+    hostSync.beginBlock (presetManager.linkClient->playHead (getPlayHead(), numSamples, getSampleRate()), numSamples);   // Cat Link: shared tempo in the apps
     midiLearn.processMidi (midi);
     const auto t = hostSync.get();
     lastBpm = t.bpm;

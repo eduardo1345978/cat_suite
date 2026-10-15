@@ -15,6 +15,7 @@ namespace cat
       Chords  Chord-Cat sends the chord it plays; followers get it as if Chord-Cat's MIDI were
               routed to them (no Cubase routing needed). Your own MIDI still works too.
       Life    Life-Cat sends births and deaths; Drum-Cat answers with hits
+      Tempo   the standalone apps share tempo and play / stop, so they play in sync
 */
 class LinkClient : private juce::Timer
 {
@@ -30,7 +31,8 @@ public:
         juce::String receiveLifeText = "React to Life-Cat";
         juce::String grooveParam;    // e.g. "followGroove" (the existing Drum-Cat groove link)
     };
-    enum Option { On = 0, Key, Chords, Life };
+    enum Option { On = 0, Key, Chords, Life, Tempo };
+    static constexpr int numOptions = 5;
 
     LinkClient (juce::AudioProcessor&, juce::AudioProcessorValueTreeState&, const juce::String& pluginName, Caps);
     ~LinkClient() override;
@@ -56,6 +58,15 @@ public:
     /** Calls fn (kind, role) for Life-Cat events since the last call (only while Life is on). */
     void pollLifeEvents (const std::function<void (int, int)>& fn);
 
+    // ---- shared tempo + play / stop (standalone apps)
+    /** Use instead of getPlayHead(): in a standalone app with Tempo linked, returns a play head that
+        follows the shared transport; otherwise returns `host` unchanged. Audio thread. */
+    juce::AudioPlayHead* playHead (juce::AudioPlayHead* host, int numSamples, double sampleRate);
+    bool isStandalone() const noexcept { return processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone; }
+    void setTransport (bool playing, double bpm);
+    bool transportPlaying() const;
+    double transportBpm() const;
+
     // ---- panel
     std::vector<LinkBus::MemberInfo> members() const;
     void linkAll();
@@ -71,7 +82,7 @@ private:
     juce::SharedResourcePointer<LinkBus> bus;
     const juce::uint64 id;
     int slot = -1;
-    std::array<std::atomic<bool>, 4> options {};
+    std::array<std::atomic<bool>, numOptions> options {};
 
     // key (message thread)
     juce::uint32 seenKeySeq = 0;
@@ -94,6 +105,27 @@ private:
 
     // life (audio thread)
     juce::uint32 seenEvents = 0;
+
+    // shared transport (audio thread)
+    struct SharedPlayHead : public juce::AudioPlayHead
+    {
+        bool playing = false;
+        double bpm = 120.0, ppq = 0.0;
+        juce::Optional<PositionInfo> getPosition() const override
+        {
+            PositionInfo info;
+            info.setBpm (bpm);
+            info.setTimeSignature (TimeSignature { 4, 4 });
+            info.setIsPlaying (playing);
+            if (playing)
+            {
+                info.setPpqPosition (ppq);
+                info.setPpqPositionOfLastBarStart (std::floor (ppq / 4.0) * 4.0);
+            }
+            return info;
+        }
+    } sharedHead;
+    double nextPpq = 0.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LinkClient)
 };

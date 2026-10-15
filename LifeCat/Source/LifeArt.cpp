@@ -47,15 +47,15 @@ namespace
 juce::String roleName (int theme, Role role, bool plural)
 {
     static const char* one[4][numRoles] = {
-        { "Beetle", "Frog",   "Firefly", "Bee",      "Snail",   "Tortoise",   "Ant" },
-        { "Fish",   "Shark",  "Jelly",   "Seahorse", "Crab",    "Whale",      "Sardine" },
-        { "Saucer", "Comet",  "Star",    "Seeder",   "Junkbot", "Star Whale", "Spark" },
-        { "Cell",   "Amoeba", "Diatom",  "Spore",    "Phage",   "Colony",     "Bacterium" } };
+        { "Beetle", "Frog",   "Firefly", "Bee",      "Snail",   "Tortoise",   "Ant",       "Songbird", "Woodpecker", "Beaver" },
+        { "Fish",   "Shark",  "Jelly",   "Seahorse", "Crab",    "Whale",      "Sardine",   "Dolphin",  "Shrimp",     "Coral Crab" },
+        { "Saucer", "Comet",  "Star",    "Seeder",   "Junkbot", "Star Whale", "Spark",     "Siren",    "Pulsar",     "Builder Bot" },
+        { "Cell",   "Amoeba", "Diatom",  "Spore",    "Phage",   "Colony",     "Bacterium", "Hummer",   "Ticker",     "Mason" } };
     static const char* many[4][numRoles] = {
-        { "Beetles", "Frogs",   "Fireflies", "Bees",      "Snails",   "Tortoises",   "Ants" },
-        { "Fish",    "Sharks",  "Jellies",   "Seahorses", "Crabs",    "Whales",      "Sardines" },
-        { "Saucers", "Comets",  "Stars",     "Seeders",   "Junkbots", "Star Whales", "Sparks" },
-        { "Cells",   "Amoebas", "Diatoms",   "Spores",    "Phages",   "Colonies",    "Bacteria" } };
+        { "Beetles", "Frogs",   "Fireflies", "Bees",      "Snails",   "Tortoises",   "Ants",     "Songbirds", "Woodpeckers", "Beavers" },
+        { "Fish",    "Sharks",  "Jellies",   "Seahorses", "Crabs",    "Whales",      "Sardines", "Dolphins",  "Shrimps",     "Coral Crabs" },
+        { "Saucers", "Comets",  "Stars",     "Seeders",   "Junkbots", "Star Whales", "Sparks",   "Sirens",    "Pulsars",     "Builder Bots" },
+        { "Cells",   "Amoebas", "Diatoms",   "Spores",    "Phages",   "Colonies",    "Bacteria", "Hummers",   "Tickers",     "Masons" } };
     const int t = juce::jlimit (0, 3, theme), r = juce::jlimit (0, numRoles - 1, (int) role);
     return plural ? many[t][r] : one[t][r];
 }
@@ -63,10 +63,10 @@ juce::String roleName (int theme, Role role, bool plural)
 Colour roleColour (int theme, Role role)
 {
     static const juce::uint32 cols[4][numRoles] = {
-        { 0xff8fd18a, 0xffd98b6a, 0xfff2df7a, 0xfff5c542, 0xffc9a27a, 0xff9aa36a, 0xffc0705a },
-        { 0xff7cc6e0, 0xff9aa6c2, 0xffd59ae6, 0xfff0a868, 0xffe8735a, 0xff6f8fb8, 0xffcfe0ea },
-        { 0xffa9b8ff, 0xffffa86b, 0xfffff0b0, 0xff7fe0c8, 0xffb0b8c8, 0xff8a7cff, 0xffffe070 },
-        { 0xff9fe0b8, 0xffe58aa8, 0xffb7a6f0, 0xfff0d070, 0xffa0d0f0, 0xffe0a0d8, 0xffc8f08a } };
+        { 0xff8fd18a, 0xffd98b6a, 0xfff2df7a, 0xfff5c542, 0xffc9a27a, 0xff9aa36a, 0xffc0705a, 0xff7fb8f0, 0xffe86060, 0xffb08050 },
+        { 0xff7cc6e0, 0xff9aa6c2, 0xffd59ae6, 0xfff0a868, 0xffe8735a, 0xff6f8fb8, 0xffcfe0ea, 0xff9cc0e8, 0xffff9a8a, 0xfff07ab0 },
+        { 0xffa9b8ff, 0xffffa86b, 0xfffff0b0, 0xff7fe0c8, 0xffb0b8c8, 0xff8a7cff, 0xffffe070, 0xffff8ae0, 0xff8af0ff, 0xffc8c8a0 },
+        { 0xff9fe0b8, 0xffe58aa8, 0xffb7a6f0, 0xfff0d070, 0xffa0d0f0, 0xffe0a0d8, 0xffc8f08a, 0xff8ad8e8, 0xfff0a060, 0xffd0c8b0 } };
     return Colour (cols[juce::jlimit (0, 3, theme)][juce::jlimit (0, numRoles - 1, (int) role)]);
 }
 
@@ -79,20 +79,20 @@ Colour creatureColour (int theme, const Creature& c)
 juce::String terrainName (int theme, Terrain t)
 {
     static const char* n[4][numTerrains] = {
-        { "Ground", "Water",   "Rock",     "Meadow",    "Sunlight" },
-        { "Sand",   "Deep",    "Reef",     "Seagrass",  "Sunbeam" },
-        { "Void",   "Nebula",  "Asteroid", "Stardust",  "Starlight" },
-        { "Gel",    "Fluid",   "Crystal",  "Nutrients", "UV Light" } };
+        { "Ground", "Water",   "Rock",     "Meadow",    "Sunlight",  "Sand",      "Lava" },
+        { "Sand",   "Deep",    "Reef",     "Seagrass",  "Sunbeam",   "Shell Bed", "Hot Vent" },
+        { "Void",   "Nebula",  "Asteroid", "Stardust",  "Starlight", "Dust",      "Plasma" },
+        { "Gel",    "Fluid",   "Crystal",  "Nutrients", "UV Light",  "Slime",     "Acid" } };
     return n[juce::jlimit (0, 3, theme)][juce::jlimit (0, numTerrains - 1, (int) t)];
 }
 
 Colour terrainColour (int theme, Terrain t)
 {
     static const juce::uint32 c[4][numTerrains] = {
-        { 0x00000000, 0xff2f6f9a, 0xff6e665c, 0xff4f9c45, 0xffffe08a },
-        { 0x00000000, 0xff06213a, 0xffa58066, 0xff3f8f6a, 0xffbfe8ff },
-        { 0x00000000, 0xff5a3a8a, 0xff6a6470, 0xffd8b87a, 0xfffff4c8 },
-        { 0x00000000, 0xff3a5a7a, 0xffa8d8f0, 0xffd8c060, 0xffc890ff } };
+        { 0x00000000, 0xff2f6f9a, 0xff6e665c, 0xff4f9c45, 0xffffe08a, 0xffd8c08a, 0xffe8582a },
+        { 0x00000000, 0xff06213a, 0xffa58066, 0xff3f8f6a, 0xffbfe8ff, 0xffd8c8a8, 0xffe0603a },
+        { 0x00000000, 0xff5a3a8a, 0xff6a6470, 0xffd8b87a, 0xfffff4c8, 0xff8a8070, 0xffff6a3a },
+        { 0x00000000, 0xff3a5a7a, 0xffa8d8f0, 0xffd8c060, 0xffc890ff, 0xff9ab060, 0xffd8ff40 } };
     return Colour (c[juce::jlimit (0, 3, theme)][juce::jlimit (0, numTerrains - 1, (int) t)]);
 }
 
@@ -264,6 +264,39 @@ juce::Image renderTerrain (const World& w, int theme, int size)
                         softGlow (g, { x, y }, cell * 1.3f, col, 0.35f);
                         break;
                     }
+                    case Terrain::Sand:
+                    {
+                        const float r = cell * 0.9f;
+                        g.setColour (col.withAlpha (theme >= 2 ? 0.8f : 0.6f));
+                        g.fillEllipse (x - r, y - r, 2.0f * r, 2.0f * r);
+                        g.setColour (col.darker (0.35f).withAlpha (0.6f));
+                        for (int k = 0; k < 4; ++k)
+                        {
+                            const float gx = x + (rnd.nextFloat() - 0.5f) * cell, gy = y + (rnd.nextFloat() - 0.5f) * cell;
+                            g.fillEllipse (gx, gy, 1.2f, 1.2f);
+                        }
+                        if (jitter < 0.35f)
+                        {
+                            Path ripple;
+                            ripple.startNewSubPath (x - r * 0.6f, y);
+                            ripple.quadraticTo (x, y - r * 0.25f, x + r * 0.6f, y);
+                            g.setColour (col.brighter (0.3f).withAlpha (0.5f));
+                            g.strokePath (ripple, juce::PathStrokeType (1.0f));
+                        }
+                        break;
+                    }
+                    case Terrain::Lava:
+                    {
+                        const float r = cell * 0.95f;
+                        softGlow (g, { x, y }, cell * 1.6f, col, 0.45f);
+                        g.setColour (col.darker (0.6f));
+                        g.fillEllipse (x - r, y - r, 2.0f * r, 2.0f * r);
+                        g.setColour (col.brighter (0.2f));
+                        g.fillEllipse (x - r * 0.75f, y - r * 0.75f, r * 1.5f, r * 1.5f);
+                        g.setColour (Colour (0xffffe070).withAlpha (0.8f));
+                        g.drawLine (x - r * 0.5f, y - r * 0.2f * jitter, x + r * 0.4f, y + r * 0.3f, 1.2f);
+                        break;
+                    }
                     case Terrain::Ground:
                     default: break;
                 }
@@ -400,7 +433,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
     {
         Path e, p;
         const float es = eye * (asleep ? 1.0f : 1.0f);
-        if (asleep)
+        if (asleep || c.blink > 0.4f)
         {
             e.startNewSubPath (x - es, y1); e.lineTo (x + es, y1);
             e.startNewSubPath (x - es, y2); e.lineTo (x + es, y2);
@@ -419,7 +452,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
     };
 
     Path p, d;
-    switch (sc.theme * numRoles + (int) c.role)
+    switch (sc.theme * 100 + (int) c.role)
     {
         // ================= GARDEN =================
         case 0:   // beetle
@@ -534,7 +567,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             break;
         }
         // ================= OCEAN =================
-        case 7:   // fish
+        case 100:   // fish
         {
             const float wag = 0.35f * std::sin (phase);
             p.addEllipse (-0.9f, -0.5f, 1.9f, 1.0f);
@@ -545,7 +578,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             g.setColour (dark); g.fillPath (d, tf);
             break;
         }
-        case 8:   // shark (from above)
+        case 101:   // shark (from above)
         {
             const float wag = 0.25f * std::sin (phase * 0.7f);
             p.startNewSubPath (1.35f, 0.0f);
@@ -561,7 +594,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             g.setColour (dark); g.fillPath (d, tf);
             break;
         }
-        case 9:   // jellyfish (always upright)
+        case 102:   // jellyfish (always upright)
         {
             const float pulse = 1.0f + 0.12f * std::sin (phase * 0.35f);
             p.addCentredArc (0.0f, 0.0f, 1.1f * pulse, 1.0f / pulse, 0.0f, -1.5708f, 1.5708f, true);
@@ -577,7 +610,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             g.strokePath (d, roundStroke (r * 0.12f), upright);
             break;
         }
-        case 10:  // seahorse (upright, curled tail)
+        case 103:  // seahorse (upright, curled tail)
         {
             const float bob = 0.1f * std::sin (phase * 0.6f);
             const auto t2 = AffineTransform::scale (r * (c.vx < 0.0f ? -1.0f : 1.0f), r).translated (pos.x, pos.y + bob * r);
@@ -596,7 +629,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             g.setColour (dark); g.fillPath (d, t2);
             break;
         }
-        case 11:  // crab: claws and legs
+        case 104:  // crab: claws and legs
         {
             const auto side = AffineTransform::scale (r).rotated (heading + 1.5708f).translated (pos);   // crabs walk sideways
             Path legs;
@@ -619,7 +652,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             eyes (-0.35f, 0.0f, 0.0f, AffineTransform::scale (r).translated (pos.x, pos.y - r * 0.6f));
             break;
         }
-        case 12:  // whale: big body, tail fluke, flippers
+        case 105:  // whale: big body, tail fluke, flippers
         {
             const float wag = 0.25f * std::sin (phase * 0.25f);
             p.startNewSubPath (1.3f, 0.0f);
@@ -643,7 +676,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             }
             break;
         }
-        case 13:  // sardine: small silver fish
+        case 106:  // sardine: small silver fish
         {
             const float wag = 0.4f * std::sin (phase * 1.6f);
             p.addEllipse (-0.9f, -0.32f, 1.9f, 0.64f);
@@ -654,7 +687,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             break;
         }
         // ================= SPACE =================
-        case 14:  // saucer
+        case 200:  // saucer
         {
             const auto tilt = AffineTransform::scale (r).rotated (juce::jlimit (-0.4f, 0.4f, c.vx * 6.0f)).translated (pos);
             d.addEllipse (-0.55f, -0.85f, 1.1f, 0.9f);
@@ -667,7 +700,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             g.setColour (Colour (0xfffff3a0)); g.fillPath (lights, tilt);
             break;
         }
-        case 15:  // comet with a tail
+        case 201:  // comet with a tail
         {
             const float tail = r * (3.0f + 6.0f * juce::jmin (1.0f, speed * 8.0f));
             const float bx = pos.x - std::cos (heading) * tail, by = pos.y - std::sin (heading) * tail;
@@ -681,14 +714,14 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             g.fillEllipse (pos.x - r * 0.8f, pos.y - r * 0.8f, r * 1.6f, r * 1.6f);
             break;
         }
-        case 16:  // star
+        case 202:  // star
         {
             softGlow (g, pos, r * (2.6f + 0.6f * std::sin (phase * 0.25f)), base, 0.3f + 0.5f * flash);
             p.addStar ({}, 5, 0.5f, 1.35f, ft * 0.4f + (float) c.id);
             g.setColour (body); g.fillPath (p, upright);
             break;
         }
-        case 17:  // seeder: probe with solar panels
+        case 203:  // seeder: probe with solar panels
         {
             p.addRectangle (-0.35f, -0.35f, 0.7f, 0.7f);
             Path panels; panels.addRectangle (-0.3f, -1.4f, 0.6f, 0.9f); panels.addRectangle (-0.3f, 0.5f, 0.6f, 0.9f);
@@ -700,7 +733,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             if (std::fmod (ft * 1.5f + (float) c.id, 1.0f) < 0.3f) { g.setColour (Colour (0xff80ffb0)); g.fillEllipse (pos.x - r * 0.15f, pos.y - r * 0.15f, r * 0.3f, r * 0.3f); }
             break;
         }
-        case 18:  // junkbot: boxy robot with grabber arms
+        case 204:  // junkbot: boxy robot with grabber arms
         {
             const float grab = 0.2f * std::sin (phase * 0.9f);
             Path arms;
@@ -714,7 +747,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             g.setColour (Colour (0xffff6a50).withAlpha ((0.5f + 0.5f * std::sin (ft * 4.0f)) * vitality)); g.fillPath (visor, tf);
             break;
         }
-        case 19:  // star whale: glowing whale with constellation dots
+        case 205:  // star whale: glowing whale with constellation dots
         {
             const float wag = 0.25f * std::sin (phase * 0.25f);
             softGlow (g, pos, r * 2.4f, base, 0.18f + 0.3f * flash);
@@ -740,7 +773,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             g.strokePath (stars, juce::PathStrokeType (r * 0.02f), tf);
             break;
         }
-        case 20:  // sparks: tiny bright points with short trails
+        case 206:  // sparks: tiny bright points with short trails
         {
             const float tl = r * (2.0f + 6.0f * juce::jmin (1.0f, speed * 8.0f));
             const float bx = pos.x - std::cos (heading) * tl, by = pos.y - std::sin (heading) * tl;
@@ -753,7 +786,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             break;
         }
         // ================= CELLS =================
-        case 21:  // cell
+        case 300:  // cell
         {
             p.addEllipse (-1.0f, -1.0f, 2.0f, 2.0f);
             g.setColour (body.withMultipliedAlpha (0.4f)); g.fillPath (p, tf);
@@ -763,7 +796,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             g.setColour (dark.brighter (0.3f)); g.fillPath (d, tf);
             break;
         }
-        case 22:  // amoeba reaching forward
+        case 301:  // amoeba reaching forward
         {
             for (int k = 0; k <= 28; ++k)
             {
@@ -780,7 +813,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             g.setColour (dark); g.fillPath (d, tf);
             break;
         }
-        case 23:  // diatom wheel
+        case 302:  // diatom wheel
         {
             const auto spin = AffineTransform::scale (r).rotated (ft * 0.6f + (float) c.id).translated (pos);
             p.addEllipse (-1.0f, -1.0f, 2.0f, 2.0f);
@@ -794,7 +827,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             g.setColour (body); g.strokePath (p, juce::PathStrokeType (r * 0.12f), spin);
             break;
         }
-        case 24:  // spore: spiky ball
+        case 303:  // spore: spiky ball
         {
             const auto spin = AffineTransform::scale (r).rotated (ft * 0.4f + (float) c.id).translated (pos);
             p.addStar ({}, 10, 0.65f, 1.05f, 0.0f);
@@ -803,7 +836,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             g.setColour (body.brighter (0.5f)); g.fillPath (d, spin);
             break;
         }
-        case 25:  // phage: hexagon head, tail, legs
+        case 304:  // phage: hexagon head, tail, legs
         {
             Path legs;
             for (int k = 0; k < 3; ++k)
@@ -819,7 +852,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             g.setColour (ink); g.strokePath (p, juce::PathStrokeType (r * 0.06f), tf);
             break;
         }
-        case 26:  // colony: a cluster of cells
+        case 305:  // colony: a cluster of cells
         {
             juce::Random rnd ((juce::int64) c.id * 13);
             for (int k = 0; k < 7; ++k)
@@ -833,7 +866,7 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             g.setColour (body); g.strokePath (p, juce::PathStrokeType (r * 0.05f), tf);
             break;
         }
-        default:  // bacterium: capsule with a whipping flagellum
+        case 306:  // bacterium: capsule with a whipping flagellum
         {
             Path fl;
             fl.startNewSubPath (-0.8f, 0.0f);
@@ -844,6 +877,223 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
             pattern (g, p, tf, c, ink);
             break;
         }
+
+        // ================= SINGERS =================
+        case 7:    // songbird: wings, tail fan, beak open while singing
+        {
+            const float flap = 0.5f * std::sin (phase * 2.2f);
+            Path wings;
+            wings.addEllipse (-0.5f, -1.25f - flap * 0.4f, 1.0f, 0.75f);
+            wings.addEllipse (-0.5f, 0.5f + flap * 0.4f, 1.0f, 0.75f);
+            g.setColour (body.darker (0.3f)); g.fillPath (wings, tf);
+            Path tail; tail.addTriangle (-0.7f, 0.0f, -1.5f, -0.45f, -1.5f, 0.45f);
+            g.setColour (body.darker (0.15f)); g.fillPath (tail, tf);
+            p.addEllipse (-0.85f, -0.55f, 1.55f, 1.1f);
+            p.addEllipse (0.35f, -0.42f, 0.84f, 0.84f);
+            g.setColour (body); g.fillPath (p, tf);
+            pattern (g, p, tf, c, ink);
+            const float open = 0.05f + 0.22f * flash;
+            Path beak; beak.addTriangle (1.1f, -0.12f - open, 1.6f, 0.0f, 1.1f, 0.12f + open);
+            g.setColour (Colour (0xfff0b040).withAlpha (vitality)); g.fillPath (beak, tf);
+            eyes (0.85f, -0.22f, 0.22f, tf);
+            break;
+        }
+        case 107:  // dolphin: sleek, beak, flukes
+        {
+            const float wag = 0.3f * std::sin (phase * 0.8f);
+            p.startNewSubPath (1.5f, 0.0f);
+            p.quadraticTo (0.6f, -0.55f, -0.9f, -0.25f);
+            p.lineTo (-1.4f, -0.1f + wag);
+            p.lineTo (-1.4f, 0.1f + wag);
+            p.lineTo (-0.9f, 0.25f);
+            p.quadraticTo (0.6f, 0.55f, 1.5f, 0.0f);
+            p.closeSubPath();
+            g.setColour (body); g.fillPath (p, tf);
+            Path flukes; flukes.addTriangle (-1.3f, wag, -1.85f, -0.6f + wag, -1.85f, 0.6f + wag);
+            flukes.addTriangle (0.3f, -0.35f, -0.2f, -0.95f, -0.25f, -0.3f);
+            flukes.addTriangle (0.3f, 0.35f, -0.2f, 0.95f, -0.25f, 0.3f);
+            g.setColour (body.darker (0.2f)); g.fillPath (flukes, tf);
+            Path belly; belly.addEllipse (-0.4f, -0.15f, 1.5f, 0.3f);
+            g.setColour (juce::Colours::white.withAlpha (0.35f * vitality)); g.fillPath (belly, tf);
+            eyes (0.95f, -0.2f, 0.2f, tf);
+            break;
+        }
+        case 207:  // siren: luminous body trailing singing ribbons
+        {
+            for (int k = 0; k < 3; ++k)
+            {
+                Path rib;
+                rib.startNewSubPath (-0.5f, 0.0f);
+                for (int j = 1; j <= 10; ++j)
+                    rib.lineTo (-0.5f - 0.28f * (float) j, (0.5f * (float) (k - 1)) + 0.35f * std::sin (phase * 0.9f + (float) j * 0.7f + (float) k));
+                g.setColour (base.brighter (0.3f).withAlpha (0.5f * vitality));
+                g.strokePath (rib, roundStroke (r * (0.16f - 0.03f * (float) k)), tf);
+            }
+            p.addEllipse (-0.7f, -0.6f, 1.6f, 1.2f);
+            g.setColour (body); g.fillPath (p, tf);
+            softGlow (g, pos, r * 1.6f, base, 0.25f + 0.5f * flash);
+            eyes (0.45f, -0.25f, 0.25f, tf);
+            break;
+        }
+        case 307:  // hummer: round cell ringed with beating cilia
+        {
+            Path cilia;
+            for (int k = 0; k < 18; ++k)
+            {
+                const float a = twoPi * (float) k / 18.0f;
+                const float beat = 0.25f * std::sin (phase * 2.5f + (float) k * 0.9f);
+                cilia.startNewSubPath (std::cos (a) * 0.95f, std::sin (a) * 0.95f);
+                cilia.lineTo (std::cos (a + beat) * 1.45f, std::sin (a + beat) * 1.45f);
+            }
+            g.setColour (body.withMultipliedAlpha (0.8f)); g.strokePath (cilia, juce::PathStrokeType (r * 0.06f), tf);
+            p.addEllipse (-1.0f, -1.0f, 2.0f, 2.0f);
+            g.setColour (body.withMultipliedAlpha (0.5f)); g.fillPath (p, tf);
+            g.setColour (body); g.strokePath (p, juce::PathStrokeType (r * 0.1f), tf);
+            d.addEllipse (-0.3f, -0.3f, 0.6f + 0.2f * flash, 0.6f + 0.2f * flash);
+            g.setColour (dark.brighter (0.4f)); g.fillPath (d, tf);
+            break;
+        }
+
+        // ================= DRUMMERS =================
+        case 8:    // woodpecker: red crest, long beak that pecks on each hit
+        {
+            const float peck = 0.35f * flash;
+            Path tail; tail.addTriangle (-0.6f, 0.0f, -1.45f, -0.3f, -1.45f, 0.3f);
+            g.setColour (dark); g.fillPath (tail, tf);
+            p.addEllipse (-0.9f, -0.55f, 1.6f, 1.1f);
+            g.setColour (body.withMultipliedSaturation (0.3f).darker (0.4f)); g.fillPath (p, tf);
+            pattern (g, p, tf, c, juce::Colours::white.withAlpha (0.5f));
+            Path head; head.addEllipse (0.35f + peck, -0.4f, 0.8f, 0.8f);
+            g.setColour (Colour (0xfff2f0ea).withAlpha (vitality)); g.fillPath (head, tf);
+            Path crest; crest.addEllipse (0.45f + peck, -0.3f, 0.55f, 0.6f);
+            g.setColour (body); g.fillPath (crest, tf);
+            Path beak; beak.addTriangle (1.1f + peck, -0.1f, 1.8f + peck, 0.0f, 1.1f + peck, 0.1f);
+            g.setColour (Colour (0xff3a3530).withAlpha (vitality)); g.fillPath (beak, tf);
+            eyes (0.9f + peck, -0.2f, 0.2f, tf);
+            break;
+        }
+        case 108:  // shrimp: curled segments, antennae, snapping claw
+        {
+            Path seg;
+            for (int k = 0; k < 5; ++k)
+            {
+                const float a = -0.4f + 0.35f * (float) k;
+                seg.addEllipse (0.8f - 0.42f * (float) k - 0.32f, std::sin (a) * 0.3f - 0.32f, 0.64f - 0.06f * (float) k, 0.64f - 0.06f * (float) k);
+            }
+            g.setColour (body); g.fillPath (seg, tf);
+            g.setColour (ink); g.strokePath (seg, juce::PathStrokeType (r * 0.04f), tf);
+            Path ant;
+            ant.startNewSubPath (1.05f, -0.1f); ant.quadraticTo (1.8f, -0.9f, 2.1f, -0.4f + 0.2f * std::sin (phase));
+            ant.startNewSubPath (1.05f, 0.1f);  ant.quadraticTo (1.8f, 0.9f, 2.1f, 0.4f - 0.2f * std::sin (phase));
+            g.setColour (body.brighter (0.2f)); g.strokePath (ant, juce::PathStrokeType (r * 0.05f), tf);
+            const float snap = 0.3f * (1.0f - flash);
+            Path claw; claw.addPieSegment (0.7f, 0.35f, 0.8f, 0.6f, 0.3f + snap, 2.8f - snap, 0.0f);
+            g.setColour (body.darker (0.2f)); g.fillPath (claw, tf);
+            eyes (0.95f, -0.18f, 0.18f, tf);
+            break;
+        }
+        case 208:  // pulsar: a spinning star with two beams that flare on each beat
+        {
+            const float spin = ft * 2.5f + (float) c.id;
+            for (int k = 0; k < 2; ++k)
+            {
+                const float a = spin + (float) k * 3.14159f;
+                Path beam;
+                beam.addTriangle (0.0f, 0.0f, std::cos (a - 0.12f) * 3.2f, std::sin (a - 0.12f) * 3.2f, std::cos (a + 0.12f) * 3.2f, std::sin (a + 0.12f) * 3.2f);
+                g.setColour (base.withAlpha (0.18f + 0.5f * flash)); g.fillPath (beam, upright);
+            }
+            softGlow (g, pos, r * (1.4f + flash), base.brighter (0.5f), 0.5f);
+            p.addEllipse (-0.6f, -0.6f, 1.2f, 1.2f);
+            g.setColour (body.brighter (0.4f)); g.fillPath (p, upright);
+            break;
+        }
+        case 308:  // ticker: a rod with rings that pulse on the beat
+        {
+            p.addRoundedRectangle (-1.1f, -0.35f, 2.2f, 0.7f, 0.35f);
+            g.setColour (body.withMultipliedAlpha (0.6f)); g.fillPath (p, tf);
+            Path rings;
+            for (int k = 0; k < 5; ++k)
+            {
+                const float x = -0.8f + 0.4f * (float) k;
+                const float h = 0.42f + 0.18f * flash * (k % 2 == 0 ? 1.0f : 0.5f);
+                rings.addRoundedRectangle (x - 0.07f, -h, 0.14f, h * 2.0f, 0.07f);
+            }
+            g.setColour (body); g.fillPath (rings, tf);
+            g.strokePath (p, juce::PathStrokeType (r * 0.07f), tf);
+            break;
+        }
+
+        // ================= BUILDERS =================
+        case 9:    // beaver: round body, flat paddle tail, front teeth
+        {
+            Path tailp; tailp.addRoundedRectangle (-1.85f, -0.35f, 0.95f, 0.7f, 0.3f);
+            g.setColour (Colour (0xff5a4030).withAlpha (vitality)); g.fillPath (tailp, tf);
+            Path hatch;
+            for (int k = 0; k < 4; ++k) { hatch.startNewSubPath (-1.75f + 0.22f * (float) k, -0.3f); hatch.lineTo (-1.65f + 0.22f * (float) k, 0.3f); }
+            g.setColour (Colour (0xff3a2820).withAlpha (vitality)); g.strokePath (hatch, juce::PathStrokeType (r * 0.04f), tf);
+            const float step = 0.15f * std::sin (phase * 0.6f);
+            Path feet; feet.addEllipse (0.2f + step, -0.95f, 0.4f, 0.35f); feet.addEllipse (0.2f - step, 0.6f, 0.4f, 0.35f);
+            g.setColour (dark); g.fillPath (feet, tf);
+            p.addEllipse (-1.0f, -0.8f, 1.9f, 1.6f);
+            p.addEllipse (0.55f, -0.5f, 0.9f, 1.0f);
+            g.setColour (body); g.fillPath (p, tf);
+            pattern (g, p, tf, c, ink);
+            Path ears; ears.addEllipse (0.75f, -0.62f, 0.25f, 0.25f); ears.addEllipse (0.75f, 0.37f, 0.25f, 0.25f);
+            g.setColour (dark); g.fillPath (ears, tf);
+            Path teeth; teeth.addRectangle (1.38f, -0.1f, 0.14f, 0.2f);
+            g.setColour (Colour (0xfff8f0d0).withAlpha (vitality)); g.fillPath (teeth, tf);
+            eyes (1.05f, -0.25f, 0.25f, tf);
+            break;
+        }
+        case 109:  // coral crab: carries branches of coral on its back
+        {
+            const float step = 0.15f * std::sin (phase);
+            Path legs;
+            for (int k = 0; k < 3; ++k)
+            {
+                const float lx = -0.45f + 0.45f * (float) k;
+                legs.startNewSubPath (lx, -0.5f); legs.lineTo (lx + step, -1.2f);
+                legs.startNewSubPath (lx, 0.5f);  legs.lineTo (lx - step, 1.2f);
+            }
+            g.setColour (dark); g.strokePath (legs, juce::PathStrokeType (r * 0.1f), tf);
+            p.addEllipse (-0.9f, -0.75f, 1.8f, 1.5f);
+            g.setColour (Colour (0xffc87050).withAlpha (vitality)); g.fillPath (p, tf);
+            Path coral;
+            for (int k = 0; k < 4; ++k)
+            {
+                const float bx = -0.5f + 0.32f * (float) k, by = -0.2f + 0.15f * (float) (k % 2);
+                coral.startNewSubPath (bx, by); coral.lineTo (bx - 0.25f, by - 0.45f);
+                coral.startNewSubPath (bx, by); coral.lineTo (bx + 0.2f, by - 0.5f);
+            }
+            g.setColour (body); g.strokePath (coral, roundStroke (r * 0.16f), tf);
+            eyes (0.8f, -0.3f, 0.3f, tf);
+            break;
+        }
+        case 209:  // builder bot: boxy, a working arm and a blinking antenna light
+        {
+            const float arm = 0.4f * std::sin (phase * 0.8f);
+            Path armp; armp.startNewSubPath (0.2f, 0.4f); armp.lineTo (1.0f, 0.7f + arm * 0.3f); armp.lineTo (1.4f, 0.4f + arm);
+            g.setColour (dark.brighter (0.4f)); g.strokePath (armp, roundStroke (r * 0.14f), tf);
+            p.addRoundedRectangle (-0.9f, -0.75f, 1.8f, 1.5f, 0.25f);
+            g.setColour (body); g.fillPath (p, tf);
+            Path panel; panel.addRectangle (-0.6f, -0.4f, 0.9f, 0.8f);
+            g.setColour (dark.withMultipliedAlpha (0.6f)); g.strokePath (panel, juce::PathStrokeType (r * 0.06f), tf);
+            const bool on = std::fmod (ft * 1.5f + (float) c.id * 0.37f, 1.0f) < 0.5f;
+            softGlow (g, pos, r * 0.6f, Colour (on ? 0xff60ff90 : 0xffff6060), 0.6f);
+            eyes (0.55f, -0.3f, 0.3f, tf);
+            break;
+        }
+        case 309:  // mason: a hexagonal cell building crystal plates
+        {
+            p.addPolygon ({ 0.0f, 0.0f }, 6, 1.0f, ft * 0.2f + (float) c.id);
+            g.setColour (body.withMultipliedAlpha (0.45f)); g.fillPath (p, upright);
+            g.setColour (body); g.strokePath (p, juce::PathStrokeType (r * 0.1f), upright);
+            Path plates;
+            for (int k = 0; k < 3; ++k) plates.addPolygon ({ 0.45f * std::cos ((float) k * 2.094f), 0.45f * std::sin ((float) k * 2.094f) }, 6, 0.28f, 0.0f);
+            g.setColour (Colour (0xffe8f4ff).withAlpha (0.5f * vitality)); g.fillPath (plates, upright);
+            break;
+        }
+        default: break;
     }
 
     // sleeping creatures dream a little "z"
@@ -855,13 +1105,60 @@ void drawCreature (juce::Graphics& g, const Creature& c, juce::Point<float> pos,
     }
 }
 
+void drawNest (juce::Graphics& g, juce::Point<float> pos, float r, const lifecat::Nest& n, const Scene& sc)
+{
+    const float s = r * (0.4f + 0.6f * n.size);
+    juce::Random rnd ((juce::int64) (n.x * 9973.0f + n.y * 7919.0f));
+    switch (sc.theme)
+    {
+        case 0:   // twig nest / lodge
+        case 1:   // coral garden
+        {
+            const auto col = sc.theme == 0 ? Colour (0xff8a6a48) : Colour (0xffe0807a);
+            g.setColour (juce::Colours::black.withAlpha (0.2f));
+            g.fillEllipse (pos.x - s * 1.05f, pos.y - s * 0.7f, s * 2.3f, s * 1.6f);
+            for (int k = 0; k < 14; ++k)
+            {
+                const float a = rnd.nextFloat() * twoPi, len = s * (0.6f + 0.5f * rnd.nextFloat());
+                const float cx = pos.x + std::cos (a) * s * 0.55f, cy = pos.y + std::sin (a) * s * 0.4f;
+                g.setColour (col.withMultipliedBrightness (0.7f + 0.6f * rnd.nextFloat()));
+                const float b = a + 1.4f + rnd.nextFloat();
+                g.drawLine (cx - std::cos (b) * len * 0.5f, cy - std::sin (b) * len * 0.5f, cx + std::cos (b) * len * 0.5f, cy + std::sin (b) * len * 0.5f, juce::jmax (1.0f, s * 0.08f));
+            }
+            break;
+        }
+        case 2:   // a small space station ring
+        {
+            g.setColour (Colour (0xffc8c8a0).withAlpha (0.8f));
+            g.drawEllipse (pos.x - s, pos.y - s * 0.45f, s * 2.0f, s * 0.9f, juce::jmax (1.2f, s * 0.12f));
+            softGlow (g, pos, s * 0.8f, Colour (0xff80ffd0), 0.3f);
+            break;
+        }
+        default:  // crystal lattice
+        {
+            Path hexes;
+            for (int k = 0; k < 7; ++k)
+            {
+                const float a = (float) k * 1.047f;
+                const juce::Point<float> c = k == 6 ? pos : juce::Point<float> (pos.x + std::cos (a) * s * 0.6f, pos.y + std::sin (a) * s * 0.6f);
+                hexes.addPolygon (c, 6, s * 0.32f, 0.0f);
+            }
+            g.setColour (Colour (0xffd0e8f8).withAlpha (0.35f));
+            g.fillPath (hexes);
+            g.setColour (Colour (0xffd0e8f8).withAlpha (0.7f));
+            g.strokePath (hexes, juce::PathStrokeType (1.0f));
+            break;
+        }
+    }
+}
+
 void drawGlow (juce::Graphics& g, const Creature& c, juce::Point<float> pos, float r, const Scene& sc)
 {
     const float flash = clamp01 (c.singFlash);
     const auto base = creatureColour (sc.theme, c);
     const float night = 1.0f - sc.light;
     // glow gene: shines in the dark (fireflies, jellies, stars always a little)
-    const bool natural = c.role == Role::Drifter || (sc.theme == 2 && (c.role == Role::Hunter || c.role == Role::Swarm));
+    const bool natural = c.role == Role::Drifter || (sc.theme == 2 && (c.role == Role::Hunter || c.role == Role::Swarm || c.role == Role::Singer || c.role == Role::Drummer));
     const float glow = juce::jmax (c.genes[gGlow] * night, natural ? 0.35f + 0.5f * night : 0.0f);
     if (glow > 0.05f) softGlow (g, pos, r * (2.4f + 1.2f * glow), base.brighter (0.4f), 0.45f * glow);
 

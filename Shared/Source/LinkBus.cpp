@@ -5,7 +5,7 @@ namespace cat
 namespace
 {
     constexpr juce::uint32 magicValue = 0x4341544cu;    // "CATL"
-    constexpr juce::uint32 versionValue = 2;
+    constexpr juce::uint32 versionValue = 3;
     constexpr int maxMembers = 32;
     constexpr int numEvents = 64;
 
@@ -34,6 +34,12 @@ struct alignas (16) LinkBus::Shared
     juce::uint32 linkAll, eventWrite;
     struct Ev { juce::uint32 seq; juce::uint8 kind, role, pad1, pad2; juce::uint64 source; };
     Ev events[numEvents];
+
+    // shared transport for the standalone apps (start time on the computer's high-resolution clock)
+    juce::uint32 transportSeq, transportPlaying;
+    double transportBpm;
+    juce::int64 transportStartTicks;
+    juce::uint64 transportSource;
 };
 
 juce::File LinkBus::busFile()
@@ -250,6 +256,47 @@ void LinkBus::readEvents (juce::uint32& lastSeen, juce::uint64 self, const std::
         if (e.source != self) fn ((int) e.kind, (int) e.role);
     }
     lastSeen = w;
+}
+
+//==============================================================================
+void LinkBus::publishTransport (bool playing, double bpm, juce::uint64 source)
+{
+    if (! lock()) return;
+    auto seq = at (shared->transportSeq);
+    const bool wasPlaying = shared->transportPlaying != 0;
+    seq.fetch_add (1u, std::memory_order_acq_rel);
+    if (playing && ! wasPlaying) shared->transportStartTicks = juce::Time::getHighResolutionTicks();
+    else if (playing && wasPlaying && std::abs (shared->transportBpm - bpm) > 1.0e-6 && shared->transportBpm > 1.0)
+    {
+        // tempo change while playing: keep the current beat where it is
+        const double nowSec = juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - shared->transportStartTicks);
+        const double beats = nowSec * shared->transportBpm / 60.0;
+        shared->transportStartTicks = juce::Time::getHighResolutionTicks()
+                                    - juce::Time::secondsToHighResolutionTicks (beats * 60.0 / bpm);
+    }
+    shared->transportPlaying = playing ? 1u : 0u;
+    shared->transportBpm = juce::jlimit (20.0, 300.0, bpm);
+    shared->transportSource = source;
+    seq.fetch_add (1u, std::memory_order_release);
+    unlock();
+}
+
+bool LinkBus::readTransport (bool& playing, double& bpm, juce::int64& startTicks) const
+{
+    if (shared == nullptr) return false;
+    for (int tries = 0; tries < 8; ++tries)
+    {
+        const auto s1 = at (shared->transportSeq).load (std::memory_order_acquire);
+        if ((s1 & 1u) != 0u) continue;
+        const bool p = shared->transportPlaying != 0;
+        const double b = shared->transportBpm;
+        const auto t = shared->transportStartTicks;
+        std::atomic_thread_fence (std::memory_order_acquire);
+        if (at (shared->transportSeq).load (std::memory_order_relaxed) != s1) continue;
+        playing = p; bpm = b > 1.0 ? b : 120.0; startTicks = t;
+        return true;
+    }
+    return false;
 }
 
 void LinkBus::requestLinkAll()

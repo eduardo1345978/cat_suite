@@ -32,7 +32,7 @@ struct MusicSettings
     float density = 0.6f;       // 0..1
     int maxNotes = 4;           // per grid step
     float lengthScale = 1.0f;
-    std::array<bool, numRoles> speciesSing { true, true, true, true, true, true, true };
+    std::array<bool, numRoles> speciesSing { true, true, true, true, true, true, true, true, true, true };
     std::array<int, numRoles> speciesOctave {};
 };
 
@@ -64,6 +64,8 @@ private:
     Rng rng;
     std::vector<int> candidates;
     std::array<int, maxCreatures> flockSize {};
+    struct Phrase { uint32_t id = 0; int left = 0, note = 60, dir = 1, stride = 1; long long nextK = 0; };
+    std::array<Phrase, maxCreatures> phrases {};
 };
 
 } // namespace lifecat
