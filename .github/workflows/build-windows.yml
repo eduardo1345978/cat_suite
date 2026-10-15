@@ -74,6 +74,12 @@ jobs:
           $t = Start-Process "$snd\Apps\Cat-Hub.exe" -ArgumentList '--selftest', "`"$((Resolve-Path "$snd\Hub Cats").Path)`"", "`"$PWD\hub-test.wav`"", '16' -Wait -PassThru
           Get-Content hub-test.txt
           if ($t.ExitCode -ne 0) { throw "Cat Hub self test failed" }
+          # UI stress: the real window with the real Cat windows, random clicks while it plays
+          $u = Start-Process "$snd\Apps\Cat-Hub.exe" -ArgumentList '--uistress', "`"$((Resolve-Path "$snd\Hub Cats").Path)`"", '90', '5' -PassThru
+          $null = $u.Handle
+          if (-not $u.WaitForExit(300000)) { $u.Kill(); throw "Cat Hub UI stress hung" }
+          if ($u.ExitCode -ne 0) { throw "Cat Hub UI stress failed (exit code $($u.ExitCode))" }
+          Write-Host "Cat Hub UI stress passed"
           Copy-Item packaging\Install-Cat-Sound-Apps.bat $snd
           Copy-Item packaging\README-sound-apps.txt $snd
           Compress-Archive -Path "$snd\*" -DestinationPath Cat-Sound-Apps-Windows.zip -Force

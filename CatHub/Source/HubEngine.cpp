@@ -36,6 +36,13 @@ namespace
         if (pos < n) s.render (l + pos, r + pos, n - pos);
     }
 
+    // copies without giving up the destination's memory (no allocation on the audio thread)
+    void copyMidi (juce::MidiBuffer& dst, const juce::MidiBuffer& src)
+    {
+        dst.clear();
+        dst.addEvents (src, 0, -1, 0);
+    }
+
     void addPanic (juce::MidiBuffer& m, int pos)
     {
         for (int ch = 1; ch <= 16; ++ch)
@@ -247,7 +254,7 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
     // ---- which Chord-Cat pad is held (song or your fingers)
     auto switchPad = [this] (int pad, int pos)
     {
-        const int note = pad >= 0 ? juce::jlimit (0, 127, triggerLow + pad) : -1;
+        const int note = pad >= 0 ? juce::jlimit (0, 127, triggerLow.load() + pad) : -1;
         if (note == heldTrigger) return;
         if (heldTrigger >= 0) songMidi.addEvent (juce::MidiMessage::noteOff (1, heldTrigger), pos);
         if (note >= 0) songMidi.addEvent (juce::MidiMessage::noteOn (1, note, (juce::uint8) 100), pos);
@@ -305,7 +312,7 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
     };
 
     // ---- Chord-Cat turns the pad into chords
-    chordOut = songMidi;
+    copyMidi (chordOut, songMidi);
     if (hasCat (ChordCat)) processCat (ChordCat, partAudio, chordOut);
     if (panic) addPanic (chordOut, 0);
 
@@ -315,7 +322,7 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
     keys.setSound (chordSound);
     if (chordSound >= keysGlideIndex() && hasCat (GlideCat))
     {
-        scratchMidi = chordOut;
+        copyMidi (scratchMidi, chordOut);
         processCat (GlideCat, partAudio, scratchMidi);
     }
     else
@@ -324,7 +331,7 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
 
     // ---- Bass-Cat follows the chords -> bass synth
     partAudio.clear();
-    scratchMidi = chordOut;
+    copyMidi (scratchMidi, chordOut);
     if (hasCat (BassCat)) processCat (BassCat, partAudio, scratchMidi); else scratchMidi.clear();
     if (panic) addPanic (scratchMidi, 0);
     partAudio.clear();
@@ -342,7 +349,7 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
     mixPart (DrumPart);
 
     // ---- Life-Cat makes its own sound and hears the chords
-    scratchMidi = chordOut;
+    copyMidi (scratchMidi, chordOut);
     if (hasCat (LifeCat)) processCat (LifeCat, partAudio, scratchMidi); else partAudio.clear();
     mixPart (LifePart);
 

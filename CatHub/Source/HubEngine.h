@@ -117,7 +117,7 @@ private:
     std::atomic<int> livePad { -1 }, currentPad { -1 }, numPads { 8 };
     std::atomic<double> ppqShown { 0.0 };
     int heldTrigger = -1;                 // the trigger note we are holding on Chord-Cat
-    int triggerLow = 60;
+    std::atomic<int> triggerLow { 60 };
 
     KeysSynth keys;
     BassSynth bass;

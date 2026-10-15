@@ -73,7 +73,7 @@ public:
 
 private:
     std::unique_ptr<juce::AudioProcessorEditor> editor;
-    juce::Viewport viewport;
+    int naturalW = 0, naturalH = 0;
 };
 
 //==============================================================================
@@ -90,6 +90,7 @@ public:
 
     void showCat (int catId);
     void rebuildTabs();
+    void updateGlideTab();
     juce::String getMissingText() const;
 
 private:

@@ -4,8 +4,12 @@
 //   Cat-Hub --selftest <catsFolder> <out.wav> [seconds]
 //                                               renders a jam offline, writes the WAV and
 //                                               <out.wav>.txt, exit code 0 = every Cat was heard
+//   Cat-Hub --uistress <catsFolder> <seconds> [seed]
+//                                               the real window, random clicks / keys / tabs /
+//                                               play / record / save + load while audio runs
 #include "HubWindow.h"
 #include <set>
+#include <thread>
 
 namespace hub
 {
@@ -99,6 +103,148 @@ static int runSelfTest (const juce::StringArray& args)
 }
 
 //==============================================================================
+/** Pokes the real Hub window at random while another thread renders audio. */
+class UiStress : private juce::Timer
+{
+public:
+    UiStress (const juce::File& catsDir, double secondsToRun, int seed)
+        : seconds (secondsToRun), rng (seed)
+    {
+        juce::PropertiesFile::Options o;
+        o.applicationName = "Cat Hub stress";
+        o.filenameSuffix = "settings";
+        o.folderName = "Cat Suite";
+        o.osxLibrarySubFolder = "Application Support";
+        settings = std::make_unique<juce::PropertiesFile> (o);
+        engine.prepare (48000.0, 512);
+        const auto report = engine.loadCats ({ catsDir });
+        std::cout << "cats: " << (report.isEmpty() ? juce::String ("all loaded") : report) << std::endl;
+        audio = std::thread ([this]
+        {
+            juce::Random r (7);
+            std::vector<float> l (1024), rr (1024);
+            while (! stop)
+            {
+                const int n = 1 + r.nextInt (1024);
+                engine.render (l.data(), rr.data(), n);
+                for (int i = 0; i < n; ++i)
+                    if (! std::isfinite (l[(size_t) i]) || std::abs (l[(size_t) i]) > 1.0f) { std::cout << "!! bad sample " << l[(size_t) i] << std::endl; std::abort(); }
+                std::this_thread::sleep_for (std::chrono::milliseconds (r.nextInt (3)));
+            }
+        });
+        openWindow();
+        start = juce::Time::getMillisecondCounterHiRes();
+        startTimer (15);
+    }
+
+    ~UiStress() override
+    {
+        stopTimer();
+        engine.stopRecording();
+        main.reset();
+        stop = true;
+        audio.join();
+        engine.releaseCats();
+    }
+
+    int failures = 0;
+
+private:
+    void openWindow()
+    {
+        main = std::make_unique<HubMain> (engine, deviceManager, *settings);
+        main->setTopLeftPosition (0, 0);
+        main->addToDesktop (juce::ComponentPeer::windowAppearsOnTaskbar);
+        main->setVisible (true);
+    }
+
+    static void collect (juce::Component& c, juce::Array<juce::Component*>& out)
+    {
+        for (auto* ch : c.getChildren())
+            if (ch->isVisible()) { out.add (ch); collect (*ch, out); }
+    }
+
+    void timerCallback() override
+    {
+        if (juce::Time::getMillisecondCounterHiRes() - start > seconds * 1000.0)
+        {
+            stopTimer();
+            std::cout << "UI STRESS OK after " << actions << " actions" << std::endl;
+            juce::JUCEApplication::getInstance()->setApplicationReturnValue (failures == 0 ? 0 : 1);
+            juce::JUCEApplication::quit();
+            return;
+        }
+        ++actions;
+        const int what = rng.nextInt (100);
+        if (what < 3)  { engine.setPlaying (! engine.isPlaying()); return; }
+        if (what < 5)  { main.reset(); openWindow(); return; }                                  // close / reopen the window
+        if (what < 7)  { const auto t = engine.saveState(); engine.restoreState (t); return; }  // save + load while playing
+        if (what < 8)  { if (engine.isRecording()) engine.stopRecording(); else engine.startRecording (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("cathub-stress.wav")); return; }
+        if (what < 12) { juce::PopupMenu::dismissAllActiveMenus(); return; }
+        if (what < 18)
+        {
+            const int pad = rng.nextInt (9);
+            main->keyPressed (pad == 8 ? juce::KeyPress (juce::KeyPress::spaceKey) : juce::KeyPress ('1' + pad, juce::ModifierKeys(), (juce::juce_wchar) ('1' + pad)));
+            engine.setLivePad (rng.nextBool() ? -1 : pad);
+            return;
+        }
+
+        juce::Array<juce::Component*> comps;
+        collect (*main, comps);
+        if (comps.isEmpty()) return;
+        auto* c = comps[rng.nextInt (comps.size())];
+        if (auto* b = dynamic_cast<juce::Button*> (c))
+        {
+            const auto t = b->getButtonText();
+            if (t.startsWith ("Audio") || t.startsWith ("Find") || t.startsWith ("Rec") || t.startsWith ("Stop rec")) return;  // dialogs / files
+            b->triggerClick();
+            return;
+        }
+        if (auto* cb = dynamic_cast<juce::ComboBox*> (c))
+        {
+            if (cb->getNumItems() > 0) cb->setSelectedItemIndex (rng.nextInt (cb->getNumItems()), juce::sendNotificationSync);
+            return;
+        }
+        if (auto* sl = dynamic_cast<juce::Slider*> (c))
+        {
+            sl->setValue (sl->getMinimum() + rng.nextDouble() * (sl->getMaximum() - sl->getMinimum()), juce::sendNotificationSync);
+            return;
+        }
+        // a click / drag on whatever it is (pads, cards, tab bar, the Cats' windows)
+        const auto r = c->getLocalBounds();
+        if (r.isEmpty()) return;
+        auto pt = [&] { return juce::Point<float> ((float) rng.nextInt (juce::jmax (1, r.getWidth())), (float) rng.nextInt (juce::jmax (1, r.getHeight()))); };
+        auto src = juce::Desktop::getInstance().getMainMouseSource();
+        const auto now = juce::Time::getCurrentTime();
+        const auto down = pt();
+        auto ev = [&] (juce::Point<float> pos, juce::ModifierKeys m, bool dragged)
+        { return juce::MouseEvent (src, pos, m, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, c, c, now, down, now, 1, dragged); };
+        // like a real click: a component behind a modal window (e.g. the open LINK pop-up)
+        // does not get it; the modal window is told instead (and usually closes)
+        if (c->isCurrentlyBlockedByAnotherModalComponent())
+        {
+            if (auto* m = juce::Component::getCurrentlyModalComponent()) m->inputAttemptWhenModal();
+            return;
+        }
+        juce::Component::SafePointer<juce::Component> safe (c);
+        c->mouseDown (ev (down, juce::ModifierKeys::leftButtonModifier, false));
+        for (int k = rng.nextInt (4); k > 0 && safe; --k) c->mouseDrag (ev (pt(), juce::ModifierKeys::leftButtonModifier, true));
+        if (safe) c->mouseUp (ev (pt(), juce::ModifierKeys(), false));
+    }
+
+    HubEngine engine;
+    juce::AudioDeviceManager deviceManager;
+    std::unique_ptr<juce::PropertiesFile> settings;
+    std::unique_ptr<HubMain> main;
+    std::thread audio;
+    std::atomic<bool> stop { false };
+    const double seconds;
+    juce::Random rng;
+    double start = 0.0;
+    int actions = 0;
+};
+
+//==============================================================================
 class HubApplication : public juce::JUCEApplication
 {
 public:
@@ -110,6 +256,13 @@ public:
     {
         auto args = juce::StringArray::fromTokens (commandLine, true);
         for (auto& a : args) a = a.unquoted();
+        if (args.contains ("--uistress"))
+        {
+            const int at = args.indexOf ("--uistress");
+            uiStress = std::make_unique<UiStress> (juce::File (args[at + 1]), juce::jmax (5.0, args[at + 2].getDoubleValue()),
+                                                   args.size() > at + 3 ? args[at + 3].getIntValue() : 1);
+            return;
+        }
         if (args.contains ("--selftest"))
         {
             setApplicationReturnValue (runSelfTest (args));
@@ -138,6 +291,7 @@ public:
 
     void shutdown() override
     {
+        uiStress.reset();
         if (engine == nullptr) return;
         if (auto xml = engine->saveState().createXml()) settings->setValue ("hub", xml.get());
         if (auto xml = deviceManager.createStateXml()) settings->setValue ("audio", xml.get());
@@ -172,6 +326,7 @@ private:
     std::unique_ptr<HubEngine> engine;
     juce::AudioDeviceManager deviceManager;
     std::unique_ptr<MainWindow> window;
+    std::unique_ptr<UiStress> uiStress;
 };
 } // namespace hub
 

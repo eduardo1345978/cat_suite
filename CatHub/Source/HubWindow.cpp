@@ -125,7 +125,7 @@ CatCard::CatCard (HubMain& o, HubEngine& e, int p) : owner (o), engine (e), part
         if (sound.getSelectedId() > 0) engine.parts[(size_t) part].sound = sound.getSelectedId() - 1;
         // the Glide-Cat tab comes and goes with this choice; rebuild later, since that deletes this card
         if (part == ChordPart)
-            juce::MessageManager::callAsync ([sp = juce::Component::SafePointer<HubMain> (&owner)] { if (sp != nullptr) sp->rebuildTabs(); });
+            juce::MessageManager::callAsync ([sp = juce::Component::SafePointer<HubMain> (&owner)] { if (sp != nullptr) sp->updateGlideTab(); });
     };
     addAndMakeVisible (sound);
     refresh();
@@ -303,14 +303,16 @@ void JamPage::resized()
 CatTab::CatTab (juce::AudioPluginInstance& plugin)
 {
     editor.reset (plugin.createEditorAndMakeActive());
-    viewport.setScrollBarsShown (true, true);
-    if (editor != nullptr) viewport.setViewedComponent (editor.get(), false);
-    addAndMakeVisible (viewport);
+    if (editor != nullptr)
+    {
+        naturalW = editor->getWidth();
+        naturalH = editor->getHeight();
+        addAndMakeVisible (editor.get());
+    }
 }
 
 CatTab::~CatTab()
 {
-    viewport.setViewedComponent (nullptr, false);
     editor.reset();      // the Cat's window always goes before the Cat itself
 }
 
@@ -325,7 +327,20 @@ void CatTab::paint (juce::Graphics& g)
     }
 }
 
-void CatTab::resized() { viewport.setBounds (getLocalBounds()); }
+void CatTab::resized()
+{
+    if (editor == nullptr || naturalW <= 0 || naturalH <= 0 || getWidth() <= 0 || getHeight() <= 0) return;
+    // A Cat's window scales as one piece (50 % - 250 %): make it fill the tab, aspect kept.
+    // No scrolling viewport: a plug-in window on Windows is a native window and would
+    // draw over the tab bar when scrolled.
+    if (editor->isResizable())
+    {
+        const float k = juce::jmin ((float) getWidth() / (float) naturalW, (float) getHeight() / (float) naturalH);
+        const int w = juce::jmax (100, (int) ((float) naturalW * k)), h = juce::jmax (80, (int) ((float) naturalH * k));
+        if (w != editor->getWidth() || h != editor->getHeight()) editor->setSize (w, h);
+    }
+    editor->setTopLeftPosition (juce::jmax (0, (getWidth() - editor->getWidth()) / 2), juce::jmax (0, (getHeight() - editor->getHeight()) / 2));
+}
 
 //==============================================================================
 HubMain::HubMain (HubEngine& e, juce::AudioDeviceManager& dm, juce::PropertiesFile& s)
@@ -434,6 +449,12 @@ void HubMain::rebuildTabs()
     findButton.setVisible (getMissingText().isNotEmpty());
     statusLabel.setText (getMissingText(), juce::dontSendNotification);
     resized();
+}
+
+void HubMain::updateGlideTab()
+{
+    const bool want = engine.hasCat (GlideCat) && engine.parts[ChordPart].sound.load() == engine.keysGlideIndex();
+    if (want != (tabIndexForCat[(size_t) GlideCat] >= 0)) rebuildTabs();
 }
 
 void HubMain::showCat (int catId)
