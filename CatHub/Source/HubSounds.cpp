@@ -1,0 +1,410 @@
+#include "HubSounds.h"
+#include <cmath>
+
+namespace hub
+{
+namespace
+{
+    constexpr float twoPi = juce::MathConstants<float>::twoPi;
+
+    inline float mtof (float note) noexcept { return 440.0f * std::pow (2.0f, (note - 69.0f) / 12.0f); }
+    inline float lpCoef (float hz, double sr) noexcept { return 1.0f - std::exp (-twoPi * juce::jlimit (10.0f, 20000.0f, hz) / (float) sr); }
+    inline float wrap (float p) noexcept { return p - std::floor (p); }
+    inline void panGains (float pan, float& gl, float& gr) noexcept
+    {
+        gl = std::cos (pan * juce::MathConstants<float>::halfPi);
+        gr = std::sin (pan * juce::MathConstants<float>::halfPi);
+    }
+
+    struct KeysPatch { float a, d, s, r, gain; };
+    const KeysPatch keysPatches[4] = {
+        { 0.25f, 1.00f, 0.70f, 0.90f, 0.15f },   // Soft Pad
+        { 0.003f, 1.50f, 0.12f, 0.35f, 0.30f },  // E-Piano
+        { 0.002f, 0.35f, 0.00f, 0.20f, 0.24f },  // Pluck
+        { 0.35f, 2.00f, 0.85f, 1.20f, 0.12f },   // Strings
+    };
+}
+
+//==============================================================================
+void KeysSynth::prepare (double sampleRate)
+{
+    sr = sampleRate > 0.0 ? sampleRate : 48000.0;
+    allOff();
+}
+
+void KeysSynth::allOff()
+{
+    for (auto& v : voices) v = Voice();
+}
+
+void KeysSynth::handle (const juce::MidiMessage& m)
+{
+    if (m.isNoteOn()) noteOn (m.getNoteNumber(), m.getFloatVelocity());
+    else if (m.isNoteOff()) noteOff (m.getNoteNumber());
+    else if (m.isAllNotesOff() || m.isAllSoundOff())
+        for (auto& v : voices) if (v.active) v.released = true;
+}
+
+void KeysSynth::noteOn (int note, float vel)
+{
+    // reuse the voice already on this note, else a free one, else the oldest
+    Voice* pick = nullptr;
+    for (auto& v : voices) if (v.active && v.note == note) { pick = &v; break; }
+    if (pick == nullptr) for (auto& v : voices) if (! v.active) { pick = &v; break; }
+    if (pick == nullptr)
+    {
+        pick = &voices[0];
+        for (auto& v : voices) if (v.age < pick->age) pick = &v;
+    }
+    const float oldEnv = pick->active ? pick->env : 0.0f;
+    *pick = Voice();
+    pick->active = true;
+    pick->note = note;
+    pick->freq = mtof ((float) note);
+    pick->vel = juce::jlimit (0.05f, 1.0f, vel);
+    pick->pan = 0.5f + 0.18f * std::sin ((float) note * 1.7f);
+    pick->env = oldEnv;                       // no click when a voice is re-used
+    pick->ph[1] = 0.33f; pick->ph[2] = 0.66f;
+    pick->age = ++ageCounter;
+}
+
+void KeysSynth::noteOff (int note)
+{
+    for (auto& v : voices) if (v.active && v.note == note && ! v.released) v.released = true;
+}
+
+void KeysSynth::render (float* l, float* r, int n)
+{
+    const auto& p = keysPatches[sound];
+    const float dt = 1.0f / (float) sr;
+    const float rel = std::exp (-1.0f / (p.r * (float) sr));
+    for (auto& v : voices)
+    {
+        if (! v.active) continue;
+        float gl, gr;
+        panGains (v.pan, gl, gr);
+        for (int i = 0; i < n; ++i)
+        {
+            // envelope
+            if (v.released) v.env *= rel;
+            else
+            {
+                const float target = v.t < p.a ? v.t / p.a : p.s + (1.0f - p.s) * std::exp (-(v.t - p.a) / p.d);
+                v.env += (target - v.env) * (v.t < p.a ? 1.0f : 0.02f);
+            }
+            v.t += dt;
+            float x = 0.0f;
+            switch (sound)
+            {
+                case 0:   // soft pad: 3 detuned saws, gentle low-pass
+                case 3:   // strings: wider detune, brighter, vibrato
+                {
+                    const float vib = sound == 3 ? 1.0f + 0.004f * std::sin (twoPi * 5.2f * v.t) * juce::jmin (1.0f, v.t * 2.0f) : 1.0f;
+                    const float det = sound == 3 ? 0.007f : 0.004f;
+                    const float mul[3] = { 1.0f, 1.0f + det, 1.0f - det };
+                    for (int k = 0; k < 3; ++k)
+                    {
+                        const float inc = v.freq * mul[k] * vib * dt;
+                        x += polyBlepSaw (v.ph[k], inc);
+                        v.ph[k] = wrap (v.ph[k] + inc);
+                    }
+                    const float cut = sound == 3 ? 2600.0f + 1800.0f * v.vel : 900.0f + 1600.0f * v.vel;
+                    x = v.f2.lp (v.f1.lp (x, lpCoef (cut, sr)), lpCoef (cut * 1.5f, sr));
+                    break;
+                }
+                case 1:   // e-piano: 2-op FM with a decaying index + a little tine
+                {
+                    const float index = (0.4f + 1.8f * v.vel) * std::exp (-v.t * 4.0f);
+                    const float mod = std::sin (twoPi * v.mph);
+                    x = std::sin (twoPi * v.ph[0] + index * mod) + 0.12f * std::exp (-v.t * 14.0f) * std::sin (twoPi * v.ph[1] * 14.0f);
+                    v.ph[0] = wrap (v.ph[0] + v.freq * dt);
+                    v.ph[1] = wrap (v.ph[1] + v.freq * dt);
+                    v.mph = wrap (v.mph + v.freq * dt);
+                    break;
+                }
+                default:  // pluck: saw through a closing filter
+                {
+                    const float inc = v.freq * dt;
+                    x = polyBlepSaw (v.ph[0], inc);
+                    v.ph[0] = wrap (v.ph[0] + inc);
+                    const float cut = 250.0f + 5500.0f * v.vel * std::exp (-v.t * 9.0f);
+                    x = v.f2.lp (v.f1.lp (x, lpCoef (cut, sr)), lpCoef (cut * 1.3f, sr));
+                    break;
+                }
+            }
+            x *= v.env * v.vel * p.gain;
+            l[i] += x * gl;
+            r[i] += x * gr;
+        }
+        if ((v.released || p.s <= 0.0f) && v.t > p.a + 0.01f && v.env < 1.0e-4f) v.active = false;
+    }
+}
+
+//==============================================================================
+void BassSynth::prepare (double sampleRate)
+{
+    sr = sampleRate > 0.0 ? sampleRate : 48000.0;
+    allOff();
+}
+
+void BassSynth::allOff()
+{
+    stackSize = 0;
+    gate = false;
+    env = 0.0f;
+}
+
+void BassSynth::handle (const juce::MidiMessage& m)
+{
+    if (m.isNoteOn())
+    {
+        const int note = m.getNoteNumber();
+        for (int i = 0; i < stackSize; ++i)
+            if (stack[(size_t) i] == note) { for (int k = i; k + 1 < stackSize; ++k) stack[(size_t) k] = stack[(size_t) k + 1]; --stackSize; break; }
+        if (stackSize < (int) stack.size()) stack[(size_t) stackSize++] = note;
+        target = mtof ((float) note);
+        if (! gate || sound == 3) { freq = target; fenv = 1.0f; }
+        vel = juce::jlimit (0.1f, 1.0f, m.getFloatVelocity());
+        gate = true;
+    }
+    else if (m.isNoteOff())
+    {
+        const int note = m.getNoteNumber();
+        for (int i = 0; i < stackSize; ++i)
+            if (stack[(size_t) i] == note) { for (int k = i; k + 1 < stackSize; ++k) stack[(size_t) k] = stack[(size_t) k + 1]; --stackSize; break; }
+        if (stackSize > 0) target = mtof ((float) stack[(size_t) stackSize - 1]);
+        else gate = false;
+    }
+    else if (m.isAllNotesOff() || m.isAllSoundOff())
+    {
+        stackSize = 0;
+        gate = false;
+    }
+}
+
+void BassSynth::render (float* l, float* r, int n)
+{
+    if (! gate && env < 1.0e-5f) return;
+    const float dt = 1.0f / (float) sr;
+    const float glide = 1.0f - std::exp (-1.0f / (0.03f * (float) sr));
+    const float att = 1.0f - std::exp (-1.0f / (0.003f * (float) sr));
+    const float rel = std::exp (-1.0f / (0.08f * (float) sr));
+    const float fdec = std::exp (-1.0f / (0.15f * (float) sr));
+    const float pluckDec = std::exp (-1.0f / (0.35f * (float) sr));
+    const float dcA = lpCoef (20.0f, sr);
+    for (int i = 0; i < n; ++i)
+    {
+        freq += (target - freq) * glide;
+        if (gate) env += (1.0f - env) * att;
+        else env *= rel;
+        fenv *= sound == 3 ? pluckDec : fdec;   // the pluck's level follows its own (slower) decay
+        float x = 0.0f;
+        switch (sound)
+        {
+            case 0:  // sub
+                x = std::sin (twoPi * ph[0]) + 0.25f * std::sin (twoPi * 2.0f * ph[0]);
+                x *= 0.55f;
+                break;
+            case 1:  // saw
+            {
+                x = polyBlepSaw (ph[0], freq * dt);
+                const float cut = 160.0f + 1900.0f * fenv * vel;
+                x = f2.lp (f1.lp (x, lpCoef (cut, sr)), lpCoef (cut * 1.4f, sr)) * 0.5f;
+                break;
+            }
+            case 2:  // reese: two detuned saws
+            {
+                x = polyBlepSaw (ph[1], freq * 1.006f * dt) + polyBlepSaw (ph[2], freq * 0.994f * dt);
+                x = f2.lp (f1.lp (x, lpCoef (850.0f, sr)), lpCoef (1100.0f, sr)) * 0.3f;
+                break;
+            }
+            default: // pluck
+            {
+                x = polyBlepSaw (ph[0], freq * dt);
+                const float cut = 120.0f + 2600.0f * fenv * vel;
+                x = f2.lp (f1.lp (x, lpCoef (cut, sr)), lpCoef (cut * 1.3f, sr)) * 0.55f * (0.25f + 0.75f * fenv);
+                break;
+            }
+        }
+        ph[0] = wrap (ph[0] + freq * dt);
+        ph[1] = wrap (ph[1] + freq * 1.006f * dt);
+        ph[2] = wrap (ph[2] + freq * 0.994f * dt);
+        x = dc.hp (x, dcA) * env * vel * 0.5f;
+        l[i] += x;
+        r[i] += x;
+    }
+}
+
+//==============================================================================
+void DrumKit::prepare (double sampleRate)
+{
+    sr = sampleRate > 0.0 ? sampleRate : 48000.0;
+    allOff();
+}
+
+void DrumKit::allOff()
+{
+    for (auto& h : hits) h.active = false;
+}
+
+void DrumKit::handle (const juce::MidiMessage& m)
+{
+    if (m.isNoteOn()) trigger (m.getNoteNumber(), m.getFloatVelocity());
+}
+
+void DrumKit::trigger (int note, float vel)
+{
+    Type type = Rim;
+    float pitch = 1.0f, pan = 0.5f;
+    switch (note)
+    {
+        case 35: case 36:                    type = Kick; break;
+        case 38: case 40:                    type = Snare; break;
+        case 39:                             type = Clap; break;
+        case 37:                             type = Rim; break;
+        case 42: case 44:                    type = ClosedHat; pan = 0.62f; break;
+        case 46:                             type = OpenHat; pan = 0.62f; break;
+        case 49: case 52: case 55: case 57:  type = Crash; pan = note == 57 ? 0.68f : 0.34f; break;
+        case 51: case 53: case 59:           type = Ride; pan = 0.4f; break;
+        case 41: case 43: case 45: case 47: case 48: case 50:
+            type = Tom;
+            pitch = 90.0f * std::pow (2.0f, (float) (note - 41) / 12.0f * 1.2f);
+            pan = juce::jmap ((float) (note - 41), 0.0f, 9.0f, 0.3f, 0.7f);
+            break;
+        case 56:                             type = Cowbell; pan = 0.55f; break;
+        case 69: case 70: case 82:           type = Shaker; pan = 0.6f; break;
+        default:                             type = Rim; break;
+    }
+    if (type == ClosedHat)   // closed hat chokes the open one
+        for (auto& h : hits) if (h.active && h.type == OpenHat) h.active = false;
+
+    Hit* pick = nullptr;
+    for (auto& h : hits) if (! h.active) { pick = &h; break; }
+    if (pick == nullptr)
+    {
+        pick = &hits[0];
+        for (auto& h : hits) if (h.t > pick->t) pick = &h;
+    }
+    *pick = Hit();
+    pick->active = true;
+    pick->type = type;
+    pick->vel = std::pow (juce::jlimit (0.05f, 1.0f, vel), 1.2f);
+    pick->pitch = pitch;
+    pick->pan = pan;
+}
+
+void DrumKit::render (float* l, float* r, int n)
+{
+    const float dt = 1.0f / (float) sr;
+    const bool k808 = kit == 1, lofi = kit == 2, live = kit == 3;
+    for (auto& h : hits)
+    {
+        if (! h.active) continue;
+        float gl, gr;
+        panGains (h.pan, gl, gr);
+        for (int i = 0; i < n; ++i)
+        {
+            const float t = h.t;
+            float x = 0.0f, len = 1.0f;
+            switch (h.type)
+            {
+                case Kick:
+                {
+                    const float f0 = k808 ? 46.0f : (live ? 62.0f : 52.0f), f1 = k808 ? 120.0f : 165.0f;
+                    const float sweep = k808 ? 0.05f : 0.032f, decay = k808 ? 0.9f : (live ? 0.2f : 0.3f);
+                    const float f = f0 + (f1 - f0) * std::exp (-t / sweep);
+                    h.ph = wrap (h.ph + f * dt);
+                    x = std::sin (twoPi * h.ph) * std::exp (-t / decay);
+                    if (k808) x = std::tanh (x * 1.6f) * 0.8f;
+                    x += (live ? 0.35f : 0.2f) * noise.next() * std::exp (-t / 0.004f);
+                    x *= 0.95f;
+                    len = decay * 6.0f;
+                    break;
+                }
+                case Snare:
+                {
+                    const float nd = k808 ? 0.22f : (live ? 0.24f : 0.17f);
+                    h.ph = wrap (h.ph + 185.0f * dt);
+                    h.ph2 = wrap (h.ph2 + 330.0f * dt);
+                    const float tone = (std::sin (twoPi * h.ph) + 0.5f * std::sin (twoPi * h.ph2)) * std::exp (-t / 0.07f);
+                    const float nz = h.f2.lp (h.f1.hp (noise.next(), lpCoef (1200.0f, sr)), lpCoef (k808 ? 7000.0f : 9000.0f, sr)) * std::exp (-t / nd);
+                    x = 0.45f * tone + 0.85f * nz;
+                    len = nd * 6.0f;
+                    break;
+                }
+                case Clap:
+                {
+                    float e = 0.0f;
+                    for (float s : { 0.0f, 0.011f, 0.022f }) if (t >= s) e += std::exp (-(t - s) / 0.006f);
+                    if (t > 0.03f) e += 0.7f * std::exp (-(t - 0.03f) / 0.16f);
+                    x = h.f2.lp (h.f1.hp (noise.next(), lpCoef (900.0f, sr)), lpCoef (5000.0f, sr)) * e * 0.9f;
+                    len = 1.0f;
+                    break;
+                }
+                case Rim:
+                    h.ph = wrap (h.ph + 1700.0f * dt);
+                    h.ph2 = wrap (h.ph2 + 520.0f * dt);
+                    x = (0.6f * std::sin (twoPi * h.ph) + 0.4f * std::sin (twoPi * h.ph2)) * std::exp (-t / 0.018f) * 0.6f;
+                    len = 0.12f;
+                    break;
+                case ClosedHat:
+                case OpenHat:
+                case Shaker:
+                {
+                    const float d = h.type == OpenHat ? 0.33f : (h.type == Shaker ? 0.06f : (k808 ? 0.06f : 0.042f));
+                    const float att = h.type == Shaker ? juce::jmin (1.0f, t / 0.012f) : 1.0f;
+                    x = h.f1.hp (noise.next(), lpCoef (h.type == Shaker ? 5000.0f : 7500.0f, sr)) * std::exp (-t / d) * att;
+                    x *= h.type == Shaker ? 0.35f : 0.42f;
+                    len = d * 6.0f;
+                    break;
+                }
+                case Crash:
+                    x = h.f1.hp (noise.next(), lpCoef (4500.0f, sr)) * std::exp (-t / (live ? 1.8f : 1.3f)) * 0.36f;
+                    len = 8.0f;
+                    break;
+                case Ride:
+                {
+                    float m = 0.0f;
+                    const float ratios[4] = { 1.0f, 1.47f, 2.09f, 2.56f };
+                    for (int k = 0; k < 4; ++k) m += std::sin (twoPi * wrap (t * 420.0f * ratios[k]));
+                    x = (0.18f * m * std::exp (-t / 0.9f) + 0.3f * h.f1.hp (noise.next(), lpCoef (6000.0f, sr)) * std::exp (-t / 0.25f)) * 0.5f;
+                    len = 5.0f;
+                    break;
+                }
+                case Tom:
+                {
+                    const float f = h.pitch * (1.0f + 0.5f * std::exp (-t / 0.05f));
+                    h.ph = wrap (h.ph + f * dt);
+                    x = std::sin (twoPi * h.ph) * std::exp (-t / 0.35f) * 0.75f + 0.1f * noise.next() * std::exp (-t / 0.01f);
+                    len = 2.0f;
+                    break;
+                }
+                case Cowbell:
+                {
+                    h.ph = wrap (h.ph + 540.0f * dt);
+                    h.ph2 = wrap (h.ph2 + 800.0f * dt);
+                    const float sq = (h.ph < 0.5f ? 1.0f : -1.0f) + (h.ph2 < 0.5f ? 1.0f : -1.0f);
+                    x = h.f2.lp (h.f1.hp (sq, lpCoef (400.0f, sr)), lpCoef (3000.0f, sr)) * std::exp (-t / 0.22f) * 0.3f;
+                    len = 1.4f;
+                    break;
+                }
+            }
+            x *= h.vel;
+            l[i] += x * gl;
+            r[i] += x * gr;
+            h.t += dt;
+            if (h.t > len) { h.active = false; break; }
+        }
+    }
+
+    if (lofi)
+    {
+        // crunchy: lower sample rate + fewer bits
+        for (int i = 0; i < n; ++i)
+        {
+            if (crushCount-- <= 0) { crushCount = 3; crushHold = std::round ((l[i] + r[i]) * 0.5f * 24.0f) / 24.0f; }
+            l[i] = r[i] = crushHold * 0.9f;
+        }
+    }
+}
+} // namespace hub
