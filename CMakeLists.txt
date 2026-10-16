@@ -51,3 +51,16 @@ if(CAT_BUILD_STRESS)
         target_link_libraries(${_cat}Sound PRIVATE ${_cat})
     endforeach()
 endif()
+
+# The composer's check (music theory rules, regenerate, endless, MIDI, player, demo renders).
+option(CAT_BUILD_COMPOSE_CHECK "Build the composer check" ${CAT_BUILD_STRESS})
+if(CAT_BUILD_COMPOSE_CHECK)
+    juce_add_console_app(ComposeCheck PRODUCT_NAME "ComposeCheck")
+    target_sources(ComposeCheck PRIVATE Tests/ComposeCheck.cpp Shared/Source/Composer.cpp
+                   Shared/Source/SongRenderer.cpp Shared/Source/CatSounds.cpp)
+    target_include_directories(ComposeCheck PRIVATE Shared/Source)
+    target_compile_definitions(ComposeCheck PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_compile_features(ComposeCheck PRIVATE cxx_std_20)
+    target_link_libraries(ComposeCheck PRIVATE juce::juce_audio_formats juce::juce_audio_basics juce::juce_gui_basics
+                          juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+endif()

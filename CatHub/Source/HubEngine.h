@@ -3,7 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_formats/juce_audio_formats.h>
-#include "HubSounds.h"
+#include "CatSounds.h"
 #include "SafetyLimiter.h"
 #include <array>
 #include <atomic>

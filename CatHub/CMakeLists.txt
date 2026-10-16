@@ -10,7 +10,7 @@ juce_add_gui_app(CatHub
 target_sources(CatHub PRIVATE
     Source/Main.cpp
     Source/HubEngine.cpp
-    Source/HubSounds.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatSounds.cpp
     Source/HubWindow.cpp
     Source/HubLook.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatLookAndFeel.cpp)
