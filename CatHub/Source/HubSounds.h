@@ -2,6 +2,7 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <array>
+#include <vector>
 #include <cstdint>
 
 // Little built-in instruments for the Cat Hub, so Chord-Cat, Bass-Cat and Drum-Cat
@@ -44,6 +45,7 @@ public:
 
     void prepare (double sampleRate);
     void setSound (int s) noexcept { sound = juce::jlimit (0, 3, s); }
+    void setBendRange (float semitones) noexcept { bendRange = semitones; }
     void handle (const juce::MidiMessage&);
     void allOff();
     void render (float* l, float* r, int n);
@@ -52,17 +54,19 @@ private:
     struct Voice
     {
         bool active = false, released = false;
-        int note = -1;
+        int note = -1, ch = 1;
         float freq = 0.0f, vel = 0.0f, pan = 0.5f, t = 0.0f;
         float ph[3] {}, mph = 0.0f;
         float env = 0.0f;
         OnePole f1, f2;
         uint32_t age = 0;
     };
-    void noteOn (int note, float vel);
-    void noteOff (int note);
+    void noteOn (int ch, int note, float vel);
+    void noteOff (int ch, int note);
 
     std::array<Voice, 16> voices;
+    std::array<float, 17> chanBend {};     // semitones per MIDI channel (Bend-Cat: one voice per channel)
+    float bendRange = 2.0f;
     double sr = 48000.0;
     int sound = 0;
     uint32_t ageCounter = 0;
@@ -77,6 +81,7 @@ public:
 
     void prepare (double sampleRate);
     void setSound (int s) noexcept { sound = juce::jlimit (0, 3, s); }
+    void setBendRange (float semitones) noexcept { bendRange = semitones; }
     void handle (const juce::MidiMessage&);
     void allOff();
     void render (float* l, float* r, int n);
@@ -84,6 +89,9 @@ public:
 private:
     double sr = 48000.0;
     int sound = 0;
+    std::array<float, 17> chanBend {};
+    float bendRange = 2.0f;
+    int lastChannel = 1;
     std::array<int, 16> stack {};
     int stackSize = 0;
     float freq = 55.0f, target = 55.0f, vel = 0.0f, env = 0.0f, fenv = 0.0f;
@@ -123,4 +131,30 @@ private:
     float crushHold = 0.0f;
     int crushCount = 0;
 };
+//==============================================================================
+/** The audio effects on every Hub track: filter, drive, chorus, tempo echo, bit crush. */
+struct TrackFxSettings
+{
+    float filter = 0.0f;   // 0 = open .. 1 = dark low-pass
+    float drive = 0.0f, chorus = 0.0f, delay = 0.0f, crush = 0.0f;
+    double bpm = 100.0;
+};
+
+class TrackFx
+{
+public:
+    void prepare (double sampleRate);
+    void reset();
+    void process (float* l, float* r, int n, const TrackFxSettings&);
+
+private:
+    double sr = 48000.0;
+    float fl1 = 0, fl2 = 0, fr1 = 0, fr2 = 0, cutSmooth = 20000.0f;
+    std::vector<float> chL, chR, dlL, dlR;
+    int chW = 0, dlW = 0;
+    float chPh = 0, dlLp = 0, dlLpR = 0, dlSmooth = 0;
+    float holdL = 0, holdR = 0;
+    int holdCount = 0;
+};
+
 } // namespace hub

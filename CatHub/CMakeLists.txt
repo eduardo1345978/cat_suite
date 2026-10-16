@@ -3,13 +3,16 @@
 juce_add_gui_app(CatHub
     PRODUCT_NAME "Cat-Hub"
     COMPANY_NAME "Cat Suite"
-    VERSION      1.0.0)
+    ICON_BIG     "${CMAKE_CURRENT_SOURCE_DIR}/Resources/icon.png"
+    ICON_SMALL   "${CMAKE_CURRENT_SOURCE_DIR}/Resources/icon_small.png"
+    VERSION      2.0.0)
 
 target_sources(CatHub PRIVATE
     Source/Main.cpp
     Source/HubEngine.cpp
     Source/HubSounds.cpp
     Source/HubWindow.cpp
+    Source/HubLook.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatLookAndFeel.cpp)
 
 target_include_directories(CatHub PRIVATE Source ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source)

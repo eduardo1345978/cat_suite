@@ -10,45 +10,72 @@
 
 namespace hub
 {
-enum Part { ChordPart = 0, BassPart, DrumPart, LifePart, NumParts };
+/** Every Cat the Hub can load. The first four play once for the whole jam; the others are
+    loaded per track when a track uses them (as a MIDI effect or as its sound). */
+enum CatId { ChordCat = 0, BassCat, DrumCat, LifeCat, PattCat, BendCat, OrbitCat, GlideCat, SingCat, TalkCat, NumCats };
+const char* catName (int id);           // "Chord-Cat" ...
 
-/** The Cat plug-ins the Hub plays (Glide-Cat is an optional sound for the chords). */
-enum CatId { ChordCat = 0, BassCat, DrumCat, LifeCat, GlideCat, NumCats };
+/** Where a track's notes come from. */
+enum Source { SrcChords = 0, SrcBass, SrcDrums, SrcLife, SrcLead, NumSources };
+const char* sourceName (int);           // "Chords" ...
+int catForSource (int);                 // ChordCat ... (Lead -> ChordCat)
 
-const char* catName (int id);          // "Chord-Cat" ...
-const char* partName (int part);       // "Chords" ...
+/** The Cat between the notes and the sound (a MIDI effect). */
+enum MidiFx { FxNone = 0, FxPatt, FxBend, FxOrbit, NumMidiFx };
+const char* midiFxName (int);           // "None", "Patt-Cat (patterns)" ...
+int catForMidiFx (int);                 // -1, PattCat ...
 
-/** Mixer + sound settings per part, shared between the UI and the audio thread. */
-struct PartSettings
+/** What the notes play: built-in sounds, a sound Cat, or Life-Cat's own sound. */
+enum Sound
 {
-    std::atomic<float> volume { 0.8f };
-    std::atomic<float> reverb { 0.15f };
-    std::atomic<bool> mute { false }, solo { false };
-    std::atomic<int> sound { 0 };          // built-in sound; chords: the last entry = Glide-Cat
-    std::atomic<float> meter { 0.0f };     // peak, read by the UI
-    std::atomic<double> energy { 0.0 };    // sum of squares since the start (self test)
-    // which notes are sounding (128 bits); drums: hit since the UI last looked
-    std::array<std::atomic<uint32_t>, 4> notes {};
-    std::array<std::atomic<uint32_t>, 4> hits {};
+    SndPad = 0, SndEPiano, SndPluck, SndStrings,      // keys
+    SndSub, SndSaw, SndReese, SndBassPluck,           // bass
+    SndBoomBap, Snd808, SndLofi, SndLive,             // drum kits
+    SndGlide, SndSing, SndTalk,                       // sound Cats
+    SndLifeOwn,                                       // Life-Cat's own sound (Life source only)
+    NumSounds
+};
+const char* soundName (int);
+int catForSound (int);                  // -1 for built-in
+juce::StringArray soundGroups();        // for menus: "Keys", "Bass", "Drums", "Cats"
+int soundGroup (int sound);             // 0..4
 
-    /** Notes currently held (and, for drums, hit since the last call). Message thread. */
-    std::vector<int> takeNotes()
-    {
-        std::vector<int> out;
-        for (int w = 0; w < 4; ++w)
-        {
-            const uint32_t bits = notes[(size_t) w].load() | hits[(size_t) w].exchange (0);
-            for (int b = 0; b < 32; ++b) if (bits & (1u << b)) out.push_back (w * 32 + b);
-        }
-        return out;
-    }
+constexpr int maxTracks = 8;
+
+/** One track (a row in the rack). Settings are atomics: the UI writes, the audio thread reads. */
+struct Track
+{
+    std::atomic<int> source { SrcChords }, midiFx { FxNone }, sound { SndPad };
+    std::atomic<float> volume { 0.75f }, pan { 0.5f }, reverb { 0.15f };
+    std::atomic<float> filter { 0.0f }, drive { 0.0f }, chorus { 0.0f }, delay { 0.0f }, crush { 0.0f };
+    std::atomic<bool> mute { false }, solo { false };
+    std::atomic<float> meter { 0.0f };
+    std::atomic<double> energy { 0.0 };                 // self test
+    std::array<std::atomic<uint32_t>, 4> notes {}, hits {};
+
+    /** Notes held now, plus (for drums) anything hit since the last call. Message thread. */
+    std::vector<int> takeNotes();
+    void copySettingsFrom (const Track&);
+
+    // ---- owned by the engine (audio thread, swapped under the render lock)
+    KeysSynth keys;
+    BassSynth bass;
+    DrumKit drums;
+    TrackFx fx;
+    std::unique_ptr<juce::AudioPluginInstance> fxCat, soundCat;   // per-track Cats
+    int fxCatId = -1, soundCatId = -1;
+    juce::MidiBuffer midi;
+    juce::AudioBuffer<float> audio;
+    juce::SortedSet<int> leadHeld;
+    int leadNote = -1;
 };
 
+//==============================================================================
 /**
-    Hosts Chord-Cat, Bass-Cat, Drum-Cat and Life-Cat (the real VST3s) and wires them like a
-    small studio: the song steps through Chord-Cat's pads, Chord-Cat's chords go to Bass-Cat,
-    Life-Cat and the keys, Bass-Cat plays the bass synth, Drum-Cat plays the drum kit. One
-    transport (play / tempo) drives every Cat. Works with an audio device or offline (self test).
+    Hosts the Cat VST3s and plays them like a little studio: the song steps through Chord-Cat's
+    pads; Bass-Cat, Drum-Cat and Life-Cat follow; every track takes notes from one of them, can
+    run them through a MIDI-effect Cat (Patt / Bend / Orbit), plays them with a built-in sound or
+    a sound Cat (Glide / Sing / Talk), then filter, drive, chorus, echo, crush, room, pan, volume.
 */
 class HubEngine : public juce::AudioIODeviceCallback
 {
@@ -56,34 +83,55 @@ public:
     HubEngine();
     ~HubEngine() override;
 
-    //==== loading (message thread)
-    /** Where to look for the Cat .vst3 bundles, best first. */
+    //==== Cats (message thread)
     static juce::Array<juce::File> defaultSearchFolders (const juce::File& extraFolder);
-    /** Loads every Cat it finds; returns a short report. Call before audio starts. */
+    /** Finds every Cat and loads the four core ones; returns what is missing. */
     juce::String loadCats (const juce::Array<juce::File>& folders);
-    juce::AudioPluginInstance* getCat (int id) const { return cats[(size_t) id].get(); }
-    juce::File getCatFile (int id) const { return catFiles[(size_t) id]; }
-    bool hasCat (int id) const { return cats[(size_t) id] != nullptr; }
+    bool catAvailable (int id) const { return catFiles[(size_t) id] != juce::File(); }
+    juce::AudioPluginInstance* getCoreCat (int id) const { return id < PattCat ? core[(size_t) id].get() : nullptr; }
+    bool hasCat (int id) const { return getCoreCat (id) != nullptr; }
     void releaseCats();
 
-    //==== transport + song (any thread)
+    //==== tracks (message thread). Structural changes close the plug-in windows first (the UI does).
+    int getNumTracks() const noexcept { return numTracks.load(); }
+    Track& track (int i) { return *tracks[(size_t) juce::jlimit (0, maxTracks - 1, i)]; }
+    bool addTrack (int source, int midiFx, int sound);
+    void removeTrack (int index);
+    /** Sets the MIDI effect / sound, loading the Cat they need. Returns false if it is missing. */
+    bool setMidiFx (int track, int fx);
+    bool setSound (int track, int sound);
+    void setDefaultTracks();
+
+    //==== song (any thread)
     void setPlaying (bool shouldPlay);
     bool isPlaying() const noexcept { return playing.load(); }
     std::atomic<double> bpm { 92.0 };
     std::atomic<int> barsPerChord { 1 };
     std::atomic<bool> autoChords { true };
     std::atomic<float> masterVolume { 0.8f };
-    /** Hold a pad yourself (0..15, -1 = none). While held it overrides the song. */
     void setLivePad (int pad) noexcept { livePad.store (pad); }
     int getCurrentPad() const noexcept { return currentPad.load(); }
     int getNumPads() const noexcept { return numPads.load(); }
     double getPpq() const noexcept { return ppqShown.load(); }
-    std::array<PartSettings, NumParts> parts;
-    bool glideAvailable() const noexcept { return hasCat (GlideCat); }
-    int keysGlideIndex() const { return KeysSynth::soundNames().size(); }
+    float getMasterMeter() const noexcept { return masterMeter.load(); }
 
-    /** Reads Chord-Cat's pad count etc. (message thread, a few times a second). */
+    //==== Chord-Cat's key and progression (message thread)
+    juce::StringArray getProgressionNames() const;
+    int getProgression() const;
+    void setProgression (int index);
+    int getKey() const;                   // 0 = C .. 11 = B (sounding key)
+    void setKey (int pitchClass);
     void pollPluginSettings();
+    void keepLifeRunning();
+    double getLifeTime() const;
+
+    //==== styles and dice (message thread; the UI closes plug-in windows first)
+    static juce::StringArray styleNames();
+    void applyStyle (int index);
+    void roll (juce::Random&);            // the dice: a new jam
+    juce::String currentStyle;
+    /** The last Cat that could not be loaded (shown in the status line); cleared by the UI. */
+    juce::String lastLoadError;
 
     //==== recording (message thread)
     bool startRecording (const juce::File&);
@@ -94,8 +142,6 @@ public:
     //==== rendering
     void prepare (double sampleRate, int maxBlock);
     void render (float* outL, float* outR, int numSamples);
-
-    // AudioIODeviceCallback
     void audioDeviceIOCallbackWithContext (const float* const*, int, float* const* out, int numOut, int numSamples,
                                            const juce::AudioIODeviceCallbackContext&) override;
     void audioDeviceAboutToStart (juce::AudioIODevice*) override;
@@ -114,37 +160,38 @@ private:
         juce::Optional<PositionInfo> getPosition() const override;
     };
 
-    void processCat (int id, juce::AudioBuffer<float>& audio, juce::MidiBuffer& midi);
-    void trackNotes (int part, const juce::MidiBuffer& midi);
-    void stopAllNotes();
+    std::unique_ptr<juce::AudioPluginInstance> createCat (int id, juce::String& error);
+    void prepareCat (juce::AudioPluginInstance&);
+    void prepareTrack (Track&);
+    void runCat (juce::AudioPluginInstance*, juce::AudioBuffer<float>& audio, juce::MidiBuffer& midi, int n);
     void renderBlock (float* outL, float* outR, int n);
+    void makeLead (Track&, const juce::MidiBuffer& chords, juce::MidiBuffer& out);
+    static void trackNotes (Track&, const juce::MidiBuffer&);
+    float bendRangeOf (juce::AudioPluginInstance*) const;
 
-    std::array<std::unique_ptr<juce::AudioPluginInstance>, NumCats> cats;
+    std::array<std::unique_ptr<juce::AudioPluginInstance>, 4> core;     // Chord, Bass, Drum, Life
     std::array<juce::File, NumCats> catFiles;
     juce::AudioPluginFormatManager formats;
+    std::array<std::unique_ptr<Track>, maxTracks> tracks;
+    std::atomic<int> numTracks { 0 };
 
     PlayHead playHead;
     double sampleRate = 48000.0;
     int maxBlockSize = 512;
     bool prepared = false;
-    juce::CriticalSection renderLock;     // render vs. prepare / release
+    juce::CriticalSection renderLock;
 
     std::atomic<bool> playing { false }, stopRequested { false }, startRequested { false };
-    std::atomic<int> livePad { -1 }, currentPad { -1 }, numPads { 8 };
+    std::atomic<int> livePad { -1 }, currentPad { -1 }, numPads { 8 }, triggerLow { 60 };
     std::atomic<double> ppqShown { 0.0 };
-    int heldTrigger = -1;                 // the trigger note we are holding on Chord-Cat
-    std::atomic<int> triggerLow { 60 };
+    std::atomic<float> masterMeter { 0.0f };
+    int heldTrigger = -1;
 
-    KeysSynth keys;
-    BassSynth bass;
-    DrumKit drums;
     juce::Reverb reverb;
     cat::SafetyLimiter limiter;
+    juce::AudioBuffer<float> catAudio, lifeAudio, sendAudio, mixAudio;
+    juce::MidiBuffer songMidi, chordOut, bassOut, drumOut, lifeOut, leadOut;
 
-    juce::AudioBuffer<float> catAudio, partAudio, sendAudio, mixAudio;
-    juce::MidiBuffer songMidi, chordOut, scratchMidi;
-
-    // recording
     juce::TimeSliceThread writerThread { "Cat Hub recorder" };
     std::unique_ptr<juce::AudioFormatWriter::ThreadedWriter> writer;
     juce::CriticalSection writerLock;

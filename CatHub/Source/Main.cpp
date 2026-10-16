@@ -4,6 +4,8 @@
 //   Cat-Hub --selftest <catsFolder> <out.wav> [seconds]
 //                                               renders a jam offline, writes the WAV and
 //                                               <out.wav>.txt, exit code 0 = every Cat was heard
+//   Cat-Hub --snapshot <catsFolder> <out.png>   pictures of the window (tutorial, simple, advanced,
+//                                               settings, every theme)
 //   Cat-Hub --uistress <catsFolder> <seconds> [seed]
 //                                               the real window, random clicks / keys / tabs /
 //                                               play / record / save + load while audio runs
@@ -29,11 +31,29 @@ static int runSelfTest (const juce::StringArray& args)
     engine.prepare (sr, 512);
     const auto report = engine.loadCats ({ catsDir });
     if (report.isNotEmpty()) log.add (report);
-    for (int id = 0; id < GlideCat; ++id) check (engine.hasCat (id), juce::String (catName (id)) + " loaded");
+    for (int id = 0; id < PattCat; ++id) check (engine.hasCat (id), juce::String (catName (id)) + " loaded");
+
+    // Extra parts with every other Cat: MIDI effects and sound Cats
+    struct Extra { int src, fx, sound; };
+    const Extra extras[] = { { SrcChords, FxPatt, SndGlide }, { SrcLead, FxOrbit, SndSing }, { SrcLead, FxBend, SndTalk }, { SrcChords, FxNone, SndEPiano } };
+    for (const auto& x : extras)
+    {
+        const bool fxOk = catForMidiFx (x.fx) < 0 || engine.catAvailable (catForMidiFx (x.fx));
+        const bool sndOk = catForSound (x.sound) < 0 || engine.catAvailable (catForSound (x.sound));
+        if (! fxOk || ! sndOk) { log.add ("(skipped a part: " + juce::String (midiFxName (x.fx)) + " / " + soundName (x.sound) + " not found)"); continue; }
+        const bool added = engine.addTrack (x.src, x.fx, x.sound);
+        auto& t = engine.track (engine.getNumTracks() - 1);
+        check (added && t.midiFx.load() == x.fx && t.sound.load() == x.sound,
+               "added part: " + juce::String (sourceName (x.src)) + " > " + midiFxName (x.fx) + " > " + soundName (x.sound)
+               + (engine.lastLoadError.isNotEmpty() ? "  (" + engine.lastLoadError + ")" : juce::String()));
+        engine.lastLoadError = {};
+        t.filter = 0.3f; t.chorus = 0.4f; t.delay = 0.3f; t.drive = 0.2f; t.crush = 0.1f; t.volume = 0.6f;
+    }
 
     engine.bpm = 100.0;
     engine.barsPerChord = 1;
     engine.setPlaying (true);
+    const double life0 = engine.getLifeTime();
 
     const int total = (int) (seconds * sr);
     juce::AudioBuffer<float> audio (2, total);
@@ -45,9 +65,6 @@ static int runSelfTest (const juce::StringArray& args)
         const int n = juce::jmin (block, total - pos);
         engine.render (audio.getWritePointer (0, pos), audio.getWritePointer (1, pos), n);
         padsSeen.insert (engine.getCurrentPad());
-        // halfway: switch the chords to Glide-Cat if it is there
-        if (pos < total / 2 && pos + block >= total / 2 && engine.glideAvailable())
-            engine.parts[ChordPart].sound = engine.keysGlideIndex();
     }
     for (int ch = 0; ch < 2; ++ch)
         for (int i = 0; i < total; ++i)
@@ -57,23 +74,45 @@ static int runSelfTest (const juce::StringArray& args)
             peak = juce::jmax (peak, std::abs (v));
         }
 
-    for (int p = 0; p < NumParts; ++p)
+    for (int i = 0; i < engine.getNumTracks(); ++i)
     {
-        const double rms = std::sqrt (engine.parts[(size_t) p].energy.load() / (2.0 * total));
-        check (rms > 1.0e-3, juce::String (partName (p)) + " is heard (rms " + juce::String (rms, 4) + ")");
+        auto& t = engine.track (i);
+        const double rms = std::sqrt (t.energy.load() / (2.0 * total));
+        check (rms > 1.0e-3, "part " + juce::String (i + 1) + " (" + sourceName (t.source.load()) + " > " + soundName (t.sound.load())
+                             + ") is heard (rms " + juce::String (rms, 4) + ")");
     }
+    const double life1 = engine.getLifeTime();
+    check (life1 > life0 + seconds * 0.5, "Life-Cat's world is moving (" + juce::String (life0, 1) + " s -> " + juce::String (life1, 1) + " s)");
     check (finite, "no NaN / inf");
     check (peak <= 1.0f, "never clips (peak " + juce::String (peak, 3) + ")");
     padsSeen.erase (-1);
     check (padsSeen.size() >= 4, "the song stepped through " + juce::String ((int) padsSeen.size()) + " pads");
 
+    // every style loads and plays
+    for (int st = 0; st < HubEngine::styleNames().size(); ++st)
+    {
+        engine.applyStyle (st);
+        for (int i = 0; i < engine.getNumTracks(); ++i) engine.track (i).energy = 0.0;
+        juce::AudioBuffer<float> b (2, (int) (4.0 * sr));
+        for (int pos = 0; pos < b.getNumSamples(); pos += block)
+            engine.render (b.getWritePointer (0, pos), b.getWritePointer (1, pos), juce::jmin (block, b.getNumSamples() - pos));
+        int heard = 0;
+        for (int i = 0; i < engine.getNumTracks(); ++i) heard += engine.track (i).energy.load() > 1.0e-3 ? 1 : 0;
+        const float pk = juce::jmax (b.getMagnitude (0, 0, b.getNumSamples()), b.getMagnitude (1, 0, b.getNumSamples()));
+        check (heard >= 3 && pk <= 1.0f && pk > 0.01f, "style " + HubEngine::styleNames()[st] + ": " + juce::String (heard) + " of "
+                                                        + juce::String (engine.getNumTracks()) + " parts heard, peak " + juce::String (pk, 2));
+    }
+    juce::Random dice (3);
+    for (int k = 0; k < 4; ++k) { engine.roll (dice); juce::AudioBuffer<float> b (2, 48000); engine.render (b.getWritePointer (0), b.getWritePointer (1), 48000); }
+    check (true, "dice rolled 4 times");
+
     // stop: everything should fade out (no hanging notes in the built-in synths)
+    engine.applyStyle (0);
+    engine.setPlaying (true);
+    { juce::AudioBuffer<float> b (2, 96000); engine.render (b.getWritePointer (0), b.getWritePointer (1), 96000); }
     engine.setPlaying (false);
-    juce::AudioBuffer<float> tail (2, (int) (4.0 * sr));
-    for (int pos = 0; pos < tail.getNumSamples(); pos += block)
-        engine.render (tail.getWritePointer (0, pos), tail.getWritePointer (1, pos), juce::jmin (block, tail.getNumSamples() - pos));
-    engine.parts[LifePart].mute = true;   // Life-Cat keeps living when stopped; only check the others
-    engine.parts[ChordPart].meter = engine.parts[BassPart].meter = engine.parts[DrumPart].meter = 0.0f;
+    for (int i = 0; i < engine.getNumTracks(); ++i) if (engine.track (i).source.load() == SrcLife) engine.track (i).mute = true;   // Life lives on
+    juce::AudioBuffer<float> tail (2, (int) (5.0 * sr));
     for (int pos = 0; pos < tail.getNumSamples(); pos += block)
         engine.render (tail.getWritePointer (0, pos), tail.getWritePointer (1, pos), juce::jmin (block, tail.getNumSamples() - pos));
     const float lastSecond = juce::jmax (tail.getMagnitude (0, tail.getNumSamples() - (int) sr, (int) sr), tail.getMagnitude (1, tail.getNumSamples() - (int) sr, (int) sr));
@@ -81,8 +120,9 @@ static int runSelfTest (const juce::StringArray& args)
 
     // save + restore round trip
     const auto state = engine.saveState();
+    const int parts = engine.getNumTracks();
     engine.restoreState (state);
-    check (state.getNumChildren() >= NumParts + 4, "state saves every Cat");
+    check (engine.getNumTracks() == parts && state.getNumChildren() >= parts + 4, "state saves every part and Cat");
 
     if (out != juce::File())
     {
@@ -156,6 +196,7 @@ private:
         main->setTopLeftPosition (0, 0);
         main->addToDesktop (juce::ComponentPeer::windowAppearsOnTaskbar);
         main->setVisible (true);
+        if (rng.nextBool()) main->finishTutorialForTests();   // sometimes click through the tutorial too
     }
 
     static void collect (juce::Component& c, juce::Array<juce::Component*>& out)
@@ -178,7 +219,9 @@ private:
         const int what = rng.nextInt (100);
         if (what < 3)  { engine.setPlaying (! engine.isPlaying()); return; }
         if (what < 5)  { main.reset(); openWindow(); return; }                                  // close / reopen the window
-        if (what < 7)  { const auto t = engine.saveState(); engine.restoreState (t); return; }  // save + load while playing
+        if (what < 7)  { const auto t = engine.saveState(); main->restoreStateSafely (t); return; }  // save + load while playing
+        if (what < 9)  { const int st = rng.nextInt (HubEngine::styleNames().size()); main->changeCats ([this, st] { engine.applyStyle (st); }); return; }
+        if (what < 10) { main->changeCats ([this] { engine.roll (rng); }); return; }
         if (what < 8)  { if (engine.isRecording()) engine.stopRecording(); else engine.startRecording (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("cathub-stress.wav")); return; }
         if (what < 12) { juce::PopupMenu::dismissAllActiveMenus(); return; }
         if (what < 18)
@@ -197,6 +240,7 @@ private:
         {
             const auto t = b->getButtonText();
             if (t.startsWith ("Audio") || t.startsWith ("Find") || t.startsWith ("Rec") || t.startsWith ("Stop rec")) return;  // dialogs / files
+            if (t == "Test" || t.startsWith ("Control Panel") || t.startsWith ("Reset")) return;    // sound card dialogs
             b->triggerClick();
             return;
         }
@@ -249,7 +293,7 @@ class HubApplication : public juce::JUCEApplication
 {
 public:
     const juce::String getApplicationName() override    { return "Cat Hub"; }
-    const juce::String getApplicationVersion() override { return "1.0.0"; }
+    const juce::String getApplicationVersion() override { return "2.0.0"; }
     bool moreThanOneInstanceAllowed() override          { return true; }
 
     void initialise (const juce::String& commandLine) override
@@ -270,21 +314,34 @@ public:
             juce::AudioDeviceManager dm;
             {
                 HubMain m (e, dm, props);
-                m.setSize (1100, 760);
-                std::vector<float> l (512), r (512);
-                for (int i = 0; i < 200; ++i) e.render (l.data(), r.data(), 512);   // meters + pads moving
+                m.setSize (1280, 820);
                 const juce::File out (args[at + 2]);
-                for (int t = 0; t < 6; ++t)
+                std::vector<float> l (512), r (512);
+                int shot = 0;
+                auto snap = [&] (const juce::String& name)
                 {
-                    if (! m.selectTab (t)) break;
                     for (int i = 0; i < 20; ++i) e.render (l.data(), r.data(), 512);
                     for (int k = 0; k < 3; ++k) m.tickForSnapshot();
                     auto img = m.createComponentSnapshot (m.getLocalBounds());
                     juce::PNGImageFormat png;
-                    auto f = out.getSiblingFile (out.getFileNameWithoutExtension() + "_" + juce::String (t) + ".png");
+                    auto f = out.getSiblingFile (out.getFileNameWithoutExtension() + "_" + juce::String (shot++) + "_" + name + ".png");
                     f.deleteFile();
                     if (auto os = f.createOutputStream()) png.writeImageToStream (img, *os);
-                }
+                };
+                for (int i = 0; i < 200; ++i) e.render (l.data(), r.data(), 512);   // meters + pads moving
+                m.startTutorial();
+                snap ("tutorial");
+                m.finishTutorialForTests();
+                m.setAdvanced (false);
+                snap ("simple");
+                m.changeCats ([&e] { e.applyStyle (4); });
+                m.setAdvanced (true);
+                snap ("advanced");
+                m.selectTab (1);
+                snap ("settings");
+                m.selectTab (0);
+                for (int th = 1; th < (int) themes().size(); ++th) { m.applyTheme (th); snap ("theme" + juce::String (th)); }
+                m.applyTheme (0);
             }
             e.releaseCats();
             quit();
@@ -343,13 +400,19 @@ private:
     {
     public:
         MainWindow (HubEngine& e, juce::AudioDeviceManager& dm, juce::PropertiesFile& s)
-            : DocumentWindow ("Cat Hub", cat::Colours::background, DocumentWindow::allButtons)
+            : DocumentWindow ("Cat Hub", theme().bg, DocumentWindow::allButtons)
         {
             setUsingNativeTitleBar (true);
             setContentOwned (new HubMain (e, dm, s), true);
             setResizable (true, false);
-            setResizeLimits (900, 640, 3000, 2000);
-            centreWithSize (getWidth(), getHeight());
+            setResizeLimits (1000, 680, 4000, 3000);
+            // fit the screen, then centre it
+            if (auto* d = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+            {
+                const auto area = d->userArea;
+                centreWithSize (juce::jmin (getWidth(), area.getWidth() - 40), juce::jmin (getHeight(), area.getHeight() - 60));
+            }
+            else centreWithSize (getWidth(), getHeight());
             setVisible (true);
             if (auto* c = getContentComponent()) c->grabKeyboardFocus();
         }

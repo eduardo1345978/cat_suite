@@ -39,17 +39,22 @@ void KeysSynth::allOff()
 
 void KeysSynth::handle (const juce::MidiMessage& m)
 {
-    if (m.isNoteOn()) noteOn (m.getNoteNumber(), m.getFloatVelocity());
-    else if (m.isNoteOff()) noteOff (m.getNoteNumber());
+    if (m.isNoteOn()) noteOn (m.getChannel(), m.getNoteNumber(), m.getFloatVelocity());
+    else if (m.isNoteOff()) noteOff (m.getChannel(), m.getNoteNumber());
+    else if (m.isPitchWheel())
+        chanBend[(size_t) juce::jlimit (1, 16, m.getChannel())] = (float) (m.getPitchWheelValue() - 8192) / 8192.0f * bendRange;
     else if (m.isAllNotesOff() || m.isAllSoundOff())
+    {
         for (auto& v : voices) if (v.active) v.released = true;
+        chanBend.fill (0.0f);
+    }
 }
 
-void KeysSynth::noteOn (int note, float vel)
+void KeysSynth::noteOn (int ch, int note, float vel)
 {
     // reuse the voice already on this note, else a free one, else the oldest
     Voice* pick = nullptr;
-    for (auto& v : voices) if (v.active && v.note == note) { pick = &v; break; }
+    for (auto& v : voices) if (v.active && v.note == note && v.ch == ch) { pick = &v; break; }
     if (pick == nullptr) for (auto& v : voices) if (! v.active) { pick = &v; break; }
     if (pick == nullptr)
     {
@@ -60,6 +65,7 @@ void KeysSynth::noteOn (int note, float vel)
     *pick = Voice();
     pick->active = true;
     pick->note = note;
+    pick->ch = juce::jlimit (1, 16, ch);
     pick->freq = mtof ((float) note);
     pick->vel = juce::jlimit (0.05f, 1.0f, vel);
     pick->pan = 0.5f + 0.18f * std::sin ((float) note * 1.7f);
@@ -68,9 +74,9 @@ void KeysSynth::noteOn (int note, float vel)
     pick->age = ++ageCounter;
 }
 
-void KeysSynth::noteOff (int note)
+void KeysSynth::noteOff (int ch, int note)
 {
-    for (auto& v : voices) if (v.active && v.note == note && ! v.released) v.released = true;
+    for (auto& v : voices) if (v.active && v.note == note && v.ch == ch && ! v.released) v.released = true;
 }
 
 void KeysSynth::render (float* l, float* r, int n)
@@ -83,6 +89,8 @@ void KeysSynth::render (float* l, float* r, int n)
         if (! v.active) continue;
         float gl, gr;
         panGains (v.pan, gl, gr);
+        const float baseFreq = v.freq;
+        v.freq = baseFreq * std::pow (2.0f, chanBend[(size_t) v.ch] / 12.0f);   // pitch bend (Bend-Cat)
         for (int i = 0; i < n; ++i)
         {
             // envelope
@@ -136,6 +144,7 @@ void KeysSynth::render (float* l, float* r, int n)
             l[i] += x * gl;
             r[i] += x * gr;
         }
+        v.freq = baseFreq;
         if ((v.released || p.s <= 0.0f) && v.t > p.a + 0.01f && v.env < 1.0e-4f) v.active = false;
     }
 }
@@ -162,6 +171,7 @@ void BassSynth::handle (const juce::MidiMessage& m)
         for (int i = 0; i < stackSize; ++i)
             if (stack[(size_t) i] == note) { for (int k = i; k + 1 < stackSize; ++k) stack[(size_t) k] = stack[(size_t) k + 1]; --stackSize; break; }
         if (stackSize < (int) stack.size()) stack[(size_t) stackSize++] = note;
+        lastChannel = juce::jlimit (1, 16, m.getChannel());
         target = mtof ((float) note);
         if (! gate || sound == 3) { freq = target; fenv = 1.0f; }
         vel = juce::jlimit (0.1f, 1.0f, m.getFloatVelocity());
@@ -175,10 +185,13 @@ void BassSynth::handle (const juce::MidiMessage& m)
         if (stackSize > 0) target = mtof ((float) stack[(size_t) stackSize - 1]);
         else gate = false;
     }
+    else if (m.isPitchWheel())
+        chanBend[(size_t) juce::jlimit (1, 16, m.getChannel())] = (float) (m.getPitchWheelValue() - 8192) / 8192.0f * bendRange;
     else if (m.isAllNotesOff() || m.isAllSoundOff())
     {
         stackSize = 0;
         gate = false;
+        chanBend.fill (0.0f);
     }
 }
 
@@ -192,9 +205,10 @@ void BassSynth::render (float* l, float* r, int n)
     const float fdec = std::exp (-1.0f / (0.15f * (float) sr));
     const float pluckDec = std::exp (-1.0f / (0.35f * (float) sr));
     const float dcA = lpCoef (20.0f, sr);
+    const float bendMul = std::pow (2.0f, chanBend[(size_t) lastChannel] / 12.0f);
     for (int i = 0; i < n; ++i)
     {
-        freq += (target - freq) * glide;
+        freq += (target * bendMul - freq) * glide;
         if (gate) env += (1.0f - env) * att;
         else env *= rel;
         fenv *= sound == 3 ? pluckDec : fdec;   // the pluck's level follows its own (slower) decay
@@ -404,6 +418,136 @@ void DrumKit::render (float* l, float* r, int n)
         {
             if (crushCount-- <= 0) { crushCount = 3; crushHold = std::round ((l[i] + r[i]) * 0.5f * 24.0f) / 24.0f; }
             l[i] = r[i] = crushHold * 0.9f;
+        }
+    }
+}
+} // namespace hub
+
+namespace hub
+{
+//==============================================================================
+void TrackFx::prepare (double sampleRate)
+{
+    sr = sampleRate > 0.0 ? sampleRate : 48000.0;
+    chL.assign ((size_t) (sr * 0.05) + 8, 0.0f);
+    chR.assign (chL.size(), 0.0f);
+    dlL.assign ((size_t) (sr * 2.1) + 8, 0.0f);
+    dlR.assign (dlL.size(), 0.0f);
+    reset();
+}
+
+void TrackFx::reset()
+{
+    std::fill (chL.begin(), chL.end(), 0.0f);
+    std::fill (chR.begin(), chR.end(), 0.0f);
+    std::fill (dlL.begin(), dlL.end(), 0.0f);
+    std::fill (dlR.begin(), dlR.end(), 0.0f);
+    fl1 = fl2 = fr1 = fr2 = 0.0f;
+    cutSmooth = 20000.0f;
+    chW = dlW = 0;
+    chPh = dlLp = dlLpR = dlSmooth = 0.0f;
+    holdL = holdR = 0.0f;
+    holdCount = 0;
+}
+
+void TrackFx::process (float* l, float* r, int n, const TrackFxSettings& s)
+{
+    const float srf = (float) sr;
+
+    // ---- filter: two one-pole low-passes (12 dB), cutoff glides
+    if (s.filter > 0.002f || cutSmooth < 19000.0f)
+    {
+        const float target = 20000.0f * std::pow (0.0075f, juce::jlimit (0.0f, 1.0f, s.filter));   // 20 kHz .. 150 Hz
+        for (int i = 0; i < n; ++i)
+        {
+            cutSmooth += (target - cutSmooth) * 0.002f;
+            const float a = lpCoef (cutSmooth, sr);
+            fl1 += a * (l[i] - fl1); fl2 += a * (fl1 - fl2);
+            fr1 += a * (r[i] - fr1); fr2 += a * (fr1 - fr2);
+            l[i] = fl2; r[i] = fr2;
+        }
+    }
+
+    // ---- drive: soft saturation, level kept about the same
+    if (s.drive > 0.002f)
+    {
+        const float k = 1.0f + 12.0f * s.drive * s.drive;
+        const float comp = 1.0f / std::tanh (k * 0.4f) * 0.4f;
+        for (int i = 0; i < n; ++i)
+        {
+            l[i] = std::tanh (k * l[i]) * comp;
+            r[i] = std::tanh (k * r[i]) * comp;
+        }
+    }
+
+    // ---- chorus: two slowly moving short delays, one per side
+    if (s.chorus > 0.002f)
+    {
+        const int size = (int) chL.size();
+        for (int i = 0; i < n; ++i)
+        {
+            chL[(size_t) chW] = l[i];
+            chR[(size_t) chW] = r[i];
+            chPh += 0.6f / srf;
+            if (chPh >= 1.0f) chPh -= 1.0f;
+            auto tap = [&] (const std::vector<float>& b, float ph)
+            {
+                const float d = (0.012f + 0.004f * (0.5f + 0.5f * std::sin (twoPi * ph))) * srf;
+                float rp = (float) chW - d;
+                while (rp < 0.0f) rp += (float) size;
+                const int i0 = ((int) rp) % size;
+                const float fr = rp - std::floor (rp);
+                return b[(size_t) i0] * (1.0f - fr) + b[(size_t) ((i0 + 1) % size)] * fr;
+            };
+            const float wl = tap (chL, chPh), wr = tap (chR, chPh + 0.25f);
+            chW = (chW + 1) % size;
+            l[i] = l[i] * (1.0f - 0.5f * s.chorus) + wl * s.chorus * 0.8f;
+            r[i] = r[i] * (1.0f - 0.5f * s.chorus) + wr * s.chorus * 0.8f;
+        }
+    }
+
+    // ---- echo: dotted eighth, ping-pong, darker each time, never runs away
+    if (s.delay > 0.002f)
+    {
+        const int size = (int) dlL.size();
+        const float target = juce::jlimit (16.0f, (float) size - 8.0f, (float) (0.75 * 60.0 / juce::jmax (40.0, s.bpm)) * srf);
+        if (dlSmooth < 1.0f) dlSmooth = target;
+        const float a = lpCoef (3500.0f, sr);
+        const float fb = 0.25f + 0.3f * s.delay;   // < 0.6
+        for (int i = 0; i < n; ++i)
+        {
+            dlSmooth += (target - dlSmooth) * 0.0005f;
+            float rp = (float) dlW - dlSmooth;
+            while (rp < 0.0f) rp += (float) size;
+            const int i0 = ((int) rp) % size;
+            const float fr = rp - std::floor (rp);
+            const float dl = dlL[(size_t) i0] * (1.0f - fr) + dlL[(size_t) ((i0 + 1) % size)] * fr;
+            const float dr = dlR[(size_t) i0] * (1.0f - fr) + dlR[(size_t) ((i0 + 1) % size)] * fr;
+            dlLp += a * (dl - dlLp);
+            dlLpR += a * (dr - dlLpR);
+            dlL[(size_t) dlW] = 0.5f * (l[i] + r[i]) + dlLpR * fb;
+            dlR[(size_t) dlW] = dlLp * fb;
+            dlW = (dlW + 1) % size;
+            l[i] += dl * s.delay * 0.7f;
+            r[i] += dr * s.delay * 0.7f;
+        }
+    }
+
+    // ---- crush: fewer samples and fewer bits
+    if (s.crush > 0.002f)
+    {
+        const int hold = 1 + (int) (s.crush * 7.0f);
+        const float steps = 4.0f + 60.0f * (1.0f - s.crush) * (1.0f - s.crush);
+        for (int i = 0; i < n; ++i)
+        {
+            if (holdCount-- <= 0)
+            {
+                holdCount = hold - 1;
+                holdL = std::round (l[i] * steps) / steps;
+                holdR = std::round (r[i] * steps) / steps;
+            }
+            l[i] = holdL;
+            r[i] = holdR;
         }
     }
 }
