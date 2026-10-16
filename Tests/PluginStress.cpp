@@ -9,6 +9,9 @@
 #include <thread>
 #include <atomic>
 #include <iostream>
+#if JUCE_LINUX
+ #include <dlfcn.h>
+#endif
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter();
 namespace juce::detail { bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages); }
@@ -23,6 +26,17 @@ static void pump (int ms)
 }
 
 using namespace juce;
+
+// Linux only: Xlib's default error handler ends the program on any X error (e.g. a message to a
+// window that was just closed). Windows ignores those, so log them instead of exiting.
+static void ignoreXErrors()
+{
+   #if JUCE_LINUX
+    if (auto* lib = dlopen ("libX11.so.6", RTLD_LAZY | RTLD_NOLOAD))
+        if (auto* set = (void* (*) (int (*) (void*, void*))) dlsym (lib, "XSetErrorHandler"))
+            set ([] (void*, void*) -> int { std::cout << "(X11 error ignored)" << std::endl; return 0; });
+   #endif
+}
 
 struct FakePlayHead : AudioPlayHead
 {
@@ -174,6 +188,7 @@ int main (int argc, char** argv)
         ed->addToDesktop (0);
         ed->setVisible (true);
     }
+    ignoreXErrors();
 
     const auto start = Time::getMillisecondCounterHiRes();
     int actions = 0;

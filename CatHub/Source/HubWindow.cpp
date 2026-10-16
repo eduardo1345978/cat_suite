@@ -67,6 +67,59 @@ namespace
             g.fillEllipse (r.getRight() - eyeW * 2.4f, r.getY() + eyeW * 0.5f, eyeW * 2.0f, eyeW * 1.1f);
     }
 
+    juce::String noteName (int n)
+    {
+        return juce::MidiMessage::getMidiNoteName (n, true, true, 3);
+    }
+
+    /** "Cmaj7", "Am/C", "G7" ... from the notes that sound; empty if it is not a known chord. */
+    juce::String chordName (const std::vector<int>& notes)
+    {
+        if (notes.empty()) return {};
+        int mask = 0;
+        for (int n : notes) mask |= 1 << (n % 12);
+        struct T { int bits; const char* name; };
+        auto b = [] (std::initializer_list<int> iv) { int m = 0; for (int i : iv) m |= 1 << i; return m; };
+        const T types[] = {
+            { b ({ 0, 4, 7 }), "" }, { b ({ 0, 3, 7 }), "m" }, { b ({ 0, 3, 6 }), "dim" }, { b ({ 0, 4, 8 }), "aug" },
+            { b ({ 0, 2, 7 }), "sus2" }, { b ({ 0, 5, 7 }), "sus4" }, { b ({ 0, 4, 7, 10 }), "7" }, { b ({ 0, 4, 7, 11 }), "maj7" },
+            { b ({ 0, 3, 7, 10 }), "m7" }, { b ({ 0, 3, 6, 10 }), "m7b5" }, { b ({ 0, 3, 6, 9 }), "dim7" }, { b ({ 0, 4, 7, 9 }), "6" },
+            { b ({ 0, 3, 7, 9 }), "m6" }, { b ({ 0, 2, 4, 7, 10 }), "9" }, { b ({ 0, 2, 4, 7, 11 }), "maj9" }, { b ({ 0, 2, 3, 7, 10 }), "m9" },
+            { b ({ 0, 2, 4, 7 }), "add9" }, { b ({ 0, 2, 3, 7 }), "madd9" }, { b ({ 0, 3, 7, 11 }), "mMaj7" }, { b ({ 0, 4, 10 }), "7" },
+            { b ({ 0, 4, 11 }), "maj7" }, { b ({ 0, 3, 10 }), "m7" }, { b ({ 0, 7 }), "5" } };
+        static const char* pcs[] = { "C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B" };
+        const int bass = *std::min_element (notes.begin(), notes.end()) % 12;
+        for (int pass = 0; pass < 2; ++pass)           // the bass note as root first
+            for (int root = 0; root < 12; ++root)
+            {
+                if ((pass == 0) != (root == bass)) continue;
+                const int rel = ((mask >> root) | (mask << (12 - root))) & 0xfff;
+                for (const auto& t : types)
+                    if (rel == t.bits)
+                        return juce::String (pcs[root]) + t.name + (root != bass ? "/" + juce::String (pcs[bass]) : juce::String());
+            }
+        return {};
+    }
+
+    juce::String drumName (int n)
+    {
+        switch (n)
+        {
+            case 35: case 36: return "Kick";
+            case 38: case 40: return "Snare";
+            case 39: return "Clap";
+            case 37: return "Rim";
+            case 42: case 44: return "Hat";
+            case 46: return "Open hat";
+            case 49: case 52: case 55: case 57: return "Crash";
+            case 51: case 53: case 59: return "Ride";
+            case 41: case 43: case 45: case 47: case 48: case 50: return "Tom";
+            case 56: return "Cowbell";
+            case 69: case 70: case 82: return "Shaker";
+            default: return "Perc";
+        }
+    }
+
     void styleBar (juce::Slider& s, double lo, double hi, double step)
     {
         s.setSliderStyle (juce::Slider::LinearBar);
@@ -161,6 +214,8 @@ void CatCard::refresh()
     }
     volume.setValue (s.volume.load(), juce::dontSendNotification);
     reverb.setValue (s.reverb.load(), juce::dontSendNotification);
+    volume.updateText();
+    reverb.updateText();
     mute.setToggleState (s.mute.load(), juce::dontSendNotification);
     solo.setToggleState (s.solo.load(), juce::dontSendNotification);
     open.setEnabled (engine.hasCat (catForPart (part)));
@@ -169,6 +224,33 @@ void CatCard::refresh()
 
 void CatCard::tick()
 {
+    // what this Cat is playing (10 times a second)
+    if (++ticks % 3 == 0)
+    {
+        const auto notes = engine.parts[(size_t) part].takeNotes();
+        juce::String big, small;
+        if (part == DrumPart)
+        {
+            juce::StringArray names;
+            for (int n : notes) names.addIfNotAlreadyThere (drumName (n));
+            if (! names.isEmpty()) { big = names.joinIntoString ("  "); lastHitTime = juce::Time::getMillisecondCounter(); }
+            else if (juce::Time::getMillisecondCounter() - lastHitTime < 400) big = nowBig;   // keep hits readable
+        }
+        else if (! notes.empty())
+        {
+            juce::StringArray names;
+            for (int n : notes) names.add (noteName (n));
+            if (part == BassPart) big = noteName (*std::min_element (notes.begin(), notes.end()));
+            else
+            {
+                big = part == ChordPart ? chordName (notes) : juce::String();
+                small = names.joinIntoString (" ");
+                if (big.isEmpty()) { big = small; small = {}; }
+            }
+        }
+        if (big != nowBig || small != nowSmall) { nowBig = big; nowSmall = small; repaint (nowArea); }
+    }
+
     const float m = engine.parts[(size_t) part].meter.load();
     const float shown = juce::jmax (m, shownMeter * 0.88f);
     if (std::abs (shown - shownMeter) > 0.002f) { shownMeter = shown; repaint(); }
@@ -203,6 +285,25 @@ void CatCard::paint (juce::Graphics& g)
     g.setColour (lv > 0.95f ? Colours::red : c);
     g.fillRoundedRectangle (meter.withTop (meter.getBottom() - meter.getHeight() * lv), 3.0f);
 
+    // now playing
+    if (here && ! nowArea.isEmpty())
+    {
+        auto a = nowArea.toFloat();
+        g.setColour (Colours::raised.withAlpha (0.5f));
+        g.fillRoundedRectangle (a, 8.0f);
+        g.setColour (Colours::textDim);
+        g.setFont (catFont (10.5f, true));
+        g.drawText ("NOW PLAYING", a.removeFromTop (22.0f).reduced (10.0f, 0.0f), juce::Justification::bottomLeft);
+        const bool idle = nowBig.isEmpty();
+        g.setColour (idle ? Colours::textDim : c);
+        g.setFont (catFont (part == DrumPart ? 20.0f : 30.0f, true));
+        g.drawFittedText (idle ? juce::String ("-") : nowBig, a.removeFromTop (a.getHeight() * 0.6f).toNearestInt().reduced (8, 0), juce::Justification::centred, 2);
+        g.setColour (Colours::textDim);
+        g.setFont (catFont (12.0f));
+        g.drawFittedText (part == LifePart && idle ? juce::String ("its creatures sing along") : nowSmall,
+                          a.toNearestInt().reduced (8, 2), juce::Justification::centredTop, 2);
+    }
+
     if (! here)
     {
         g.setColour (Colours::textDim);
@@ -230,6 +331,8 @@ void CatCard::resized()
     solo.setBounds (row.removeFromLeft (40));
     row.removeFromLeft (8);
     open.setBounds (row);
+    r.removeFromTop (14);
+    nowArea = r.withHeight (juce::jmin (r.getHeight(), 130));
 }
 
 //==============================================================================

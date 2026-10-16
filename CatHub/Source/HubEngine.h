@@ -27,6 +27,21 @@ struct PartSettings
     std::atomic<int> sound { 0 };          // built-in sound; chords: the last entry = Glide-Cat
     std::atomic<float> meter { 0.0f };     // peak, read by the UI
     std::atomic<double> energy { 0.0 };    // sum of squares since the start (self test)
+    // which notes are sounding (128 bits); drums: hit since the UI last looked
+    std::array<std::atomic<uint32_t>, 4> notes {};
+    std::array<std::atomic<uint32_t>, 4> hits {};
+
+    /** Notes currently held (and, for drums, hit since the last call). Message thread. */
+    std::vector<int> takeNotes()
+    {
+        std::vector<int> out;
+        for (int w = 0; w < 4; ++w)
+        {
+            const uint32_t bits = notes[(size_t) w].load() | hits[(size_t) w].exchange (0);
+            for (int b = 0; b < 32; ++b) if (bits & (1u << b)) out.push_back (w * 32 + b);
+        }
+        return out;
+    }
 };
 
 /**
@@ -100,6 +115,7 @@ private:
     };
 
     void processCat (int id, juce::AudioBuffer<float>& audio, juce::MidiBuffer& midi);
+    void trackNotes (int part, const juce::MidiBuffer& midi);
     void stopAllNotes();
     void renderBlock (float* outL, float* outR, int n);
 

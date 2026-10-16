@@ -229,7 +229,7 @@ void BassSynth::render (float* l, float* r, int n)
         ph[0] = wrap (ph[0] + freq * dt);
         ph[1] = wrap (ph[1] + freq * 1.006f * dt);
         ph[2] = wrap (ph[2] + freq * 0.994f * dt);
-        x = dc.hp (x, dcA) * env * vel;
+        x = dc.hp (x, dcA) * env * vel * 0.5f;
         l[i] += x;
         r[i] += x;
     }

@@ -212,6 +212,28 @@ void HubEngine::processCat (int id, juce::AudioBuffer<float>& audio, juce::MidiB
     if (p->getTotalNumOutputChannels() == 1) audio.copyFrom (1, 0, catAudio, 0, 0, n);
 }
 
+void HubEngine::trackNotes (int part, const juce::MidiBuffer& midi)
+{
+    auto& s = parts[(size_t) part];
+    for (const auto meta : midi)
+    {
+        const auto m = meta.getMessage();
+        if (m.isNoteOn())
+        {
+            const int n = m.getNoteNumber();
+            s.notes[(size_t) (n >> 5)].fetch_or (1u << (n & 31));
+            s.hits[(size_t) (n >> 5)].fetch_or (1u << (n & 31));
+        }
+        else if (m.isNoteOff())
+        {
+            const int n = m.getNoteNumber();
+            s.notes[(size_t) (n >> 5)].fetch_and (~(1u << (n & 31)));
+        }
+        else if (m.isAllNotesOff() || m.isAllSoundOff())
+            for (auto& w : s.notes) w = 0;
+    }
+}
+
 void HubEngine::render (float* outL, float* outR, int numSamples)
 {
     const juce::ScopedTryLock sl (renderLock);
@@ -296,7 +318,7 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
     {
         auto& s = parts[(size_t) part];
         const float v = s.volume.load();
-        const float gain = (s.mute || (anySolo && ! s.solo)) ? 0.0f : v * v * 1.4f;
+        const float gain = (s.mute || (anySolo && ! s.solo)) ? 0.0f : v * v;
         float peak = 0.0f;
         for (int ch = 0; ch < 2; ++ch)
         {
@@ -317,6 +339,7 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
     if (panic) addPanic (chordOut, 0);
 
     // ---- chords: built-in keys, or Glide-Cat
+    trackNotes (ChordPart, chordOut);
     partAudio.clear();
     const int chordSound = parts[ChordPart].sound.load();
     keys.setSound (chordSound);
@@ -334,6 +357,7 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
     copyMidi (scratchMidi, chordOut);
     if (hasCat (BassCat)) processCat (BassCat, partAudio, scratchMidi); else scratchMidi.clear();
     if (panic) addPanic (scratchMidi, 0);
+    trackNotes (BassPart, scratchMidi);
     partAudio.clear();
     bass.setSound (parts[BassPart].sound.load());
     renderWithMidi (bass, scratchMidi, partAudio.getWritePointer (0), partAudio.getWritePointer (1), n);
@@ -343,6 +367,7 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
     scratchMidi.clear();
     if (panic) addPanic (scratchMidi, 0);
     if (hasCat (DrumCat)) processCat (DrumCat, partAudio, scratchMidi); else scratchMidi.clear();
+    trackNotes (DrumPart, scratchMidi);
     partAudio.clear();
     drums.setSound (parts[DrumPart].sound.load());
     renderWithMidi (drums, scratchMidi, partAudio.getWritePointer (0), partAudio.getWritePointer (1), n);
@@ -351,6 +376,7 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
     // ---- Life-Cat makes its own sound and hears the chords
     copyMidi (scratchMidi, chordOut);
     if (hasCat (LifeCat)) processCat (LifeCat, partAudio, scratchMidi); else partAudio.clear();
+    trackNotes (LifePart, scratchMidi);   // Life-Cat's MIDI out (if it is on)
     mixPart (LifePart);
 
     // ---- reverb send, master, safety limiter
@@ -358,7 +384,7 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
     mixAudio.addFrom (0, 0, sendAudio, 0, 0, n, 0.5f);
     mixAudio.addFrom (1, 0, sendAudio, 1, 0, n, 0.5f);
     const float master = masterVolume.load();
-    mixAudio.applyGain (master * master * 1.3f);
+    mixAudio.applyGain (master * master);
     auto* l = mixAudio.getWritePointer (0);
     auto* r = mixAudio.getWritePointer (1);
     for (int i = 0; i < n; ++i)

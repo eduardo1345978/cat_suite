@@ -18,7 +18,7 @@ static int runSelfTest (const juce::StringArray& args)
     const int at = args.indexOf ("--selftest");
     const juce::File catsDir (args[at + 1]);
     const juce::File out (args[at + 2]);
-    const double seconds = args.size() > at + 3 ? juce::jmax (4.0, args[at + 3].getDoubleValue()) : 16.0;
+    const double seconds = args.size() > at + 3 ? juce::jmax (12.0, args[at + 3].getDoubleValue()) : 16.0;
     juce::StringArray log;
     int failures = 0;
     auto check = [&] (bool ok, const juce::String& what) { log.add ((ok ? "ok    " : "FAIL  ") + what); if (! ok) ++failures; };
@@ -256,6 +256,40 @@ public:
     {
         auto args = juce::StringArray::fromTokens (commandLine, true);
         for (auto& a : args) a = a.unquoted();
+        if (args.contains ("--snapshot"))
+        {
+            // --snapshot <catsFolder> <out.png>: pictures of every tab (for checking the layout)
+            const int at = args.indexOf ("--snapshot");
+            juce::PropertiesFile::Options o;
+            o.applicationName = "Cat Hub snapshot"; o.filenameSuffix = "settings"; o.folderName = "Cat Suite";
+            juce::PropertiesFile props (o);
+            HubEngine e;
+            e.prepare (48000.0, 512);
+            e.loadCats ({ juce::File (args[at + 1]) });
+            e.setPlaying (true);
+            juce::AudioDeviceManager dm;
+            {
+                HubMain m (e, dm, props);
+                m.setSize (1100, 760);
+                std::vector<float> l (512), r (512);
+                for (int i = 0; i < 200; ++i) e.render (l.data(), r.data(), 512);   // meters + pads moving
+                const juce::File out (args[at + 2]);
+                for (int t = 0; t < 6; ++t)
+                {
+                    if (! m.selectTab (t)) break;
+                    for (int i = 0; i < 20; ++i) e.render (l.data(), r.data(), 512);
+                    for (int k = 0; k < 3; ++k) m.tickForSnapshot();
+                    auto img = m.createComponentSnapshot (m.getLocalBounds());
+                    juce::PNGImageFormat png;
+                    auto f = out.getSiblingFile (out.getFileNameWithoutExtension() + "_" + juce::String (t) + ".png");
+                    f.deleteFile();
+                    if (auto os = f.createOutputStream()) png.writeImageToStream (img, *os);
+                }
+            }
+            e.releaseCats();
+            quit();
+            return;
+        }
         if (args.contains ("--uistress"))
         {
             const int at = args.indexOf ("--uistress");

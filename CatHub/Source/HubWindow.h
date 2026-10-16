@@ -27,6 +27,10 @@ private:
     juce::ComboBox sound;
     juce::Label soundLabel, volLabel, revLabel;
     float shownMeter = 0.0f;
+    juce::String nowBig, nowSmall;      // "Cmaj7" / "C3 E3 G3 B3"
+    juce::uint32 lastHitTime = 0;
+    int ticks = 0;
+    juce::Rectangle<int> nowArea;
 };
 
 /** Chord-Cat's pads: the one playing lights up; hold one with the mouse (or keys 1-8). */
@@ -89,6 +93,8 @@ public:
     bool keyStateChanged (bool isKeyDown) override;
 
     void showCat (int catId);
+    bool selectTab (int index) { if (index >= tabs.getNumTabs()) return false; tabs.setCurrentTabIndex (index); return true; }
+    void tickForSnapshot() { timerCallback(); }
     void rebuildTabs();
     void updateGlideTab();
     juce::String getMissingText() const;
