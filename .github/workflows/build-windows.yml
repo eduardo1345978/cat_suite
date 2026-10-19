@@ -44,6 +44,8 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
+          # every failure shows up as an annotation on the run page (readable without the full log)
+          trap { Write-Host "::error::$($_.Exception.Message)"; exit 1 }
           $pkg = "pkg\Cat-Suite"
           New-Item -ItemType Directory "$pkg\VST3" -Force | Out-Null
           Get-ChildItem build -Recurse -Directory -Filter *.vst3 |
@@ -73,7 +75,10 @@ jobs:
           # Self test: the Hub plays a jam offline with these exact files; every Cat must be heard
           $t = Start-Process "$snd\Apps\Cat-Hub.exe" -ArgumentList '--selftest', "`"$((Resolve-Path "$snd\Hub Cats").Path)`"", "`"$PWD\hub-test.wav`"", '16' -Wait -PassThru
           Get-Content hub-test.txt
-          if ($t.ExitCode -ne 0) { throw "Cat Hub self test failed" }
+          if ($t.ExitCode -ne 0) {
+            Get-Content hub-test.txt | Where-Object { $_ -notmatch '^ok ' } | Select-Object -First 30 | ForEach-Object { Write-Host "::error::hub self test: $_" }
+            throw "Cat Hub self test failed (exit code $($t.ExitCode))"
+          }
           # UI stress: the real window with the real Cat windows, random clicks while it plays
           $u = Start-Process "$snd\Apps\Cat-Hub.exe" -ArgumentList '--uistress', "`"$((Resolve-Path "$snd\Hub Cats").Path)`"", '90', '5' -PassThru
           $null = $u.Handle
