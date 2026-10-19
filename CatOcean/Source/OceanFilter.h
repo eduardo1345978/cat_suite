@@ -5,11 +5,29 @@
 /** Keeps fish names friendly: no bad words (English and Slovak, also written with 0 / 1 / 3 / 4 / 5 / @ / $), short, simple characters. */
 namespace ocean::filter
 {
+/** Slovak / Czech / German letters to plain ones (the pixel font only has ASCII). */
+inline juce::juce_wchar fold (juce::juce_wchar c)
+{
+    static const juce::juce_wchar lower[] = { 0xe1, 0xe4, 0x10d, 0x10f, 0xe9, 0x11b, 0xed, 0x13e, 0x13a, 0x148, 0xf3, 0xf4, 0xf6, 0x155, 0x159,
+                                              0x161, 0x165, 0xfa, 0x16f, 0xfc, 0xfd, 0x17e, 0xdf };
+    static const juce::juce_wchar upper[] = { 0xc1, 0xc4, 0x10c, 0x10e, 0xc9, 0x11a, 0xcd, 0x13d, 0x139, 0x147, 0xd3, 0xd4, 0xd6, 0x154, 0x158,
+                                              0x160, 0x164, 0xda, 0x16e, 0xdc, 0xdd, 0x17d, 0x1e9e };
+    static const char plain[] = "aacdeeillnooorrstuuuyzs";
+    for (size_t i = 0; i < sizeof (lower) / sizeof (lower[0]); ++i)
+    {
+        if (c == lower[i]) return (juce::juce_wchar) plain[i];
+        if (c == upper[i]) return (juce::juce_wchar) (plain[i] - 'a' + 'A');
+    }
+    return c;
+}
+
 inline juce::String normalise (const juce::String& s)
 {
     juce::String out;
-    for (auto c : s.toLowerCase())
+    for (auto c : s)
     {
+        c = fold (c);
+        if (c >= 'A' && c <= 'Z') c = c - 'A' + 'a';
         switch (c)
         {
             case '0': c = 'o'; break;   case '1': c = 'i'; break;   case '!': c = 'i'; break;
@@ -50,20 +68,6 @@ inline bool isClean (const juce::String& text)
             if (nw == b) return false;
     }
     return true;
-}
-
-/** Slovak / Czech / German letters to plain ones (the pixel font only has ASCII). */
-inline juce::juce_wchar fold (juce::juce_wchar c)
-{
-    static const juce::juce_wchar from[] = { 0xe1, 0xe4, 0x10d, 0x10f, 0xe9, 0x11b, 0xed, 0x13e, 0x13a, 0x148, 0xf3, 0xf4, 0xf6, 0x155, 0x159,
-                                             0x161, 0x165, 0xfa, 0x16f, 0xfc, 0xfd, 0x17e, 0xdf };
-    static const char to[] = "aacdeeillnooorrstuuuyzs";
-    for (size_t i = 0; i < sizeof (from) / sizeof (from[0]); ++i)
-    {
-        if (c == from[i]) return (juce::juce_wchar) to[i];
-        if (c == juce::CharacterFunctions::toUpperCase (from[i])) return (juce::juce_wchar) juce::CharacterFunctions::toUpperCase ((juce::juce_wchar) to[i]);
-    }
-    return c;
 }
 
 /** A name that may be shown: simple characters, at most 16 long, nothing rude (else "Fish123"). */
