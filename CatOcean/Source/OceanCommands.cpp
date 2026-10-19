@@ -1,79 +1,199 @@
-// Cat Ocean: what people can type in the YouTube chat.
+// Cat Ocean: what people can type in the YouTube chat (and what moderators can do).
 #include "OceanSim.h"
 #include "OceanFilter.h"
+#include <algorithm>
 
 namespace ocean
 {
 namespace
 {
-    constexpr double commandCooldown = 2.5, feedCooldown = 30.0;
+    constexpr double commandCooldown = 2.5, feedCooldown = 30.0, xpMessageGap = 30.0;
 
     int indexIn (const juce::StringArray& names, const juce::String& w) { return names.indexOf (w, true); }
 
-    /** The help line shown when someone types !help (the screen also shows tips). */
-    const char* helpText = "!fish NAME  !color red blue  !body cat  !pattern stripes  !hat crown  !voice bell  !melody 1353  !feed  !vote 1";
+    const char* helpText = "!fish NAME  !color red blue  !body cat  !pattern stripes  !hat crown  !voice bell  !melody 1353  !dance  !feed  !vote 1  !level";
 }
 
-void Sim::chat (const juce::String& authorId, const juce::String& authorName, const juce::String& text)
+void Sim::chat (const juce::String& authorId, const juce::String& authorName, const juce::String& text, bool moderator)
 {
-    if (authorId.isEmpty()) return;
+    if (authorId.isEmpty() || banned.count (authorId) > 0) return;
     auto& v = viewers[authorId];
     if (v.name.isEmpty())
         v.name = filter::cleanName (authorName, (int) (authorId.hashCode() & 0x7fffffff));
     v.lastMessage = time;
 
     if (auto* f = findFish (v.fishId))
+    {
         bringBack (*f);
+        // chatting earns XP (at most every 30 s)
+        if (time - v.lastXpMessage >= xpMessageGap) { v.lastXpMessage = time; addXp (*f, 2); }
+    }
 
     const auto t = text.trim();
     if (t.startsWithChar ('!'))
-        command (v, authorId, t);
+        command (v, authorId, t, moderator);
 }
 
-bool Sim::applyWord (Fish& f, const juce::String& word, juce::String& changed)
+bool Sim::applyWord (Fish& f, const juce::String& word, juce::String& changed, juce::String& locked)
 {
     // the word decides on its own which gene it means; "!tail round" style hints are handled by command()
     auto& g = f.genes;
+    const int lv = f.level();
     auto note = [&changed] (const juce::String& s) { changed << (changed.isEmpty() ? "" : ", ") << s; };
+    auto allowed = [&] (int kind, int value, const juce::String& what)
+    {
+        const int need = unlockLevel (kind, value);
+        if (need <= lv) return true;
+        locked << (locked.isEmpty() ? "" : ", ") << what << " at LV" << need;
+        return false;
+    };
     int i;
-    if ((i = indexIn (bodyNames(), word)) >= 0)           { g.body = i; note (word); return true; }
+    if ((i = indexIn (bodyNames(), word)) >= 0)           { if (allowed (KindBody, i, word)) { g.body = i; note (word); } return true; }
     if (word == "small" || word == "tiny")                 { g.size = 0; note ("small"); return true; }
     if (word == "medium")                                  { g.size = 1; note ("medium"); return true; }
     if (word == "big" || word == "huge" || word == "large"){ g.size = 2; note ("big"); return true; }
-    if ((i = indexIn (patternNames(), word)) >= 0)         { g.pattern = i; note (word); return true; }
+    if ((i = indexIn (patternNames(), word)) >= 0)         { if (allowed (KindPattern, i, word)) { g.pattern = i; note (word); } return true; }
     if (word == "stripe" || word == "striped")             { g.pattern = PatStripes; note ("stripes"); return true; }
     if (word == "spot" || word == "spotty" || word == "dots") { g.pattern = PatSpots; note ("spots"); return true; }
-    if ((i = indexIn (accessoryNames(), word)) >= 0)       { g.accessory = i; note (i == 0 ? "no hat" : word); return true; }
+    if ((i = indexIn (accessoryNames(), word)) >= 0)       { if (allowed (KindHat, i, word)) { g.accessory = i; note (i == 0 ? "no hat" : word); } return true; }
     if (word == "nothing" || word == "none")               { g.accessory = AccNone; note ("no hat"); return true; }
     if (word == "sunglasses")                              { g.accessory = AccGlasses; note ("glasses"); return true; }
-    if ((i = indexIn (voiceNames(), word)) >= 0)           { g.voice = i; note (word + " voice"); return true; }
+    if ((i = indexIn (voiceNames(), word)) >= 0)           { if (allowed (KindVoice, i, word)) { g.voice = i; note (word + " voice"); } return true; }
     if (word == "low" || word == "mid" || word == "high")  { g.pitch = word == "low" ? 0 : word == "mid" ? 1 : 2; note (word + " voice"); return true; }
     if ((i = indexIn (moodNames(), word)) >= 0)            { g.setMood (i); note (word); return true; }
     if (word == "sparse" || word == "busy")                { g.setRhythm (word == "sparse" ? 0 : 2); note (word + " rhythm"); return true; }
     if (word == "slow" || word == "fast")                  { g.speed = word == "slow" ? 0.15f : 0.9f; note (word); return true; }
-    if (word == "fan" || word == "fork" || word == "veil") { g.tail = indexIn (tailNames(), word); note (word + " tail"); return true; }
-    if (word == "sail" || word == "spiky" || word == "nofin") { g.fin = indexIn (finNames(), word); note (word == "nofin" ? "no fin" : word + " fin"); return true; }
-    if (word == "dot" || word == "sleepy" || word == "star")  { g.eyes = indexIn (eyeNames(), word); note (word + " eyes"); return true; }
+    if (word == "fan" || word == "fork" || word == "veil") { i = indexIn (tailNames(), word); if (allowed (KindTail, i, word + " tail")) { g.tail = i; note (word + " tail"); } return true; }
+    if (word == "sail" || word == "spiky" || word == "nofin") { i = indexIn (finNames(), word); if (allowed (KindFin, i, word + " fin")) { g.fin = i; note (word == "nofin" ? "no fin" : word + " fin"); } return true; }
+    if (word == "dot" || word == "sleepy" || word == "star")  { i = indexIn (eyeNames(), word); if (allowed (KindEyes, i, word + " eyes")) { g.eyes = i; note (word + " eyes"); } return true; }
     return false;
 }
 
-void Sim::command (Viewer& v, const juce::String& ownerId, const juce::String& text)
+juce::String Sim::findViewer (const juce::String& nameOrMention) const
 {
-    if (time - v.lastCommand < commandCooldown) { ++ignoredCommands; return; }
-    v.lastCommand = time;
+    // "@Miro", "Miro" or a fish name; YouTube names may contain spaces, so compare without them
+    auto key = [] (const juce::String& s) { return s.trim().trimCharactersAtStart ("@").removeCharacters (" ").toLowerCase(); };
+    const auto want = key (nameOrMention);
+    if (want.isEmpty()) return {};
+    for (auto& v : viewers)
+        if (key (v.second.name) == want) return v.first;
+    for (auto& f : fish)
+        if (f.viewer() && (key (f.name) == want || key (f.ownerName) == want)) return f.ownerId;
+    for (auto& b : bannedNamesById)
+        if (key (b.second) == want) return b.first;
+    return {};
+}
 
+bool Sim::modCommand (const juce::String& cmd, const juce::StringArray& tok, const juce::StringArray& raw)
+{
+    // moderators: !rename @name New Name, !resetname @name, !kick @name, !ban @name, !unban @name,
+    // !event storm, !place kelp, !music lofi, !endvote, !feast
+    auto target = [&] { return tok.size() > 0 ? findViewer (raw[0]) : juce::String(); };
+    if (cmd == "rename" && tok.size() >= 2)
+    {
+        const auto id = target();
+        if (auto* f = fishOf (id))
+        {
+            juce::StringArray rest (raw);
+            rest.remove (0);
+            f->name = filter::cleanName (rest.joinIntoString (" "), f->id);
+            if (f->familyId == f->id) f->familyName = f->name;
+            toast (*f, "renamed by a moderator", 0xffc0a7f0);
+        }
+        return true;
+    }
+    if (cmd == "resetname")
+    {
+        if (auto* f = fishOf (target()))
+        {
+            f->name = "Fish" + juce::String (100 + f->id % 900);
+            if (f->familyId == f->id) f->familyName = f->name;
+            toast (*f, "name reset by a moderator", 0xffc0a7f0);
+        }
+        return true;
+    }
+    if (cmd == "kick")
+    {
+        if (auto* f = fishOf (target())) sendAway (*f);
+        return true;
+    }
+    if (cmd == "ban")
+    {
+        const auto id = target();
+        if (id.isEmpty()) return true;
+        auto it = viewers.find (id);
+        bannedNamesById[id] = it != viewers.end() ? it->second.name : raw[0].trimCharactersAtStart ("@");
+        banned.insert (id);
+        if (auto* f = fishOf (id))
+        {
+            // the fish leaves for good
+            const int fid = f->id;
+            fish.erase (std::remove_if (fish.begin(), fish.end(), [fid] (const Fish& x) { return x.id == fid; }), fish.end());
+        }
+        viewers.erase (id);
+        announce (bannedNamesById[id] + " was banned from the ocean", 0xff8b9bb4);
+        return true;
+    }
+    if (cmd == "unban")
+    {
+        const auto id = target();
+        if (id.isNotEmpty() && banned.erase (id) > 0)
+        {
+            announce (bannedNamesById[id] + " may come back to the ocean", 0xff8b9bb4);
+            bannedNamesById.erase (id);
+        }
+        return true;
+    }
+    if (cmd == "event" && tok.size() > 0)
+    {
+        const int e = findEvent (tok.joinIntoString (""));
+        if (e >= 0) { announce ("A moderator called: " + eventName (e) + "!", 0xff2ce8f5); applyEvent (e); }
+        return true;
+    }
+    if ((cmd == "place" || cmd == "goto") && tok.size() > 0)
+    {
+        const int p = findPlace (tok.joinIntoString (""));
+        if (p >= 0) { announce ("Off to the " + placeName (p) + "!", 0xff2ce8f5); goToPlace (p); }
+        return true;
+    }
+    if (cmd == "music" && tok.size() > 0)
+    {
+        const int st = findStyle (tok.joinIntoString (""));
+        if (st >= 0) { styleRequest = st; announce ("Now playing: " + styleName (st), 0xff2ce8f5); }
+        return true;
+    }
+    if (cmd == "endvote" || cmd == "skipvote")
+    {
+        if (vote.active) vote.left = 0.0f;
+        return true;
+    }
+    if (cmd == "startvote")
+    {
+        if (! vote.active) voteTimer = 0.0f;
+        return true;
+    }
+    return false;
+}
+
+void Sim::command (Viewer& v, const juce::String& ownerId, const juce::String& text, bool moderator)
+{
     juce::StringArray tok;
     tok.addTokens (text.substring (1).toLowerCase(), " ,", "");
     tok.removeEmptyStrings();
     if (tok.isEmpty()) return;
     const auto cmd = tok[0];
     tok.remove (0);
-
     // the original spelling of the words after the command (for names)
     juce::StringArray raw;
     raw.addTokens (text.substring (1), " ,", "");
     raw.removeEmptyStrings();
     raw.remove (0);
+
+    // moderators' commands have no cooldown
+    if (moderator && modCommand (cmd, tok, raw)) return;
+
+    if (time - v.lastCommand < commandCooldown) { ++ignoredCommands; return; }
+    v.lastCommand = time;
 
     Fish* f = findFish (v.fishId);
 
@@ -114,23 +234,44 @@ void Sim::command (Viewer& v, const juce::String& ownerId, const juce::String& t
         f = &nf;
         bringBack (*f);
         // !fish Miro blue stripes: known words change the fish, the rest is its name
-        juce::String changed, name;
+        juce::String changed, name, locked;
         int colourSlot = 0;
         for (int i = 0; i < tok.size(); ++i)
         {
             const int c = findColour (tok[i]);
             if (c >= 0) { (colourSlot == 0 ? f->genes.colour1 : colourSlot == 1 ? f->genes.colour2 : f->genes.colour3) = c; ++colourSlot; changed << (changed.isEmpty() ? "" : ", ") << tok[i]; continue; }
-            if (! applyWord (*f, tok[i], changed)) name << (name.isEmpty() ? "" : " ") << raw[i];
+            if (! applyWord (*f, tok[i], changed, locked)) name << (name.isEmpty() ? "" : " ") << raw[i];
         }
+        // a new fish starts with looks everyone has (higher-level things come with levels)
+        auto& g = f->genes;
+        if (unlockLevel (KindBody, g.body) > 1) g.body = BodySlim;
+        if (unlockLevel (KindPattern, g.pattern) > 1) g.pattern = PatStripes;
+        if (unlockLevel (KindTail, g.tail) > 1) g.tail = TailFan;
+        if (unlockLevel (KindFin, g.fin) > 1) g.fin = FinSmall;
+        if (unlockLevel (KindEyes, g.eyes) > 1) g.eyes = EyesBig;
+        if (unlockLevel (KindHat, g.accessory) > 1) g.accessory = AccNone;
+        if (unlockLevel (KindVoice, g.voice) > 1) g.voice = VoiceBell;
         if (name.isNotEmpty()) f->name = f->familyName = filter::cleanName (name, f->id);
-        toast (*f, "Hi, I'm " + f->name + "!", 0xff9ef0c2);
+        toast (*f, locked.isNotEmpty() ? "Hi, I'm " + f->name + "! (" + locked + ")" : "Hi, I'm " + f->name + "!", 0xff9ef0c2);
         if (f->genes.rare != RareNone) announce ("Lucky! " + v.name + " got a " + rareNames()[f->genes.rare] + " fish!", 0xfffee761);
         return;
     }
 
     if (! f->present) bringBack (*f);
-    juce::String changed;
+    juce::String changed, locked;
 
+    if (cmd == "dance" || cmd == "spin" || cmd == "jump")
+    {
+        f->emote = cmd == "dance" ? EmoteDance : cmd == "spin" ? EmoteSpin : EmoteJump;
+        f->emoteTime = 0.0f;
+        return;
+    }
+    if (cmd == "level" || cmd == "lvl" || cmd == "xp")
+    {
+        const int lv = f->level();
+        toast (*f, "LV" + juce::String (lv) + "  " + juce::String (f->xp) + "/" + juce::String (xpForLevel (lv + 1)) + " XP", 0xfffee761);
+        return;
+    }
     if (cmd == "name" || cmd == "rename")
     {
         const auto name = filter::cleanName (raw.joinIntoString (" "), f->id);
@@ -163,10 +304,19 @@ void Sim::command (Viewer& v, const juce::String& ownerId, const juce::String& t
     }
     else if (cmd == "random" || cmd == "reroll")
     {
-        const auto keepRare = f->genes.rare;
-        const auto keepTempo = f->genes.tempo; const auto keepKey = f->genes.key;
+        const auto keep = f->genes;
         f->genes = Genes::random (rng);
-        f->genes.rare = keepRare; f->genes.tempo = keepTempo; f->genes.key = keepKey;
+        auto& g = f->genes;
+        g.rare = keep.rare; g.tempo = keep.tempo; g.key = keep.key; g.species = keep.species; g.trait = keep.trait;
+        // only what the level allows
+        const int lv = f->level();
+        if (unlockLevel (KindBody, g.body) > lv) g.body = keep.body;
+        if (unlockLevel (KindPattern, g.pattern) > lv) g.pattern = keep.pattern;
+        if (unlockLevel (KindTail, g.tail) > lv) g.tail = keep.tail;
+        if (unlockLevel (KindFin, g.fin) > lv) g.fin = keep.fin;
+        if (unlockLevel (KindEyes, g.eyes) > lv) g.eyes = keep.eyes;
+        if (unlockLevel (KindHat, g.accessory) > lv) g.accessory = keep.accessory;
+        if (unlockLevel (KindVoice, g.voice) > lv) g.voice = keep.voice;
         changed = "a new look";
     }
     else if (cmd == "home" || cmd == "bye" || cmd == "sleep")
@@ -187,8 +337,10 @@ void Sim::command (Viewer& v, const juce::String& ownerId, const juce::String& t
     }
     else if (cmd == "info" || cmd == "me")
     {
-        toast (*f, voiceNames()[f->genes.voice] + " " + moodNames()[f->genes.mood()] + " gen " + juce::String (f->generation)
-                     + " babies " + juce::String (f->babies), 0xff2ce8f5);
+        juce::String s = "LV" + juce::String (f->level()) + " " + voiceNames()[f->genes.voice] + " " + moodNames()[f->genes.mood()]
+                       + " gen " + juce::String (f->generation) + " babies " + juce::String (f->babies);
+        if (auto* sp = species (f->genes.species)) s << " " << sp->name;
+        toast (*f, s, 0xff2ce8f5);
         return;
     }
     else
@@ -199,25 +351,35 @@ void Sim::command (Viewer& v, const juce::String& ownerId, const juce::String& t
                            || cmd == "voice" || cmd == "pitch" || cmd == "mood" || cmd == "body" || cmd == "pattern";
         if (! create && ! category && cmd != "set" && cmd != "look") { ++ignoredCommands; return; }
         int colourSlot = 0;
+        const int lv = f->level();
         for (auto& w : tok)
         {
             auto& g = f->genes;
             auto note = [&changed] (const juce::String& s) { changed << (changed.isEmpty() ? "" : ", ") << s; };
+            auto ok = [&] (int kind, int value, const juce::String& what)
+            {
+                const int need = unlockLevel (kind, value);
+                if (need <= lv) return true;
+                locked << (locked.isEmpty() ? "" : ", ") << what << " at LV" << need;
+                return false;
+            };
             int i;
-            if (cmd == "tail" && (i = indexIn (tailNames(), w)) >= 0)                      { g.tail = i; note (w + " tail"); continue; }
+            if (cmd == "tail" && (i = indexIn (tailNames(), w)) >= 0)                      { if (ok (KindTail, i, w + " tail")) { g.tail = i; note (w + " tail"); } continue; }
             if ((cmd == "fin" || cmd == "fins") && (w == "none" || w == "no"))             { g.fin = FinNone; note ("no fin"); continue; }
-            if ((cmd == "fin" || cmd == "fins") && (i = indexIn (finNames(), w)) >= 0)     { g.fin = i; note (w + " fin"); continue; }
-            if ((cmd == "eyes" || cmd == "eye") && (i = indexIn (eyeNames(), w)) >= 0)     { g.eyes = i; note (w + " eyes"); continue; }
+            if ((cmd == "fin" || cmd == "fins") && (i = indexIn (finNames(), w)) >= 0)     { if (ok (KindFin, i, w + " fin")) { g.fin = i; note (w + " fin"); } continue; }
+            if ((cmd == "eyes" || cmd == "eye") && (i = indexIn (eyeNames(), w)) >= 0)     { if (ok (KindEyes, i, w + " eyes")) { g.eyes = i; note (w + " eyes"); } continue; }
             if (cmd == "notes" && (w == "short" || w == "long"))                           { g.noteLength = w == "long" ? 1 : 0; note (w + " notes"); continue; }
             if (cmd == "speed" && w == "normal")                                           { g.speed = 0.5f; note ("normal speed"); continue; }
             if (cmd == "rhythm" && w == "normal")                                          { g.setRhythm (1); note ("normal rhythm"); continue; }
             const int c = findColour (w);
             if (c >= 0 && colourSlot < 3) { (colourSlot == 0 ? g.colour1 : colourSlot == 1 ? g.colour2 : g.colour3) = c; ++colourSlot; note (w); continue; }
-            applyWord (*f, w, changed);
+            applyWord (*f, w, changed, locked);
         }
     }
 
-    if (changed.isNotEmpty()) toast (*f, changed, 0xffffffff);
+    if (changed.isNotEmpty() || locked.isNotEmpty())
+        toast (*f, changed + (locked.isNotEmpty() ? (changed.isNotEmpty() ? "  " : "") + juce::String ("(") + locked + ")" : juce::String()),
+               locked.isNotEmpty() && changed.isEmpty() ? 0xfff6757a : 0xffffffff);
     else ++ignoredCommands;
 }
 } // namespace ocean

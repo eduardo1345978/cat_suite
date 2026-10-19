@@ -13,7 +13,7 @@ namespace ocean
 class YouTubeChat : private juce::Thread
 {
 public:
-    struct Message { juce::String id, authorId, authorName, text; };
+    struct Message { juce::String id, authorId, authorName, text; bool moderator = false; };
 
     YouTubeChat();
     ~YouTubeChat() override;
@@ -26,6 +26,9 @@ public:
     std::vector<Message> take();
     juce::String getStatus() const;
     int getMessageCount() const noexcept { return received.load(); }
+    /** The channel's subscriber count (checked every minute when a channel was given), -1 = unknown. */
+    int getSubscribers() const noexcept { return subscribers.load(); }
+    static int parseSubscribers (const juce::String& channelPage);
 
     // pieces (public for the tests)
     static juce::String videoIdFrom (const juce::String& text);           // "" if the text has no video id
@@ -47,6 +50,8 @@ private:
     mutable juce::CriticalSection lock;
     juce::String status { "not connected" };
     std::vector<Message> inbox;
-    std::atomic<int> received { 0 };
+    std::atomic<int> received { 0 }, subscribers { -1 };
+    juce::uint32 lastSubCheck = 0;
+    void checkSubscribers (const juce::String& channelPath);
 };
 } // namespace ocean

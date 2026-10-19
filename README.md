@@ -50,29 +50,35 @@ Six VST3 MIDI plug-ins and four instruments (a choir, a gliding synth, a vocaloi
 Every plug-in has its own **music-reactive cat**: Chord-Cat wears headphones, Patt-Cat is a tabby, Bend-Cat has a pitch wave and a curly tail, Drum-Cat plays a snare, Orbit-Cat wears a space helmet with a planet circling it, Sing-Cat sings into a microphone, Bass-Cat plays a bass guitar and Glide-Cat is wrapped in coloured glide lines Talk-Cat wears an idol headset with music notes floating up and Life-Cat has a sprout on its head with tiny creatures swimming around it. Each cat nods to the beat, twitches its ears and flicks its tail on notes, its eyes glow with how hard you play, and it appears big on a short boot screen when the window opens (click to skip). Every plug-in also has **Surprise** (randomise within musical ranges) with a one-step **undo** arrow; Bend-Cat's Surprise never touches Bend Range / MPE settings, which must match your instrument.
 
 ### Cat Ocean (an endless YouTube live stream)
-**Cat-Ocean.exe** (comes with Get-Cat-Sound-Apps.bat) is a pixel-art ocean that streams itself to YouTube in 1080p, 24/7:
+**Cat-Ocean.exe** (comes with Get-Cat-Sound-Apps.bat) is a relaxing pixel-art ocean that streams itself to YouTube in 1080p, 24/7:
 1. Paste your **stream key** (YouTube Studio > Go live > Stream) and your **channel** (`@name`).
 2. Press **Get ffmpeg** once (the free tool that sends the video), then **Go live**. *Record a 30 s test video* checks everything without going live.
+3. **Copy the YouTube description** puts a ready description with every command on the clipboard (the same text is in `packaging/Cat-Ocean-YouTube-Description.txt`).
 
 Viewers type commands in the live chat:
 
 | Command | What it does |
 |---|---|
-| `!fish Miro blue stripes cat` | get your own fish (name + any looks) |
+| `!fish Miro blue stripes` | get your own fish (name + any looks) |
 | `!color red yellow white` | body, pattern and fin colours (red, orange, yellow, lime, green, teal, cyan, blue, navy, purple, violet, pink, magenta, coral, white, gray, black, brown, peach, mint, lavender) |
-| `!body` slim / round / long / puffer / cat / flat, `!size` small / medium / big | the body |
-| `!pattern` plain / stripes / spots / gradient / checker / belly | the pattern |
+| `!body` slim / round / long / puffer / flat / cat, `!size` small / medium / big | the body |
+| `!pattern` plain / stripes / spots / gradient / belly / checker | the pattern |
 | `!tail` fan / fork / round / veil, `!fin` none / small / sail / spiky, `!eyes` dot / big / sleepy / star | tail, fin, eyes |
-| `!hat` crown / hat / glasses / scarf / bow / lamp / headphones / none | something to wear |
+| `!hat` none / hat / glasses / bow / scarf / headphones / lamp / crown | something to wear |
 | `!mood` calm / shy / social / hyper / lazy, `!speed` slow / normal / fast | how it swims |
-| `!voice` bubble / pluck / bell / flute / chip / pad / marimba / whistle, `!pitch` low / mid / high | how it sings |
+| `!voice` bubble / pluck / bell / flute / chip / marimba / whistle / pad, `!pitch` low / mid / high | how it sings |
 | `!melody 1353` (1 = key note .. 8 = octave), `!rhythm` sparse / normal / busy, `!notes` short / long | what it sings |
-| `!feed`, `!vote 1`, `!name Miro`, `!random`, `!info`, `!home`, `!release`, `!help` | food, votes, ... |
+| `!dance`, `!spin`, `!jump` | moves |
+| `!feed`, `!vote 1`, `!name Miro`, `!random`, `!info`, `!level`, `!home`, `!release`, `!help` | food, votes, ... |
 
-- Your fish swims in when you write in the chat and goes to sleep in the cave after 20 quiet minutes (it is kept forever).
-- Fish have babies that mix their parents' genes (babies of your fish are called *Miro Jr.*); sometimes they mutate, and a few are born **Golden, Rainbow, Ghost, Glowing or Crystal**.
-- The music never ends: the composer keeps writing, and the fishes' genes slowly pull its **tempo and key**. Every fish sings its own melody with its own voice.
-- Storms, rain, feeding time and votes (next music style, or an event: storm, feast, baby boom, rare hunt). Leaderboards: oldest fish, biggest families, rare fish, most babies.
+**Moderators** (and the host typing in the app): `!rename @name New Name`, `!resetname @name`, `!kick @name`, `!ban @name`, `!unban @name`, `!event storm/calm/feast/babyboom/rarehunt`, `!place reef/kelp/trench/wreck`, `!music dreamy/lofi/deep/sunrise`, `!startvote`, `!endvote`.
+
+- **Levels**: a viewer's fish earns XP while it swims (1 a minute) and when they chat (2, at most every 30 s); the name shows the level (*MIRO LV7*). Some looks unlock with levels: LV2 puffer, gradient, sail fin, sleepy eyes, scarf, chip voice; LV3 flat, belly, spiky fin, star eyes, headphones, marimba; LV4 checker, veil tail, whistle; LV5 cat body, lamp; LV6 pad voice; LV8 crown.
+- Your fish swims in when you write in the chat; after 20 quiet minutes it naps in the cave (it is kept forever). A cat in a boat waves hello.
+- **Genetics**: babies mix their parents' genes (babies of your fish are called *Miro Jr.*), sometimes mutate, and a few are born **Golden, Rainbow, Ghost, Glowing or Crystal**. After many generations evolution discovers **new species** with something no fish had before (whiskers, a glowing antenna, a twin tail, starry spots, a frill, a horn).
+- **Music** is always relaxing: Dreamy ambient, Lo-fi chill, Deep sea or Sunrise piano. The composer never stops; the fishes' genes slowly pull its **tempo and key**, and every fish sings its own melody (with a little fin wave).
+- **Places**: Coral reef, Kelp forest, Deep trench (glowing plants, fish glow), Shipwreck (with a treasure chest). Chat votes where the ocean goes, which music plays, and events (storm, feast, baby boom, rare hunt).
+- New **subscribers** (the channel's count going up) start a confetti party. Leaderboards: oldest fish, biggest families, rare fish, most babies, species, highest levels.
 - One fish per viewer, a word filter for names (English and Slovak), a cooldown against spam, at most 40 viewers' fish on screen at once.
 
 ### The composer (Cat Hub's Compose tab, Dice and Muse-Cat)

@@ -97,6 +97,7 @@ jobs:
           }
           Copy-Item packaging\Install-Cat-Sound-Apps.bat $snd
           Copy-Item packaging\README-sound-apps.txt $snd
+          Copy-Item packaging\Cat-Ocean-YouTube-Description.txt $snd
           Compress-Archive -Path "$snd\*" -DestinationPath Cat-Sound-Apps-Windows.zip -Force
           if ((Get-ChildItem "$snd\Apps" -Filter *.exe).Count -ne 7) { throw "Sound apps missing" }
           Copy-Item packaging\Get-Cat-Sound-Apps.bat .

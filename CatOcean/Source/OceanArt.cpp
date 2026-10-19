@@ -122,19 +122,48 @@ int Canvas::text (const juce::String& s, int x, int y, Colour c, int scale, Colo
 }
 
 //==============================================================================
+namespace
+{
+    // water (top, middle, deep), sand (top, bottom) and rocks for every place
+    struct PlaceLook { Colour top, mid, deep, sandTop, sandLow, rock; float rays; };
+    const PlaceLook& look (int place)
+    {
+        static const PlaceLook looks[NumPlaces] = {
+            { 0xff35c2cf, 0xff1b72a8, 0xff0c2756, 0xffe3c48a, 0xffa9844f, 0xff55607a, 1.0f },   // coral reef
+            { 0xff4cc3a4, 0xff1f7468, 0xff0b3135, 0xffb9b77a, 0xff6f6a43, 0xff4d5f58, 0.8f },   // kelp forest
+            { 0xff16426a, 0xff0b1d3a, 0xff02060f, 0xff2a3352, 0xff10142a, 0xff222a44, 0.0f },   // deep trench
+            { 0xff3aa7b5, 0xff1e5e78, 0xff0e2a40, 0xffc9b07e, 0xff7e6845, 0xff4c5566, 0.5f },   // shipwreck
+        };
+        return looks[juce::jlimit (0, NumPlaces - 1, place)];
+    }
+}
+
 Painter::Painter()
 {
-    // the sea floor: rocks, coral, seaweed (the same every time)
+    // the sea floor: rocks, coral, seaweed (the same every time, one set per place)
     juce::Random r (77);
     for (int i = 0; i < 9; ++i)
-        rocks.push_back ({ 10 + r.nextInt (W - 20), 10 + r.nextInt (22), 5 + r.nextInt (9), mixc (0xff4a5670, 0xff6b6f86, r.nextFloat()) });
+        rocks.push_back ({ 10 + r.nextInt (W - 20), 10 + r.nextInt (22), 5 + r.nextInt (9), 0 });
     for (int i = 0; i < 26; ++i)
     {
         const bool kelp = r.nextFloat() < 0.6f;
-        weeds.push_back ({ 6.0f + r.nextFloat() * (W - 12), kelp ? 22 + r.nextInt (40) : 6 + r.nextInt (10),
-                           kelp ? mixc (0xff2f7a3d, 0xff58b04a, r.nextFloat()) : mixc (0xfff6757a, 0xffff9a5c, r.nextFloat()),
-                           r.nextFloat() * 6.0f });
+        weedSets[PlaceReef].push_back ({ 6.0f + r.nextFloat() * (W - 12), kelp ? 22 + r.nextInt (40) : 6 + r.nextInt (10),
+                                         kelp ? mixc (0xff2f7a3d, 0xff58b04a, r.nextFloat()) : mixc (0xfff6757a, 0xffff9a5c, r.nextFloat()),
+                                         r.nextFloat() * 6.0f });
     }
+    for (int i = 0; i < 44; ++i)   // a forest of tall kelp
+    {
+        const bool tall = i < 34;
+        weedSets[PlaceKelp].push_back ({ 4.0f + r.nextFloat() * (W - 8), tall ? 70 + r.nextInt (120) : 8 + r.nextInt (14),
+                                         mixc (0xff3f7a2a, 0xff8fb04a, r.nextFloat()), r.nextFloat() * 6.0f });
+    }
+    for (int i = 0; i < 16; ++i)   // glowing plants in the dark
+    {
+        static const Colour glows[] = { 0xff2ce8f5, 0xffc06bff, 0xff7dffb0, 0xffff7ad9 };
+        weedSets[PlaceDeep].push_back ({ 6.0f + r.nextFloat() * (W - 12), 8 + r.nextInt (22), glows[r.nextInt (4)], r.nextFloat() * 6.0f, true });
+    }
+    for (int i = 0; i < 18; ++i)
+        weedSets[PlaceWreck].push_back ({ 6.0f + r.nextFloat() * (W - 12), 10 + r.nextInt (30), mixc (0xff4d6b2a, 0xff8a8a3a, r.nextFloat()), r.nextFloat() * 6.0f });
     sandNoise.resize ((size_t) W);
     for (auto& n : sandNoise) n = r.nextInt (1000);
 }
@@ -144,6 +173,8 @@ void Painter::paint (Canvas& c, const Sim& sim, const MusicInfo& music, float dt
     clock += dt;
     const float t = clock;
     background (c, sim, t);
+    decor (c, sim, t);
+    boat (c, sim, t);
 
     // food
     for (auto& p : sim.food)
@@ -158,6 +189,14 @@ void Painter::paint (Canvas& c, const Sim& sim, const MusicInfo& music, float dt
     for (auto& f : sim.fish) if (f.present) order.push_back (&f);
     std::sort (order.begin(), order.end(), [] (auto* a, auto* b) { return a->genes.lengthPixels() * a->growth > b->genes.lengthPixels() * b->growth; });
     for (auto* f : order) drawFish (c, *f, (float) sim.time);
+    if (sim.place == PlaceDeep)
+        for (auto* f : order)   // in the dark, every fish glows a little
+            for (int y = -8; y <= 8; ++y)
+                for (int x = -8; x <= 8; ++x)
+                {
+                    const float d = std::sqrt ((float) (x * x + y * y)) / 8.0f;
+                    if (d < 1.0f) c.add ((int) f->x + x, (int) f->y + y, colourARGB (f->genes.colour1), 0.10f * (1.0f - d) * f->fade);
+                }
 
     bubbles (c, sim, dt);
     floor (c, sim, t);
@@ -190,10 +229,32 @@ void Painter::paint (Canvas& c, const Sim& sim, const MusicInfo& music, float dt
         for (auto* f : order)
         {
             if (f->dying || f->name.isEmpty() || f->viewer() != (pass == 0)) continue;
+            // wild named fish (babies of viewers' fish) only show their name for a while after they're born
+            if (! f->viewer() && sim.time - f->bornAt > 30.0) continue;
             const float len = f->genes.lengthPixels() * (0.5f + 0.5f * f->growth);
             const Colour col = f->genes.rare != RareNone ? 0xffffd34d : f->viewer() ? 0xffffffff : 0xff9ef0c2;
-            place (f->name.toUpperCase(), (int) f->x, (int) (f->y - len * 0.45f) - 9, col, pass == 0);
+            const auto label = f->viewer() ? f->name.toUpperCase() + " LV" + juce::String (f->level()) : f->name.toUpperCase();
+            place (label, (int) f->x, (int) (f->y - len * 0.45f) - 9, col, pass == 0);
         }
+
+    // confetti (new subscribers, new species)
+    for (auto& cf : sim.confetti)
+    {
+        const float a = juce::jmin (1.0f, cf.life);
+        c.blend ((int) cf.x, (int) cf.y, cf.colour, a);
+        c.blend ((int) cf.x + (((int) (cf.life * 8.0f)) & 1), (int) cf.y + 1, cf.colour, a);
+    }
+
+    // moving to a new place: the picture fades out and in
+    if (sim.placeFade > 0.0f)
+    {
+        c.fillRect (0, 0, W, H, 0xff02040a, juce::jmin (0.95f, sim.placeFade));
+        if (sim.nextPlace >= 0)
+        {
+            const auto text = "SWIMMING TO THE " + placeName (sim.nextPlace).toUpperCase() + " ...";
+            c.text (text, W / 2 - Canvas::textWidth (text, 2) / 2, H / 2 - 5, 0xff2ce8f5, 2);
+        }
+    }
 
     overlay (c, sim, music, t);
 }
@@ -203,8 +264,9 @@ void Painter::background (Canvas& c, const Sim& sim, float t)
 {
     const float storm = sim.weatherLevel;
     const Colour skyTop = mixc (0xff6fc3f0, 0xff2e3442, storm), skyLow = mixc (0xffcff1fb, 0xff5d6676, storm);
-    const Colour waterTop = mixc (0xff35c2cf, 0xff3a6a78, storm), waterMid = mixc (0xff1b72a8, 0xff173a5c, storm),
-                 waterDeep = mixc (0xff0c2756, 0xff07112a, storm);
+    const auto& lk = look (sim.place);
+    const Colour waterTop = mixc (lk.top, shade (lk.top, 0.55f), storm), waterMid = mixc (lk.mid, shade (lk.mid, 0.55f), storm),
+                 waterDeep = mixc (lk.deep, shade (lk.deep, 0.5f), storm);
 
     for (int x = 0; x < W; ++x)
     {
@@ -254,9 +316,9 @@ void Painter::background (Canvas& c, const Sim& sim, float t)
     }
 
     // sun rays in calm water
-    if (storm < 0.8f)
+    if (storm < 0.8f && lk.rays > 0.0f)
     {
-        const float a = 0.07f * (1.0f - storm / 0.8f);
+        const float a = 0.07f * lk.rays * (1.0f - storm / 0.8f);
         for (int y = (int) surfaceY + 3; y < (int) floorY; ++y)
         {
             const float depth = (y - surfaceY) / (floorY - surfaceY);
@@ -280,9 +342,20 @@ void Painter::background (Canvas& c, const Sim& sim, float t)
 void Painter::floor (Canvas& c, const Sim& sim, float t)
 {
     // seaweed and coral
-    for (auto& w : weeds)
+    const auto& lk = look (sim.place);
+    for (auto& w : weedSets[(size_t) juce::jlimit (0, NumPlaces - 1, sim.place)])
     {
         const bool kelp = w.height > 18;
+        if (w.glow)
+        {
+            // glowing plants: a soft light, brighter tips
+            for (int y = -10; y <= 10; ++y)
+                for (int x = -10; x <= 10; ++x)
+                {
+                    const float d = std::sqrt ((float) (x * x + y * y)) / 10.0f;
+                    if (d < 1.0f) c.add ((int) w.x + x, (int) floorY + 2 - w.height + y, w.colour, 0.07f * (1.0f - d) * (0.7f + 0.3f * std::sin (t * 1.5f + w.phase)));
+                }
+        }
         for (int k = 0; k < w.height; ++k)
         {
             const float sway = std::sin (t * 1.1f + w.phase + k * 0.18f) * k * (kelp ? 0.09f : 0.04f) * (1.0f + sim.weatherLevel);
@@ -300,7 +373,7 @@ void Painter::floor (Canvas& c, const Sim& sim, float t)
         for (int y = top; y < H; ++y)
         {
             const float depth = (float) (y - top) / (float) (H - top + 1);
-            Colour col = mixc (0xffe3c48a, 0xffa9844f, depth);
+            Colour col = mixc (lk.sandTop, lk.sandLow, depth);
             const auto h = hash ((juce::uint32) (x * 1031 + y * 7919));
             if (h % 11 == 0) col = shade (col, 0.85f);
             else if (h % 17 == 0) col = light (col, 0.25f);
@@ -316,7 +389,7 @@ void Painter::floor (Canvas& c, const Sim& sim, float t)
             {
                 const float nx = (x - r.w * 0.5f) / (r.w * 0.5f), ny = (float) (r.h - y) / (float) r.h;
                 if (nx * nx + ny * ny * 0.9f > 1.0f) continue;
-                Colour col = r.colour;
+                Colour col = mixc (lk.rock, light (lk.rock, 0.15f), (float) (r.x % 7) / 7.0f);
                 if (ny > 0.7f && nx < 0.2f) col = light (col, 0.2f);
                 else if (nx > 0.4f) col = shade (col, 0.8f);
                 c.set (r.x + x - r.w / 2, (int) floorY + 4 - y, col);
@@ -420,7 +493,6 @@ void Painter::drawFish (Canvas& c, const Fish& f, float time)
     static thread_local std::vector<Colour> spr;
     spr.assign ((size_t) (SW * SH), 0);
     auto put = [&] (int x, int y, Colour col) { if ((unsigned) (x + CX) < (unsigned) SW && (unsigned) (y + CY) < (unsigned) SH) spr[(size_t) ((y + CY) * SW + x + CX)] = col | 0xff000000u; };
-    auto at = [&] (int x, int y) -> Colour { return (unsigned) (x + CX) < (unsigned) SW && (unsigned) (y + CY) < (unsigned) SH ? spr[(size_t) ((y + CY) * SW + x + CX)] : 0; };
 
     const auto& g = f.genes;
     Colour c1 = colourARGB (g.colour1), c2 = colourARGB (g.colour2), c3 = colourARGB (g.colour3);
@@ -528,8 +600,24 @@ void Painter::drawFish (Canvas& c, const Fish& f, float time)
     {
         const float u = 0.58f;
         const int fx = bx0 + (int) (u * L), fy = (int) std::lround (halfH (u) * 0.25f + wig (u));
-        const int flap = (int) std::lround (std::sin (f.wiggle * 3.0f) * 1.2f);
-        put (fx - 1, fy + 1, shade (c3, 0.8f)); put (fx - 2, fy + 1 + flap, shade (c3, 0.7f)); put (fx - 1, fy + 2 + flap, shade (c3, 0.7f));
+        if (f.singFlash > 0.0f)
+        {
+            // singing: the side fin goes up and waves (twice, left - right)
+            const float phase = (1.0f - f.singFlash) * 6.2831853f * 2.0f;
+            const int sway = (int) std::lround (std::sin (phase) * 1.4f);
+            const Colour fin = light (c3, 0.25f);
+            put (fx, fy, shade (c3, 0.85f));
+            put (fx, fy - 1, fin);
+            put (fx + sway / 2, fy - 2, fin);
+            put (fx + sway, fy - 3, fin);
+            put (fx + sway, fy - 4, light (c3, 0.5f));
+            if (L >= 17) { put (fx + sway + 1, fy - 4, light (c3, 0.5f)); put (fx + 1, fy - 1, fin); }
+        }
+        else
+        {
+            const int flap = (int) std::lround (std::sin (f.wiggle * 3.0f) * 1.2f);
+            put (fx - 1, fy + 1, shade (c3, 0.8f)); put (fx - 2, fy + 1 + flap, shade (c3, 0.7f)); put (fx - 1, fy + 2 + flap, shade (c3, 0.7f));
+        }
     }
     // cat ears
     if (g.body == BodyCat)
@@ -638,9 +726,55 @@ void Painter::drawFish (Canvas& c, const Fish& f, float time)
         default: break;
     }
 
+    // what only a new species has
+    switch (g.trait)
+    {
+        case TraitWhiskers:
+            for (int k = 1; k <= 5; ++k) { put (bx0 + L + k, ey + 1 - k / 2, 0xffe8ecf4); put (bx0 + L + k, ey + 2 + k / 2, 0xffe8ecf4); }
+            break;
+        case TraitAntenna:
+        {
+            const int ax = bx0 + (int) (0.8f * L), ay = (int) std::lround (-halfH (0.8f) + wig (0.8f));
+            for (int k = 1; k <= 4; ++k) put (ax + k / 2, ay - k, shade (c3, 0.7f));
+            put (ax + 2, ay - 5, 0xff9ff8ff); put (ax + 3, ay - 5, 0xff9ff8ff); put (ax + 2, ay - 6, 0xffffffff);
+            break;
+        }
+        case TraitTwinTail:
+            for (int k = 1; k <= (int) tl; ++k)
+            {
+                const int up = (int) std::lround (-Hmax * 0.6f - k * 0.5f + tailShift), down = (int) std::lround (Hmax * 0.6f + k * 0.5f + tailShift);
+                put (bx0 - k + 1, up, light (c3, 0.2f)); put (bx0 - k + 1, down, light (c3, 0.2f));
+            }
+            break;
+        case TraitStars:
+            for (int i = 2; i < L - 2; i += 3)
+            {
+                const float u = (i + 0.5f) / L;
+                const int y = (int) std::lround (wig (u) + ((i * 7) % 5 - 2) * halfH (u) * 0.25f);
+                put (bx0 + i, y, ((int) (time * 3.0f) + i) % 4 == 0 ? 0xffffffff : 0xfffee761);
+            }
+            break;
+        case TraitFrill:
+        {
+            const float u = 0.64f;
+            const int fx = bx0 + (int) (u * L), h = (int) halfH (u) + 1, w = (int) std::lround (wig (u));
+            for (int y = -h - 1; y <= h + 1; ++y) if ((y & 1) == 0) { put (fx, y + w, light (c2, 0.3f)); put (fx - 1, y + w, c2); }
+            break;
+        }
+        case TraitHorn:
+        {
+            const int hx2 = bx0 + (int) (0.86f * L), hy = (int) std::lround (-halfH (0.86f) + wig (0.86f));
+            put (hx2, hy - 1, 0xffffe9a0); put (hx2 + 1, hy - 2, 0xffffcf3d); put (hx2 + 1, hy - 3, 0xffffe9a0); put (hx2 + 2, hy - 4, 0xffffffff);
+            break;
+        }
+        default: break;
+    }
+
     // to the canvas (flipped when swimming left)
     float alpha = f.fade * (g.rare == RareGhost ? 0.5f + 0.15f * std::sin (time * 2.0f) : 1.0f);
-    const int px = (int) std::lround (f.x), py = (int) std::lround (f.y + std::sin (time * 1.5f + f.id) * 0.6f);
+    // a little hop while it sings
+    const float hopUp = f.singFlash > 0.0f ? std::sin (f.singFlash * 3.14159265f) * 1.5f : 0.0f;
+    const int px = (int) std::lround (f.x), py = (int) std::lround (f.y + std::sin (time * 1.5f + f.id) * 0.6f - hopUp);
     for (int y = 0; y < SH; ++y)
         for (int x = 0; x < SW; ++x)
         {
@@ -698,7 +832,7 @@ void Painter::overlay (Canvas& c, const Sim& sim, const MusicInfo& m, float dt)
     // now playing
     {
         const juce::String l1 = "NOW PLAYING", l2 = m.style + "  " + m.key + " " + m.scale + "  " + juce::String (m.bpm) + " BPM",
-                           l3 = "PART " + juce::String (m.piece + 1) + "  " + m.section,
+                           l3 = "PART " + juce::String (m.piece + 1) + "  " + m.section + "   " + m.place,
                            l4 = "FISH PULL IT TO " + juce::String ((int) std::lround (m.targetBpm)) + " BPM " + m.targetKey;
         const int w = juce::jmax (Canvas::textWidth (l2), Canvas::textWidth (l4)) + 10;
         panel (4, 4, w, 31);
@@ -757,7 +891,9 @@ void Painter::overlay (Canvas& c, const Sim& sim, const MusicInfo& m, float dt)
         "!COLOR RED BLUE   !PATTERN STRIPES   !BODY CAT",
         "!HAT CROWN   !EYES BIG   !TAIL VEIL   !FIN SAIL",
         "!VOICE BELL   !MELODY 1353   !RHYTHM BUSY   !NOTES LONG",
-        "!FEED TO DROP FOOD   !MOOD HYPER   !NAME MIRO",
+        "!DANCE   !SPIN   !JUMP   !FEED   !LEVEL   !NAME MIRO",
+        "CHATTING AND WATCHING LEVEL UP YOUR FISH: NEW HATS, VOICES AND LOOKS UNLOCK",
+        "AFTER MANY GENERATIONS, EVOLUTION CAN DISCOVER A WHOLE NEW SPECIES",
         "YOUR FISH SWIMS IN WHEN YOU CHAT AND SLEEPS IN THE CAVE WHEN YOU'RE AWAY",
         "FISH HAVE BABIES. RARE ONES ARE GOLDEN, RAINBOW, GHOST, GLOWING OR CRYSTAL",
         "THE MUSIC FOLLOWS THE FISH: THEIR GENES PULL THE TEMPO AND THE KEY",
@@ -770,5 +906,153 @@ void Painter::overlay (Canvas& c, const Sim& sim, const MusicInfo& m, float dt)
     if (! sim.news.empty()) { line = sim.news.back().text.toUpperCase(); col = sim.news.back().colour; }
     line = line.substring (0, 118);
     c.text (line, W / 2 - Canvas::textWidth (line) / 2, H - 8, col, 1, 0, false);
+}
+//==============================================================================
+void Painter::decor (Canvas& c, const Sim& sim, float t)
+{
+    switch (sim.place)
+    {
+        case PlaceWreck:
+        {
+            // a sunken ship lying on the sand, a little tilted, with portholes and a broken mast
+            const int x0 = 150, y0 = (int) floorY + 2;
+            for (int x = 0; x < 150; ++x)
+            {
+                const float u = x / 150.0f;
+                const int top = y0 - 26 - (int) (u * 10.0f) + (x > 120 ? (x - 120) / 2 : 0);
+                const int bottom = y0 - (int) (std::sin (u * 3.14159f) * 6.0f);
+                for (int y = top; y <= bottom; ++y)
+                {
+                    Colour col = ((y - top) % 6 == 0) ? 0xff5a3a24 : (x % 23 == 0 ? 0xff4a2f1d : 0xff7a5134);
+                    if (y == top) col = 0xff9a6a44;
+                    c.blend (x0 + x, y, col, 0.95f);
+                }
+                if (x % 24 == 12) for (int k = -2; k <= 2; ++k) for (int j = -2; j <= 2; ++j)
+                    if (k * k + j * j <= 4) c.set (x0 + x + k, top + 9 + j, (k * k + j * j <= 1) ? 0xff0f1a26 : 0xffc9a25a);
+            }
+            for (int y = 0; y < 70; ++y)   // the broken mast
+                c.set (x0 + 60 + y / 6, y0 - 36 - y, y % 9 == 0 ? 0xff4a2f1d : 0xff6b4630);
+            for (int y = 0; y < 18; ++y) for (int x = 0; x < 10 - y / 3; ++x)   // a torn sail
+                c.blend (x0 + 63 + y / 6 + x, y0 - 100 + y, 0xffd8ccb0, 0.75f);
+            // the treasure chest (it shines)
+            const int tx = 345, ty = (int) floorY - 1;
+            c.fillRect (tx, ty - 7, 14, 8, 0xff7a4a22);
+            c.fillRect (tx, ty - 10, 14, 3, 0xff9a6a34);
+            c.fillRect (tx, ty - 7, 14, 1, 0xffffcf3d);
+            c.set (tx + 7, ty - 5, 0xffffcf3d);
+            for (int i = 0; i < 3; ++i)
+            {
+                const auto h = hash ((juce::uint32) (i * 31 + (int) (t * 4.0f)));
+                if (h % 3 == 0) c.set (tx + (int) (h % 14), ty - 11 - (int) ((h >> 8) % 4), 0xffffffff);
+            }
+            break;
+        }
+        case PlaceKelp:
+        {
+            // far kelp in the haze
+            for (int k = 0; k < 30; ++k)
+            {
+                const float kx = hashf ((juce::uint32) k * 17 + 3) * W;
+                const int hgt = 90 + (int) (hashf ((juce::uint32) k * 5 + 1) * 110);
+                for (int j = 0; j < hgt; ++j)
+                {
+                    const float sway = std::sin (t * 0.7f + k + j * 0.05f) * j * 0.05f;
+                    c.blend ((int) (kx + sway), (int) floorY - j, 0xff1d4a3a, 0.35f);
+                }
+            }
+            break;
+        }
+        case PlaceDeep:
+        {
+            // marine snow drifting down
+            for (int i = 0; i < 90; ++i)
+            {
+                const float x = hashf ((juce::uint32) i * 13 + 7) * W + std::sin (t * 0.4f + i) * 4.0f;
+                const float y = std::fmod (hashf ((juce::uint32) i * 29 + 3) * H + t * (3.0f + (i % 5)), (float) H);
+                if (y > surfaceY + 4.0f) c.blend ((int) x, (int) y, 0xffcfe3ff, 0.45f);
+            }
+            break;
+        }
+        default: break;
+    }
+}
+
+void Painter::boat (Canvas& c, const Sim& sim, float t)
+{
+    const auto& cat = sim.cat;
+    const float storm = sim.weatherLevel;
+    const int bx = (int) cat.x;
+    auto surfAt = [&] (float x) { return surfaceY + std::sin (x * 0.07f + t * 1.4f) * (1.0f + storm * 2.5f) + std::sin (x * 0.19f - t * 2.1f) * 0.6f; };
+    const int sy = (int) std::lround (surfAt ((float) bx));
+    const float rock = std::sin (t * 1.3f) * (0.6f + storm * 1.5f);
+    auto tilt = [&] (int dx) { return (int) std::lround (dx * rock * 0.06f); };
+    const Colour ink = 0xff1b1f33;
+
+    // the fishing line goes into the water (behind the boat)
+    if (cat.mood == 0)
+    {
+        const int tipX = bx + 13, tipY = sy - 17 + tilt (13);
+        const int bob = (int) std::lround (surfAt ((float) tipX + 4.0f));
+        for (int y = tipY; y < bob; ++y) c.blend (tipX + (y - tipY) / 6, y, 0xffe8ecf4, 0.6f);
+        c.set (tipX + (bob - tipY) / 6, bob, 0xffe43b44); c.set (tipX + (bob - tipY) / 6, bob - 1, 0xffffffff);
+        for (int y = bob + 1; y < bob + 30; ++y) c.blend (tipX + (bob - tipY) / 6, y, 0xffe8ecf4, 0.35f);
+    }
+    // the hull
+    for (int r = 0; r < 6; ++r)
+        for (int dx = -14 + r; dx <= 14 - r; ++dx)
+        {
+            const Colour col = r == 0 ? 0xffb8794a : r == 5 ? 0xff5a3a24 : (dx % 5 == 0 ? 0xff7a4a2a : 0xff8f563b);
+            c.set (bx + dx, sy - 3 + r + tilt (dx), col);
+        }
+    for (int dx = -14; dx <= 14; ++dx) c.set (bx + dx, sy - 4 + tilt (dx), ink);
+
+    // the cat (orange, white muzzle)
+    const Colour fur = 0xfff7922e, furDark = 0xffc96a1c;
+    const int cx = bx - 2, base = sy - 5 + tilt (-2);
+    if (cat.mood == 1)
+    {
+        // napping, curled up
+        for (int y = 0; y < 3; ++y) for (int x = -4; x <= 4; ++x) if (std::abs (x) + y < 6) c.set (cx + x, base - y, y == 0 ? furDark : fur);
+        c.set (cx + 4, base - 3, fur); c.set (cx + 5, base - 3, fur); c.set (cx + 3, base - 4, fur); c.set (cx + 5, base - 4, fur);   // head + ears
+        c.set (cx + 4, base - 2, ink);   // closed eye
+        c.text ("Z", cx + 6, base - 10 - (int) std::fmod (t * 2.0f, 4.0f), 0xffc0a7f0, 1, 0, false);
+    }
+    else
+    {
+        // sitting: body, head with ears, tail
+        for (int y = 0; y < 5; ++y) for (int x = -3; x <= 2; ++x) c.set (cx + x, base - y, x == 2 || y == 0 ? furDark : fur);
+        for (int y = 0; y < 4; ++y) for (int x = -2; x <= 2; ++x) c.set (cx + x + 1, base - 5 - y, fur);
+        c.set (cx - 1, base - 9, fur); c.set (cx + 3, base - 9, fur); c.set (cx - 1, base - 10, furDark); c.set (cx + 3, base - 10, furDark);   // ears
+        c.set (cx, base - 7, ink); c.set (cx + 2, base - 7, ink);   // eyes
+        c.set (cx + 1, base - 6, 0xfff6757a);                        // nose
+        c.set (cx + 3, base - 6, 0xffffffff);                        // muzzle
+        for (int k = 0; k < 4; ++k) c.set (cx - 4 - k / 2, base - 1 - k, k == 3 ? furDark : fur);   // tail
+        if (cat.mood == 0)
+        {
+            // the rod in its paws
+            for (int k = 0; k < 14; ++k) c.set (cx + 3 + k * 13 / 14, base - 3 - (k * 9) / 14 + tilt (k), 0xff6b4630);
+        }
+        else
+        {
+            // waving hello
+            const bool up = std::sin (cat.wave * 12.0f) > 0.0f;
+            c.set (cx + 4, base - 4, fur); c.set (cx + 5, base - 6 + (up ? 0 : 1), fur); c.set (cx + (up ? 6 : 5), base - 8 + (up ? 0 : 1), fur);
+            if (cat.waveAt.isNotEmpty())
+            {
+                const auto text = "HI " + cat.waveAt.toUpperCase().substring (0, 14) + "!";
+                c.text (text, juce::jlimit (2, W - 2 - Canvas::textWidth (text), cx - Canvas::textWidth (text) / 2), base - 20, 0xffffffff);
+            }
+        }
+        if (storm > 0.3f)
+        {
+            // an umbrella in the rain
+            for (int dx = -7; dx <= 7; ++dx)
+            {
+                const int h = 4 - (dx * dx) / 12;
+                for (int k = 0; k < juce::jmax (1, h); ++k) c.set (cx + 1 + dx, base - 14 - k, (dx / 3) % 2 == 0 ? 0xffe43b44 : 0xfffee761);
+            }
+            for (int k = 0; k < 5; ++k) c.set (cx + 1, base - 13 + k, ink);
+        }
+    }
 }
 } // namespace ocean

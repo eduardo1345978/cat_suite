@@ -136,7 +136,7 @@ void Music::prepare (double sampleRate)
     fish.prepare (sr);
     fishVerb.setSampleRate (sr);
     juce::Reverb::Parameters p;
-    p.roomSize = 0.8f; p.damping = 0.4f; p.wetLevel = 0.35f; p.dryLevel = 0.8f; p.width = 1.0f;
+    p.roomSize = 0.85f; p.damping = 0.5f; p.wetLevel = 0.45f; p.dryLevel = 0.75f; p.width = 1.0f;
     fishVerb.setParameters (p);
     limiter.prepare (sr);
     fishBuf.setSize (2, 4096);
@@ -145,18 +145,32 @@ void Music::prepare (double sampleRate)
 void Music::startStyle (int st, int key, double bpm)
 {
     style = juce::jlimit (0, NumStyles - 1, st);
+    const auto& info = styleInfo (style);
     Settings s;
     s.seed = seed = seed * 1664525u + 1013904223u;
-    s.genre = styleGenre (style);
-    static const int moods[NumStyles] = { Dreamy, Chill, Chill, Happy, Epic, Happy, Dark, Epic };
-    s.mood = moods[style];
+    s.genre = info.genre;
+    s.mood = info.mood;
     s.endless = true;
     s.key = ((key % 12) + 12) % 12;
     auto first = compose (s);
-    // the genre keeps its own feel; the fish pull it a little
-    if (bpm > 0) first.bpm = std::round (juce::jlimit (first.bpm * 0.85, first.bpm * 1.15, bpm));
+    // always relaxed: the style's tempo range, and inside it what the fish like
+    first.bpm = std::round (juce::jlimit ((double) info.bpmLo, (double) info.bpmHi, bpm > 0 ? bpm : first.bpm));
     song = std::make_shared<Song> (std::move (first));
-    renderer.setSounds (defaultSounds (s.genre));
+
+    // soft sounds for every style (KeysSynth: 0 pad 1 e-piano 2 pluck 3 strings; DrumKit 2 = lo-fi)
+    SoundSet ss;
+    switch (style)
+    {
+        case StyleLoFi:    ss = { 1, 0, 2, 1, 2 }; break;
+        case StyleDeepSea: ss = { 0, 0, 2, 3, 0 }; break;
+        case StyleSunrise: ss = { 1, 0, 2, 2, 3 }; break;
+        default:           ss = { 0, 0, 2, 1, 0 }; break;
+    }
+    renderer.setSounds (ss);
+    renderer.levels = { 0.5f, 0.6f, style == StyleLoFi ? 0.32f : 0.22f, 0.85f, 0.45f };
+    renderer.mute = {};
+    renderer.mute[(size_t) Drums] = ! info.drums;
+    renderer.reverbSend = 0.32f;
     renderer.allOff();
     player.setSong (song);
     ppq = 0.0;
@@ -171,7 +185,8 @@ void Music::nextPiece (const Sim& sim)
     // slowly towards what the fish like: a few bpm and one step round the circle of fifths per piece
     const double target = sim.targetTempo();
     const double base = prev.bpm;
-    prev.bpm = std::round (juce::jlimit (base - 3.0, base + 3.0, target));
+    const auto& info = styleInfo (style);
+    prev.bpm = std::round (juce::jlimit ((double) info.bpmLo, (double) info.bpmHi, juce::jlimit (base - 3.0, base + 3.0, target)));
     const int want = sim.targetKey(), cur = prev.key;
     const int fWant = (want * 7) % 12, fCur = (cur * 7) % 12, diff = (fWant - fCur + 12) % 12;
     if (diff != 0) prev.key = (cur + (diff <= 6 ? 7 : 5)) % 12;
@@ -204,7 +219,7 @@ void Music::render (float* l, float* r, int n, Sim& sim)
     fishVerb.processStereo (fl, fr, n);
     for (int i = 0; i < n; ++i)
     {
-        float a = l[i] + fl[i] * 0.9f, b = r[i] + fr[i] * 0.9f;
+        float a = l[i] + fl[i] * 0.7f, b = r[i] + fr[i] * 0.7f;
         limiter.processSample (a, b);
         l[i] = a; r[i] = b;
     }
@@ -247,7 +262,7 @@ void Music::singFish (Sim& sim, double fromBeat, double toBeat, double pps, int 
             const auto& g = f.genes;
             if ((g.rhythmPattern & (1u << stepInBar)) == 0) continue;
             const float chance = g.rhythm == 0 ? 0.9f : g.rhythm == 1 ? 0.7f : 0.55f;
-            if (rng.nextFloat() > chance * (f.viewer() ? 1.0f : 0.35f)) continue;
+            if (rng.nextFloat() > chance * (f.viewer() ? 0.5f : 0.3f)) continue;
 
             const int deg = g.melody[(size_t) (f.melodyPos % juce::jmax (1, g.melodyLength))];
             ++f.melodyPos;
@@ -266,7 +281,8 @@ void Music::singFish (Sim& sim, double fromBeat, double toBeat, double pps, int 
 
             const float beats = g.noteLength == 1 ? (g.rhythm == 2 ? 0.5f : 0.9f) : (g.rhythm == 2 ? 0.2f : 0.3f);
             const float seconds = beats * 60.0f / (float) song->bpm;
-            const float vel = (0.55f + rng.nextFloat() * 0.2f) * level * (strong ? 1.0f : 0.85f);
+            const float bright = g.voice == VoiceChip || g.voice == VoiceWhistle ? 0.55f : 1.0f;   // the sharp voices softer
+            const float vel = (0.5f + rng.nextFloat() * 0.2f) * level * bright * (strong ? 1.0f : 0.8f);
             fish.noteOn (note, vel, seconds, g.voice, 0.1f + 0.8f * juce::jlimit (0.0f, 1.0f, f.x / (float) W), g.rare != RareNone);
             f.singFlash = 1.0f;
             ++sung;
@@ -291,6 +307,7 @@ MusicInfo Music::info (const Sim& sim) const
     m.piece = pieceCount - 1;
     m.targetBpm = sim.targetTempo();
     m.targetKey = keyName (sim.targetKey());
+    m.place = placeName (sim.place).toUpperCase();
     return m;
 }
 

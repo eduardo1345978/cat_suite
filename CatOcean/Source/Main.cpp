@@ -5,6 +5,7 @@
 #include "OceanEngine.h"
 #include "OceanFilter.h"
 #include "CatLookAndFeel.h"
+#include "BinaryData.h"
 
 using namespace ocean;
 
@@ -89,11 +90,20 @@ public:
         hostEditor.onReturnKey = [this]
         {
             const auto text = hostEditor.getText().trim();
-            if (text.isNotEmpty()) engine.say ("host", "Host", text);
+            if (text.isNotEmpty()) engine.say ("host", "Host", text, true);   // the host may use the mod commands too
             hostEditor.clear();
         };
 
-        for (auto* b : { &liveButton, &stopButton, &chatButton, &testButton, &getFFmpegButton, &findFFmpegButton })
+        descriptionButton.setTooltip ("Copies a description for your stream (all the commands for viewers and moderators). Paste it into YouTube Studio.");
+        descriptionButton.onClick = [this]
+        {
+            juce::SystemClipboard::copyTextToClipboard (juce::String::fromUTF8 (BinaryData::CatOceanYouTubeDescription_txt,
+                                                                                BinaryData::CatOceanYouTubeDescription_txtSize));
+            descriptionButton.setButtonText ("Copied! Paste it in YouTube Studio");
+            juce::Timer::callAfterDelay (3000, [safe = juce::Component::SafePointer<MainComponent> (this)]
+                                         { if (safe != nullptr) safe->descriptionButton.setButtonText ("Copy the YouTube description (all commands)"); });
+        };
+        for (auto* b : { &liveButton, &stopButton, &chatButton, &testButton, &getFFmpegButton, &findFFmpegButton, &descriptionButton })
             addAndMakeVisible (b);
         liveButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xffc0392b));
         liveButton.onClick = [this] { goLive(); };
@@ -118,7 +128,7 @@ public:
         }
         if (channelEditor.getText().isNotEmpty()) engine.chat.start (channelEditor.getText());
 
-        setSize (1360, 640);
+        setSize (1360, 700);
         startTimerHz (30);
     }
 
@@ -168,6 +178,8 @@ public:
         chatStatus.setBounds (side.removeFromTop (34));
         side.removeFromTop (4);
         testButton.setBounds (side.removeFromTop (30));
+        side.removeFromTop (4);
+        descriptionButton.setBounds (side.removeFromTop (30));
         side.removeFromTop (6);
         ffmpegStatus.setBounds (side.removeFromTop (34));
         row = side.removeFromTop (28);
@@ -304,7 +316,8 @@ private:
     juce::Label title, keyLabel, keyHint, channelLabel, streamStatus, chatStatus, ffmpegStatus, hostLabel, volumeLabel, statsLabel;
     juce::TextEditor keyEditor, channelEditor, hostEditor;
     juce::TextButton liveButton { "Go live" }, stopButton { "Stop" }, chatButton { "Connect chat only" },
-                     testButton { "Record a 30 s test video (to check it works)" }, getFFmpegButton { "Get ffmpeg" }, findFFmpegButton { "Find ffmpeg..." };
+                     testButton { "Record a 30 s test video (to check it works)" },
+                     descriptionButton { "Copy the YouTube description (all commands)" }, getFFmpegButton { "Get ffmpeg" }, findFFmpegButton { "Find ffmpeg..." };
     juce::Slider volume;
     juce::AudioDeviceManager devices;
     juce::AudioSourcePlayer player;

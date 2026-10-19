@@ -27,7 +27,7 @@ public:
     void stop();
 
     // any thread
-    void say (const juce::String& authorId, const juce::String& authorName, const juce::String& text);
+    void say (const juce::String& authorId, const juce::String& authorName, const juce::String& text, bool moderator = false);
     void copyFrame (juce::Image& into) const;
     juce::String stats() const;
     bool goLive (const juce::File& ffmpeg, const juce::String& target);
@@ -61,7 +61,8 @@ private:
     Canvas canvas;
     std::vector<float> left, right;
 
-    struct ChatLine { juce::String id, name, text; };
+    struct ChatLine { juce::String id, name, text; bool moderator = false; };
+    int lastSubscribers = -1;
     juce::CriticalSection chatLock;
     std::vector<ChatLine> pending;
 

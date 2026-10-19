@@ -1,0 +1,69 @@
+🐟 CAT OCEAN - a relaxing pixel ocean that never ends 🐟
+Get your own fish by typing in the chat! It swims in when you chat and naps in the cave when you're away (it's saved forever).
+The music never stops: it is written live, and the fishes' genes slowly change its tempo and key. Every fish sings its own little tune.
+
+━━━━━━━━━━━━━━━━━━━━
+🎣 GET YOUR FISH
+!fish Miro             your own fish called Miro
+!fish Miro blue cat    name + looks in one go
+!name Miro             rename it
+!random                a surprise look
+!info  /  !level       about your fish / your level and XP
+!home                  your fish goes to sleep
+!release               your fish becomes a wild fish
+
+🎨 LOOKS
+!color red yellow white   body, pattern and fin colours
+   red orange yellow lime green teal cyan blue navy purple violet pink magenta coral white gray black brown peach mint lavender
+!body slim / round / long / puffer* / flat* / cat*
+!size small / medium / big
+!pattern plain / stripes / spots / gradient* / belly* / checker*
+!tail fan / fork / round / veil*
+!fin none / small / sail* / spiky*
+!eyes dot / big / sleepy* / star*
+!hat none / hat / glasses / bow / scarf* / headphones* / lamp* / crown*
+
+🎵 SINGING
+!voice bubble / pluck / bell / flute / chip* / marimba* / whistle* / pad*
+!pitch low / mid / high
+!melody 1353           your own tune (1 = the key note ... 8 = an octave up, up to 8 notes)
+!rhythm sparse / normal / busy
+!notes short / long
+
+🐠 SWIMMING & FUN
+!mood calm / shy / social / hyper / lazy
+!speed slow / normal / fast
+!dance  !spin  !jump
+!feed                  drop some food (every 30 s)
+!vote 1 / 2 / 3        vote for the next music, place or event
+
+━━━━━━━━━━━━━━━━━━━━
+⭐ LEVELS
+Your fish earns XP while it swims (1 per minute) and when you chat (2, at most every 30 s).
+* = unlocks with levels:  LV2 puffer, gradient, sail fin, sleepy eyes, scarf, chip voice
+                          LV3 flat body, belly, spiky fin, star eyes, headphones, marimba voice
+                          LV4 checker, veil tail, whistle voice   LV5 cat body, lamp   LV6 pad voice   LV8 crown
+
+🧬 GENETICS
+Fish have babies that mix their parents' colours, shapes and songs (your fish's babies are called "Miro Jr.").
+Babies sometimes mutate - and a few are born Golden, Rainbow, Ghost, Glowing or Crystal.
+After many generations evolution can discover a whole NEW SPECIES with something no fish had before.
+
+🌊 THE OCEAN
+Places: Coral reef, Kelp forest, Deep trench, Shipwreck (chat votes where it goes)
+Music (always relaxing): Dreamy ambient, Lo-fi chill, Deep sea, Sunrise piano
+Weather: calm, rain and storms. Feeding time. A cat in a boat says hi to every fish that arrives.
+New subscribers get a little party 🎉
+
+━━━━━━━━━━━━━━━━━━━━
+🛡 MODERATORS (and the channel owner)
+!rename @name New Name    rename someone's fish
+!resetname @name          give it a neutral name (Fish123)
+!kick @name               send their fish home
+!ban @name / !unban @name no fish for them (their fish is removed)
+!event storm / calm / feast / babyboom / rarehunt
+!place reef / kelp / trench / wreck
+!music dreamy / lofi / deep / sunrise
+!startvote / !endvote
+
+Be kind - names with rude words are replaced automatically. One fish per person. 🐾

@@ -79,15 +79,20 @@ void testChatReader()
 
     const juce::String answer = R"({"continuationContents":{"liveChatContinuation":{"continuations":[{"timedContinuationData":{"continuation":"NEXT","timeoutMs":2500}}],
         "actions":[{"addChatItemAction":{"item":{"liveChatTextMessageRenderer":{"id":"m1","authorExternalChannelId":"UCabc","authorName":{"simpleText":"Miro"},
-        "message":{"runs":[{"text":"!fish Miro "},{"emoji":{"emojiId":"x","shortcuts":[":cat:"]}},{"text":" blue"}]}}}}},
+        "message":{"runs":[{"text":"!fish Miro "},{"emoji":{"emojiId":"x","shortcuts":[":cat:"]}},{"text":" blue"}]},
+        "authorBadges":[{"liveChatAuthorBadgeRenderer":{"icon":{"iconType":"MODERATOR"},"tooltip":"Moderator"}}]}}}},
         {"addChatItemAction":{"item":{"liveChatPaidMessageRenderer":{"id":"m2","authorExternalChannelId":"UCdef","authorName":{"simpleText":"Ana"},"message":{"runs":[{"text":"!feed"}]}}}}},
         {"addLiveChatTickerItemAction":{}}]}}})";
+    check (YouTubeChat::parseSubscribers (R"(..."subscriberCountText":{"accessibility":{"accessibilityData":{"label":"1.23K subscribers"}},"simpleText":"1.23K subscribers"}...)") == 1230
+           && YouTubeChat::parseSubscribers (R"("subscriberCountText":{"simpleText":"987 subscribers"})") == 987
+           && YouTubeChat::parseSubscribers ("no count here") == -1, "chat: reads the subscriber count (987, 1.23K)");
     std::vector<YouTubeChat::Message> msgs;
     int wait = 0;
     juce::String next;
     const bool ok = YouTubeChat::parseChat (juce::JSON::parse (answer), msgs, next, wait);
     check (ok && msgs.size() == 2 && msgs[0].authorName == "Miro" && msgs[0].authorId == "UCabc" && msgs[0].text == "!fish Miro :cat: blue"
            && msgs[1].text == "!feed" && next == "NEXT" && wait == 2500, "chat: reads new messages (text, emoji, super chat) and the next poll");
+    check (msgs.size() == 2 && msgs[0].moderator && ! msgs[1].moderator, "chat: knows who is a moderator");
 }
 
 void testGenes()
@@ -129,8 +134,12 @@ void testCommandsAndLife (const juce::File& outDir)
     auto* miro = fishNamed (sim, "Miro");
     check (miro != nullptr && miro->viewer() && miro->present, "chat: !fish makes a viewer fish that swims in");
     if (miro != nullptr)
-        check (miro->genes.colour1 == findColour ("blue") && miro->genes.pattern == PatStripes && miro->genes.body == BodyCat,
-               "chat: !fish Miro blue stripes cat sets the look");
+        check (miro->genes.colour1 == findColour ("blue") && miro->genes.pattern == PatStripes && miro->genes.body == BodySlim,
+               "chat: !fish Miro blue stripes cat sets the look (the cat body waits for LV5)");
+    if (miro != nullptr) miro->xp = 1000;   // a long-time viewer: everything unlocked
+    engine.say ("UC1", "Miro", "!body cat");
+    engine.runFrames (90);
+    check (miro != nullptr && miro->genes.body == BodyCat && miro->level() >= 8, "levels: LV" + juce::String (miro != nullptr ? miro->level() : 0) + " may have a cat body");
 
     // more commands (with the cooldown between them)
     auto cmd = [&] (const juce::String& id, const juce::String& text) { engine.say (id, "Viewer", text); engine.runFrames (90); };
@@ -164,6 +173,71 @@ void testCommandsAndLife (const juce::File& outDir)
     bool rude = false;
     for (auto& f : sim.fish) rude = rude || ! filter::isClean (f.name);
     check (! rude && sim.fishOf ("UC2") != nullptr && sim.fishOf ("UC3") != nullptr, "chat: rude names are replaced");
+    // a new viewer can't wear a crown yet
+    engine.runFrames (90);
+    engine.say ("UC3", "Ana", "!hat crown");
+    engine.runFrames (2);
+    check (sim.fishOf ("UC3") != nullptr && sim.fishOf ("UC3")->genes.accessory != AccCrown, "levels: the crown waits for LV8");
+    const int xpBefore = sim.fishOf ("UC3") != nullptr ? sim.fishOf ("UC3")->xp : 0;
+    engine.runFrames (30 * 65);
+    check (sim.fishOf ("UC3") != nullptr && sim.fishOf ("UC3")->xp > xpBefore, "levels: swimming earns XP");
+
+    // emotes
+    engine.say ("UC1", "Miro", "!jump");
+    engine.runFrames (2);
+    const float yBefore = miro != nullptr ? miro->y : 0.0f;
+    engine.runFrames (12);
+    check (miro != nullptr && miro->y < yBefore - 10.0f, "emotes: !jump jumps");
+    engine.runFrames (90);
+    engine.say ("UC1", "Miro", "!dance");
+    engine.runFrames (20);
+    check (miro != nullptr && miro->emote == EmoteDance, "emotes: !dance dances");
+    savePng (engine.canvasForTests(), outDir.getChildFile ("02b-dance.png"));
+    engine.runFrames (120);
+
+    // moderators
+    engine.say ("UCmod", "Mod", "!rename @Ana Bubbles", true);
+    engine.runFrames (2);
+    check (sim.fishOf ("UC3") != nullptr && sim.fishOf ("UC3")->name == "Bubbles", "mods: !rename @name");
+    engine.say ("UCx", "Troll", "!ban @Miro");
+    engine.runFrames (2);
+    check (sim.fishOf ("UC1") != nullptr, "mods: viewers can't use mod commands");
+    engine.say ("UCmod", "Mod", "!ban @Ana", true);
+    engine.runFrames (2);
+    check (sim.fishOf ("UC3") == nullptr && sim.isBanned ("UC3"), "mods: !ban removes the fish");
+    engine.say ("UC3", "Ana", "!fish Ana");
+    engine.runFrames (2);
+    check (sim.fishOf ("UC3") == nullptr, "mods: banned people get no fish");
+    engine.say ("UCmod", "Mod", "!unban @Ana", true);
+    engine.runFrames (90);
+    engine.say ("UC3", "Ana", "!fish Ana");
+    engine.runFrames (2);
+    check (sim.fishOf ("UC3") != nullptr, "mods: !unban lets them back");
+    engine.say ("host", "Host", "!kick @Miro", true);
+    engine.runFrames (2);
+    check (miro != nullptr && miro->leaving, "mods: !kick sends a fish home (the host can do it too)");
+    engine.say ("UC1", "Miro", "back!");
+    engine.runFrames (2);
+    miro = fishNamed (sim, "Miro");
+
+    // places
+    for (auto* where : { "kelp", "trench", "wreck", "reef" })
+    {
+        engine.say ("UCmod", "Mod", juce::String ("!place ") + where, true);
+        engine.runFrames (30 * 5);
+        savePng (engine.canvasForTests(), outDir.getChildFile (juce::String ("09-place-") + where + ".png"));
+        check (sim.place == findPlace (where), juce::String ("places: the ocean moves to the ") + placeName (findPlace (where)));
+    }
+
+    // a new species and a subscriber party
+    const int sp = sim.discoverSpeciesForTests();
+    check (sp > 0 && sim.species (sp) != nullptr && sim.species (sp)->trait != TraitNone,
+           "evolution: a new species gets a name and a new trait (" + (sim.species (sp) != nullptr ? sim.species (sp)->name : juce::String()) + ")");
+    sim.celebrateSubscribers (124, 1);
+    engine.runFrames (20);
+    check (! sim.confetti.empty(), "subscribers: a new subscriber makes a party");
+    savePng (engine.canvasForTests(), outDir.getChildFile ("10-party.png"));
+
     engine.say ("UC4", "Nobody", "!hat crown");
     engine.runFrames (2);
     check (sim.fishOf ("UC4") == nullptr, "chat: other commands need !fish first");
@@ -191,6 +265,7 @@ void testCommandsAndLife (const juce::File& outDir)
             const int kind = sim.vote.kind, choice = sim.vote.options[1];
             engine.runFrames (30 * 95);
             if (kind == 0) check (sim.getStyle() == choice, "vote: the ocean plays the music people voted for (" + styleName (choice) + ")");
+            else if (kind == 1) check (sim.place == choice, "vote: the ocean moved where people voted (" + placeName (choice) + ")");
             else check (true, "vote: event " + eventName (choice) + " happened");
         }
     }
@@ -233,6 +308,11 @@ void testCommandsAndLife (const juce::File& outDir)
     check (peakMax > 0.05 && peakMax <= 1.0, "music: plays and never clips (peak " + juce::String (peakMax, 3) + ")");
     check (music.fishNotes > 500, "music: the fish sing (" + juce::String (music.fishNotes) + " notes)");
     check (music.outOfKey * 50 < music.fishNotes + 1, "music: fish sing in the song's key (" + juce::String (music.outOfKey) + " out of key)");
+    {
+        const auto& st = styleInfo (sim.getStyle());
+        check (music.currentBpm() >= st.bpmLo - 0.5 && music.currentBpm() <= st.bpmHi + 0.5,
+               "music: always relaxed (" + juce::String (music.currentBpm(), 0) + " bpm, " + styleName (sim.getStyle()) + ")");
+    }
     check (music.pieces() > startPieces + 10, "music: the song keeps going, piece after piece (" + juce::String (music.pieces() - startPieces) + " new pieces)");
 
     // genes pull the music: make every fish like A at 120 bpm
@@ -241,7 +321,7 @@ void testCommandsAndLife (const juce::File& outDir)
     check (music.currentKey() == 9, "music: the key moves to the one the fish like (now " + cat::muse::keyName (music.currentKey()) + ")");
     const double bpmBefore = music.currentBpm();
     for (int s = 0; s < 60 * 6; ++s) engine.runFrames (30);
-    check (music.currentBpm() > bpmBefore || music.currentBpm() >= 120.0, "music: the tempo moves towards what the fish like ("
+    check (music.currentBpm() > bpmBefore || music.currentBpm() >= styleInfo (sim.getStyle()).bpmHi - 0.5, "music: the tempo moves towards what the fish like ("
            + juce::String (bpmBefore, 0) + " -> " + juce::String (music.currentBpm(), 0) + " bpm)");
     check ((weatherSeen & 2) != 0 || (weatherSeen & 4) != 0, "weather: it rains or storms now and then");
 
@@ -288,6 +368,7 @@ void testAllLooks (const juce::File& outDir)
             f.genes.pattern = (k + body) % NumPatterns;
             f.genes.accessory = k % NumAccessories;
             f.genes.rare = k < 6 ? k : 0;
+            f.genes.trait = (k + body) % NumTraits;
             f.x = 30.0f + k * 56.0f;
             f.y = 25.0f + body * 42.0f;
             f.facing = (k & 1) ? -1 : 1;
@@ -296,6 +377,22 @@ void testAllLooks (const juce::File& outDir)
             Painter::drawFish (c, f, 1.0f);
         }
     savePng (c, outDir.getChildFile ("07-all-looks.png"));
+
+    // the wave while singing, frame by frame
+    Canvas w;
+    for (int i = 0; i < W * H; ++i) w.data()[i] = 0xff1b72a8;
+    for (int k = 0; k < 8; ++k)
+    {
+        Fish f;
+        f.id = 500 + k;
+        f.genes = Genes::random (r);
+        f.genes.size = 2;
+        f.genes.body = k % 2 == 0 ? BodySlim : BodyCat;
+        f.x = 40.0f + k * 55.0f; f.y = 135.0f;
+        f.singFlash = 1.0f - k / 8.0f;
+        Painter::drawFish (w, f, 0.0f);
+    }
+    savePng (w, outDir.getChildFile ("08-wave.png"));
     check (distinctColours (c) > 60, "picture: every kind of fish can be drawn");
 }
 

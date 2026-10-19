@@ -67,7 +67,7 @@ private:
     std::array<juce::MidiBuffer, cat::muse::NumParts> parts;
     juce::AudioBuffer<float> fishBuf;
     double sr = 48000.0, ppq = 0.0;
-    int style = StyleAmbient, pieceCount = 0, singRotate = 0;
+    int style = StyleDreamy, pieceCount = 0, singRotate = 0;
     juce::uint32 seed = 1;
     juce::Random rng { 99 };
     int pendingStyle = -1;

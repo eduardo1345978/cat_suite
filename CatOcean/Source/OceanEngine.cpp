@@ -52,10 +52,10 @@ void Engine::saveNow()
     }
 }
 
-void Engine::say (const juce::String& id, const juce::String& name, const juce::String& text)
+void Engine::say (const juce::String& id, const juce::String& name, const juce::String& text, bool moderator)
 {
     const juce::ScopedLock sl (chatLock);
-    if (pending.size() < 5000) pending.push_back ({ id, name, text });
+    if (pending.size() < 5000) pending.push_back ({ id, name, text, moderator });
 }
 
 void Engine::copyFrame (juce::Image& img) const
@@ -124,11 +124,17 @@ void Engine::run()
 void Engine::frame()
 {
     // chat: YouTube + typed in the app
-    for (auto& m : chat.take()) sim.chat (m.authorId, m.authorName, m.text);
+    for (auto& m : chat.take()) sim.chat (m.authorId, m.authorName, m.text, m.moderator);
+    // new subscribers: a little party
+    if (const int subs = chat.getSubscribers(); subs >= 0)
+    {
+        if (lastSubscribers >= 0 && subs > lastSubscribers) sim.celebrateSubscribers (subs, subs - lastSubscribers);
+        lastSubscribers = subs;
+    }
     {
         std::vector<ChatLine> lines;
         { const juce::ScopedLock sl (chatLock); lines.swap (pending); }
-        for (auto& l : lines) sim.chat (l.id, l.name, l.text);
+        for (auto& l : lines) sim.chat (l.id, l.name, l.text, l.moderator);
     }
 
     const float dt = 1.0f / fps;
@@ -185,6 +191,9 @@ void Engine::frame()
           << sim.births << " babies born, " << sim.mutations << " mutations\n"
           << "music: " << styleName (sim.getStyle()) << ", " << (int) std::lround (music.currentBpm()) << " bpm, key "
           << cat::muse::keyName (music.currentKey()) << ", piece " << music.pieces();
+        s << "\nplace: " << placeName (sim.place) << ", species discovered: " << (int) sim.speciesList.size();
+        const auto bans = sim.bannedNames();
+        if (! bans.isEmpty()) s << "\nbanned: " << bans.joinIntoString (", ") << "  (type !unban @name to undo)";
         const juce::ScopedLock sl (statsLock);
         statsText = s;
     }

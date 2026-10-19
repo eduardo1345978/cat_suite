@@ -2,6 +2,7 @@
 
 #include "OceanGenes.h"
 #include <map>
+#include <set>
 #include <deque>
 #include <vector>
 
@@ -18,9 +19,20 @@ constexpr int maxWild = 34, minWild = 16, maxViewerFish = 40;
 constexpr double viewerIdleSeconds = 20.0 * 60.0; // a viewer's fish swims away after 20 quiet minutes
 
 enum Weather { WeatherCalm = 0, WeatherRain, WeatherStorm };
-enum MusicStyle { StyleAmbient = 0, StyleLoFi, StyleJazz, StyleHouse, StyleCinematic, StylePop, StyleTrap, StyleRock, NumStyles };
+
+/** The music: always relaxing, four flavours of ambient. */
+enum MusicStyle { StyleDreamy = 0, StyleLoFi, StyleDeepSea, StyleSunrise, NumStyles };
+struct StyleInfo { const char* name; const char* word; int genre, mood; float bpmLo, bpmHi; bool drums; };
+const StyleInfo& styleInfo (int style);
 juce::String styleName (int style);
-int styleGenre (int style);                       // -> cat::muse::Genre
+int findStyle (const juce::String& word);         // -1 if none
+
+/** Where the ocean is (chat votes where it goes next). */
+enum Place { PlaceReef = 0, PlaceKelp, PlaceDeep, PlaceWreck, NumPlaces };
+juce::String placeName (int place);
+int findPlace (const juce::String& word);
+
+enum Emote { EmoteNone = 0, EmoteDance, EmoteSpin, EmoteJump };
 
 struct Fish
 {
@@ -44,23 +56,46 @@ struct Fish
     juce::String familyName;                      // the viewer name the family started from (or "")
     int melodyPos = 0;
     double bornAt = 0;                            // ocean time
+    // viewers' fish: experience and level
+    int xp = 0;
+    int level() const noexcept;
+    // emotes (!dance !spin !jump)
+    int emote = EmoteNone;
+    float emoteTime = 0;
 };
+
+/** XP needed for a level (level 1 = 0 XP). */
+int xpForLevel (int level);
 
 struct Food { float x = 0, y = 0, vy = 10, life = 90; };
 struct Toast { juce::String text; int fishId = 0; float x = 0, y = 0, life = 4.0f; juce::uint32 colour = 0xffffffff; };
 struct Announcement { juce::String text; float life = 8.0f; juce::uint32 colour = 0xffffffff; };
+struct Confetti { float x, y, vx, vy, life; juce::uint32 colour; };
 
 struct Vote
 {
     bool active = false;
-    int kind = 0;                                 // 0 = music style, 1 = event
-    std::vector<int> options;                     // style index or event index
+    int kind = 0;                                 // 0 = music style, 1 = place, 2 = event
+    std::vector<int> options;
     std::vector<int> counts;
     std::map<juce::String, int> voters;
     float left = 0;                               // seconds
 };
 enum Event { EventStorm = 0, EventCalm, EventFeast, EventBabyBoom, EventRareHunt, NumEvents };
 juce::String eventName (int e);
+int findEvent (const juce::String& word);
+
+/** A species that evolution discovered (its fish carry its trait). */
+struct Species { int id = 0; juce::String name; int trait = 0; double discoveredAt = 0; juce::String firstFish; };
+
+/** The cat in the boat on the surface. */
+struct BoatCat
+{
+    float x = 120, vx = 4;
+    int mood = 0;                                 // 0 fishing, 1 sleeping, 2 waving
+    float moodTime = 0, wave = 0;
+    juce::String waveAt;                          // who it waves at
+};
 
 struct Board { juce::String title; juce::StringArray lines; bool empty = false; };
 
@@ -72,70 +107,100 @@ public:
     /** Moves the ocean on by dt seconds (the stream clock calls it 30 times a second). */
     void step (float dt);
 
-    /** One chat message. Commands start with '!'; any message brings the writer's fish back. */
-    void chat (const juce::String& authorId, const juce::String& authorName, const juce::String& text);
+    /** One chat message. Commands start with '!'; any message brings the writer's fish back.
+        moderator: the channel owner or a moderator (they may use the mod commands). */
+    void chat (const juce::String& authorId, const juce::String& authorName, const juce::String& text, bool moderator = false);
+
+    /** The channel got more subscribers: a little party. */
+    void celebrateSubscribers (int newCount, int gained);
 
     juce::ValueTree save() const;
     void load (const juce::ValueTree&);
 
     // what the music listens to
-    float targetTempo() const;                    // average of the fish on screen
+    float targetTempo() const;                    // average of the fish on screen (inside the style's range)
     int targetKey() const;                        // the key most fish like (weighted)
     int takeStyleRequest() { const int s = styleRequest; styleRequest = -1; return s; }
     int getStyle() const noexcept { return style; }
     void setStyle (int s) noexcept { style = juce::jlimit (0, NumStyles - 1, s); }
 
-    Board board (int which) const;                // 0 oldest, 1 families, 2 rare, 3 most babies
-    static constexpr int numBoards = 4;
+    Board board (int which) const;                // 0 oldest, 1 families, 2 rare, 3 most babies, 4 species, 5 levels
+    static constexpr int numBoards = 6;
     int wildCount() const;
     int viewerFishOnScreen() const;
     int viewerCount() const { return (int) viewers.size(); }
     Fish* findFish (int id);
     const Fish* findFish (int id) const;
     Fish* fishOf (const juce::String& ownerId);
+    const Species* species (int id) const;
+    juce::StringArray bannedNames() const;
+    bool isBanned (const juce::String& ownerId) const { return banned.count (ownerId) > 0; }
 
     // state (read by the painter on the same thread)
     std::vector<Fish> fish;
     std::vector<Food> food;
     std::vector<Toast> toasts;
+    std::vector<Confetti> confetti;
     std::deque<Announcement> news;
+    std::vector<Species> speciesList;
     Vote vote;
+    BoatCat cat;
     int weather = WeatherCalm;
     float weatherLevel = 0;                       // 0 calm .. 0.5 rain .. 1 storm (smoothed)
     float lightning = 0;
+    int place = PlaceReef, nextPlace = -1;
+    float placeFade = 0;                          // 0 .. 1 .. 0 while the ocean moves to a new place
     double time = 0;                              // seconds of ocean life
     float babyBoom = 0, rareHunt = 0;             // seconds left of those events
     int births = 0, mutations = 0;
 
+    /** Tests: evolution discovers a species right now (returns its id). */
+    int discoverSpeciesForTests();
     /** Test hook: how many commands got ignored by the cooldown / filter. */
     int ignoredCommands = 0;
 
 private:
-    struct Viewer { juce::String name; int fishId = 0; double lastMessage = -1e9, lastCommand = -1e9, lastFeed = -1e9; };
+    struct Viewer
+    {
+        juce::String name;
+        int fishId = 0;
+        double lastMessage = -1e9, lastCommand = -1e9, lastFeed = -1e9, lastXpMessage = -1e9;
+    };
 
     void stepFish (Fish&, float dt);
     void stepWeather (float dt);
     void stepVote (float dt);
+    void stepCat (float dt);
+    void stepXp (float dt);
     void tryBreeding (float dt);
     void keepPopulation (float dt);
     void dropFood (int count, float x = -1);
     void startVote();
     void finishVote();
     void applyEvent (int e);
+    void goToPlace (int p);
+    void addXp (Fish&, int amount);
+    void party (int count);
     Fish& spawnWild (bool fromSide);
     Fish& newViewerFish (const juce::String& ownerId, const juce::String& name);
     void bringBack (Fish&);
     void sendAway (Fish&);
     void toast (const Fish&, const juce::String&, juce::uint32 colour = 0xffffffff);
     void announce (const juce::String&, juce::uint32 colour = 0xffffffff);
-    void command (Viewer&, const juce::String& ownerId, const juce::String& text);
-    bool applyWord (Fish&, const juce::String& word, juce::String& changed);
+    void command (Viewer&, const juce::String& ownerId, const juce::String& text, bool moderator);
+    bool modCommand (const juce::String& cmd, const juce::StringArray& tok, const juce::StringArray& raw);
+    bool applyWord (Fish&, const juce::String& word, juce::String& changed, juce::String& locked);
+    juce::String findViewer (const juce::String& nameOrMention) const;   // owner id or ""
+    void maybeNewSpecies (Fish& baby, const Fish& a, const Fish& b, bool mutated);
 
     std::map<juce::String, Viewer> viewers;
+    std::set<juce::String> banned;
+    std::map<juce::String, juce::String> bannedNamesById;
     juce::Random rng;
-    int nextId = 1;
-    float weatherTimer = 600, foodTimer = 120, voteTimer = 180, wildTimer = 0;
+    int nextId = 1, nextSpecies = 1;
+    float weatherTimer = 600, foodTimer = 120, voteTimer = 180, wildTimer = 0, xpTimer = 0;
     int voteKindNext = 0;
-    int style = StyleAmbient, styleRequest = -1;
+    bool newSpeciesBorn = false;
+    int style = StyleDreamy, styleRequest = -1;
 };
 } // namespace ocean

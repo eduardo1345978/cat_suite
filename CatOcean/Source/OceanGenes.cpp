@@ -71,6 +71,30 @@ juce::StringArray accessoryNames() { return { "nohat", "hat", "glasses", "crown"
 juce::StringArray voiceNames()     { return { "bubble", "pluck", "bell", "flute", "chip", "pad", "marimba", "whistle" }; }
 juce::StringArray rareNames()      { return { "", "Golden", "Rainbow", "Ghost", "Glowing", "Crystal" }; }
 juce::StringArray moodNames()      { return { "calm", "shy", "social", "hyper", "lazy" }; }
+juce::StringArray traitNames()     { return { "", "long whiskers", "a glowing antenna", "a twin tail", "starry spots", "a frill", "a horn" }; }
+
+int unlockLevel (int kind, int v)
+{
+    static const int body[NumBodies]         = { 1, 1, 1, 2, 5, 3 };
+    static const int pattern[NumPatterns]    = { 1, 1, 1, 2, 4, 3 };
+    static const int tail[NumTails]          = { 1, 1, 1, 4 };
+    static const int fin[NumFins]            = { 1, 1, 2, 3 };
+    static const int eyes[NumEyes]           = { 1, 1, 2, 3 };
+    static const int hat[NumAccessories]     = { 1, 1, 1, 8, 2, 1, 5, 3 };
+    static const int voice[NumVoices]        = { 1, 1, 1, 1, 2, 6, 3, 4 };
+    auto get = [v] (const int* t, int n) { return t[juce::jlimit (0, n - 1, v)]; };
+    switch (kind)
+    {
+        case KindBody:    return get (body, NumBodies);
+        case KindPattern: return get (pattern, NumPatterns);
+        case KindTail:    return get (tail, NumTails);
+        case KindFin:     return get (fin, NumFins);
+        case KindEyes:    return get (eyes, NumEyes);
+        case KindHat:     return get (hat, NumAccessories);
+        case KindVoice:   return get (voice, NumVoices);
+        default:          return 1;
+    }
+}
 
 //==============================================================================
 Genes Genes::random (juce::Random& r)
@@ -128,6 +152,9 @@ Genes Genes::breed (const Genes& a, const Genes& b, juce::Random& r, bool* mutat
     const int cut = 1 + r.nextInt (juce::jmax (1, g.melodyLength - 1));
     for (int i = 0; i < 8; ++i) g.melody[(size_t) i] = i < cut ? a.melody[(size_t) i] : b.melody[(size_t) i];
     g.tempo = juce::jlimit (60.0f, 140.0f, (a.tempo + b.tempo) * 0.5f + gauss (r) * 4.0f);
+    // species: a baby belongs to one parent's species (and has its trait)
+    if (a.species == b.species || r.nextBool()) { g.species = a.species; g.trait = a.trait; }
+    else { g.species = b.species; g.trait = b.trait; }
     g.key = either (a.key, b.key);
 
     // mutations
@@ -213,6 +240,7 @@ juce::ValueTree Genes::toTree() const
     t.setProperty ("acc", accessory, nullptr);   t.setProperty ("c1", colour1, nullptr);
     t.setProperty ("c2", colour2, nullptr);      t.setProperty ("c3", colour3, nullptr);
     t.setProperty ("rare", rare, nullptr);       t.setProperty ("speed", speed, nullptr);
+    t.setProperty ("species", species, nullptr); t.setProperty ("trait", trait, nullptr);
     t.setProperty ("social", social, nullptr);   t.setProperty ("shy", shy, nullptr);
     t.setProperty ("bounce", bounce, nullptr);   t.setProperty ("voice", voice, nullptr);
     t.setProperty ("pitch", pitch, nullptr);     t.setProperty ("rhythm", rhythm, nullptr);
@@ -235,6 +263,8 @@ Genes Genes::fromTree (const juce::ValueTree& t)
     g.accessory = i ("acc", 0, NumAccessories);
     g.colour1 = i ("c1", 0, numCols);         g.colour2 = i ("c2", 1, numCols);   g.colour3 = i ("c3", 2, numCols);
     g.rare = i ("rare", 0, NumRares);
+    g.species = juce::jmax (0, (int) t.getProperty ("species", 0));
+    g.trait = i ("trait", 0, NumTraits);
     g.speed = f ("speed", 0.5f);  g.social = f ("social", 0.5f);  g.shy = f ("shy", 0.3f);  g.bounce = f ("bounce", 0.2f);
     g.voice = i ("voice", 0, NumVoices);      g.pitch = i ("pitch", 1, 3);
     g.rhythm = i ("rhythm", 1, 3);            g.noteLength = i ("len", 0, 2);

@@ -774,7 +774,11 @@ public:
                         {
                             int k = 0;
                             for (auto& h : parseRhythm (pats[pat], bar))
-                                add (h.start, h.length, k++ == 0 ? root : (r.chance (0.5) ? fifth : root + 12 <= 52 ? root + 12 : root), vel * (k == 1 ? 1.0f : 0.8f));
+                            {
+                                const int idx = k++;
+                                const int note = idx == 0 ? root : (r.chance (0.5) ? fifth : root + 12 <= 52 ? root + 12 : root);
+                                add (h.start, h.length, note, vel * (idx == 0 ? 1.0f : 0.8f));
+                            }
                         }
                         if (L >= 4.0 && r.chance (0.5)) approach (a + L - 0.5);
                         break;
@@ -1052,7 +1056,11 @@ public:
                         const int seq[] = { root, root + 7, root + 12, root + 7 };
                         const double step = sec.energy > 0.7f ? 0.25 : 0.5;
                         int k = 0;
-                        for (double t = a; t < a + L - 1e-6; t += step) add (t, step * 0.9, seq[k++ % 4], vel * (k % 4 == 1 ? 1.0f : 0.8f));
+                        for (double t = a; t < a + L - 1e-6; t += step)
+                        {
+                            const int idx = k++;
+                            add (t, step * 0.9, seq[idx % 4], vel * (idx % 4 == 0 ? 1.0f : 0.8f));
+                        }
                         break;
                     }
                     case Trap:

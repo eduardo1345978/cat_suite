@@ -183,6 +183,12 @@ bool YouTubeChat::parseChat (const juce::var& json, std::vector<Message>& out, j
                 msg.authorId = m["authorExternalChannelId"].toString();
                 msg.authorName = m["authorName"]["simpleText"].toString();
                 msg.text = runsText (m["message"]);
+                if (auto* badges = m["authorBadges"].getArray())
+                    for (auto& b : *badges)
+                    {
+                        const auto type = b["liveChatAuthorBadgeRenderer"]["icon"]["iconType"].toString();
+                        if (type == "MODERATOR" || type == "OWNER") msg.moderator = true;
+                    }
                 if (msg.authorId.isNotEmpty() && msg.text.isNotEmpty()) out.push_back (msg);
             }
         }
@@ -216,6 +222,35 @@ juce::String YouTubeChat::fetch (const juce::String& url, const juce::String& po
                                            .withNumRedirectsToFollow (5));
     if (stream == nullptr || (statusCode != 0 && statusCode >= 400)) return {};
     return stream->readEntireStreamAsString();
+}
+
+int YouTubeChat::parseSubscribers (const juce::String& page)
+{
+    // "1.23K subscribers", "987 subscribers", "1,234 subscribers": the number before the word
+    int from = page.indexOf ("subscriberCountText");
+    if (from < 0) from = 0;
+    const int at = page.indexOf (from, " subscriber");
+    if (at < 0) return -1;
+    int start = at;
+    while (start > 0 && (juce::CharacterFunctions::isDigit (page[start - 1]) || page[start - 1] == '.' || page[start - 1] == ','
+                          || page[start - 1] == 'K' || page[start - 1] == 'M')) --start;
+    auto token = page.substring (start, at).removeCharacters (",");
+    if (token.isEmpty()) return -1;
+    double mult = 1.0;
+    if (token.endsWithChar ('K')) { mult = 1000.0; token = token.dropLastCharacters (1); }
+    else if (token.endsWithChar ('M')) { mult = 1000000.0; token = token.dropLastCharacters (1); }
+    if (token.isEmpty() || ! token.containsOnly ("0123456789.")) return -1;
+    return (int) std::lround (token.getDoubleValue() * mult);
+}
+
+void YouTubeChat::checkSubscribers (const juce::String& channelPath)
+{
+    if (channelPath.isEmpty()) return;
+    const auto now = juce::Time::getMillisecondCounter();
+    if (lastSubCheck != 0 && now - lastSubCheck < 60000) return;
+    lastSubCheck = now;
+    const int n = parseSubscribers (fetch ("https://www.youtube.com/" + channelPath));
+    if (n >= 0) subscribers = n;
 }
 
 juce::String YouTubeChat::findLiveVideo (const juce::String& channelPath)
@@ -303,6 +338,7 @@ void YouTubeChat::run()
             }
             if (seen.size() > 600) seen.removeRange (0, 300);
             cont = next;
+            checkSubscribers (channel);
             if (! waitOrQuit (juce::jlimit (1000, 5000, waitMs))) return;
         }
         setStatus ("lost the chat connection - reconnecting ...");

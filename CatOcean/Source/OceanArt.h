@@ -40,6 +40,7 @@ struct MusicInfo
     int bpm = 0, piece = 0;
     float targetBpm = 0;
     juce::String targetKey;
+    juce::String place;
 };
 
 class Painter
@@ -54,17 +55,19 @@ public:
 
 private:
     struct Bubble { float x, y, r, speed, wobble; };
-    struct Weed { float x; int height; Colour colour; float phase; };
+    struct Weed { float x; int height; Colour colour; float phase; bool glow = false; };
     struct Rock { int x, w, h; Colour colour; };
 
     void background (Canvas&, const Sim&, float t);
+    void decor (Canvas&, const Sim&, float t);
+    void boat (Canvas&, const Sim&, float t);
     void floor (Canvas&, const Sim&, float t);
     void bubbles (Canvas&, const Sim&, float dt);
     void weather (Canvas&, const Sim&, float t);
     void overlay (Canvas&, const Sim&, const MusicInfo&, float t);
 
     std::vector<Bubble> bubbleList;
-    std::vector<Weed> weeds;
+    std::array<std::vector<Weed>, NumPlaces> weedSets;
     std::vector<Rock> rocks;
     std::vector<int> sandNoise;
     juce::Random rng { 1234 };

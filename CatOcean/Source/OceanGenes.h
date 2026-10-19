@@ -19,6 +19,12 @@ enum Accessory { AccNone = 0, AccHat, AccGlasses, AccCrown, AccScarf, AccBow, Ac
 enum Voice     { VoiceBubble = 0, VoicePluck, VoiceBell, VoiceFlute, VoiceChip, VoicePad, VoiceMarimba, VoiceWhistle, NumVoices };
 enum Rare      { RareNone = 0, RareGold, RareRainbow, RareGhost, RareGlow, RareCrystal, NumRares };
 enum Mood      { MoodCalm = 0, MoodShy, MoodSocial, MoodHyper, MoodLazy, NumMoods };
+/** Something only a new species has (evolution invents it). */
+enum Trait     { TraitNone = 0, TraitWhiskers, TraitAntenna, TraitTwinTail, TraitStars, TraitFrill, TraitHorn, NumTraits };
+/** What a viewer's level unlocks: look categories. */
+enum LookKind  { KindBody = 0, KindPattern, KindTail, KindFin, KindEyes, KindHat, KindVoice };
+/** The level a look needs (1 = everyone has it). */
+int unlockLevel (int kind, int value);
 
 /** The colours a fish can have (names are what people type in chat). */
 int numColours();
@@ -35,6 +41,7 @@ juce::StringArray accessoryNames();
 juce::StringArray voiceNames();
 juce::StringArray rareNames();
 juce::StringArray moodNames();
+juce::StringArray traitNames();
 
 struct Genes
 {
@@ -43,6 +50,7 @@ struct Genes
     int pattern = PatPlain, accessory = AccNone;
     int colour1 = 0, colour2 = 1, colour3 = 2;        // body, pattern / belly, fins
     int rare = RareNone;
+    int species = 0, trait = TraitNone;                  // 0 = the common fish; new species come from evolution
     // personality (0..1)
     float speed = 0.5f, social = 0.5f, shy = 0.3f, bounce = 0.2f;
     // singing
