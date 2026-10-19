@@ -1461,6 +1461,12 @@ juce::String sectionName (int t)
     return n[juce::jlimit (0, NumSectionTypes - 1, t)];
 }
 juce::String scaleName (int s) { return scaleNameList[juce::jlimit (0, 6, s)]; }
+std::array<int, 7> scaleIntervals (int s)
+{
+    std::array<int, 7> r {};
+    for (int i = 0; i < 7; ++i) r[(size_t) i] = scaleSteps[juce::jlimit (0, 6, s)][i];
+    return r;
+}
 juce::String keyName (int pc) { return keyNameList[((pc % 12) + 12) % 12]; }
 int partChannel (int part) { static const int ch[NumParts] = { 1, 2, 10, 3, 4 }; return ch[juce::jlimit (0, NumParts - 1, part)]; }
 

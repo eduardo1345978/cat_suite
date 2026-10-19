@@ -11,12 +11,12 @@ set "VST=%LOCALAPPDATA%\Programs\Common\VST3"
 
 echo.
 echo   =====  Cat Suite - sound apps  =====
-echo   Sing-Cat, Talk-Cat, Glide-Cat, Life-Cat, Muse-Cat and the Cat Hub
+echo   Sing-Cat, Talk-Cat, Glide-Cat, Life-Cat, Muse-Cat, the Cat Hub and Cat Ocean
 echo.
 
 :checkRunning
 set "RUNNING="
-for %%A in (Sing-Cat Talk-Cat Glide-Cat Life-Cat Muse-Cat Cat-Hub) do (
+for %%A in (Sing-Cat Talk-Cat Glide-Cat Life-Cat Muse-Cat Cat-Hub Cat-Ocean) do (
     tasklist /FI "IMAGENAME eq %%A.exe" 2>nul | find /I "%%A.exe" >nul && set "RUNNING=%%A"
 )
 tasklist /FI "IMAGENAME eq Cubase*" 2>nul | find /I "Cubase" >nul && set "RUNNING=Cubase"
@@ -54,7 +54,7 @@ echo.
 if "%FAILED%"=="1" (
     echo   Something could not be copied. Close all Cat apps and Cubase, then run this again.
 ) else (
-    echo   Done! Start Sing-Cat, Talk-Cat, Glide-Cat, Life-Cat, Muse-Cat or the Cat Hub from the Start menu or your Desktop.
+    echo   Done! Start Sing-Cat, Talk-Cat, Glide-Cat, Life-Cat, Muse-Cat, the Cat Hub or Cat Ocean from the Start menu or your Desktop.
     echo.
     echo   Cat Hub: Chord-Cat, Bass-Cat, Drum-Cat and Life-Cat play together - just press Play.
     echo       Space = play / stop       keys 1-8 = hold a chord pad

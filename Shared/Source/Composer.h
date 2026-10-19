@@ -34,6 +34,8 @@ juce::StringArray partNames();
 juce::StringArray targetNames();
 juce::String sectionName (int type);
 juce::String scaleName (int scale);
+/** The 7 notes of a scale (semitones above the key). */
+std::array<int, 7> scaleIntervals (int scale);
 juce::String keyName (int pitchClass);
 
 /** General MIDI drum notes the composer writes. */

@@ -8,6 +8,7 @@ The instruments that make their own sound, as standalone apps AND as VST3 plug-i
     Life-Cat   - a tiny ecosystem that makes music
     Muse-Cat   - writes whole songs (or endless music) from a genre, a mood and a song number
     Cat Hub    - every Cat jamming together in one window; Dice and Compose write songs
+    Cat Ocean  - an endless pixel ocean for YouTube live streams: viewers get fish through the chat
 
 How to install
 1. Close Cubase and any open Cat apps.

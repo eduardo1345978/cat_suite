@@ -27,6 +27,7 @@ add_subdirectory(GlideCat)
 add_subdirectory(TalkCat)
 add_subdirectory(MuseCat)
 add_subdirectory(CatHub)
+add_subdirectory(CatOcean)
 
 option(CAT_BUILD_TESTS "Build the headless VST3 host test (loads the built .vst3 files)" OFF)
 if(CAT_BUILD_TESTS)
