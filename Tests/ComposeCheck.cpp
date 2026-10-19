@@ -171,6 +171,40 @@ static std::pair<float, double> measure (const juce::File& f)
     return { peak, n > 0 ? std::sqrt (sum / (double) n) : 0.0 };
 }
 
+// How repetitive a song is: distinct bars per part, distinct 4-bar blocks of the whole mix,
+// and the longest run of bars where nothing at all changes.
+struct Variety { double partDistinct = 0, blockDistinct = 0, longestSame = 0; int n = 0; };
+static juce::String barPrint (const Song& s, int part, int bar)
+{
+    juce::String f;
+    const double a = bar * 4.0, b = a + 4.0;
+    for (auto& n : s.parts[(size_t) part])
+        if (n.start >= a - 1e-6 && n.start < b - 1e-6)
+            f << juce::String ((n.start - a), 2) << ":" << n.pitch << ":" << juce::String (n.length, 1) << " ";
+    return f;
+}
+static void measureVariety (const Song& s, Variety& v)
+{
+    const int bars = (int) std::ceil (s.lengthBeats / 4.0);
+    double partSum = 0; int partCount = 0;
+    for (int p = 0; p < NumParts; ++p)
+    {
+        juce::StringArray seen; int playing = 0;
+        for (int b = 0; b < bars; ++b) { auto f = barPrint (s, p, b); if (f.isEmpty()) continue; ++playing; seen.addIfNotAlreadyThere (f); }
+        if (playing > 0) { partSum += (double) seen.size() / playing; ++partCount; }
+    }
+    juce::StringArray mixBars;
+    for (int b = 0; b < bars; ++b) { juce::String f; for (int p = 0; p < NumParts; ++p) f << p << "|" << barPrint (s, p, b); mixBars.add (f); }
+    juce::StringArray blocks; int blockCount = 0;
+    for (int b = 0; b + 4 <= bars; b += 4) { blocks.addIfNotAlreadyThere (mixBars[b] + mixBars[b+1] + mixBars[b+2] + mixBars[b+3]); ++blockCount; }
+    int longest = 1, run = 1;
+    for (int b = 1; b < bars; ++b) { run = mixBars[b] == mixBars[b - 1] ? run + 1 : 1; longest = juce::jmax (longest, run); }
+    v.partDistinct += partCount > 0 ? partSum / partCount : 0;
+    v.blockDistinct += blockCount > 0 ? (double) blocks.size() / blockCount : 0;
+    v.longestSame += longest;
+    ++v.n;
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI init;
@@ -181,6 +215,7 @@ int main (int argc, char** argv)
     outDir.createDirectory();
 
     Stats st;
+    std::array<Variety, NumGenres> variety;
     int songs = 0;
     juce::StringArray titles;
     for (int g = 0; g < NumGenres; ++g)
@@ -193,6 +228,7 @@ int main (int argc, char** argv)
                 const auto what = genreNames()[g] + "/" + moodNames()[m] + "/" + juce::String (set.seed);
                 auto s = compose (set);
                 checkSong (s, what, st);
+                measureVariety (s, variety[(size_t) g]);
                 ++songs;
                 titles.addIfNotAlreadyThere (s.title);
                 CHECK (sameSong (s, compose (set)), "%s: not deterministic", what.toRawUTF8());
@@ -302,6 +338,12 @@ int main (int argc, char** argv)
         for (int i = 0; i < juce::jmin (12, s.lyricLines.size()); ++i) std::printf ("    %s\n", s.lyricLines[i].toRawUTF8());
     }
 
+    for (int g = 0; g < NumGenres; ++g)
+    {
+        const auto& v = variety[(size_t) g];
+        std::printf ("variety %-10s distinct bars per part %3.0f%%, distinct 4-bar blocks %3.0f%%, longest unchanged run %.1f bars\n",
+                     genreNames()[g].toRawUTF8(), 100.0 * v.partDistinct / v.n, 100.0 * v.blockDistinct / v.n, v.longestSame / v.n);
+    }
     std::printf ("\n%d songs, %d different titles. melody: %d notes, %.0f%% chord tones on strong beats, steps %.0f%%, leaps %.0f%%, leaps > 5th %.1f%%\n",
                  songs, titles.size(), st.melodyNotes, 100.0 * st.strongChordTone / juce::jmax (1, st.strong),
                  100.0 * st.steps / juce::jmax (1, st.steps + st.leaps + st.bigLeaps), 100.0 * st.leaps / juce::jmax (1, st.steps + st.leaps + st.bigLeaps),

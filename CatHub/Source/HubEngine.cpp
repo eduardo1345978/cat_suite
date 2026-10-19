@@ -652,7 +652,7 @@ void HubEngine::roll (juce::Random& r)
     st.seed = (juce::uint32) (1 + r.nextInt (999999));
     st.genre = r.nextInt ((int) cat::muse::NumGenres);
     st.mood = r.nextInt ((int) cat::muse::NumMoods);
-    st.endless = songMode.load() && songSettings.endless;
+    st.endless = songMode.load() ? songSettings.endless : true;   // never-ending, so it never repeats
     composeSong (st, true, &r);
 }
 

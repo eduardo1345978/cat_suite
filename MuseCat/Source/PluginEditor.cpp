@@ -212,6 +212,7 @@ MuseCatEditor::MuseCatEditor (MuseCatProcessor& p) : processor (p)
                                 (juce::Component*) &endlessButton, (juce::Component*) &map, (juce::Component*) &masterKnob,
                                 (juce::Component*) &soundToggle, (juce::Component*) &midiToggle })
         addAndMakeVisible (c);
+    resized();
     refreshSong();
     startTimerHz (30);
 }
@@ -381,6 +382,8 @@ void MuseCatEditor::paint (juce::Graphics& g)
 
 void MuseCatEditor::resized()
 {
+    if (soundBoxes.size() < NumParts || volumeKnobs.size() < NumParts)
+        return;   // still being built (setSize in the constructor comes first)
     auto r = getLocalBounds().reduced (14, 10);
     auto top = r.removeFromTop (40);
     logoArea = top.removeFromLeft (160);

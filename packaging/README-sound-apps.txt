@@ -6,7 +6,8 @@ The instruments that make their own sound, as standalone apps AND as VST3 plug-i
     Talk-Cat   - singer with lyrics (English, Slovak, Japanese, Cat)
     Glide-Cat  - gliding poly synth
     Life-Cat   - a tiny ecosystem that makes music
-    Cat Hub    - Chord-Cat, Bass-Cat, Drum-Cat and Life-Cat jamming together in one window
+    Muse-Cat   - writes whole songs (or endless music) from a genre, a mood and a song number
+    Cat Hub    - every Cat jamming together in one window; Dice and Compose write songs
 
 How to install
 1. Close Cubase and any open Cat apps.

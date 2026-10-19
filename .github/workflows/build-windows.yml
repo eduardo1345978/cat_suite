@@ -36,7 +36,7 @@ jobs:
         run: cmake -B build -A x64 -DCAT_BUILD_TESTS=ON -DCAT_PLUGIN_FORMATS=VST3 -DCAT_SOUND_STANDALONE=ON
 
       - name: Build all plug-ins, the sound apps and the test host
-        run: cmake --build build --config Release --parallel --target CatSuiteHostTest SingCat_Standalone TalkCat_Standalone GlideCat_Standalone LifeCat_Standalone CatHub
+        run: cmake --build build --config Release --parallel --target CatSuiteHostTest SingCat_Standalone TalkCat_Standalone GlideCat_Standalone LifeCat_Standalone MuseCat_Standalone CatHub
 
       - name: Run the tests
         run: build\Tests\CatSuiteHostTest_artefacts\Release\CatSuiteHostTest.exe
@@ -53,12 +53,12 @@ jobs:
           Copy-Item packaging\README-install.txt $pkg
           Compress-Archive -Path "$pkg\*" -DestinationPath Cat-Suite-Windows.zip -Force
           $count = (Get-ChildItem "$pkg\VST3" -Directory).Count
-          if ($count -lt 10) { throw "Only $count plug-ins were packed" }
+          if ($count -lt 11) { throw "Only $count plug-ins were packed" }
 
           # Only the instruments that make sound: standalone apps + their VST3s
           $snd = "pkg\Cat-Sound-Apps"
           New-Item -ItemType Directory "$snd\Apps", "$snd\VST3" -Force | Out-Null
-          foreach ($p in @("SingCat:Sing-Cat", "TalkCat:Talk-Cat", "GlideCat:Glide-Cat", "LifeCat:Life-Cat")) {
+          foreach ($p in @("SingCat:Sing-Cat", "TalkCat:Talk-Cat", "GlideCat:Glide-Cat", "LifeCat:Life-Cat", "MuseCat:Muse-Cat")) {
             $t, $n = $p.Split(":")
             Copy-Item "build\$t\${t}_artefacts\Release\Standalone\$n.exe" "$snd\Apps\"
             Copy-Item "$pkg\VST3\$n.vst3" "$snd\VST3\" -Recurse
@@ -83,7 +83,7 @@ jobs:
           Copy-Item packaging\Install-Cat-Sound-Apps.bat $snd
           Copy-Item packaging\README-sound-apps.txt $snd
           Compress-Archive -Path "$snd\*" -DestinationPath Cat-Sound-Apps-Windows.zip -Force
-          if ((Get-ChildItem "$snd\Apps" -Filter *.exe).Count -ne 5) { throw "Sound apps missing" }
+          if ((Get-ChildItem "$snd\Apps" -Filter *.exe).Count -ne 6) { throw "Sound apps missing" }
           Copy-Item packaging\Get-Cat-Sound-Apps.bat .
 
       - name: Keep the zip on the Actions page
@@ -110,4 +110,4 @@ jobs:
           gh release create latest Cat-Suite-Windows.zip Cat-Sound-Apps-Windows.zip Get-Cat-Sound-Apps.bat `
             --target "${{ github.sha }}" `
             --title "Cat Suite - latest build ($date UTC)" `
-            --notes "**Everything (VST3 for Cubase):** download **Cat-Suite-Windows.zip**, unzip it, close Cubase and double-click **Install-Cat-Suite.bat**. Then rescan in Cubase (Studio > VST Plug-in Manager).<br><br>**Only the instruments that make sound, as apps you can play with your computer keyboard** (Sing-Cat, Talk-Cat, Glide-Cat, Life-Cat) **plus the Cat Hub** (every Cat jamming together in one window: styles, dice, effects, Patt/Bend/Orbit-Cat as effects, Glide/Sing/Talk-Cat as sounds - press Play): download **Get-Cat-Sound-Apps.bat** and double-click it. It downloads and installs them (Start menu + Desktop shortcuts, plus the VST3 versions). If Windows warns about the file, click *More info* > *Run anyway*.<br><br>Built from commit ${{ github.sha }}."
+            --notes "**Everything (VST3 for Cubase):** download **Cat-Suite-Windows.zip**, unzip it, close Cubase and double-click **Install-Cat-Suite.bat**. Then rescan in Cubase (Studio > VST Plug-in Manager).<br><br>**Only the instruments that make sound, as apps you can play with your computer keyboard** (Sing-Cat, Talk-Cat, Glide-Cat, Life-Cat, Muse-Cat the song writer) **plus the Cat Hub** (every Cat jamming together in one window: Dice and Compose write whole songs or endless music, effects, Patt/Bend/Orbit-Cat as effects, Glide/Sing/Talk-Cat as sounds - press Play): download **Get-Cat-Sound-Apps.bat** and double-click it. It downloads and installs them (Start menu + Desktop shortcuts, plus the VST3 versions). If Windows warns about the file, click *More info* > *Run anyway*.<br><br>Built from commit ${{ github.sha }}."
