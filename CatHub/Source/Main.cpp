@@ -104,7 +104,108 @@ static int runSelfTest (const juce::StringArray& args)
     }
     juce::Random dice (3);
     for (int k = 0; k < 4; ++k) { engine.roll (dice); juce::AudioBuffer<float> b (2, 48000); engine.render (b.getWritePointer (0), b.getWritePointer (1), 48000); }
-    check (true, "dice rolled 4 times");
+    check (engine.isSongMode() && engine.getSong() != nullptr, "dice rolled 4 times: it writes songs (last: \"" + (engine.getSong() != nullptr ? engine.getSong()->title : juce::String()) + "\")");
+
+    // ---- composed songs: every genre plays, the words reach Talk-Cat, endless keeps going, export, save
+    {
+        auto renderFor = [&] (double secs)
+        {
+            juce::AudioBuffer<float> b (2, block);
+            float pk = 0.0f;
+            bool ok = true;
+            for (int pos = 0; pos < (int) (secs * sr); pos += block)
+            {
+                engine.render (b.getWritePointer (0), b.getWritePointer (1), block);
+                pk = juce::jmax (pk, b.getMagnitude (0, 0, block), b.getMagnitude (1, 0, block));
+                for (int ch = 0; ch < 2; ++ch) for (int i = 0; i < block; ++i) ok = ok && std::isfinite (b.getSample (ch, i));
+                if (pos % (block * 50) == 0) engine.tickSong();
+            }
+            return std::pair<float, bool> { pk, ok };
+        };
+        for (int g = 0; g < cat::muse::NumGenres; ++g)
+        {
+            cat::muse::Settings st;
+            st.seed = 100 + (juce::uint32) g; st.genre = g; st.mood = g % cat::muse::NumMoods;
+            engine.composeSong (st, true);
+            engine.setPlaying (false);
+            renderFor (0.1);
+            engine.setPlaying (true);
+            for (int i = 0; i < engine.getNumTracks(); ++i) engine.track (i).energy = 0.0;
+            auto [pk, ok] = renderFor (10.0);
+            check (engine.track (0).energy.load() > 1.0e-3 && pk > 0.01f && pk <= 1.0f && ok,
+                   "song " + cat::muse::genreNames()[g] + " \"" + engine.getSong()->title + "\" plays (peak " + juce::String (pk, 2) + ")");
+        }
+
+        // a pop song sung by Talk-Cat, exported whole: every part is heard
+        cat::muse::Settings st;
+        st.seed = 777; st.genre = cat::muse::Pop; st.mood = cat::muse::Happy;
+        engine.composeSong (st, true);
+        int melodyTrack = -1;
+        for (int i = 0; i < engine.getNumTracks(); ++i) if (engine.track (i).source.load() == SrcLead) melodyTrack = i;
+        check (engine.getNumTracks() == 5 && melodyTrack >= 0, "a song has 5 parts (chords, bass, drums, melody, counter-melody)");
+        const bool talk = engine.catAvailable (TalkCat) && melodyTrack >= 0 && engine.setSound (melodyTrack, SndTalk);
+        engine.tickSong();
+        if (talk)
+        {
+            juce::String sung;
+            juce::MemoryBlock mb;
+            engine.track (melodyTrack).soundCat->getStateInformation (mb);
+            auto xml = juce::AudioProcessor::getXmlFromBinary (mb.getData(), (int) mb.getSize());
+            if (xml != nullptr && xml->hasTagName ("VST3PluginState"))
+                if (auto* comp = xml->getChildByName ("IComponent"))
+                {
+                    juce::MemoryBlock inner;
+                    inner.fromBase64Encoding (comp->getAllSubText());
+                    xml = juce::AudioProcessor::getXmlFromBinary (inner.getData(), (int) inner.getSize());
+                }
+            if (xml != nullptr) sung = xml->getStringAttribute ("liveLyrics");
+            check (sung.isNotEmpty() && sung == engine.getSong()->lyricsText, "Talk-Cat got the song's words (" + juce::String (sung.length()) + " letters)");
+        }
+        else log.add ("(skipped: Talk-Cat not found)");
+
+        const auto wavFile = out.getSiblingFile ("selftest_song.wav");
+        for (int i = 0; i < engine.getNumTracks(); ++i) engine.track (i).energy = 0.0;
+        const bool exported = engine.exportSong (wavFile);
+        juce::AudioFormatManager fm;
+        fm.registerBasicFormats();
+        std::unique_ptr<juce::AudioFormatReader> rd (fm.createReaderFor (wavFile));
+        const double secs = rd != nullptr ? (double) rd->lengthInSamples / rd->sampleRate : 0.0;
+        const double want = engine.getSong()->lengthBeats * 60.0 / engine.bpm.load() + 3.0;
+        check (exported && std::abs (secs - want) < 0.5, "exported the song as WAV (" + juce::String (secs, 1) + " s, expected " + juce::String (want, 1) + " s)");
+        for (int i = 0; i < engine.getNumTracks(); ++i)
+        {
+            auto& t = engine.track (i);
+            check (t.energy.load() > 1.0e-3, "export: part " + juce::String (i + 1) + " (" + sourceName (t.source.load()) + " > " + soundName (t.sound.load()) + ") is heard");
+        }
+        const auto stem = out.getSiblingFile ("selftest_stem.wav");
+        check (engine.exportSong (stem, 2) && stem.getSize() > 10000, "exported a stem");
+        const auto midFile = out.getSiblingFile ("selftest_song.mid");
+        juce::MidiFile mf;
+        bool midOk = engine.exportSongMidi (midFile);
+        if (midOk) { juce::FileInputStream in (midFile); midOk = in.openedOk() && mf.readFrom (in) && mf.getNumTracks() == 6; }
+        check (midOk, "exported the song as MIDI (" + juce::String (mf.getNumTracks()) + " tracks)");
+
+        // save + restore keeps the song
+        const auto title = engine.getSong()->title;
+        const auto saved = engine.saveState();
+        engine.applyStyle (1);
+        check (! engine.isSongMode(), "a style goes back to jamming");
+        engine.restoreState (saved);
+        check (engine.isSongMode() && engine.getSong() != nullptr && engine.getSong()->title == title, "the saved song comes back (\"" + title + "\")");
+
+        // endless: the next part gets written while it plays
+        st.endless = true;
+        st.genre = cat::muse::House;
+        engine.composeSong (st, true);
+        engine.setPlaying (false);
+        renderFor (0.1);
+        engine.setPlaying (true);
+        double played = 0.0;
+        while (played < 240.0 && engine.getSong()->chunk < 1) { renderFor (2.0); played += 2.0; }
+        check (engine.getSong()->chunk >= 1, "endless: moved on to part " + juce::String (engine.getSong()->chunk + 1) + " after " + juce::String (played, 0) + " s");
+        auto [pk, ok] = renderFor (4.0);
+        check (ok && pk <= 1.0f && pk > 0.01f, "endless keeps playing (peak " + juce::String (pk, 2) + ")");
+    }
 
     // stop: everything should fade out (no hanging notes in the built-in synths)
     engine.applyStyle (0);
@@ -337,9 +438,20 @@ public:
                 m.changeCats ([&e] { e.applyStyle (4); });
                 m.setAdvanced (true);
                 snap ("advanced");
-                m.selectTab (1);
+                m.selectTab (2);
                 snap ("settings");
+                m.changeCats ([&e]
+                {
+                    cat::muse::Settings st;
+                    st.seed = 4242; st.genre = cat::muse::Pop; st.mood = cat::muse::Happy;
+                    e.composeSong (st, true);
+                    e.setPlaying (true);
+                });
+                for (int i = 0; i < 1500; ++i) e.render (l.data(), r.data(), 512);   // into the song a bit
+                m.selectTab (1);
+                snap ("compose");
                 m.selectTab (0);
+                snap ("song_rack");
                 for (int th = 1; th < (int) themes().size(); ++th) { m.applyTheme (th); snap ("theme" + juce::String (th)); }
                 m.applyTheme (0);
             }

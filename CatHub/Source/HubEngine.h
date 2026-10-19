@@ -5,6 +5,7 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "CatSounds.h"
 #include "SafetyLimiter.h"
+#include "Composer.h"
 #include <array>
 #include <atomic>
 
@@ -16,7 +17,7 @@ enum CatId { ChordCat = 0, BassCat, DrumCat, LifeCat, PattCat, BendCat, OrbitCat
 const char* catName (int id);           // "Chord-Cat" ...
 
 /** Where a track's notes come from. */
-enum Source { SrcChords = 0, SrcBass, SrcDrums, SrcLife, SrcLead, NumSources };
+enum Source { SrcChords = 0, SrcBass, SrcDrums, SrcLife, SrcLead, SrcCounter, NumSources };
 const char* sourceName (int);           // "Chords" ...
 int catForSource (int);                 // ChordCat ... (Lead -> ChordCat)
 
@@ -133,6 +134,26 @@ public:
     /** The last Cat that could not be loaded (shown in the status line); cleared by the UI. */
     juce::String lastLoadError;
 
+    //==== composed songs (message thread). In song mode the tracks play the composer's parts:
+    //     Chords, Bass line, Drums, Lead = the melody, Counter-melody (Life-Cat follows the song's chords).
+    /** Writes a song and plays it. newTracks: also sets up parts and sounds that suit the genre. */
+    void composeSong (const cat::muse::Settings&, bool newTracks, juce::Random* dice = nullptr);
+    /** Renews one thing in the song (see cat::muse::Target) and keeps playing. */
+    void regenerateSong (int target, juce::uint32 seed);
+    void setSongEndless (bool endless);
+    void leaveSongMode();
+    bool isSongMode() const noexcept { return songMode.load(); }
+    std::shared_ptr<const cat::muse::Song> getSong() const { return songPlayer.getSong(); }
+    cat::muse::Settings getSongSettings() const { return songSettings; }
+    double getSongBeat() const noexcept { return songBeatShown.load(); }
+    /** Timer (message thread): endless mode composes ahead; Talk- / Sing-Cat get the words to sing. */
+    void tickSong();
+    /** Renders the song (one piece in endless mode) to a WAV file, faster than real time. The audio
+        device must not be calling the engine meanwhile. onlyTrack >= 0: that part alone (a stem). */
+    bool exportSong (const juce::File&, int onlyTrack = -1, std::function<bool (float)> progress = {});
+    bool exportSongMidi (const juce::File&) const;
+    juce::String getSungLyrics() const { return sungLyrics; }   // what the singing Cats were given (tests)
+
     //==== recording (message thread)
     bool startRecording (const juce::File&);
     void stopRecording();
@@ -190,7 +211,20 @@ private:
     juce::Reverb reverb;
     cat::SafetyLimiter limiter;
     juce::AudioBuffer<float> catAudio, lifeAudio, sendAudio, mixAudio;
-    juce::MidiBuffer songMidi, chordOut, bassOut, drumOut, lifeOut, leadOut;
+    juce::MidiBuffer songMidi, chordOut, bassOut, drumOut, lifeOut, leadOut, melodyOut, counterOut;
+
+    // composed song
+    void setSong (std::shared_ptr<const cat::muse::Song>);
+    void setUpSongTracks (int genre, juce::Random* dice);
+    void sendLyrics (const cat::muse::Song&);
+    cat::muse::SongPlayer songPlayer;
+    cat::muse::Settings songSettings;
+    std::atomic<bool> songMode { false };
+    std::array<juce::MidiBuffer, cat::muse::NumParts> songParts;
+    double clockPpq = 0.0;
+    std::atomic<double> songBeatShown { 0.0 };
+    const cat::muse::Song* lyricsSentFor = nullptr;
+    juce::String sungLyrics;
 
     juce::TimeSliceThread writerThread { "Cat Hub recorder" };
     std::unique_ptr<juce::AudioFormatWriter::ThreadedWriter> writer;

@@ -4,7 +4,11 @@ namespace hub
 {
 namespace
 {
-    juce::Colour sourceColour (int src) { return theme().source[(size_t) juce::jlimit (0, 4, src)]; }
+    juce::Colour sourceColour (int src)
+    {
+        if (src == SrcCounter) return theme().source[4].withRotatedHue (-0.14f);
+        return theme().source[(size_t) juce::jlimit (0, 4, src)];
+    }
 
     int defaultSoundFor (int src)
     {
@@ -14,6 +18,7 @@ namespace
             case SrcDrums: return SndBoomBap;
             case SrcLife:  return SndLifeOwn;
             case SrcLead:  return SndPluck;
+            case SrcCounter: return SndPluck;
             default:       return SndPad;
         }
     }
@@ -664,6 +669,391 @@ void CatTab::resized()
 }
 
 //==============================================================================
+namespace
+{
+    juce::Colour partColour (int part)
+    {
+        switch (part)
+        {
+            case cat::muse::Chords:  return sourceColour (SrcChords);
+            case cat::muse::Bass:    return sourceColour (SrcBass);
+            case cat::muse::Drums:   return sourceColour (SrcDrums);
+            case cat::muse::Melody:  return sourceColour (SrcLead);
+            default:                 return sourceColour (SrcCounter);
+        }
+    }
+
+    juce::Colour sectionColour (int type)
+    {
+        static const float hues[] = { 0.58f, 0.52f, 0.12f, 0.95f, 0.75f, 0.08f, 0.0f, 0.62f, 0.55f };
+        return juce::Colour::fromHSV (hues[juce::jlimit (0, 8, type)], theme().light ? 0.35f : 0.45f, theme().light ? 0.92f : 0.55f, 1.0f);
+    }
+}
+
+ComposePage::ComposePage (HubMain& o, HubEngine& e) : owner (o), engine (e)
+{
+    genreBox.addItemList (cat::muse::genreNames(), 1);
+    genreBox.setSelectedId (1, juce::dontSendNotification);
+    genreBox.setTooltip ("What kind of music the song is");
+    moodBox.addItemList (cat::muse::moodNames(), 1);
+    moodBox.setSelectedId (1, juce::dontSendNotification);
+    moodBox.setTooltip ("How the song feels: it picks the scale, the chords and the words");
+    seedBox.setInputRestrictions (7, "0123456789");
+    seedBox.setText ("1", false);
+    seedBox.setJustification (juce::Justification::centred);
+    seedBox.setTooltip ("The song's number: the same number, genre and mood always write the same song. Share it with a friend!");
+    seedBox.onReturnKey = [this] { writeButton.triggerClick(); };
+    newSeedButton.setTooltip ("A new number: a new song in the same genre and mood");
+    newSeedButton.onClick = [this]
+    {
+        seedBox.setText (juce::String (1 + juce::Random().nextInt (999999)), false);
+        writeButton.triggerClick();
+    };
+    for (auto* b : { &songButton, &endlessButton })
+    {
+        b->setClickingTogglesState (true);
+        b->setRadioGroupId (202);
+    }
+    songButton.setToggleState (true, juce::dontSendNotification);
+    songButton.setTooltip ("A whole song: intro, verses, choruses, bridge, outro (it starts again at the end)");
+    endlessButton.setTooltip ("Music that never ends: it keeps writing new parts while it plays, with the same key and hook");
+    auto modeChanged = [this]
+    {
+        if (engine.isSongMode() && engine.getSongSettings().endless != endlessButton.getToggleState())
+        {
+            engine.setSongEndless (endlessButton.getToggleState());
+            owner.songChanged();
+        }
+    };
+    songButton.onClick = modeChanged;
+    endlessButton.onClick = modeChanged;
+    writeButton.setTooltip ("Write the song and play it on the parts in the Rack");
+    writeButton.onClick = [this]
+    {
+        const auto st = settingsFromControls();
+        const bool newTracks = ! engine.isSongMode() || engine.getSongSettings().genre != st.genre;
+        owner.changeCatsLater ([this, st, newTracks]
+        {
+            engine.composeSong (st, newTracks);
+            if (! engine.isPlaying()) engine.setPlaying (true);
+        });
+    };
+    exportButton.setTooltip ("Save the song: as a WAV, as one WAV per part (stems), or as a MIDI file for Cubase");
+    exportButton.onClick = [this]
+    {
+        juce::PopupMenu m;
+        m.addItem (1, "The song as a WAV file");
+        m.addItem (2, "Each part as its own WAV (stems)");
+        m.addItem (3, "MIDI file (all parts, with the words) for Cubase");
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (exportButton),
+                         [sp = juce::Component::SafePointer<HubMain> (&owner)] (int r) { if (sp != nullptr && r > 0) sp->exportSong (r - 1); });
+    };
+    jamButton.setTooltip ("Stop the song and jam with Chord-Cat's pads again");
+    jamButton.onClick = [this] { owner.changeCatsLater ([this] { engine.applyStyle (0); }); };
+
+    const auto names = cat::muse::targetNames();
+    static const char* tips[] = { "New chords (the melody, bass and counter-melody follow them)", "A new bass line", "New drum grooves and fills",
+                                  "A new melody and hook (with new words)", "A new counter-melody", "New words for the same melody",
+                                  "A new song form: other sections in another order" };
+    for (int t = 0; t < names.size(); ++t)
+    {
+        auto* b = renewButtons.add (new juce::TextButton (names[t]));
+        b->setTooltip (tips[t]);
+        b->onClick = [this, t]
+        {
+            engine.regenerateSong (t, (juce::uint32) (1 + juce::Random().nextInt (0x7ffffff)));
+            owner.songChanged();
+        };
+        addAndMakeVisible (b);
+    }
+    for (juce::Component* c : { (juce::Component*) &genreBox, (juce::Component*) &moodBox, (juce::Component*) &seedBox, (juce::Component*) &newSeedButton,
+                                (juce::Component*) &songButton, (juce::Component*) &endlessButton, (juce::Component*) &writeButton,
+                                (juce::Component*) &exportButton, (juce::Component*) &jamButton })
+        addAndMakeVisible (c);
+    refresh();
+}
+
+cat::muse::Settings ComposePage::settingsFromControls() const
+{
+    cat::muse::Settings st;
+    st.genre = juce::jmax (0, genreBox.getSelectedId() - 1);
+    st.mood = juce::jmax (0, moodBox.getSelectedId() - 1);
+    st.seed = (juce::uint32) juce::jmax (1, seedBox.getText().getIntValue());
+    st.endless = endlessButton.getToggleState();
+    return st;
+}
+
+void ComposePage::showSettings (const cat::muse::Settings& st)
+{
+    genreBox.setSelectedId (st.genre + 1, juce::dontSendNotification);
+    moodBox.setSelectedId (st.mood + 1, juce::dontSendNotification);
+    seedBox.setText (juce::String ((juce::int64) st.seed), false);
+    (st.endless ? endlessButton : songButton).setToggleState (true, juce::dontSendNotification);
+}
+
+void ComposePage::refresh()
+{
+    const bool song = engine.isSongMode();
+    if (song) showSettings (engine.getSongSettings());
+    for (auto* b : renewButtons) b->setEnabled (song);
+    exportButton.setEnabled (song);
+    jamButton.setEnabled (song);
+    writeButton.setColour (juce::TextButton::buttonColourId, theme().accent.withAlpha (0.75f));
+    shownSong = nullptr;   // redraw the map
+    tick();
+    repaint();
+}
+
+void ComposePage::tick()
+{
+    auto song = engine.getSong();
+    if (song.get() != shownSong)
+    {
+        shownSong = song.get();
+        rebuildMap();
+        repaint();
+        return;
+    }
+    if (song == nullptr) return;
+    const double beat = engine.isPlaying() ? engine.getSongBeat() : -1.0;
+    if (std::abs (beat - shownBeat) > 0.06)
+    {
+        shownBeat = beat;
+        repaint (mapBounds.expanded (2));
+    }
+    const int line = beat >= 0.0 ? song->lyricLineAt (beat + 0.25) : -1;
+    if (line != shownLine) { shownLine = line; repaint (lyricsArea); }
+}
+
+void ComposePage::rebuildMap()
+{
+    auto song = engine.getSong();
+    const auto area = mapBounds;
+    if (area.isEmpty()) { mapImage = {}; return; }
+    mapImage = juce::Image (juce::Image::ARGB, area.getWidth(), area.getHeight(), true);
+    juce::Graphics g (mapImage);
+    const auto& th = theme();
+    g.setColour (th.panel);
+    g.fillRoundedRectangle (mapImage.getBounds().toFloat(), 8.0f);
+    if (song == nullptr || song->lengthBeats <= 0.0) return;
+
+    auto r = mapImage.getBounds().toFloat().reduced (10.0f, 8.0f);
+    const float labelW = 92.0f;
+    auto timeArea = r.withTrimmedLeft (labelW);
+    const float x0 = timeArea.getX(), w = timeArea.getWidth();
+    const double len = song->lengthBeats;
+    auto xOf = [&] (double beat) { return x0 + (float) (beat / len) * w; };
+
+    // sections
+    auto secRow = timeArea.removeFromTop (34.0f);
+    auto chordRow = timeArea.removeFromTop (18.0f);
+    timeArea.removeFromTop (6.0f);
+    g.setFont (hubFont (12.5f, true));
+    for (const auto& sec : song->sections)
+    {
+        juce::Rectangle<float> b (xOf (sec.start), secRow.getY(), xOf (sec.end()) - xOf (sec.start), secRow.getHeight());
+        g.setColour (sectionColour (sec.type));
+        g.fillRoundedRectangle (b.reduced (1.0f, 0.0f), 5.0f);
+        g.setColour (th.light ? th.text : juce::Colours::white.withAlpha (0.92f));
+        const auto name = cat::muse::sectionName (sec.type);
+        g.drawFittedText (b.getWidth() > 60.0f ? name : name.substring (0, 1), b.reduced (4.0f, 2.0f).toNearestInt(), juce::Justification::centred, 1);
+    }
+    // chords
+    g.setFont (hubFont (11.0f));
+    for (const auto& ch : song->chords)
+    {
+        const float cx = xOf (ch.start), cw = xOf (ch.start + ch.length) - cx;
+        if (cw < 26.0f) continue;
+        g.setColour (th.textDim);
+        g.drawText (ch.name, juce::Rectangle<float> (cx + 2.0f, chordRow.getY(), cw - 2.0f, chordRow.getHeight()), juce::Justification::centredLeft, true);
+    }
+    // a lane per part: where it plays, and its notes
+    const int lanes = cat::muse::NumParts;
+    const float laneH = timeArea.getHeight() / (float) lanes;
+    static const int order[] = { cat::muse::Melody, cat::muse::Counter, cat::muse::Chords, cat::muse::Bass, cat::muse::Drums };
+    for (int li = 0; li < lanes; ++li)
+    {
+        const int p = order[li];
+        juce::Rectangle<float> lane (timeArea.getX(), timeArea.getY() + li * laneH, w, laneH - 3.0f);
+        const auto c = partColour (p);
+        g.setColour (th.textDim);
+        g.setFont (hubFont (12.0f, true));
+        g.drawText (cat::muse::partNames()[p].toUpperCase(), juce::Rectangle<float> (r.getX(), lane.getY(), labelW - 8.0f, lane.getHeight()),
+                    juce::Justification::centredLeft);
+        g.setColour (th.raised.withAlpha (0.6f));
+        g.fillRoundedRectangle (lane, 3.0f);
+        for (const auto& sec : song->sections)
+            if (sec.on[(size_t) p])
+            {
+                g.setColour (c.withAlpha (0.16f));
+                g.fillRoundedRectangle (juce::Rectangle<float> (xOf (sec.start), lane.getY(), xOf (sec.end()) - xOf (sec.start), lane.getHeight()).reduced (1.0f, 0.0f), 3.0f);
+            }
+        const auto& notes = song->parts[(size_t) p];
+        if (notes.empty()) continue;
+        int lo = 127, hi = 0;
+        for (const auto& n : notes) { lo = juce::jmin (lo, n.pitch); hi = juce::jmax (hi, n.pitch); }
+        const float span = (float) juce::jmax (6, hi - lo);
+        g.setColour (c.withAlpha (0.9f));
+        for (const auto& n : notes)
+        {
+            if (p == cat::muse::Drums && n.pitch != cat::muse::drum::kick && n.pitch != cat::muse::drum::snare && n.pitch != cat::muse::drum::clap) continue;
+            const float nx = xOf (n.start), nw = juce::jmax (1.2f, xOf (n.start + n.length) - nx);
+            const float ny = p == cat::muse::Drums ? lane.getY() + lane.getHeight() * (n.pitch == cat::muse::drum::kick ? 0.65f : 0.25f)
+                                                   : lane.getBottom() - 3.0f - (float) (n.pitch - lo) / span * (lane.getHeight() - 6.0f);
+            g.fillRect (nx, ny - 1.0f, nw, 2.2f);
+        }
+    }
+}
+
+void ComposePage::paint (juce::Graphics& g)
+{
+    const auto& th = theme();
+    g.fillAll (th.bg);
+    auto song = engine.getSong();
+
+    // header: the song's name and what it is
+    auto h = headerArea;
+    g.setColour (th.text);
+    g.setFont (hubFont (24.0f, true));
+    const auto st = engine.getSongSettings();
+    if (song != nullptr && engine.isSongMode())
+    {
+        g.drawText ("\"" + song->title + "\"", h.removeFromLeft (h.getWidth() / 2), juce::Justification::centredLeft, true);
+        g.setColour (th.textDim);
+        g.setFont (hubFont (14.0f));
+        juce::String info = cat::muse::genreNames()[st.genre] + "  /  " + cat::muse::moodNames()[st.mood] + "     "
+                            + cat::muse::keyName (song->key) + " " + cat::muse::scaleName (song->scale) + "     "
+                            + juce::String (juce::roundToInt (engine.bpm.load())) + " BPM     song #" + juce::String ((juce::int64) st.seed);
+        if (st.endless) info << "     endless, part " << (song->chunk + 1);
+        else
+        {
+            const int secs = (int) std::round (song->lengthBeats * 60.0 / juce::jmax (30.0, engine.bpm.load()));
+            info << "     " << (secs / 60) << ":" << juce::String (secs % 60).paddedLeft ('0', 2) << " min";
+        }
+        g.drawText (info, h, juce::Justification::centredRight, true);
+    }
+    else
+    {
+        g.drawText ("Write a song", h.removeFromLeft (h.getWidth() / 2), juce::Justification::centredLeft);
+        g.setColour (th.textDim);
+        g.setFont (hubFont (14.0f));
+        g.drawText ("Pick a genre and a mood, then press  Write a song!  (or roll the Dice)", h, juce::Justification::centredRight, true);
+    }
+    g.setColour (th.textDim);
+    g.setFont (hubFont (12.0f, true));
+    g.drawText ("NEW:", renewLabelArea, juce::Justification::centredLeft);
+
+    // the map + playhead
+    if (mapImage.isValid()) g.drawImageAt (mapImage, mapBounds.getX(), mapBounds.getY());
+    else
+    {
+        g.setColour (th.panel);
+        g.fillRoundedRectangle (mapBounds.toFloat(), 8.0f);
+    }
+    if (song != nullptr && engine.isSongMode() && song->lengthBeats > 0.0)
+    {
+        const float x0 = (float) mapBounds.getX() + 10.0f + 92.0f, w = (float) mapBounds.getWidth() - 20.0f - 92.0f;
+        const double beat = engine.isPlaying() ? engine.getSongBeat() : -1.0;
+        if (beat >= 0.0)
+        {
+            const int si = song->sectionIndexAt (beat);
+            if (si >= 0)
+            {
+                const auto& sec = song->sections[(size_t) si];
+                const float sx = x0 + (float) (sec.start / song->lengthBeats) * w, sw = (float) (sec.bars * 4.0 / song->lengthBeats) * w;
+                g.setColour (th.text.withAlpha (0.8f));
+                g.drawRoundedRectangle (juce::Rectangle<float> (sx, (float) mapBounds.getY() + 8.0f, sw, 34.0f).reduced (1.0f, 0.0f), 5.0f, 2.0f);
+            }
+            const float px = x0 + (float) (beat / song->lengthBeats) * w;
+            g.setColour (th.accent);
+            g.fillRect (px - 1.0f, (float) mapBounds.getY() + 6.0f, 2.5f, (float) mapBounds.getHeight() - 12.0f);
+        }
+    }
+    else
+    {
+        g.setColour (th.textDim);
+        g.setFont (hubFont (16.0f));
+        g.drawFittedText ("The song's map shows up here: its sections, chords and every part's notes.", mapBounds.reduced (30), juce::Justification::centred, 2);
+    }
+
+    // the words
+    auto la = lyricsArea.toFloat();
+    g.setColour (th.panel);
+    g.fillRoundedRectangle (la, 8.0f);
+    la = la.reduced (16.0f, 8.0f);
+    if (song != nullptr && engine.isSongMode())
+    {
+        const int line = shownLine;
+        const auto& lines = song->lyricLines;
+        bool singer = false;
+        for (int i = 0; i < engine.getNumTracks(); ++i)
+        {
+            auto& t = engine.track (i);
+            if (t.source.load() == SrcLead && (t.sound.load() == SndSing || t.sound.load() == SndTalk) && ! t.mute.load()) singer = true;
+        }
+        if (lines.isEmpty())
+        {
+            g.setColour (th.textDim);
+            g.setFont (hubFont (15.0f));
+            g.drawText ("(this song has no words)", la, juce::Justification::centred);
+        }
+        else
+        {
+            auto top = la.removeFromTop (la.getHeight() * 0.3f);
+            auto mid = la.removeFromTop (la.getHeight() * 0.55f);
+            g.setColour (th.textDim);
+            g.setFont (hubFont (14.0f));
+            if (line >= 1) g.drawText (lines[line - 1], top, juce::Justification::centred, true);
+            else g.drawText (singer ? "WORDS" : "WORDS  -  tip: give the Lead / melody part Sing-Cat or Talk-Cat as its sound and it sings them",
+                             top, juce::Justification::centred, true);
+            g.setColour (th.text);
+            g.setFont (hubFont (24.0f, true));
+            g.drawText (line >= 0 ? lines[line] : lines[0], mid, juce::Justification::centred, true);
+            g.setColour (th.textDim);
+            g.setFont (hubFont (14.0f));
+            const int next = line >= 0 ? line + 1 : 1;
+            if (next < lines.size()) g.drawText (lines[next], la, juce::Justification::centred, true);
+        }
+    }
+}
+
+void ComposePage::mouseDown (const juce::MouseEvent&) {}
+
+void ComposePage::resized()
+{
+    auto r = getLocalBounds().reduced (14, 10);
+    headerArea = r.removeFromTop (36);
+    r.removeFromTop (6);
+    auto row = r.removeFromTop (34);
+    auto col = [&row] (int w) { auto c = row.removeFromLeft (w); row.removeFromLeft (8); return c; };
+    genreBox.setBounds (col (130));
+    moodBox.setBounds (col (110));
+    seedBox.setBounds (col (84));
+    newSeedButton.setBounds (col (92));
+    row.removeFromLeft (6);
+    songButton.setBounds (row.removeFromLeft (70));
+    endlessButton.setBounds (col (84));
+    row.removeFromLeft (6);
+    writeButton.setBounds (col (150));
+    jamButton.setBounds (row.removeFromRight (140));
+    row.removeFromRight (8);
+    exportButton.setBounds (row.removeFromRight (100));
+
+    r.removeFromTop (8);
+    auto renew = r.removeFromTop (30);
+    renewLabelArea = renew.removeFromLeft (44);
+    const int bw = juce::jmin (130, (renew.getWidth() - 6 * renewButtons.size()) / juce::jmax (1, renewButtons.size()));
+    for (auto* b : renewButtons) { b->setBounds (renew.removeFromLeft (bw)); renew.removeFromLeft (6); }
+
+    r.removeFromTop (10);
+    lyricsArea = r.removeFromBottom (juce::jlimit (80, 120, r.getHeight() / 4));
+    r.removeFromBottom (8);
+    const auto oldMap = mapBounds;
+    mapBounds = r;
+    if (oldMap != mapBounds) rebuildMap();
+}
+
+//==============================================================================
 SettingsPage::SettingsPage (HubMain& o, HubEngine& e, juce::AudioDeviceManager& dm)
     : owner (o), engine (e), audio (dm, 0, 0, 2, 2, false, false, true, false)
 {
@@ -861,8 +1251,16 @@ HubMain::HubMain (HubEngine& e, juce::AudioDeviceManager& dm, juce::PropertiesFi
     playButton.onClick = [this] { togglePlay(); };
     recordButton.setTooltip ("Record what you hear to a WAV file (Music \\ Cat Hub)");
     recordButton.onClick = [this] { toggleRecord(); };
-    diceButton.setTooltip ("Roll the dice: a brand new jam (style, chords, key, sounds, effects)");
-    diceButton.onClick = [this] { changeCatsLater ([this] { juce::Random r; engine.roll (r); }); };
+    diceButton.setTooltip ("Roll the dice: a brand new song (genre, mood, chords, melody, words, sounds)");
+    diceButton.onClick = [this]
+    {
+        changeCatsLater ([this]
+        {
+            juce::Random r;
+            engine.roll (r);
+            if (! engine.isPlaying()) engine.setPlaying (true);
+        });
+    };
     helpButton.setTooltip ("Show the tutorial again");
     helpButton.onClick = [this] { startTutorial(); };
     for (auto* b : { &simpleButton, &advancedButton })
@@ -924,6 +1322,7 @@ HubMain::HubMain (HubEngine& e, juce::AudioDeviceManager& dm, juce::PropertiesFi
     tabs.setOutline (0);
     tabs.setIndent (8);
     rack = new RackView (*this, engine);
+    composePage = new ComposePage (*this, engine);
     settingsPage = new SettingsPage (*this, engine, deviceManager);
     rebuildTabs();
 
@@ -940,6 +1339,7 @@ HubMain::~HubMain()
     stopTimer();
     tutorial.reset();
     chooser.reset();
+    exportJob.reset();
     tabs.clearTabs();      // deletes the Cat windows (and the rack) before anything else goes
     setLookAndFeel (nullptr);
 }
@@ -952,7 +1352,7 @@ juce::Rectangle<int> HubMain::boundsOf (juce::Component& c) const
 //==============================================================================
 void HubMain::closeCatTabs()
 {
-    while (tabs.getNumTabs() > 2) tabs.removeTab (tabs.getNumTabs() - 1);
+    while (tabs.getNumTabs() > 3) tabs.removeTab (tabs.getNumTabs() - 1);
 }
 
 void HubMain::rebuildTabs()
@@ -962,6 +1362,7 @@ void HubMain::rebuildTabs()
     if (tabs.getNumTabs() == 0)
     {
         tabs.addTab ("Rack", theme().bg, rack, true);
+        tabs.addTab ("Compose", theme().bg, composePage, true);
         tabs.addTab ("Settings", theme().bg, settingsPage, true);
     }
     closeCatTabs();
@@ -1018,6 +1419,7 @@ void HubMain::refreshAll()
     master.setValue (engine.masterVolume.load(), juce::dontSendNotification);
     refreshSongBar();
     rack->refresh();
+    composePage->refresh();
     settingsPage->refresh();
     status = [this]
     {
@@ -1030,9 +1432,29 @@ void HubMain::refreshAll()
     repaint();
 }
 
+void HubMain::songChanged()
+{
+    bpm.setValue (engine.bpm.load(), juce::dontSendNotification);
+    refreshSongBar();
+    rack->refresh();
+    composePage->refresh();
+    repaint();
+}
+
 void HubMain::refreshSongBar()
 {
+    const bool song = engine.isSongMode();
+    for (juce::Component* c : { (juce::Component*) &keyBox, (juce::Component*) &progressionBox, (juce::Component*) &lengthBox, (juce::Component*) &autoChords })
+        c->setEnabled (! song);
+    if (song)
+    {
+        styleBox.setSelectedId (0, juce::dontSendNotification);
+        if (auto s = engine.getSong()) styleBox.setTextWhenNothingSelected ("Song: " + s->title);
+        if (auto s = engine.getSong()) keyBox.setSelectedId (s->key + 1, juce::dontSendNotification);
+        return;
+    }
     const int styleIdx = HubEngine::styleNames().indexOf (engine.currentStyle);
+    styleBox.setTextWhenNothingSelected ("Pick a style...");
     if (styleIdx >= 0) styleBox.setSelectedId (styleIdx + 1, juce::dontSendNotification);
     else { styleBox.setSelectedId (0, juce::dontSendNotification); styleBox.setTextWhenNothingSelected (engine.currentStyle.isNotEmpty() ? engine.currentStyle : "Pick a style..."); }
     const int key = engine.getKey();
@@ -1090,6 +1512,78 @@ void HubMain::findCats()
 }
 
 //==============================================================================
+namespace
+{
+    /** Renders the song (or its stems) with a progress window; the sound card is paused meanwhile. */
+    class ExportJob : public juce::ThreadWithProgressWindow
+    {
+    public:
+        ExportJob (HubEngine& e, std::vector<std::pair<int, juce::File>> j, std::function<void (bool, juce::String)> done)
+            : juce::ThreadWithProgressWindow ("Saving the song...", true, true), engine (e), jobs (std::move (j)), onDone (std::move (done)) {}
+
+        void run() override
+        {
+            for (size_t i = 0; i < jobs.size() && ! threadShouldExit(); ++i)
+            {
+                setStatusMessage ("Saving " + jobs[i].second.getFileName());
+                ok = engine.exportSong (jobs[i].second, jobs[i].first, [this, i] (float p)
+                {
+                    setProgress (((double) i + p) / (double) jobs.size());
+                    return ! threadShouldExit();
+                }) && ok;
+            }
+        }
+        void threadComplete (bool cancelled) override { if (onDone) onDone (ok && ! cancelled, jobs.empty() ? juce::String() : jobs.front().second.getFullPathName()); }
+
+    private:
+        HubEngine& engine;
+        std::vector<std::pair<int, juce::File>> jobs;
+        std::function<void (bool, juce::String)> onDone;
+        bool ok = true;
+    };
+}
+
+void HubMain::exportSong (int what)
+{
+    auto song = engine.getSong();
+    if (song == nullptr || exportJob != nullptr) return;
+    auto dir = juce::File::getSpecialLocation (juce::File::userMusicDirectory).getChildFile ("Cat Hub");
+    dir.createDirectory();
+    const auto name = juce::File::createLegalFileName (song->title.isNotEmpty() ? song->title : juce::String ("Cat Hub song"));
+    if (what == 2)
+    {
+        const auto f = dir.getNonexistentChildFile (name, ".mid", false);
+        status = engine.exportSongMidi (f) ? "Saved: " + f.getFullPathName() : "Could not save " + f.getFullPathName();
+        if (f.existsAsFile()) f.revealToUser();
+        resized();
+        repaint();
+        return;
+    }
+    std::vector<std::pair<int, juce::File>> jobs;
+    if (what == 0) jobs.push_back ({ -1, dir.getNonexistentChildFile (name, ".wav", false) });
+    else
+    {
+        auto stems = dir.getNonexistentChildFile (name + " stems", {}, false);
+        stems.createDirectory();
+        for (int i = 0; i < engine.getNumTracks(); ++i)
+            jobs.push_back ({ i, stems.getChildFile (juce::String (i + 1) + " " + juce::File::createLegalFileName (sourceName (engine.track (i).source.load())) + ".wav") });
+    }
+    exporting = true;
+    deviceManager.removeAudioCallback (&engine);          // the song is rendered here, faster than real time
+    exportJob = std::make_unique<ExportJob> (engine, jobs, [sp = juce::Component::SafePointer<HubMain> (this), what] (bool ok, juce::String path)
+    {
+        if (sp == nullptr) return;
+        sp->deviceManager.addAudioCallback (&sp->engine);
+        sp->exporting = false;
+        sp->status = ok ? "Saved: " + path + (what == 1 ? "  (and the other parts next to it)" : "") : juce::String ("Saving stopped");
+        if (ok) juce::File (path).revealToUser();
+        sp->resized();
+        sp->repaint();
+        juce::MessageManager::callAsync ([sp] { if (sp != nullptr) sp->exportJob.reset(); });
+    });
+    exportJob->launchThread();
+}
+
 std::vector<Tutorial::Step> HubMain::tutorialSteps()
 {
     auto at = [this] (juce::Component& c) { return [this, &c] { return c.isShowing() ? boundsOf (c) : juce::Rectangle<int>(); }; };
@@ -1100,7 +1594,10 @@ std::vector<Tutorial::Step> HubMain::tutorialSteps()
     s.push_back ({ "Pick a style", "Lo-fi, Trap, House, Neo Soul, Ambient... One click sets every Cat, sound, effect and the tempo.", at (styleBox) });
     s.push_back ({ "Key and chords", "Change the key everything plays in, and which chord progression Chord-Cat plays.",
                    [this] { return boundsOf (keyBox).getUnion (boundsOf (progressionBox)); } });
-    s.push_back ({ "Feeling lucky?", "The dice makes a brand new jam: style, chords, key, sounds and effects.", at (diceButton) });
+    s.push_back ({ "Feeling lucky?", "The dice writes a brand new song: genre, mood, chords, melody, words and sounds. Roll it as often as you like!", at (diceButton) });
+    s.push_back ({ "Write your own song", "The Compose tab writes songs that sound good: pick a genre and a mood, then press Write a song! "
+                   "Don't like the drums or the melody? Press New on just that part. Export saves it as a WAV or a MIDI file.",
+                   [this] { return boundsOf (tabs.getTabbedButtonBar()); } });
     s.push_back ({ "The rack", "Every row is a part. Choose its sound and preset, set the volume, mute (M) or solo (S) it. "
                    "The cat bounces when it plays and NOW PLAYING shows the chord or notes.",
                    [this] { if (auto* r = rack->getRow (0)) return r->isShowing() ? boundsOf (*r) : juce::Rectangle<int>(); return juce::Rectangle<int>(); } });
@@ -1174,7 +1671,8 @@ void HubMain::paint (juce::Graphics& g)
     label (g, bpm.getBounds().withY (bpm.getY() - 15).withHeight (14), "TEMPO");
     label (g, master.getBounds().withY (master.getY() - 15).withHeight (14), "MASTER");
     label (g, songLabelArea, "SONG", juce::Justification::centredLeft);
-    label (g, padsLabelArea, "CHORD-CAT PADS  -  hold one with the mouse or keys 1-8   (Space = play / stop)", juce::Justification::centredLeft);
+    label (g, padsLabelArea, engine.isSongMode() ? juce::String ("SONG MODE  -  the song plays every part (Compose tab). Pick a style or press Back to jamming to play the pads again")
+                                                 : juce::String ("CHORD-CAT PADS  -  hold one with the mouse or keys 1-8   (Space = play / stop)"), juce::Justification::centredLeft);
     // master meter
     {
         auto m = masterMeterArea.toFloat();
@@ -1256,6 +1754,13 @@ void HubMain::updateTopBar()
 void HubMain::timerCallback()
 {
     if (++ticks % 10 == 0) { engine.pollPluginSettings(); engine.keepLifeRunning(); }
+    if (! exporting)
+    {
+        const auto before = engine.getSong();
+        engine.tickSong();
+        if (engine.isSongMode() && engine.getSong() != before) refreshSongBar();
+    }
+    composePage->tick();
     rack->tick();
     pads.tick();
     updateTopBar();

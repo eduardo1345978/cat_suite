@@ -77,6 +77,7 @@ struct Settings
     bool endless = false;
     int key = -1;                       // -1 = the seed picks
     double bpm = 0.0;                   // 0 = the seed picks
+    std::array<juce::uint32, NumTargets> partSeeds {};   // set by "regenerate": the same settings = the same song
 };
 
 struct Song
@@ -102,7 +103,6 @@ struct Song
     struct Motif { std::vector<MotifNote> notes; int bars = 0; int centre = 2; };
     std::vector<std::vector<int>> progressions;   // encoded chords: verse, chorus, pre-chorus, bridge
     std::array<Motif, NumSectionTypes> motifs;    // the melody idea for each kind of section
-    std::array<juce::uint32, NumTargets> partSeeds {};   // changed by "regenerate"
     double chordBeats = 4.0;                      // harmonic rhythm
 
     int sectionIndexAt (double beat) const;
@@ -142,7 +142,13 @@ public:
     /** Stops every sounding note (audio thread). */
     void allOff (std::array<juce::MidiBuffer*, NumParts>& out, int samplePos);
     double getPlayPosition() const noexcept { return shownPos.load(); }   // beats into the current song / piece
+    /** Audio thread: where ppq falls in the piece playing now, and that piece's length (0 = none). */
+    double localPosition (double ppq, double& length) const noexcept;
+    /** Message thread: the endless piece composed to come next (if any). */
+    std::shared_ptr<const Song> getQueued() const { return queuedMsg; }
     int getCurrentChunk() const noexcept { return shownChunk.load(); }
+    /** Audio thread: the tempo the song playing now was written for. */
+    double songBpm() const noexcept { return song != nullptr ? song->bpm : 120.0; }
 
 private:
     struct Held { int part, pitch; double end; };

@@ -11,6 +11,8 @@ target_sources(CatHub PRIVATE
     Source/Main.cpp
     Source/HubEngine.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatSounds.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/Composer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/SongRenderer.cpp
     Source/HubWindow.cpp
     Source/HubLook.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatLookAndFeel.cpp)

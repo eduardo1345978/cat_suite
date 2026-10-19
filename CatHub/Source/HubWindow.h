@@ -102,6 +102,39 @@ private:
     int naturalW = 0, naturalH = 0;
 };
 
+/** Compose: the song writer. Genre, mood, seed, song / endless, "new ..." for each part,
+    the song's map with the playhead, the words, and export. */
+class ComposePage : public juce::Component
+{
+public:
+    ComposePage (HubMain&, HubEngine&);
+    void paint (juce::Graphics&) override;
+    void resized() override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void refresh();
+    void tick();
+    void showSettings (const cat::muse::Settings&);
+
+    juce::ComboBox genreBox, moodBox;
+    juce::TextEditor seedBox;
+    juce::TextButton newSeedButton { "New seed" }, songButton { "Song" }, endlessButton { "Endless" }, writeButton { "Write a song!" },
+                     exportButton { "Export..." }, jamButton { "Back to jamming" };
+    juce::OwnedArray<juce::TextButton> renewButtons;
+
+private:
+    cat::muse::Settings settingsFromControls() const;
+    void rebuildMap();
+    juce::Rectangle<float> mapArea() const { return mapBounds.toFloat(); }
+
+    HubMain& owner;
+    HubEngine& engine;
+    juce::Image mapImage;
+    juce::Rectangle<int> headerArea, mapBounds, lyricsArea, renewLabelArea;
+    const cat::muse::Song* shownSong = nullptr;
+    double shownBeat = -1.0;
+    int shownLine = -2;
+};
+
 /** Settings: theme, mode, audio, where the Cats are, tutorial, reset. */
 class SettingsPage : public juce::Component
 {
@@ -161,11 +194,15 @@ public:
     void applyTheme (int index);
     void startTutorial();
     void findCats();
+    /** Writes the song (or each part as a stem) to Music \ Cat Hub, faster than real time. */
+    void exportSong (int what);       // 0 = WAV, 1 = stems, 2 = MIDI
+    void songChanged();
     void refreshAll();
     juce::PropertiesFile& getSettings() { return settings; }
 
     // for the tests
     bool selectTab (int index) { if (index >= tabs.getNumTabs()) return false; tabs.setCurrentTabIndex (index); return true; }
+    ComposePage* getComposePage() { return composePage; }
     void tickForSnapshot() { timerCallback(); }
     void restoreStateSafely (const juce::ValueTree& t) { changeCats ([this, t] { engine.restoreState (t); }); }
     bool isTutorialShowing() const { return tutorial != nullptr; }
@@ -199,13 +236,16 @@ private:
 
     juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
     RackView* rack = nullptr;
+    ComposePage* composePage = nullptr;
     SettingsPage* settingsPage = nullptr;
+    bool exporting = false;
     PadStrip pads { engine };
     std::unique_ptr<Tutorial> tutorial;
 
     juce::Rectangle<int> logoArea, positionArea, masterMeterArea, songLabelArea, padsLabelArea;
     juce::String status;
     std::unique_ptr<juce::FileChooser> chooser;
+    std::unique_ptr<juce::ThreadWithProgressWindow> exportJob;
     int heldKeyPad = -1, heldKeyCode = 0, ticks = 0;
     bool shownPlaying = false, shownRecording = false;
     float shownMasterMeter = 0.0f;

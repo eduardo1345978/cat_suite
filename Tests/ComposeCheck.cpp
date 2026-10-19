@@ -208,6 +208,7 @@ int main (int argc, char** argv)
                         if (t == NewBass || t == NewCounter || t == NewDrums)
                             CHECK (r.parts[Chords].size() == s.parts[Chords].size(), "%s: regen changed the chords", what.toRawUTF8());
                         if (t != NewLyrics) { auto r2 = s; regenerate (r2, t, 4242); CHECK (sameSong (r, r2), "%s: regen not deterministic", what.toRawUTF8()); }
+                        if (! r.settings.endless) CHECK (sameSong (r, compose (r.settings)), "%s: regen %d can't be rebuilt from its settings", what.toRawUTF8(), t);
                     }
                     // endless: pieces follow on, keep the key and the hook
                     Settings e = set; e.endless = true;

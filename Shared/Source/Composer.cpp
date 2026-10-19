@@ -232,7 +232,7 @@ public:
 
     Rng partRng (int target, u64 salt) const
     {
-        return Rng (mix (mix (s.settings.seed, (u64) target * 7919u + s.partSeeds[(size_t) target]), salt));
+        return Rng (mix (mix (s.settings.seed, (u64) target * 7919u + s.settings.partSeeds[(size_t) target]), salt));
     }
 
     //==========================================================================
@@ -1516,7 +1516,6 @@ Song composeNext (const Song& prev)
     s.key = prev.key; s.scale = prev.scale; s.bpm = prev.bpm; s.swing = prev.swing; s.chordBeats = prev.chordBeats;
     s.progressions = prev.progressions;
     s.motifs = prev.motifs;
-    s.partSeeds = prev.partSeeds;
     Writer w (s);
     w.lastTypeHint = prev.sections.empty() ? -1 : prev.sections.back().type;
     // now and then a fresh bridge, so a long stream keeps surprising
@@ -1524,7 +1523,7 @@ Song composeNext (const Song& prev)
     if (r.chance (0.35))
     {
         Song tmp = s;
-        tmp.partSeeds[NewChords] += 1000u + (juce::uint32) s.chunk;
+        tmp.settings.partSeeds[NewChords] += 1000u + (juce::uint32) s.chunk;
         Writer tw (tmp);
         tw.makeProgressions();
         s.progressions[3] = tmp.progressions[3];
@@ -1540,7 +1539,7 @@ Song composeNext (const Song& prev)
 void regenerate (Song& s, int target, juce::uint32 seed)
 {
     if (! juce::isPositiveAndBelow (target, (int) NumTargets)) return;
-    s.partSeeds[(size_t) target] = seed;
+    s.settings.partSeeds[(size_t) target] = seed;
     Writer w (s);
     switch (target)
     {
@@ -1706,6 +1705,14 @@ void SongPlayer::emit (const Song& sg, double from, double to, double ppqPerSamp
     }
 }
 
+double SongPlayer::localPosition (double ppq, double& length) const noexcept
+{
+    length = song != nullptr ? song->lengthBeats : 0.0;
+    if (length <= 0.0) return 0.0;
+    if (song->settings.endless) return juce::jlimit (0.0, length, ppq - offset);
+    return std::fmod (juce::jmax (0.0, ppq), length);
+}
+
 void SongPlayer::process (double ppqStart, double ppqPerSample, int numSamples, bool playing,
                           std::array<juce::MidiBuffer*, NumParts>& out)
 {
@@ -1737,6 +1744,12 @@ void SongPlayer::process (double ppqStart, double ppqPerSample, int numSamples, 
     }
 
     const double blockBeats = ppqPerSample * numSamples;
+    if (lastPpq < 0.0 && song->settings.endless)
+    {
+        // starting to play: the piece playing now starts again from its first bar
+        const double l = ppqStart - offset;
+        if (l < 0.0 || l >= song->lengthBeats) offset = std::floor (juce::jmax (0.0, ppqStart) / 4.0) * 4.0;
+    }
     if (lastPpq >= 0.0 && (ppqStart < lastPpq - 1e-6 || ppqStart > lastPpq + blockBeats * 3.0 + 0.05))
     {
         // the host jumped: start clean from here

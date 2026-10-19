@@ -1,4 +1,5 @@
 #include "HubEngine.h"
+#include "SongRenderer.h"
 
 namespace hub
 {
@@ -11,7 +12,7 @@ const char* catName (int id)
 
 const char* sourceName (int s)
 {
-    static const char* names[] = { "Chords", "Bass line", "Drums", "Life creatures", "Lead (top note)" };
+    static const char* names[] = { "Chords", "Bass line", "Drums", "Life creatures", "Lead / melody", "Counter-melody" };
     return names[juce::jlimit (0, (int) NumSources - 1, s)];
 }
 
@@ -161,6 +162,47 @@ namespace
     {
         dst.clear();
         dst.addEvents (src, 0, -1, 0);
+    }
+
+    // song parts arrive on their own channels; the instruments want channel 1 (drums keep 10)
+    void copyMidiTo (juce::MidiBuffer& dst, const juce::MidiBuffer& src, int channel)
+    {
+        dst.clear();
+        for (const auto meta : src)
+        {
+            auto m = meta.getMessage();
+            if (m.getChannel() > 0) m.setChannel (channel);
+            dst.addEvent (m, meta.samplePosition);
+        }
+    }
+
+    /** Changes one property in a hosted Cat's saved state (unwrapping the VST3 host's wrapper). */
+    bool setCatStateProperty (juce::AudioPluginInstance* p, const juce::Identifier& name, const juce::String& value)
+    {
+        if (p == nullptr) return false;
+        juce::MemoryBlock mb;
+        p->getStateInformation (mb);
+        auto outer = juce::AudioProcessor::getXmlFromBinary (mb.getData(), (int) mb.getSize());
+        if (outer == nullptr) return false;
+        if (outer->hasTagName ("VST3PluginState"))
+        {
+            auto* comp = outer->getChildByName ("IComponent");
+            if (comp == nullptr) return false;
+            juce::MemoryBlock inner;
+            if (! inner.fromBase64Encoding (comp->getAllSubText())) return false;
+            auto xml = juce::AudioProcessor::getXmlFromBinary (inner.getData(), (int) inner.getSize());
+            if (xml == nullptr) return false;
+            xml->setAttribute (name, value);
+            juce::MemoryBlock newInner;
+            juce::AudioProcessor::copyXmlToBinary (*xml, newInner);
+            comp->deleteAllTextElements();
+            comp->addTextElement (newInner.toBase64Encoding());
+        }
+        else outer->setAttribute (name, value);
+        juce::MemoryBlock out;
+        juce::AudioProcessor::copyXmlToBinary (*outer, out);
+        p->setStateInformation (out.getData(), (int) out.getSize());
+        return true;
     }
 
     void addPanic (juce::MidiBuffer& m, int pos)
@@ -488,6 +530,9 @@ bool HubEngine::setSound (int index, int sound)
         t.keys.allOff(); t.bass.allOff(); t.drums.allOff();
     }
     if (old != nullptr) old->releaseResources();
+    // Talk-Cat sings what it is played here (not its own demo song)
+    if (t.soundCatId == TalkCat) setChoice (t.soundCat.get(), "Play Mode", "Live MIDI");
+    if (songMode.load() && (t.soundCatId == TalkCat || t.soundCatId == SingCat)) lyricsSentFor = nullptr;   // give it the words
     return true;
 }
 
@@ -563,6 +608,7 @@ void HubEngine::applyStyle (int index)
 {
     const auto& all = styles();
     const auto& st = all[(size_t) juce::jlimit (0, (int) all.size() - 1, index)];
+    leaveSongMode();             // a style is a jam with the Cats' own loops
     bpm = st.bpm;
     barsPerChord = st.bars;
     autoChords = true;
@@ -601,35 +647,13 @@ void HubEngine::applyStyle (int index)
 
 void HubEngine::roll (juce::Random& r)
 {
-    applyStyle (r.nextInt (styleNames().size()));
-    currentStyle = "Dice";
-    const auto progs = getProgressionNames();
-    if (! progs.isEmpty()) setProgression (r.nextInt (progs.size()));
-    setKey (r.nextInt (12));
-    const auto drumStyles = choiceTexts (getCoreCat (DrumCat), "Style");
-    const auto bassStyles = choiceTexts (getCoreCat (BassCat), "Style");
-    if (! drumStyles.isEmpty()) setChoice (getCoreCat (DrumCat), "Style", drumStyles[r.nextInt (drumStyles.size())]);
-    if (! bassStyles.isEmpty()) setChoice (getCoreCat (BassCat), "Style", bassStyles[r.nextInt (bassStyles.size())]);
-    bpm = 72 + r.nextInt (60);
-    barsPerChord = r.nextInt (3) == 0 ? 2 : 1;
-    for (int i = 0; i < numTracks.load(); ++i)
-    {
-        auto& t = track (i);
-        const int src = t.source.load();
-        if (src == SrcChords || src == SrcLead)
-        {
-            static const int keys[] = { SndPad, SndEPiano, SndPluck, SndStrings, SndPad, SndEPiano, SndGlide };
-            if (! setSound (i, keys[r.nextInt (7)])) setSound (i, SndPad);
-            if (r.nextInt (3) == 0) setMidiFx (i, 1 + r.nextInt (3)); else setMidiFx (i, FxNone);
-        }
-        else if (src == SrcBass) setSound (i, SndSub + r.nextInt (4));
-        else if (src == SrcDrums) setSound (i, SndBoomBap + r.nextInt (4));
-        t.filter = r.nextInt (3) == 0 ? r.nextFloat() * 0.4f : 0.0f;
-        t.chorus = r.nextInt (3) == 0 ? r.nextFloat() * 0.5f : 0.0f;
-        t.delay = r.nextInt (4) == 0 ? r.nextFloat() * 0.4f : 0.0f;
-        t.crush = r.nextInt (8) == 0 ? r.nextFloat() * 0.4f : 0.0f;
-        t.drive = r.nextInt (5) == 0 ? r.nextFloat() * 0.4f : 0.0f;
-    }
+    // the dice writes a whole new song: genre, mood, seed, and sounds to go with it
+    cat::muse::Settings st;
+    st.seed = (juce::uint32) (1 + r.nextInt (999999));
+    st.genre = r.nextInt ((int) cat::muse::NumGenres);
+    st.mood = r.nextInt ((int) cat::muse::NumMoods);
+    st.endless = songMode.load() && songSettings.endless;
+    composeSong (st, true, &r);
 }
 
 //==============================================================================
@@ -662,7 +686,8 @@ void HubEngine::prepare (double newRate, int maxBlock)
     lifeAudio.setSize (2, maxBlockSize);
     sendAudio.setSize (2, maxBlockSize);
     mixAudio.setSize (2, maxBlockSize);
-    for (auto* m : { &songMidi, &chordOut, &bassOut, &drumOut, &lifeOut, &leadOut }) m->ensureSize (2048);
+    for (auto* m : { &songMidi, &chordOut, &bassOut, &drumOut, &lifeOut, &leadOut, &melodyOut, &counterOut }) m->ensureSize (2048);
+    for (auto& m : songParts) m.ensureSize (2048);
     heldTrigger = -1;
     prepared = true;
 }
@@ -747,7 +772,16 @@ void HubEngine::render (float* outL, float* outR, int numSamples)
     }
     for (int done = 0; done < numSamples;)
     {
-        const int n = juce::jmin (maxBlockSize, numSamples - done);
+        int n = juce::jmin (maxBlockSize, numSamples - done);
+        if (songMode.load() && playing.load())
+        {
+            // never run across the end of a song piece: the Cats then see the new piece start at a block start
+            double len = 0.0;
+            const double local = songPlayer.localPosition (clockPpq, len);
+            const double samplesPerBeat = sampleRate * 60.0 / juce::jlimit (30.0, 300.0, bpm.load());
+            const int left = (int) std::floor ((len - local) * samplesPerBeat);
+            if (len > 0.0 && left >= 1 && left < n) n = left;
+        }
         renderBlock (outL + done, outR + done, n);
         done += n;
     }
@@ -766,6 +800,7 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
         playing = true;
         playHead.ppq = 0.0;
         playHead.samples = 0;
+        clockPpq = 0.0;
     }
     if (stopRequested.exchange (false) && playing)
     {
@@ -788,6 +823,8 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
     const int live = livePad.load();
     const int pads = juce::jmax (1, numPads.load());
     if (panic) { switchPad (-1, 0); addPanic (songMidi, 0); }
+    const bool song = songMode.load();
+    if (song) { if (! panic) switchPad (-1, 0); }
     else if (live >= 0) switchPad (live % 16, 0);
     else if (playing && autoChords)
     {
@@ -800,18 +837,40 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
     }
     else switchPad (-1, 0);
 
-    // ---- the four core Cats
-    copyMidi (chordOut, songMidi);
-    if (hasCat (ChordCat)) runCat (core[ChordCat].get(), lifeAudio, chordOut, n);
-    if (panic) addPanic (chordOut, 0);
+    if (song)
+    {
+        // ---- a composed song: the parts come from the song player
+        std::array<juce::MidiBuffer*, cat::muse::NumParts> ptrs;
+        for (int p = 0; p < cat::muse::NumParts; ++p) { songParts[(size_t) p].clear(); ptrs[(size_t) p] = &songParts[(size_t) p]; }
+        double len = 0.0;
+        double local = songPlayer.localPosition (clockPpq, len);
+        if (len > 0.0 && len - local < 1.5 / samplesPerBeat) local = 0.0;     // a new piece starts right here
+        if (playing) playHead.ppq = local;        // the Cats see the song's own position: a new piece / loop = a jump
+        songPlayer.process (clockPpq, 1.0 / samplesPerBeat, n, playing, ptrs);
+        copyMidiTo (chordOut, songParts[cat::muse::Chords], 1);
+        copyMidiTo (bassOut, songParts[cat::muse::Bass], 1);
+        copyMidiTo (drumOut, songParts[cat::muse::Drums], 10);
+        copyMidiTo (melodyOut, songParts[cat::muse::Melody], 1);
+        copyMidiTo (counterOut, songParts[cat::muse::Counter], 1);
+        if (panic) for (auto* m : { &chordOut, &bassOut, &drumOut, &melodyOut, &counterOut }) addPanic (*m, 0);
+    }
+    else
+    {
+        // ---- the four core Cats
+        copyMidi (chordOut, songMidi);
+        if (hasCat (ChordCat)) runCat (core[ChordCat].get(), lifeAudio, chordOut, n);
+        if (panic) addPanic (chordOut, 0);
 
-    copyMidi (bassOut, chordOut);
-    if (hasCat (BassCat)) runCat (core[BassCat].get(), lifeAudio, bassOut, n); else bassOut.clear();
-    if (panic) addPanic (bassOut, 0);
+        copyMidi (bassOut, chordOut);
+        if (hasCat (BassCat)) runCat (core[BassCat].get(), lifeAudio, bassOut, n); else bassOut.clear();
+        if (panic) addPanic (bassOut, 0);
 
-    drumOut.clear();
-    if (panic) addPanic (drumOut, 0);
-    if (hasCat (DrumCat)) runCat (core[DrumCat].get(), lifeAudio, drumOut, n); else drumOut.clear();
+        drumOut.clear();
+        if (panic) addPanic (drumOut, 0);
+        if (hasCat (DrumCat)) runCat (core[DrumCat].get(), lifeAudio, drumOut, n); else drumOut.clear();
+        melodyOut.clear();
+        counterOut.clear();
+    }
 
     copyMidi (lifeOut, chordOut);
     if (hasCat (LifeCat)) runCat (core[LifeCat].get(), lifeAudio, lifeOut, n);
@@ -838,7 +897,8 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
             case SrcBass:  copyMidi (t.midi, bassOut); break;
             case SrcDrums: copyMidi (t.midi, drumOut); break;
             case SrcLife:  copyMidi (t.midi, lifeOut); break;
-            case SrcLead:  makeLead (t, chordOut, t.midi); break;
+            case SrcLead:  if (song) copyMidi (t.midi, melodyOut); else makeLead (t, chordOut, t.midi); break;
+            case SrcCounter: if (song) copyMidi (t.midi, counterOut); else makeLead (t, chordOut, t.midi); break;
             default:       copyMidi (t.midi, chordOut); break;
         }
         if (panic) addPanic (t.midi, 0);
@@ -938,8 +998,10 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
     {
         playHead.ppq += n / samplesPerBeat;
         playHead.samples += n;
+        clockPpq += n / samplesPerBeat;
     }
     ppqShown = playHead.ppq;
+    if (song) songBeatShown = songPlayer.getPlayPosition();
 }
 
 //==============================================================================
@@ -1032,6 +1094,19 @@ juce::ValueTree HubEngine::saveState() const
         if (s.soundCat != nullptr) p.setProperty ("soundState", stateOf (s.soundCat.get()), nullptr);
         t.appendChild (p, nullptr);
     }
+    if (songMode.load())
+    {
+        juce::ValueTree sg ("SONG");
+        sg.setProperty ("seed", (juce::int64) songSettings.seed, nullptr);
+        sg.setProperty ("genre", songSettings.genre, nullptr);
+        sg.setProperty ("mood", songSettings.mood, nullptr);
+        sg.setProperty ("endless", songSettings.endless, nullptr);
+        sg.setProperty ("key", songSettings.key, nullptr);
+        juce::StringArray seeds;
+        for (auto v : songSettings.partSeeds) seeds.add (juce::String ((juce::int64) v));
+        sg.setProperty ("partSeeds", seeds.joinIntoString (","), nullptr);
+        t.appendChild (sg, nullptr);
+    }
     for (int id = 0; id < (int) core.size(); ++id)
         if (auto* c = getCoreCat (id))
         {
@@ -1091,6 +1166,22 @@ void HubEngine::restoreState (const juce::ValueTree& t)
         }
         if (numTracks.load() == 0) setDefaultTracks();
     }
+    const auto sg = t.getChildWithName ("SONG");
+    if (sg.isValid())
+    {
+        cat::muse::Settings st;
+        st.seed = (juce::uint32) (juce::int64) sg.getProperty ("seed", 1);
+        st.genre = juce::jlimit (0, (int) cat::muse::NumGenres - 1, (int) sg.getProperty ("genre", 0));
+        st.mood = juce::jlimit (0, (int) cat::muse::NumMoods - 1, (int) sg.getProperty ("mood", 0));
+        st.endless = (bool) sg.getProperty ("endless", false);
+        st.key = juce::jlimit (-1, 11, (int) sg.getProperty ("key", -1));
+        const auto seeds = juce::StringArray::fromTokens (sg.getProperty ("partSeeds", "").toString(), ",", "");
+        for (int i = 0; i < juce::jmin (seeds.size(), (int) st.partSeeds.size()); ++i) st.partSeeds[(size_t) i] = (juce::uint32) seeds[i].getLargeIntValue();
+        const double savedBpm = bpm.load();
+        composeSong (st, false);
+        bpm = savedBpm;
+    }
+    else leaveSongMode();
     keepLifeRunning();
     pollPluginSettings();
 }
@@ -1104,6 +1195,204 @@ void HubEngine::keepLifeRunning()
         if (auto* prm = findParam (*life, "Life Running")) if (prm->getValue() < 0.5f) prm->setValueNotifyingHost (1.0f);
         if (auto* prm = findParam (*life, "MIDI Out")) if (prm->getValue() < 0.5f) prm->setValueNotifyingHost (1.0f);
     }
+}
+
+//==============================================================================
+void HubEngine::setSong (std::shared_ptr<const cat::muse::Song> song)
+{
+    if (song == nullptr) return;
+    songSettings = song->settings;
+    bpm = song->bpm;
+    songPlayer.setSong (song);
+    songMode = true;
+    lyricsSentFor = nullptr;
+    currentStyle = song->title;
+    tickSong();
+}
+
+void HubEngine::composeSong (const cat::muse::Settings& settings, bool newTracks, juce::Random* dice)
+{
+    auto song = std::make_shared<cat::muse::Song> (cat::muse::compose (settings));
+    if (newTracks) setUpSongTracks (settings.genre, dice);
+    setSong (song);
+}
+
+void HubEngine::regenerateSong (int target, juce::uint32 seed)
+{
+    auto now = songPlayer.getSong();
+    if (now == nullptr) return;
+    auto s = std::make_shared<cat::muse::Song> (*now);
+    cat::muse::regenerate (*s, target, seed);
+    if (s->chunk == 0) songSettings = s->settings;
+    setSong (s);
+}
+
+void HubEngine::setSongEndless (bool endless)
+{
+    auto st = songSettings;
+    st.endless = endless;
+    composeSong (st, false);
+}
+
+void HubEngine::leaveSongMode()
+{
+    songMode = false;
+    songPlayer.setSong (nullptr);
+    lyricsSentFor = nullptr;
+}
+
+void HubEngine::setUpSongTracks (int genre, juce::Random* dice)
+{
+    // the parts a song has, with sounds that suit the genre
+    const auto ss = cat::muse::defaultSounds (genre);
+    struct Def { int src, sound; float vol, rev, pan; };
+    const bool wet = genre == cat::muse::Ambient || genre == cat::muse::Cinematic;
+    std::vector<Def> defs = {
+        { SrcChords,  SndPad + ss.chords,     0.62f, wet ? 0.4f : 0.2f,  0.5f },
+        { SrcBass,    SndSub + ss.bass,       0.72f, 0.05f,              0.5f },
+        { SrcDrums,   SndBoomBap + ss.drums,  0.70f, 0.08f,              0.5f },
+        { SrcLead,    SndPad + ss.melody,     0.78f, wet ? 0.35f : 0.18f, 0.5f },
+        { SrcCounter, SndPad + ss.counter,    0.52f, wet ? 0.4f : 0.22f, 0.32f },
+    };
+    if (dice != nullptr)
+    {
+        // the dice also picks the sounds: sometimes Sing-, Talk- or Glide-Cat sings the melody
+        const int r = dice->nextInt (100);
+        if (r < 20 && catAvailable (SingCat)) defs[3].sound = SndSing;
+        else if (r < 35 && catAvailable (TalkCat)) defs[3].sound = SndTalk;
+        else if (r < 45 && catAvailable (GlideCat)) defs[3].sound = SndGlide;
+        else if (r < 70) defs[3].sound = SndPad + dice->nextInt (4);
+        if (dice->nextInt (3) == 0) defs[0].sound = SndPad + dice->nextInt (4);
+        if (dice->nextInt (3) == 0) defs[4].sound = SndPad + dice->nextInt (4);
+        if (dice->nextInt (3) == 0) defs[1].sound = SndSub + dice->nextInt (4);
+        if (dice->nextInt (3) == 0) defs[2].sound = SndBoomBap + dice->nextInt (4);
+    }
+    while (numTracks.load() > 0) removeTrack (numTracks.load() - 1);
+    for (const auto& d : defs)
+    {
+        if (! addTrack (d.src, FxNone, SndPad)) break;
+        const int i = numTracks.load() - 1;
+        if (! setSound (i, d.sound)) setSound (i, d.src == SrcDrums ? SndBoomBap : (d.src == SrcBass ? SndSub : SndPluck));
+        auto& t = track (i);
+        t.volume = d.vol; t.reverb = d.rev; t.pan = d.pan;
+        if (d.sound == SndSing || d.sound == SndTalk) t.volume = 0.85f;
+        if (dice != nullptr && d.src != SrcDrums && d.src != SrcBass)
+        {
+            t.chorus = dice->nextInt (3) == 0 ? dice->nextFloat() * 0.5f : 0.0f;
+            t.delay = dice->nextInt (4) == 0 ? dice->nextFloat() * 0.35f : 0.0f;
+            t.filter = dice->nextInt (4) == 0 ? dice->nextFloat() * 0.3f : 0.0f;
+        }
+        if (dice != nullptr && d.src == SrcDrums) t.crush = dice->nextInt (6) == 0 ? dice->nextFloat() * 0.35f : 0.0f;
+    }
+}
+
+void HubEngine::sendLyrics (const cat::muse::Song& song)
+{
+    // Talk- and Sing-Cat on the melody sing one syllable per note: give them the song's words
+    for (int i = 0; i < numTracks.load(); ++i)
+    {
+        auto& t = track (i);
+        if (t.soundCat == nullptr) continue;
+        const bool melody = t.source.load() == SrcLead && songMode.load();
+        if (t.soundCatId == TalkCat)
+        {
+            setChoice (t.soundCat.get(), "Play Mode", "Live MIDI");
+            if (melody) setCatStateProperty (t.soundCat.get(), "liveLyrics", song.lyricsText);
+        }
+        else if (t.soundCatId == SingCat && melody)
+        {
+            setCatStateProperty (t.soundCat.get(), "lyrics", song.lyricsText.substring (0, 2000));
+            if (auto* w = findParam (*t.soundCat, "Words")) if (w->getValue() < 0.5f) w->setValueNotifyingHost (1.0f);
+        }
+    }
+    sungLyrics = song.lyricsText;
+}
+
+void HubEngine::tickSong()
+{
+    if (! songMode.load()) return;
+    auto now = songPlayer.getSong();
+    if (now == nullptr) return;
+    // endless: write the next piece while this one plays
+    if (songPlayer.needNext())
+        songPlayer.queueNext (std::make_shared<cat::muse::Song> (cat::muse::composeNext (*now)));
+
+    // the words: the piece playing now, or the next one once this one's last sung note has gone by
+    auto target = now;
+    if (auto next = songPlayer.getQueued(); next != nullptr && next != now && ! now->parts[cat::muse::Melody].empty())
+        if (songPlayer.getPlayPosition() > now->parts[cat::muse::Melody].back().start + 0.05) target = next;
+    if (target.get() != lyricsSentFor)
+    {
+        lyricsSentFor = target.get();
+        sendLyrics (*target);
+    }
+}
+
+bool HubEngine::exportSongMidi (const juce::File& file) const
+{
+    auto song = songPlayer.getSong();
+    if (song == nullptr) return false;
+    file.deleteFile();
+    auto os = file.createOutputStream();
+    return os != nullptr && cat::muse::toMidiFile (*song).writeTo (*os);
+}
+
+bool HubEngine::exportSong (const juce::File& file, int onlyTrack, std::function<bool (float)> progress)
+{
+    auto song = songPlayer.getSong();
+    if (song == nullptr || ! songMode.load()) return false;
+    file.deleteFile();
+    std::unique_ptr<juce::OutputStream> stream (file.createOutputStream().release());
+    if (stream == nullptr) return false;
+    juce::WavAudioFormat wav;
+    const double rate = sampleRate > 0.0 ? sampleRate : 48000.0;
+    auto w = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}.withSampleRate (rate).withNumChannels (2).withBitsPerSample (24));
+    if (w == nullptr) return false;
+
+    // solo the one part for a stem
+    std::vector<std::pair<bool, bool>> saved;
+    for (int i = 0; i < numTracks.load(); ++i)
+    {
+        auto& t = track (i);
+        saved.push_back ({ t.mute.load(), t.solo.load() });
+        if (onlyTrack >= 0) { t.mute = i != onlyTrack; t.solo = false; }
+    }
+    if (! prepared) prepare (rate, 512);
+    const bool wasPlaying = playing.load();
+    if (wasPlaying) { setPlaying (false); juce::AudioBuffer<float> b (2, 512); render (b.getWritePointer (0), b.getWritePointer (1), 512); }
+    // start clean: no echo or reverb left from before
+    {
+        const juce::ScopedLock sl (renderLock);
+        reverb.reset();
+        for (auto& t : tracks) t->fx.reset();
+    }
+    lyricsSentFor = nullptr;
+    sendLyrics (*song);
+    lyricsSentFor = song.get();
+
+    setPlaying (true);
+    const double samplesPerBeat = rate * 60.0 / juce::jlimit (30.0, 300.0, bpm.load());
+    const juce::int64 songSamples = (juce::int64) std::floor (song->lengthBeats * samplesPerBeat);
+    const juce::int64 total = songSamples + (juce::int64) (rate * 3.0);
+    constexpr int block = 512;
+    juce::AudioBuffer<float> buf (2, block);
+    bool ok = true;
+    for (juce::int64 pos = 0; pos < total && ok;)
+    {
+        int n = (int) std::min<juce::int64> (block, total - pos);
+        if (pos < songSamples) n = (int) std::min<juce::int64> (n, songSamples - pos);   // stop exactly at the end
+        if (pos == songSamples) setPlaying (false);
+        render (buf.getWritePointer (0), buf.getWritePointer (1), n);
+        ok = w->writeFromAudioSampleBuffer (buf, 0, n);
+        pos += n;
+        if (progress && ! progress ((float) ((double) pos / (double) total))) ok = false;
+    }
+    setPlaying (false);
+    { juce::AudioBuffer<float> b (2, 512); render (b.getWritePointer (0), b.getWritePointer (1), 512); }
+    w.reset();
+    for (int i = 0; i < (int) saved.size(); ++i) { track (i).mute = saved[(size_t) i].first; track (i).solo = saved[(size_t) i].second; }
+    if (wasPlaying) setPlaying (true);
+    return ok;
 }
 
 double HubEngine::getLifeTime() const
