@@ -1,4 +1,4 @@
-🐟 CAT OCEAN - a relaxing pixel ocean that never ends 🐟
+🐟 CAT OCEAN - a relaxing Frutiger Aero pixel ocean that never ends 🫧
 Get your own fish by typing in the chat! It swims in when you chat and naps in the cave when you're away (it's saved forever).
 The music never stops: it is written live, and the fishes' genes slowly change its tempo and key. Every fish sings its own little tune.
 
@@ -50,8 +50,8 @@ Babies sometimes mutate - and a few are born Golden, Rainbow, Ghost, Glowing or 
 After many generations evolution can discover a whole NEW SPECIES with something no fish had before.
 
 🌊 THE OCEAN
-Places: Coral reef, Kelp forest, Deep trench, Shipwreck (chat votes where it goes)
-Music (always relaxing): Dreamy ambient, Lo-fi chill, Deep sea, Sunrise piano
+Places: Aqua reef, Emerald kelp, Crystal deep, Sunken ship (chat votes where it goes)
+Music (always relaxing, Frutiger Aero): Aqua dream, Sky lounge, Crystal deep, Bubble pop
 Weather: calm, rain and storms. Feeding time. A cat in a boat says hi to every fish that arrives.
 New subscribers get a little party 🎉
 
@@ -62,8 +62,8 @@ New subscribers get a little party 🎉
 !kick @name               send their fish home
 !ban @name / !unban @name no fish for them (their fish is removed)
 !event storm / calm / feast / babyboom / rarehunt
-!place reef / kelp / trench / wreck
-!music dreamy / lofi / deep / sunrise
+!place reef / kelp / crystal / ship
+!music aqua / lounge / crystal / bubble
 !startvote / !endvote
 
 Be kind - names with rude words are replaced automatically. One fish per person. 🐾

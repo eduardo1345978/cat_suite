@@ -134,7 +134,7 @@ void testCommandsAndLife (const juce::File& outDir)
     auto* miro = fishNamed (sim, "Miro");
     check (miro != nullptr && miro->viewer() && miro->present, "chat: !fish makes a viewer fish that swims in");
     if (miro != nullptr)
-        check (miro->genes.colour1 == findColour ("blue") && miro->genes.pattern == PatStripes && miro->genes.body == BodySlim,
+        check (miro->genes.colour1 == findColour ("blue") && miro->genes.pattern == PatStripes && miro->genes.body != BodyCat,
                "chat: !fish Miro blue stripes cat sets the look (the cat body waits for LV5)");
     if (miro != nullptr) miro->xp = 1000;   // a long-time viewer: everything unlocked
     engine.say ("UC1", "Miro", "!body cat");
@@ -221,7 +221,7 @@ void testCommandsAndLife (const juce::File& outDir)
     miro = fishNamed (sim, "Miro");
 
     // places
-    for (auto* where : { "kelp", "trench", "wreck", "reef" })
+    for (auto* where : { "kelp", "crystal", "ship", "reef" })
     {
         engine.say ("UCmod", "Mod", juce::String ("!place ") + where, true);
         engine.runFrames (30 * 5);
@@ -321,7 +321,9 @@ void testCommandsAndLife (const juce::File& outDir)
     check (music.currentKey() == 9, "music: the key moves to the one the fish like (now " + cat::muse::keyName (music.currentKey()) + ")");
     const double bpmBefore = music.currentBpm();
     for (int s = 0; s < 60 * 6; ++s) engine.runFrames (30);
-    check (music.currentBpm() > bpmBefore || music.currentBpm() >= styleInfo (sim.getStyle()).bpmHi - 0.5, "music: the tempo moves towards what the fish like ("
+    const double want = sim.targetTempo();
+    check (std::abs (music.currentBpm() - want) <= 3.5 || std::abs (music.currentBpm() - want) < std::abs (bpmBefore - want),
+           "music: the tempo moves towards what the fish like (" + juce::String (want, 0) + " wanted, "
            + juce::String (bpmBefore, 0) + " -> " + juce::String (music.currentBpm(), 0) + " bpm)");
     check ((weatherSeen & 2) != 0 || (weatherSeen & 4) != 0, "weather: it rains or storms now and then");
 

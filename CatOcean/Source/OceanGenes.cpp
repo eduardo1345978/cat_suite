@@ -115,7 +115,8 @@ Genes Genes::random (juce::Random& r)
     g.setMood (pick (r, NumMoods));
     g.speed = clamp01 (g.speed + gauss (r) * 0.2f);
     g.social = clamp01 (g.social + gauss (r) * 0.2f);
-    g.voice = pick (r, NumVoices);
+    static const int aeroVoices[] = { VoiceBell, VoiceMarimba, VoiceBubble, VoiceFlute, VoicePluck, VoiceBell, VoiceMarimba, VoicePad };
+    g.voice = aeroVoices[r.nextInt (8)];
     g.pitch = pick (r, 3);
     g.rhythm = r.nextFloat() < 0.5f ? 1 : (r.nextBool() ? 0 : 2);
     g.noteLength = r.nextFloat() < 0.6f ? 0 : 1;

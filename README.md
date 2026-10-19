@@ -71,13 +71,13 @@ Viewers type commands in the live chat:
 | `!dance`, `!spin`, `!jump` | moves |
 | `!feed`, `!vote 1`, `!name Miro`, `!random`, `!info`, `!level`, `!home`, `!release`, `!help` | food, votes, ... |
 
-**Moderators** (and the host typing in the app): `!rename @name New Name`, `!resetname @name`, `!kick @name`, `!ban @name`, `!unban @name`, `!event storm/calm/feast/babyboom/rarehunt`, `!place reef/kelp/trench/wreck`, `!music dreamy/lofi/deep/sunrise`, `!startvote`, `!endvote`.
+**Moderators** (and the host typing in the app): `!rename @name New Name`, `!resetname @name`, `!kick @name`, `!ban @name`, `!unban @name`, `!event storm/calm/feast/babyboom/rarehunt`, `!place reef/kelp/crystal/ship`, `!music aqua/lounge/crystal/bubble`, `!startvote`, `!endvote`.
 
 - **Levels**: a viewer's fish earns XP while it swims (1 a minute) and when they chat (2, at most every 30 s); the name shows the level (*MIRO LV7*). Some looks unlock with levels: LV2 puffer, gradient, sail fin, sleepy eyes, scarf, chip voice; LV3 flat, belly, spiky fin, star eyes, headphones, marimba; LV4 checker, veil tail, whistle; LV5 cat body, lamp; LV6 pad voice; LV8 crown.
 - Your fish swims in when you write in the chat; after 20 quiet minutes it naps in the cave (it is kept forever). A cat in a boat waves hello.
 - **Genetics**: babies mix their parents' genes (babies of your fish are called *Miro Jr.*), sometimes mutate, and a few are born **Golden, Rainbow, Ghost, Glowing or Crystal**. After many generations evolution discovers **new species** with something no fish had before (whiskers, a glowing antenna, a twin tail, starry spots, a frill, a horn).
-- **Music** is always relaxing: Dreamy ambient, Lo-fi chill, Deep sea or Sunrise piano. The composer never stops; the fishes' genes slowly pull its **tempo and key**, and every fish sings its own melody (with a little fin wave).
-- **Places**: Coral reef, Kelp forest, Deep trench (glowing plants, fish glow), Shipwreck (with a treasure chest). Chat votes where the ocean goes, which music plays, and events (storm, feast, baby boom, rare hunt).
+- **Music** is always relaxing: Aqua dream, Sky lounge, Crystal deep or Bubble pop (Frutiger Aero: bright, airy, glassy). The composer never stops; the fishes' genes slowly pull its **tempo and key**, and every fish sings its own melody (with a little fin wave).
+- **Places**: Aqua reef, Emerald kelp, Crystal deep (glowing plants, fish glow), Sunken ship (with a treasure chest). Chat votes where the ocean goes, which music plays, and events (storm, feast, baby boom, rare hunt).
 - New **subscribers** (the channel's count going up) start a confetti party. Leaderboards: oldest fish, biggest families, rare fish, most babies, species, highest levels.
 - One fish per viewer, a word filter for names (English and Slovak), a cooldown against spam, at most 40 viewers' fish on screen at once.
 

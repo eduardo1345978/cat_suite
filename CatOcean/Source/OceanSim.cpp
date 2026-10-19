@@ -9,10 +9,11 @@ const StyleInfo& styleInfo (int s)
     // cat::muse genres: Pop 0, LoFi 1, Trap 2, House 3, Ambient 4, Jazz 5, Rock 6, Cinematic 7
     // moods: Happy 0, Sad 1, Dark 2, Dreamy 3, Epic 4, Chill 5
     static const StyleInfo styles[NumStyles] = {
-        { "Dreamy ambient", "dreamy",  4, 3, 60.0f, 80.0f, true  },
-        { "Lo-fi chill",    "lofi",    1, 5, 70.0f, 86.0f, true  },
-        { "Deep sea",       "deep",    4, 1, 54.0f, 70.0f, false },
-        { "Sunrise piano",  "sunrise", 4, 0, 62.0f, 82.0f, false },
+        // Frutiger Aero: bright, airy, glassy - major keys, pads, bells, soft beats
+        { "Aqua dream",   "aqua",    4, 0, 66.0f, 84.0f, false },
+        { "Sky lounge",   "lounge",  1, 0, 76.0f, 92.0f, true  },
+        { "Crystal deep", "crystal", 4, 3, 56.0f, 72.0f, false },
+        { "Bubble pop",   "bubble",  0, 0, 84.0f, 98.0f, true  },
     };
     return styles[juce::jlimit (0, NumStyles - 1, s)];
 }
@@ -20,24 +21,24 @@ juce::String styleName (int s) { return styleInfo (s).name; }
 int findStyle (const juce::String& w)
 {
     const auto x = w.toLowerCase().removeCharacters ("-_ ");
-    if (x == "dreamy" || x == "ambient" || x == "dream") return StyleDreamy;
-    if (x == "lofi" || x == "chill" || x == "lofichill") return StyleLoFi;
-    if (x == "deep" || x == "deepsea" || x == "sea") return StyleDeepSea;
-    if (x == "sunrise" || x == "piano" || x == "sunrisepiano") return StyleSunrise;
+    if (x == "aqua" || x == "dream" || x == "aquadream" || x == "dreamy" || x == "ambient") return StyleDreamy;
+    if (x == "lounge" || x == "sky" || x == "skylounge" || x == "lofi" || x == "chill") return StyleLoFi;
+    if (x == "crystal" || x == "crystaldeep" || x == "deep" || x == "deepsea") return StyleDeepSea;
+    if (x == "bubble" || x == "pop" || x == "bubblepop" || x == "sunrise") return StyleSunrise;
     return -1;
 }
 juce::String placeName (int p)
 {
-    static const char* n[NumPlaces] = { "Coral reef", "Kelp forest", "Deep trench", "Shipwreck" };
+    static const char* n[NumPlaces] = { "Aqua reef", "Emerald kelp", "Crystal deep", "Sunken ship" };
     return n[juce::jlimit (0, NumPlaces - 1, p)];
 }
 int findPlace (const juce::String& w)
 {
     const auto x = w.toLowerCase().removeCharacters ("-_ ");
-    if (x == "reef" || x == "coral" || x == "coralreef") return PlaceReef;
-    if (x == "kelp" || x == "forest" || x == "kelpforest") return PlaceKelp;
-    if (x == "trench" || x == "abyss" || x == "deeptrench" || x == "dark") return PlaceDeep;
-    if (x == "wreck" || x == "ship" || x == "shipwreck") return PlaceWreck;
+    if (x == "reef" || x == "coral" || x == "aqua" || x == "aquareef") return PlaceReef;
+    if (x == "kelp" || x == "forest" || x == "emerald" || x == "emeraldkelp") return PlaceKelp;
+    if (x == "trench" || x == "abyss" || x == "deep" || x == "crystal" || x == "crystaldeep") return PlaceDeep;
+    if (x == "wreck" || x == "ship" || x == "shipwreck" || x == "sunken" || x == "sunkenship") return PlaceWreck;
     return -1;
 }
 juce::String eventName (int e)

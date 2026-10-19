@@ -129,10 +129,10 @@ namespace
     const PlaceLook& look (int place)
     {
         static const PlaceLook looks[NumPlaces] = {
-            { 0xff35c2cf, 0xff1b72a8, 0xff0c2756, 0xffe3c48a, 0xffa9844f, 0xff55607a, 1.0f },   // coral reef
-            { 0xff4cc3a4, 0xff1f7468, 0xff0b3135, 0xffb9b77a, 0xff6f6a43, 0xff4d5f58, 0.8f },   // kelp forest
-            { 0xff16426a, 0xff0b1d3a, 0xff02060f, 0xff2a3352, 0xff10142a, 0xff222a44, 0.0f },   // deep trench
-            { 0xff3aa7b5, 0xff1e5e78, 0xff0e2a40, 0xffc9b07e, 0xff7e6845, 0xff4c5566, 0.5f },   // shipwreck
+            { 0xff52e3ea, 0xff1c9fd6, 0xff0b4f93, 0xfff6ead0, 0xffd6bd8c, 0xff7aa6c4, 1.3f },   // aqua reef
+            { 0xff74eab8, 0xff1fa58a, 0xff0b5a5c, 0xffe8efc0, 0xffb4c482, 0xff6fa59a, 1.1f },   // emerald kelp
+            { 0xff2d8fd0, 0xff124c8e, 0xff051c40, 0xff3c5c94, 0xff1a2c58, 0xff2f4c80, 0.0f },   // crystal deep
+            { 0xff5fd6de, 0xff2589b0, 0xff0f4672, 0xfff0dfb6, 0xffc4a878, 0xff6f90ae, 0.8f },   // sunken ship
         };
         return looks[juce::jlimit (0, NumPlaces - 1, place)];
     }
@@ -199,6 +199,17 @@ void Painter::paint (Canvas& c, const Sim& sim, const MusicInfo& music, float dt
                 }
 
     bubbles (c, sim, dt);
+    // little light sparkles drifting in the water
+    for (int i = 0; i < 18; ++i)
+    {
+        const float phase = std::sin (t * 2.2f + i * 1.7f);
+        if (phase < 0.75f) continue;
+        const int sx = (int) (hashf ((juce::uint32) i * 41 + 9) * W + std::sin (t * 0.3f + i) * 12.0f);
+        const int sy = (int) (surfaceY + 8.0f + hashf ((juce::uint32) i * 23 + 4) * 120.0f);
+        const float a = (phase - 0.75f) * 4.0f * (1.0f - sim.weatherLevel);
+        c.blend (sx, sy, 0xffffffff, a); c.blend (sx - 1, sy, 0xffffffff, a * 0.5f); c.blend (sx + 1, sy, 0xffffffff, a * 0.5f);
+        c.blend (sx, sy - 1, 0xffffffff, a * 0.5f); c.blend (sx, sy + 1, 0xffffffff, a * 0.5f);
+    }
     floor (c, sim, t);
     weather (c, sim, t);
 
@@ -263,7 +274,7 @@ void Painter::paint (Canvas& c, const Sim& sim, const MusicInfo& music, float dt
 void Painter::background (Canvas& c, const Sim& sim, float t)
 {
     const float storm = sim.weatherLevel;
-    const Colour skyTop = mixc (0xff6fc3f0, 0xff2e3442, storm), skyLow = mixc (0xffcff1fb, 0xff5d6676, storm);
+    const Colour skyTop = mixc (0xff2b8ff0, 0xff2e3442, storm), skyLow = mixc (0xffc8f0ff, 0xff5d6676, storm);
     const auto& lk = look (sim.place);
     const Colour waterTop = mixc (lk.top, shade (lk.top, 0.55f), storm), waterMid = mixc (lk.mid, shade (lk.mid, 0.55f), storm),
                  waterDeep = mixc (lk.deep, shade (lk.deep, 0.5f), storm);
@@ -297,6 +308,34 @@ void Painter::background (Canvas& c, const Sim& sim, float t)
             for (int x = -9; x <= 9; ++x)
                 if (x * x + y * y <= 64) c.blend (420 + x, 15 + y, 0xfffff2a8, a);
                 else if (x * x + y * y <= 81) c.blend (420 + x, 15 + y, 0xfffff2a8, a * 0.35f);
+    }
+    // lens flare from the sun (Frutiger Aero!)
+    if (storm < 0.6f)
+    {
+        const float a = 1.0f - storm / 0.6f;
+        static const Colour flare[] = { 0xff9ff3ff, 0xfffff2a8, 0xffffb6e6, 0xffb6ffcf };
+        for (int k = 1; k <= 4; ++k)
+        {
+            const int fx = 420 - k * 46, fy = 15 + k * 30, r = 3 + (k % 2) * 3;
+            for (int y = -r; y <= r; ++y)
+                for (int x = -r; x <= r; ++x)
+                {
+                    const float d = std::sqrt ((float) (x * x + y * y)) / (float) r;
+                    if (d <= 1.0f) c.add (fx + x, fy + y, flare[k - 1], a * 0.10f * (d > 0.7f ? 1.6f : 0.8f));
+                }
+        }
+    }
+    // green islands on the horizon
+    for (int x = 0; x < W; ++x)
+    {
+        const float hill = 5.0f + 4.0f * std::sin (x * 0.035f + 0.6f) + 2.5f * std::sin (x * 0.09f);
+        if (hill < 3.0f) continue;
+        const int top = (int) (surfaceY - hill);
+        for (int y = top; y < (int) surfaceY - 1; ++y)
+        {
+            const Colour g = mixc (mixc (0xff7ee05a, 0xff3c9a3c, (float) (y - top) / juce::jmax (1.0f, hill)), 0xff59707a, storm);
+            c.set (x, y, y == top ? light (g, 0.4f) : g);
+        }
     }
     // clouds
     const int clouds = 3 + (int) (storm * 6);
@@ -378,6 +417,12 @@ void Painter::floor (Canvas& c, const Sim& sim, float t)
             if (h % 11 == 0) col = shade (col, 0.85f);
             else if (h % 17 == 0) col = light (col, 0.25f);
             if (y == top) col = light (col, 0.3f);
+            // dancing light from the surface (caustics)
+            if (lk.rays > 0.0f)
+            {
+                const float v = std::sin (x * 0.21f + t * 1.3f) + std::sin (y * 0.5f - t * 0.9f + x * 0.07f) + std::sin ((x + y) * 0.13f + t * 0.7f);
+                if (v > 2.1f) col = light (col, 0.35f * (1.0f - sim.weatherLevel));
+            }
             c.set (x, y, col);
         }
     }
@@ -419,7 +464,8 @@ void Painter::bubbles (Canvas& c, const Sim& sim, float dt)
     // vents on the floor, fish breathing, more in storms
     const float rate = 2.5f + sim.weatherLevel * 4.0f;
     if (rng.nextFloat() < rate * dt)
-        bubbleList.push_back ({ (float) (60 + 130 * rng.nextInt (3) + rng.nextInt (6)), floorY, 0.8f + rng.nextFloat() * 1.6f, 12.0f + rng.nextFloat() * 10.0f, rng.nextFloat() * 6 });
+        bubbleList.push_back ({ (float) (60 + 130 * rng.nextInt (3) + rng.nextInt (6)), floorY,
+                                rng.nextFloat() < 0.15f ? 3.0f + rng.nextFloat() * 1.5f : 0.8f + rng.nextFloat() * 1.6f, 12.0f + rng.nextFloat() * 10.0f, rng.nextFloat() * 6 });
     for (auto& f : sim.fish)
         if (f.present && ! f.dying && rng.nextFloat() < 0.06f * dt)
             bubbleList.push_back ({ f.x + f.facing * f.genes.lengthPixels() * 0.5f, f.y - 2.0f, 0.6f + rng.nextFloat(), 10.0f + rng.nextFloat() * 6.0f, rng.nextFloat() * 6 });
@@ -435,11 +481,25 @@ void Painter::bubbles (Canvas& c, const Sim& sim, float dt)
     {
         const int x = (int) b.x, y = (int) b.y;
         if (b.r < 1.4f) c.blend (x, y, 0xffd8f6ff, 0.7f);
-        else
+        else if (b.r < 2.8f)
         {
             c.blend (x - 1, y, 0xffd8f6ff, 0.75f); c.blend (x + 1, y, 0xffd8f6ff, 0.75f);
             c.blend (x, y - 1, 0xffd8f6ff, 0.75f); c.blend (x, y + 1, 0xffd8f6ff, 0.75f);
             c.blend (x, y, 0xffffffff, 0.15f); c.set (x - 1, y - 1, 0xffffffff);
+        }
+        else
+        {
+            // a big glossy bubble: a rim, a light inside and a white shine
+            const int r = (int) b.r;
+            for (int yy = -r; yy <= r; ++yy)
+                for (int xx = -r; xx <= r; ++xx)
+                {
+                    const float d = std::sqrt ((float) (xx * xx + yy * yy));
+                    if (d > r + 0.4f) continue;
+                    if (d > r - 0.8f) c.blend (x + xx, y + yy, 0xffe6faff, 0.8f);
+                    else c.blend (x + xx, y + yy, yy > 0 ? 0xff9ff3ff : 0xffffffff, yy > 0 ? 0.16f : 0.08f);
+                }
+            c.set (x - r / 2, y - r / 2, 0xffffffff); c.set (x - r / 2 + 1, y - r / 2, 0xffffffff); c.set (x - r / 2, y - r / 2 + 1, 0xffffffff);
         }
     }
 }
@@ -591,10 +651,17 @@ void Painter::drawFish (Canvas& c, const Fish& f, float time)
                 default: break;
             }
             if (g.rare == RareRainbow) col = hsv (i * 0.06f + time * 0.25f, 0.65f, 1.0f);
-            if (dy < -h * 0.5f) col = light (col, 0.25f);
+            if (dy < -h * 0.55f) col = light (col, 0.5f);          // a glossy top
+            else if (dy < -h * 0.2f) col = light (col, 0.18f);
             else if (dy > h * 0.55f) col = shade (col, 0.8f);
             put (bx0 + i, y, col);
         }
+    }
+    // a shine spot, like glass
+    {
+        const float us = 0.7f;
+        put (bx0 + (int) (us * L), (int) std::lround (-halfH (us) * 0.6f + wig (us)), 0xffffffff);
+        if (L >= 16) put (bx0 + (int) (us * L) - 1, (int) std::lround (-halfH (us) * 0.6f + wig (us)), 0xfff0fbff);
     }
     // a small side fin that flaps
     {
@@ -821,11 +888,26 @@ void Painter::drawFish (Canvas& c, const Fish& f, float time)
 //==============================================================================
 void Painter::overlay (Canvas& c, const Sim& sim, const MusicInfo& m, float dt)
 {
+    // glossy glass panels (Frutiger Aero): rounded, aqua, a shine on the top half, a light rim
     auto panel = [&c] (int x, int y, int w, int h)
     {
-        c.fillRect (x, y, w, h, 0xff0b1020, 0.72f);
-        for (int i = x; i < x + w; ++i) { c.blend (i, y, 0xff2ce8f5, 0.45f); c.blend (i, y + h - 1, 0xff2ce8f5, 0.25f); }
-        for (int j = y; j < y + h; ++j) { c.blend (x, j, 0xff2ce8f5, 0.35f); c.blend (x + w - 1, j, 0xff2ce8f5, 0.35f); }
+        constexpr int r = 4;
+        auto inside = [&] (int i, int j)
+        {
+            const int cx = i < r ? r - i : (i >= w - r ? i - (w - r - 1) : 0);
+            const int cy = j < r ? r - j : (j >= h - r ? j - (h - r - 1) : 0);
+            return cx * cx + cy * cy <= r * r;
+        };
+        for (int j = 0; j < h; ++j)
+            for (int i = 0; i < w; ++i)
+            {
+                if (! inside (i, j)) continue;
+                const float v = (float) j / (float) juce::jmax (1, h - 1);
+                c.blend (x + i, y + j, mixc (0xff4fc4ee, 0xff0a3f7c, v), 0.66f);
+                if (v < 0.45f) c.blend (x + i, y + j, 0xffffffff, 0.05f + 0.22f * (1.0f - v / 0.45f));
+                const bool edge = ! inside (i - 1, j) || ! inside (i + 1, j) || ! inside (i, j - 1) || ! inside (i, j + 1);
+                if (edge) c.blend (x + i, y + j, j < h / 2 ? 0xffffffff : 0xff9ff3ff, j < h / 2 ? 0.75f : 0.5f);
+            }
     };
     juce::ignoreUnused (dt);
 
@@ -836,10 +918,10 @@ void Painter::overlay (Canvas& c, const Sim& sim, const MusicInfo& m, float dt)
                            l4 = "FISH PULL IT TO " + juce::String ((int) std::lround (m.targetBpm)) + " BPM " + m.targetKey;
         const int w = juce::jmax (Canvas::textWidth (l2), Canvas::textWidth (l4)) + 10;
         panel (4, 4, w, 31);
-        c.text (l1, 9, 8, 0xff2ce8f5, 1, 0, false);
-        c.text (l2.toUpperCase(), 9, 15, 0xffffffff, 1, 0, false);
-        c.text (l3.toUpperCase(), 9, 22, 0xffc0a7f0, 1, 0, false);
-        c.text (l4.toUpperCase(), 9, 29 - 1, 0xff9ef0c2, 1, 0, false);
+        c.text (l1, 9, 8, 0xff2ce8f5, 1, 0xff06264a, true);
+        c.text (l2.toUpperCase(), 9, 15, 0xffffffff, 1, 0xff06264a, true);
+        c.text (l3.toUpperCase(), 9, 22, 0xffc0a7f0, 1, 0xff06264a, true);
+        c.text (l4.toUpperCase(), 9, 29 - 1, 0xff9ef0c2, 1, 0xff06264a, true);
     }
 
     // leaderboard (changes every 10 s)
@@ -856,10 +938,10 @@ void Painter::overlay (Canvas& c, const Sim& sim, const MusicInfo& m, float dt)
         w = juce::jmax (w, Canvas::textWidth (stats) + 10);
         const int x = W - 4 - w, h = 12 + 7 * b.lines.size() + 8;
         panel (x, 4, w, h);
-        c.text (b.title, x + 5, 8, 0xfffee761, 1, 0, false);
+        c.text (b.title, x + 5, 8, 0xfffee761, 1, 0xff06264a, true);
         for (int i = 0; i < b.lines.size(); ++i)
-            c.text ((b.empty ? juce::String() : juce::String (i + 1) + ".") + b.lines[i].toUpperCase().substring (0, 30), x + 5, 15 + 7 * i, 0xffffffff, 1, 0, false);
-        c.text (stats, x + 5, 4 + h - 8, 0xff8b9bb4, 1, 0, false);
+            c.text ((b.empty ? juce::String() : juce::String (i + 1) + ".") + b.lines[i].toUpperCase().substring (0, 30), x + 5, 15 + 7 * i, 0xffffffff, 1, 0xff06264a, true);
+        c.text (stats, x + 5, 4 + h - 8, 0xff8b9bb4, 1, 0xff06264a, true);
     }
 
     // the vote
@@ -868,20 +950,20 @@ void Painter::overlay (Canvas& c, const Sim& sim, const MusicInfo& m, float dt)
         const int w = 170, x = W / 2 - w / 2, y = 46, h = 14 + 8 * (int) sim.vote.options.size() + 4;
         panel (x, y, w, h);
         const juce::String title = sim.vote.kind == 0 ? "VOTE: NEXT MUSIC" : "VOTE: WHAT HAPPENS?";
-        c.text (title, x + 5, y + 4, 0xff2ce8f5, 1, 0, false);
+        c.text (title, x + 5, y + 4, 0xff2ce8f5, 1, 0xff06264a, true);
         const auto secs = juce::String ((int) std::ceil (sim.vote.left)) + "S";
-        c.text (secs, x + w - 5 - Canvas::textWidth (secs), y + 4, 0xff8b9bb4, 1, 0, false);
+        c.text (secs, x + w - 5 - Canvas::textWidth (secs), y + 4, 0xff8b9bb4, 1, 0xff06264a, true);
         int total = 0;
         for (auto n : sim.vote.counts) total += n;
         for (size_t i = 0; i < sim.vote.options.size(); ++i)
         {
             const int oy = y + 13 + 8 * (int) i;
             const auto name = (sim.vote.kind == 0 ? styleName (sim.vote.options[i]) : eventName (sim.vote.options[i])).toUpperCase();
-            c.text ("!VOTE " + juce::String ((int) i + 1) + " " + name, x + 5, oy, 0xffffffff, 1, 0, false);
+            c.text ("!VOTE " + juce::String ((int) i + 1) + " " + name, x + 5, oy, 0xffffffff, 1, 0xff06264a, true);
             const int bw = total > 0 ? (int) (50.0f * sim.vote.counts[i] / total) : 0;
             c.fillRect (x + w - 62, oy, bw, 5, 0xff2ce8f5, 0.9f);
             c.fillRect (x + w - 62 + bw, oy, 50 - bw, 5, 0xff2a2f4e, 0.8f);
-            c.text (juce::String (sim.vote.counts[i]), x + w - 9, oy, 0xffffffff, 1, 0, false);
+            c.text (juce::String (sim.vote.counts[i]), x + w - 9, oy, 0xffffffff, 1, 0xff06264a, true);
         }
     }
 
@@ -900,12 +982,21 @@ void Painter::overlay (Canvas& c, const Sim& sim, const MusicInfo& m, float dt)
     };
     tipTimer += 1.0f / 30.0f;
     if (tipTimer > 9.0f) { tipTimer = 0; tip = (tip + 1) % (int) (sizeof (tips) / sizeof (tips[0])); }
-    c.fillRect (0, H - 11, W, 11, 0xff0b1020, 0.75f);
+    for (int y = H - 11; y < H; ++y)
+    {
+        const float v = (float) (y - (H - 11)) / 10.0f;
+        for (int x = 0; x < W; ++x)
+        {
+            c.blend (x, y, mixc (0xff4fc4ee, 0xff0a3f7c, v), 0.7f);
+            if (v < 0.5f) c.blend (x, y, 0xffffffff, 0.2f * (1.0f - v * 2.0f));
+            if (y == H - 11) c.blend (x, y, 0xffffffff, 0.7f);
+        }
+    }
     juce::String line = tips[tip];
     Colour col = 0xffffffff;
     if (! sim.news.empty()) { line = sim.news.back().text.toUpperCase(); col = sim.news.back().colour; }
     line = line.substring (0, 118);
-    c.text (line, W / 2 - Canvas::textWidth (line) / 2, H - 8, col, 1, 0, false);
+    c.text (line, W / 2 - Canvas::textWidth (line) / 2, H - 8, col, 1, 0xff06264a, true);
 }
 //==============================================================================
 void Painter::decor (Canvas& c, const Sim& sim, float t)
@@ -1015,7 +1106,7 @@ void Painter::boat (Canvas& c, const Sim& sim, float t)
         for (int y = 0; y < 3; ++y) for (int x = -4; x <= 4; ++x) if (std::abs (x) + y < 6) c.set (cx + x, base - y, y == 0 ? furDark : fur);
         c.set (cx + 4, base - 3, fur); c.set (cx + 5, base - 3, fur); c.set (cx + 3, base - 4, fur); c.set (cx + 5, base - 4, fur);   // head + ears
         c.set (cx + 4, base - 2, ink);   // closed eye
-        c.text ("Z", cx + 6, base - 10 - (int) std::fmod (t * 2.0f, 4.0f), 0xffc0a7f0, 1, 0, false);
+        c.text ("Z", cx + 6, base - 10 - (int) std::fmod (t * 2.0f, 4.0f), 0xffc0a7f0, 1, 0xff06264a, true);
     }
     else
     {

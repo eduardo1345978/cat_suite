@@ -50,6 +50,59 @@ private:
 };
 
 //==============================================================================
+/** Frutiger Aero: sky gradient, glossy rounded buttons, white glass text boxes. */
+namespace aero
+{
+    const juce::Colour ink { 0xff0b2f55 }, inkDim { 0xff3d6a8f }, sky { 0xff7fd0ff }, sea { 0xffe6f8ff };
+
+    class LookAndFeel : public cat::CatLookAndFeel
+    {
+    public:
+        LookAndFeel()
+        {
+            setColour (juce::TextEditor::backgroundColourId, juce::Colours::white.withAlpha (0.85f));
+            setColour (juce::TextEditor::textColourId, ink);
+            setColour (juce::TextEditor::outlineColourId, juce::Colour (0xff6fc3ec));
+            setColour (juce::TextEditor::focusedOutlineColourId, juce::Colour (0xff1e90e0));
+            setColour (juce::TextEditor::highlightColourId, juce::Colour (0xff9fdcff));
+            setColour (juce::CaretComponent::caretColourId, ink);
+            setColour (juce::Label::textColourId, ink);
+            setColour (juce::Slider::thumbColourId, juce::Colour (0xff1e90e0));
+            setColour (juce::Slider::trackColourId, juce::Colour (0xff7fd0ff));
+            setColour (juce::Slider::backgroundColourId, juce::Colours::white.withAlpha (0.6f));
+        }
+        void drawButtonBackground (juce::Graphics& g, juce::Button& b, const juce::Colour& base, bool over, bool down) override
+        {
+            auto r = b.getLocalBounds().toFloat().reduced (1.0f);
+            const float c = juce::jmin (12.0f, r.getHeight() * 0.5f);
+            const bool red = base == juce::Colour (0xffc0392b);
+            juce::Colour top = red ? juce::Colour (0xffff8a7a) : juce::Colour (0xffbfeaff), bottom = red ? juce::Colour (0xffc0392b) : juce::Colour (0xff2b96e0);
+            if (over) { top = top.brighter (0.1f); bottom = bottom.brighter (0.15f); }
+            if (down) { std::swap (top, bottom); }
+            g.setGradientFill (juce::ColourGradient (top, r.getX(), r.getY(), bottom, r.getX(), r.getBottom(), false));
+            g.fillRoundedRectangle (r, c);
+            // the glossy shine on the top half
+            auto shine = r.reduced (3.0f, 2.0f).withHeight (r.getHeight() * 0.45f);
+            g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.75f), shine.getX(), shine.getY(),
+                                                     juce::Colours::white.withAlpha (0.1f), shine.getX(), shine.getBottom(), false));
+            g.fillRoundedRectangle (shine, c * 0.8f);
+            g.setColour (juce::Colours::white.withAlpha (0.8f));
+            g.drawRoundedRectangle (r, c, 1.2f);
+        }
+        void drawButtonText (juce::Graphics& g, juce::TextButton& b, bool, bool) override
+        {
+            g.setFont (cat::catFont (juce::jmin (15.0f, b.getHeight() * 0.48f), true));
+            g.setColour (juce::Colours::white);
+            const auto area = b.getLocalBounds().reduced (6, 2);
+            g.setColour (juce::Colour (0x660b2f55));
+            g.drawFittedText (b.getButtonText(), area.translated (0, 1), juce::Justification::centred, 1);
+            g.setColour (juce::Colours::white);
+            g.drawFittedText (b.getButtonText(), area, juce::Justification::centred, 1);
+        }
+    };
+}
+
+//==============================================================================
 class MainComponent : public juce::Component, private juce::Timer
 {
 public:
@@ -60,13 +113,13 @@ public:
         {
             l.setText (text, juce::dontSendNotification);
             l.setFont (cat::catFont (size, bold));
-            l.setColour (juce::Label::textColourId, cat::Colours::text);
+            l.setColour (juce::Label::textColourId, aero::ink);
             addAndMakeVisible (l);
         };
         label (title, "Cat Ocean", 24.0f, true);
         label (keyLabel, "1.  YouTube stream key");
         label (keyHint, "YouTube Studio > Go live > Stream > copy the Stream key", 12.0f);
-        keyHint.setColour (juce::Label::textColourId, cat::Colours::textDim);
+        keyHint.setColour (juce::Label::textColourId, aero::inkDim);
         label (channelLabel, "2.  Your channel (@name) or the live video link");
         label (streamStatus, "", 13.0f);
         label (chatStatus, "", 13.0f);
@@ -80,8 +133,8 @@ public:
         keyEditor.setPasswordCharacter ((juce::juce_wchar) 0x2022);
         keyEditor.setText (props.getValue ("streamKey"), false);
         channelEditor.setText (props.getValue ("channel"), false);
-        channelEditor.setTextToShowWhenEmpty ("@yourchannel", cat::Colours::textDim);
-        hostEditor.setTextToShowWhenEmpty ("!fish Miro blue stripes", cat::Colours::textDim);
+        channelEditor.setTextToShowWhenEmpty ("@yourchannel", aero::inkDim);
+        hostEditor.setTextToShowWhenEmpty ("!fish Miro blue stripes", aero::inkDim);
         for (auto* ed : { &keyEditor, &channelEditor, &hostEditor })
         {
             ed->setFont (cat::catFont (14.0f));
@@ -142,11 +195,17 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        g.fillAll (cat::Colours::background);
+        // a bright sky to sea gradient with a soft glow (Frutiger Aero)
+        g.setGradientFill (juce::ColourGradient (aero::sky, 0.0f, 0.0f, aero::sea, 0.0f, (float) getHeight(), false));
+        g.fillAll();
+        g.setColour (juce::Colours::white.withAlpha (0.35f));
+        g.fillEllipse ((float) getWidth() - 360.0f, -180.0f, 520.0f, 360.0f);
+        g.setColour (juce::Colours::white.withAlpha (0.8f));
+        g.drawRect (previewArea.expanded (2), 2);
         engine.copyFrame (frame);
         g.setImageResamplingQuality (juce::Graphics::lowResamplingQuality);
         g.drawImage (frame, previewArea.toFloat());
-        g.setColour (cat::Colours::textDim);
+        g.setColour (aero::inkDim);
         g.setFont (cat::catFont (12.0f));
         g.drawText ("This is what the stream shows (1920 x 1080 on YouTube)", previewArea.withY (previewArea.getBottom() + 4).withHeight (18),
                     juce::Justification::centredLeft);
@@ -310,7 +369,7 @@ private:
 
     Engine& engine;
     juce::PropertiesFile& props;
-    cat::CatLookAndFeel lnf;
+    aero::LookAndFeel lnf;
     juce::Image frame;
     juce::Rectangle<int> previewArea;
     juce::Label title, keyLabel, keyHint, channelLabel, streamStatus, chatStatus, ffmpegStatus, hostLabel, volumeLabel, statsLabel;
@@ -378,7 +437,7 @@ public:
 private:
     struct Window : juce::DocumentWindow
     {
-        Window (Engine& e, juce::PropertiesFile& p) : juce::DocumentWindow ("Cat Ocean", cat::Colours::background, allButtons)
+        Window (Engine& e, juce::PropertiesFile& p) : juce::DocumentWindow ("Cat Ocean", aero::sky, allButtons)
         {
             setUsingNativeTitleBar (true);
             setContentOwned (new MainComponent (e, p), true);

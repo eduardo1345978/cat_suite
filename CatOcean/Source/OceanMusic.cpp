@@ -161,13 +161,13 @@ void Music::startStyle (int st, int key, double bpm)
     SoundSet ss;
     switch (style)
     {
-        case StyleLoFi:    ss = { 1, 0, 2, 1, 2 }; break;
-        case StyleDeepSea: ss = { 0, 0, 2, 3, 0 }; break;
-        case StyleSunrise: ss = { 1, 0, 2, 2, 3 }; break;
-        default:           ss = { 0, 0, 2, 1, 0 }; break;
+        case StyleLoFi:    ss = { 1, 0, 2, 2, 0 }; break;   // sky lounge: e-piano, soft beat, bell-like plucks
+        case StyleDeepSea: ss = { 0, 0, 2, 3, 0 }; break;   // crystal deep: pads and strings
+        case StyleSunrise: ss = { 1, 3, 2, 2, 2 }; break;   // bubble pop: e-piano, plucky bass and melody
+        default:           ss = { 0, 0, 2, 2, 3 }; break;   // aqua dream: glassy pad, plucks, strings
     }
     renderer.setSounds (ss);
-    renderer.levels = { 0.5f, 0.6f, style == StyleLoFi ? 0.32f : 0.22f, 0.85f, 0.45f };
+    renderer.levels = { 0.5f, 0.6f, style == StyleSunrise ? 0.3f : 0.26f, 0.8f, 0.45f };
     renderer.mute = {};
     renderer.mute[(size_t) Drums] = ! info.drums;
     renderer.reverbSend = 0.32f;
@@ -219,7 +219,7 @@ void Music::render (float* l, float* r, int n, Sim& sim)
     fishVerb.processStereo (fl, fr, n);
     for (int i = 0; i < n; ++i)
     {
-        float a = l[i] + fl[i] * 0.7f, b = r[i] + fr[i] * 0.7f;
+        float a = l[i] + fl[i] * 0.5f, b = r[i] + fr[i] * 0.5f;
         limiter.processSample (a, b);
         l[i] = a; r[i] = b;
     }
@@ -237,7 +237,7 @@ void Music::singFish (Sim& sim, double fromBeat, double toBeat, double pps, int 
     std::vector<Fish*> singers;
     for (auto& f : sim.fish) if (f.present && ! f.dying && ! f.leaving) singers.push_back (&f);
     // a few voices at a time, so the song stays clear: two on the beat, one in between
-    const int maxStrong = singers.size() <= 8 ? 3 : 2;
+    const int maxStrong = 2;
     const float level = 1.0f / std::sqrt (juce::jmax (1.0f, (float) singers.size() / 6.0f));
 
     int done = 0;
@@ -262,15 +262,15 @@ void Music::singFish (Sim& sim, double fromBeat, double toBeat, double pps, int 
             const auto& g = f.genes;
             if ((g.rhythmPattern & (1u << stepInBar)) == 0) continue;
             const float chance = g.rhythm == 0 ? 0.9f : g.rhythm == 1 ? 0.7f : 0.55f;
-            if (rng.nextFloat() > chance * (f.viewer() ? 0.5f : 0.3f)) continue;
+            if (rng.nextFloat() > chance * 0.3f) continue;   // named or not: everyone sings now and then
 
             const int deg = g.melody[(size_t) (f.melodyPos % juce::jmax (1, g.melodyLength))];
             ++f.melodyPos;
             static const int base[3] = { 48, 60, 72 };
             int note = base[juce::jlimit (0, 2, g.pitch)] + keyOff + iv[(size_t) (deg % 7)] + 12 * (deg / 7);
-            if (strong && chord != nullptr && ! chord->isTone (note))
+            if (chord != nullptr && ! chord->isTone (note))
             {
-                // land on a chord note on the strong beats
+                // every note lands on a chord note, so it always fits the music
                 for (int d : { 1, -1, 2, -2, 3, -3 })
                     if (chord->isTone (note + d)) { note += d; break; }
             }
