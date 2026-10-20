@@ -1,4 +1,5 @@
 #include "HubWindow.h"
+#include "Arranger.h"
 
 namespace hub
 {
@@ -1029,13 +1030,6 @@ void ComposePage::paint (juce::Graphics& g)
 
 //==============================================================================
 // the arranger: click a section on the map
-namespace arr
-{
-    constexpr int Renew = 1, Louder = 2, Softer = 3, Duplicate = 4, Earlier = 5, Later = 6, Delete = 7, Undo = 8,
-                  ChangeTo = 100, AddAfter = 200, Length = 300, PartToggle = 400;
-    const int lengths[] = { 4, 8, 12, 16 };
-}
-
 int ComposePage::sectionAt (juce::Point<int> p) const
 {
     auto song = engine.getSong();
@@ -1053,79 +1047,30 @@ void ComposePage::mouseDown (const juce::MouseEvent& e)
     const int idx = sectionAt (e.getPosition());
     auto song = engine.getSong();
     if (idx < 0 || song == nullptr) return;
-    const auto& sec = song->sections[(size_t) idx];
-    juce::PopupMenu m;
-    m.addSectionHeader (cat::muse::sectionName (sec.type) + " (" + juce::String (sec.bars) + " bars)");
-    if (song->settings.endless)
-        m.addItem (1, "Endless songs arrange themselves - turn Endless off to arrange", false);
-    else
-    {
-        m.addItem (arr::Renew, "Other chords for this section");
-        juce::PopupMenu change, add, length, parts;
-        for (int t = 0; t < cat::muse::NumSectionTypes; ++t)
-        {
-            change.addItem (arr::ChangeTo + t, cat::muse::sectionName (t), true, t == sec.type);
-            add.addItem (arr::AddAfter + t, cat::muse::sectionName (t));
-        }
-        for (int k = 0; k < 4; ++k) length.addItem (arr::Length + k, juce::String (arr::lengths[k]) + " bars", true, sec.bars == arr::lengths[k]);
-        for (int p = 0; p < cat::muse::NumParts; ++p) parts.addItem (arr::PartToggle + p, cat::muse::partNames()[p], true, sec.on[(size_t) p]);
-        m.addSubMenu ("Make it a...", change);
-        m.addSubMenu ("Length", length);
-        m.addSubMenu ("Parts that play", parts);
-        m.addItem (arr::Louder, "More energy", sec.energy < 0.99f);
-        m.addItem (arr::Softer, "Less energy", sec.energy > 0.11f);
-        m.addSeparator();
-        m.addSubMenu ("Add a section after it", add, song->sections.size() < 40);
-        m.addItem (arr::Duplicate, "Play it twice", song->sections.size() < 40);
-        m.addItem (arr::Earlier, "Move earlier", idx > 0);
-        m.addItem (arr::Later, "Move later", idx < (int) song->sections.size() - 1);
-        m.addItem (arr::Delete, "Remove it", song->sections.size() > 1);
-        m.addSeparator();
-        m.addItem (arr::Undo, "Undo the last change", ! undoForm.empty()
-                   && undoKey == song->settings.seed * 131u + (juce::uint32) song->settings.genre * 7u + (juce::uint32) song->settings.mood);
-    }
+    const bool canUndo = ! undoForm.empty() && undoKey == cat::muse::arranger::songKey (*song);
     juce::Component::SafePointer<ComposePage> sp (this);
-    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withTargetScreenArea (
-                         juce::Rectangle<int> (e.getScreenX(), e.getScreenY(), 1, 1)),
-                     [sp, idx] (int result) { if (sp != nullptr && result > 0) sp->arrangeSection (idx, result); });
+    cat::muse::arranger::menu (*song, idx, canUndo).showMenuAsync (
+        juce::PopupMenu::Options().withTargetComponent (this).withTargetScreenArea (juce::Rectangle<int> (e.getScreenX(), e.getScreenY(), 1, 1)),
+        [sp, idx] (int result) { if (sp != nullptr && result > 0) sp->arrangeSection (idx, result); });
 }
 
 void ComposePage::arrangeSection (int idx, int result)
 {
+    namespace A = cat::muse::arranger;
     auto song = engine.getSong();
-    if (song == nullptr || song->settings.endless || ! juce::isPositiveAndBelow (idx, (int) song->sections.size())) return;
-    auto form = song->sections;
-    auto& sec = form[(size_t) idx];
-    const auto seed = (juce::uint32) (1 + juce::Random().nextInt (0x7ffffff));
-    const int numProgressions = juce::jmax (1, (int) song->progressions.size());
-    if (result == arr::Undo)
+    if (song == nullptr || song->settings.endless) return;
+    std::vector<cat::muse::Section> form;
+    if (result == A::Undo)
     {
-        if (undoForm.empty() || undoKey != song->settings.seed * 131u + (juce::uint32) song->settings.genre * 7u + (juce::uint32) song->settings.mood) return;
+        if (undoForm.empty() || undoKey != A::songKey (*song)) return;
         form = undoForm;
         undoForm.clear();
     }
     else
     {
-        if (result == arr::Renew) sec.progression = (sec.progression + 1 + juce::Random().nextInt (juce::jmax (1, numProgressions - 1))) % numProgressions;
-        else if (result == arr::Louder) sec.energy = juce::jmin (1.0f, sec.energy + 0.15f);
-        else if (result == arr::Softer) sec.energy = juce::jmax (0.1f, sec.energy - 0.15f);
-        else if (result == arr::Duplicate) { if (form.size() >= 40) return; const auto copy = sec; form.insert (form.begin() + idx + 1, copy); }
-        else if (result == arr::Earlier) { if (idx == 0) return; std::swap (form[(size_t) idx], form[(size_t) idx - 1]); }
-        else if (result == arr::Later) { if (idx + 1 >= (int) form.size()) return; std::swap (form[(size_t) idx], form[(size_t) idx + 1]); }
-        else if (result == arr::Delete) { if (form.size() <= 1) return; form.erase (form.begin() + idx); }
-        else if (result >= arr::PartToggle && result < arr::PartToggle + cat::muse::NumParts) { auto& on = sec.on[(size_t) (result - arr::PartToggle)]; on = ! on; }
-        else if (result >= arr::Length && result < arr::Length + 4) sec.bars = arr::lengths[result - arr::Length];
-        else if (result >= arr::ChangeTo && result < arr::ChangeTo + cat::muse::NumSectionTypes)
-            sec = cat::muse::makeSection (*song, result - arr::ChangeTo, sec.bars, seed);
-        else if (result >= arr::AddAfter && result < arr::AddAfter + cat::muse::NumSectionTypes)
-        {
-            if (form.size() >= 40) return;
-            const int type = result - arr::AddAfter;
-            form.insert (form.begin() + idx + 1, cat::muse::makeSection (*song, type, type == cat::muse::PreChorus || type == cat::muse::Build ? 4 : 8, seed));
-        }
-        else return;
+        if (! A::apply (*song, idx, result, (juce::uint32) (1 + juce::Random().nextInt (0x7ffffff)), form)) return;
         undoForm = song->sections;
-        undoKey = song->settings.seed * 131u + (juce::uint32) song->settings.genre * 7u + (juce::uint32) song->settings.mood;
+        undoKey = A::songKey (*song);
     }
     if (engine.arrangeSong (form)) owner.songChanged();
 }

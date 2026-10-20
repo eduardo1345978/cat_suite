@@ -58,6 +58,10 @@ public:
     // ---- the song (message thread)
     std::shared_ptr<const cat::muse::Song> getSong() const { return player.getSong(); }
     void regenerate (int target);
+    /** The arranger (click a section on the map): plays the song with these sections. Not in endless mode. */
+    bool arrange (std::vector<cat::muse::Section> sections);
+    /** One part as a MIDI file (for dragging into Cubase); -1 = every part. */
+    juce::File writeMidiForDrag (int part) const;
     void newSeed();
     void setSeed (juce::uint32);
     cat::muse::Settings currentSettings() const;
@@ -99,6 +103,7 @@ private:
     // message thread
     std::array<juce::uint32, cat::muse::NumTargets> partSeeds {};
     cat::muse::Settings composedFor;
+    std::vector<cat::muse::Section> arrangedForm, pendingForm;   // the arranger's sections (saved with the song)
     bool composedOnce = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MuseCatProcessor)

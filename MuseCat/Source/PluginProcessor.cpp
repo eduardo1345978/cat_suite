@@ -136,7 +136,15 @@ void MuseCatProcessor::updateSong (bool force)
     {
         composedFor = st;
         composedOnce = true;
-        setSongNow (std::make_shared<Song> (compose (st)));
+        auto song = std::make_shared<Song> (compose (st));
+        arrangedForm.clear();
+        if (! pendingForm.empty() && ! st.endless)
+        {
+            cat::muse::arrange (*song, pendingForm);
+            arrangedForm = song->sections;
+        }
+        pendingForm.clear();
+        setSongNow (song);
     }
     // endless: write the next piece while this one plays
     if (player.needNext())
@@ -152,7 +160,33 @@ void MuseCatProcessor::regenerate (int target)
     cat::muse::regenerate (*s, target, (juce::uint32) (1 + juce::Random().nextInt (0x7ffffff)));
     partSeeds = s->settings.partSeeds;
     composedFor = currentSettings();
+    if (target == NewArrangement) arrangedForm.clear();
+    else if (! arrangedForm.empty()) arrangedForm = s->sections;
     setSongNow (s);
+}
+
+bool MuseCatProcessor::arrange (std::vector<Section> sections)
+{
+    auto now = player.getSong();
+    if (now == nullptr || now->settings.endless || sections.empty()) return false;
+    auto s = std::make_shared<Song> (*now);
+    cat::muse::arrange (*s, std::move (sections));
+    arrangedForm = s->sections;
+    setSongNow (s);
+    return true;
+}
+
+juce::File MuseCatProcessor::writeMidiForDrag (int part) const
+{
+    auto s = player.getSong();
+    if (s == nullptr) return {};
+    auto name = "Muse-Cat " + juce::File::createLegalFileName (s->title);
+    if (juce::isPositiveAndBelow (part, (int) NumParts)) name << " - " << partNames()[part];
+    auto f = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile (name + ".mid");
+    f.deleteFile();
+    auto os = f.createOutputStream();
+    if (os == nullptr || ! toMidiFile (*s, part).writeTo (*os)) return {};
+    return f;
 }
 
 void MuseCatProcessor::setSeed (juce::uint32 seed)
@@ -288,6 +322,18 @@ void MuseCatProcessor::getStateInformation (juce::MemoryBlock& dest)
     for (auto v : partSeeds) seeds.add (juce::String ((juce::int64) v));
     state.setProperty ("partSeeds", seeds.joinIntoString (","), nullptr);
     state.setProperty ("preset", currentPreset.load(), nullptr);
+    if (! arrangedForm.empty())
+    {
+        juce::StringArray form;
+        for (const auto& sec : arrangedForm)
+        {
+            int on = 0;
+            for (int part = 0; part < NumParts; ++part) if (sec.on[(size_t) part]) on |= 1 << part;
+            form.add (juce::String (sec.type) + ":" + juce::String (sec.bars) + ":" + juce::String (sec.progression) + ":"
+                      + juce::String (sec.energy, 3) + ":" + juce::String (on));
+        }
+        state.setProperty ("form", form.joinIntoString (";"), nullptr);
+    }
     if (auto xml = state.createXml()) copyXmlToBinary (*xml, dest);
 }
 
@@ -300,6 +346,18 @@ void MuseCatProcessor::setStateInformation (const void* data, int size)
     partSeeds = {};
     for (int i = 0; i < juce::jmin (seeds.size(), (int) partSeeds.size()); ++i) partSeeds[(size_t) i] = (juce::uint32) seeds[i].getLargeIntValue();
     currentPreset = (int) state.getProperty ("preset", -1);
+    pendingForm.clear();
+    for (const auto& item : juce::StringArray::fromTokens (state.getProperty ("form", "").toString(), ";", ""))
+    {
+        const auto f = juce::StringArray::fromTokens (item, ":", "");
+        if (f.size() < 5) continue;
+        Section sec;
+        sec.type = f[0].getIntValue(); sec.bars = f[1].getIntValue(); sec.progression = f[2].getIntValue();
+        sec.energy = f[3].getFloatValue();
+        for (int part = 0; part < NumParts; ++part) sec.on[(size_t) part] = (f[4].getIntValue() >> part) & 1;
+        pendingForm.push_back (sec);
+    }
+    state.removeProperty ("form", nullptr);
     state.removeProperty ("partSeeds", nullptr);
     state.removeProperty ("preset", nullptr);
     apvts.replaceState (state);

@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 #include "MidiExport.h"
+#include "Arranger.h"
 
 using namespace cat::muse;
 
@@ -111,6 +112,56 @@ void SongMap::rebuild()
     }
 }
 
+int SongMap::sectionAt (juce::Point<int> p) const
+{
+    if (song == nullptr || song->lengthBeats <= 0.0) return -1;
+    const float x0 = 10.0f + labelWidth, w = (float) getWidth() - 20.0f - labelWidth;
+    if (w <= 0.0f || (float) p.x < x0) return -1;
+    const double b = ((float) p.x - x0) / w * song->lengthBeats;
+    for (int i = 0; i < (int) song->sections.size(); ++i)
+        if (b >= song->sections[(size_t) i].start && b < song->sections[(size_t) i].end()) return i;
+    return -1;
+}
+
+int SongMap::partAt (juce::Point<int> p) const
+{
+    // the same geometry as rebuild(): sections 30, chords 17, gap 5, then one lane per part
+    const float top = 8.0f + 30.0f + 17.0f + 5.0f, h = (float) getHeight() - 8.0f - top;
+    if ((float) p.y < top || h <= 0.0f) return -1;
+    static const int order[] = { Melody, Counter, Chords, Bass, Drums };
+    const int li = (int) (((float) p.y - top) / (h / (float) NumParts));
+    return juce::isPositiveAndBelow (li, (int) NumParts) ? order[li] : -1;
+}
+
+void SongMap::mouseMove (const juce::MouseEvent& e)
+{
+    const bool onLabel = (float) e.x < 10.0f + labelWidth && partAt (e.getPosition()) >= 0;
+    setMouseCursor (onLabel ? juce::MouseCursor::DraggingHandCursor
+                            : (sectionAt (e.getPosition()) >= 0 ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor));
+}
+
+void SongMap::mouseDown (const juce::MouseEvent& e)
+{
+    dragPart = partAt (e.getPosition());
+    dragged = false;
+}
+
+void SongMap::mouseDrag (const juce::MouseEvent& e)
+{
+    if (! dragged && dragPart >= 0 && e.getDistanceFromDragStart() > 6 && onDragPart)
+    {
+        dragged = true;
+        onDragPart (dragPart);
+    }
+}
+
+void SongMap::mouseUp (const juce::MouseEvent& e)
+{
+    if (dragged || e.getDistanceFromDragStart() > 6) return;
+    const int si = sectionAt (e.getMouseDownPosition());
+    if (si >= 0 && onSectionClick) onSectionClick (si, e.getScreenPosition());
+}
+
 void SongMap::paint (juce::Graphics& g)
 {
     if (image.isValid()) g.drawImageAt (image, 0, 0);
@@ -147,7 +198,19 @@ MuseCatEditor::MuseCatEditor (MuseCatProcessor& p) : processor (p)
             if (auto os = f.createOutputStream()) { toMidiFile (*s).writeTo (*os); os.reset(); cat::midiexport::dragFileOut (f, &dragButton); }
         }
     };
-    dragButton.onClick = [this] { status = "Drag this button onto a Cubase track to get the song as MIDI"; repaint(); };
+    dragButton.onClick = [this] { status = "Drag this button onto a Cubase track to get the song as MIDI (drag a part's name for just that part)"; repaint(); };
+    map.onDragPart = [this] (int part) { dragPartOut (part); };
+    map.onSectionClick = [this] (int section, juce::Point<int> screen)
+    {
+        auto song = processor.getSong();
+        if (song == nullptr) return;
+        const bool canUndo = ! undoForm.empty() && undoKey == arranger::songKey (*song);
+        juce::Component::SafePointer<MuseCatEditor> sp (this);
+        arranger::menu (*song, section, canUndo).showMenuAsync (
+            juce::PopupMenu::Options().withTargetComponent (&map).withTargetScreenArea (juce::Rectangle<int> (screen.x, screen.y, 1, 1)),
+            [sp, section] (int result) { if (sp != nullptr && result > 0) sp->arrangeSection (section, result); });
+    };
+    map.setTooltip ("Click a section to arrange the song. Drag a part (its lane or name) onto a Cubase track to get just that part as MIDI");
     exportButton.setTooltip ("Save the song as a WAV, as one WAV per part (stems), or as a MIDI file");
     exportButton.onClick = [this]
     {
@@ -262,6 +325,54 @@ void MuseCatEditor::timerCallback()
     }
     const bool endless = processor.currentSettings().endless;
     if (endlessButton.getToggleState() != endless) (endless ? endlessButton : songButton).setToggleState (true, juce::dontSendNotification);
+}
+
+void MuseCatEditor::arrangeSection (int section, int result)
+{
+    auto song = processor.getSong();
+    if (song == nullptr || song->settings.endless) return;
+    std::vector<Section> form;
+    if (result == arranger::Undo)
+    {
+        if (undoForm.empty() || undoKey != arranger::songKey (*song)) return;
+        form = undoForm;
+        undoForm.clear();
+    }
+    else
+    {
+        if (! arranger::apply (*song, section, result, (juce::uint32) (1 + juce::Random().nextInt (0x7ffffff)), form)) return;
+        undoForm = song->sections;
+        undoKey = arranger::songKey (*song);
+    }
+    if (processor.arrange (form))
+    {
+        status = "Arranged: " + juce::String ((int) form.size()) + " sections";
+        refreshSong();
+    }
+}
+
+void MuseCatEditor::dragPartOut (int part)
+{
+    const auto f = processor.writeMidiForDrag (part);
+    if (f.existsAsFile()) cat::midiexport::dragFileOut (f, this);
+}
+
+void MuseCatEditor::mouseDown (const juce::MouseEvent& e)
+{
+    labelDragPart = -1;
+    labelDragged = false;
+    for (int part = 0; part < NumParts; ++part)
+        if (partLabelAreas[(size_t) part].contains (e.getPosition())) labelDragPart = part;
+    if (labelDragPart >= 0) { status = "Drag " + partNames()[labelDragPart] + " onto a Cubase track to get just that part as MIDI"; repaint(); }
+}
+
+void MuseCatEditor::mouseDrag (const juce::MouseEvent& e)
+{
+    if (labelDragPart >= 0 && ! labelDragged && e.getDistanceFromDragStart() > 6)
+    {
+        labelDragged = true;
+        dragPartOut (labelDragPart);
+    }
 }
 
 void MuseCatEditor::exportSong (int what)

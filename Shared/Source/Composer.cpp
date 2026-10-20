@@ -1641,7 +1641,7 @@ Section makeSection (const Song& song, int type, int bars, juce::uint32 seed)
     return sec;
 }
 
-juce::MidiFile toMidiFile (const Song& s)
+juce::MidiFile toMidiFile (const Song& s, int onlyPart)
 {
     constexpr int tpq = 960;
     juce::MidiFile f;
@@ -1656,6 +1656,7 @@ juce::MidiFile toMidiFile (const Song& s)
 
     for (int p = 0; p < NumParts; ++p)
     {
+        if (onlyPart >= 0 && p != onlyPart) continue;
         juce::MidiMessageSequence seq;
         const int ch = partChannel (p);
         seq.addEvent (juce::MidiMessage::textMetaEvent (3, partNames()[p]), 0);

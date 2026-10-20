@@ -348,6 +348,30 @@ int main (int argc, char** argv)
                  songs, titles.size(), st.melodyNotes, 100.0 * st.strongChordTone / juce::jmax (1, st.strong),
                  100.0 * st.steps / juce::jmax (1, st.steps + st.leaps + st.bigLeaps), 100.0 * st.leaps / juce::jmax (1, st.steps + st.leaps + st.bigLeaps),
                  100.0 * st.bigLeaps / juce::jmax (1, st.steps + st.leaps + st.bigLeaps));
+    // the arranger: every change keeps the song playable, deterministic and in tune
+    for (int g = 0; g < NumGenres; ++g)
+    {
+        Settings set; set.seed = 4000 + (juce::uint32) g; set.genre = g; set.mood = g % NumMoods;
+        auto s = compose (set);
+        auto form = s.sections;
+        form.erase (form.begin());
+        form.insert (form.begin() + 1, makeSection (s, Chorus, 8, 9));
+        form.push_back (makeSection (s, Bridge, 12, 10));
+        form[0].progression = (form[0].progression + 1) % (int) s.progressions.size();
+        form[0].on[Melody] = ! form[0].on[Melody];
+        auto a = s, b = s;
+        arrange (a, form);
+        arrange (b, form);
+        double beats = 0.0;
+        for (auto& sec : form) beats += sec.bars * 4.0;
+        bool inside = true, same = a.parts[Melody].size() == b.parts[Melody].size();
+        for (auto& part : a.parts) for (auto& n : part) inside = inside && n.start >= -1e-6 && n.start < a.lengthBeats + 1e-6 && n.pitch >= 0 && n.pitch < 128;
+        CHECK (std::abs (a.lengthBeats - beats) < 1e-6 && a.sections.size() == form.size() && inside && same && ! a.chords.empty(),
+               "arranger broke a %s song", genreNames()[g].toRawUTF8());
+        auto one = toMidiFile (a, Bass);
+        CHECK (one.getNumTracks() == 2, "one part as MIDI should be 2 tracks (tempo + part), got %d", one.getNumTracks());
+    }
+
     CHECK (st.strongChordTone > st.strong * 0.85, "too few chord tones on strong beats");
     CHECK (st.bigLeaps * 10 < st.steps, "too many big leaps");
     std::printf (failures == 0 ? "COMPOSE CHECK PASSED\n" : "COMPOSE CHECK FAILED (%d)\n", failures);

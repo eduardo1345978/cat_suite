@@ -125,7 +125,7 @@ void arrange (Song&, std::vector<Section> sections);
 /** A section of this type as the composer would write it (energy, progression, which parts play). */
 Section makeSection (const Song&, int type, int bars, juce::uint32 seed);
 /** All parts as a MIDI file: chords ch 1, bass ch 2, melody ch 3 (with lyrics), counter ch 4, drums ch 10. */
-juce::MidiFile toMidiFile (const Song&);
+juce::MidiFile toMidiFile (const Song&, int onlyPart = -1);   // onlyPart >= 0: just that part (tempo track + it)
 /** The MIDI channel each part plays on. */
 int partChannel (int part);
 
