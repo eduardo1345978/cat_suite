@@ -77,6 +77,7 @@ private:
     float clock = 0, tipTimer = 0;
     int tip = 0, boardIndex = 0;
     float boardTimer = 0;
+    int boardLeft = 10000, boardBottom = 0;   // where the leaderboard was drawn (the cat's speech bubble keeps clear of it)
     float lastRainAt = -1.0e9f;   // for the rainbow after a shower
 };
 } // namespace ocean

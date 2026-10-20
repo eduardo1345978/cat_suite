@@ -1208,6 +1208,7 @@ void Painter::overlay (Canvas& c, const Sim& sim, const MusicInfo& m, float dt)
         stats << "  " << wn[juce::jlimit (0, 2, sim.weather)];
         w = juce::jmax (w, Canvas::textWidth (stats) + 10);
         const int x = W - 4 - w, h = 12 + 7 * b.lines.size() + 8;
+        boardLeft = x; boardBottom = 4 + h;
         panel (x, 4, w, h);
         c.text (b.title, x + 5, 8, 0xfffee761, 1, 0xff06264a, true);
         for (int i = 0; i < b.lines.size(); ++i)
@@ -1860,7 +1861,9 @@ void Painter::boat (Canvas& c, const Sim& sim, float t)
     {
         const auto text = cat.say.toUpperCase().substring (0, 44);
         const int tw = Canvas::textWidth (text);
-        const int x0 = juce::jlimit (2, W - tw - 8, cx - tw / 2), y0 = base - 30;
+        int x0 = juce::jlimit (2, W - tw - 8, cx - tw / 2), y0 = base - 30;
+        if (y0 - 3 < boardBottom && x0 + tw + 4 > boardLeft)     // keep clear of the leaderboard
+            x0 = juce::jmax (2, boardLeft - tw - 6);
         const float a = juce::jmin (1.0f, cat.sayTime * 2.0f);
         c.fillRect (x0 - 3, y0 - 2, tw + 6, 9, 0xfff4fbff, 0.92f * a);
         c.fillRect (x0 - 3, y0 - 3, tw + 6, 1, 0xffffffff, 0.7f * a);
