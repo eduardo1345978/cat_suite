@@ -123,6 +123,12 @@ void regenerate (Song&, int target, juce::uint32 seed);
     play; the starts are worked out). It lays the chords again and re-writes every part, keeping the
     song's key, chord progressions and melody ideas, so it still sounds like the same song. */
 void arrange (Song&, std::vector<Section> sections);
+/** Your own words: one text line per lyric line of the song (same count as Song::lyricLines; an empty line
+    keeps the song's own). Words are split into syllables, one per melody note; extra notes hold the last
+    syllable, extra syllables are squeezed onto the last note. */
+void setLyrics (Song&, const juce::StringArray& lines);
+/** Splits a word into sung syllables ("morning" -> "mor", "ning"); words already written with hyphens keep them. */
+juce::StringArray splitSyllables (const juce::String& word);
 /** A section of this type as the composer would write it (energy, progression, which parts play). */
 Section makeSection (const Song&, int type, int bars, juce::uint32 seed);
 /** All parts as a MIDI file: chords ch 1, bass ch 2, melody ch 3 (with lyrics), counter ch 4, drums ch 10. */

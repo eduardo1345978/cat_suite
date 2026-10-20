@@ -51,7 +51,8 @@ int findStyle (const juce::String& w)
 juce::String placeName (int p)
 {
     static const char* n[NumPlaces] = { "Aqua reef", "Emerald kelp", "Crystal deep", "Sunken ship",
-                                        "Coral cave", "Ice ocean", "Tropical lagoon", "Sunken ruins" };
+                                        "Coral cave", "Ice ocean", "Tropical lagoon", "Sunken ruins",
+                                        "Volcano vents", "Jellyfish bay", "Open sea" };
     return n[juce::jlimit (0, NumPlaces - 1, p)];
 }
 int findPlace (const juce::String& w)
@@ -65,6 +66,9 @@ int findPlace (const juce::String& w)
     if (x == "ice" || x == "iceocean" || x == "arctic" || x == "snow") return PlaceIce;
     if (x == "lagoon" || x == "tropical" || x == "tropicallagoon" || x == "beach") return PlaceLagoon;
     if (x == "ruins" || x == "sunkenruins" || x == "temple" || x == "city") return PlaceRuins;
+    if (x == "volcano" || x == "vents" || x == "volcanovents" || x == "lava" || x == "vent") return PlaceVolcano;
+    if (x == "jelly" || x == "jellyfish" || x == "jellybay" || x == "jellyfishbay" || x == "bay") return PlaceJelly;
+    if (x == "open" || x == "opensea" || x == "sea" || x == "blue" || x == "whale") return PlaceOpenSea;
     return -1;
 }
 juce::String eventName (int e)

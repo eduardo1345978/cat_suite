@@ -135,6 +135,14 @@ public:
     std::atomic<int> keyboardTrack { -1 };
     int getKeyboardTrackNow() const noexcept { return keyboardTrackNow.load(); }
     void handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage&) override;
+    //==== the loop recorder: record the MIDI keyboard into a loop that plays on the keyboard's part
+    std::atomic<int> loopBars { 4 };
+    void setLoopRecording (bool on) noexcept { loopRecordRequest.store (on ? 1 : 0); }
+    bool isLoopRecording() const noexcept { return loopRecording.load(); }
+    void clearLoop() noexcept { loopClearRequest = true; }
+    void undoLoopTake() noexcept { loopUndoRequest = true; }
+    int getLoopNotes() const noexcept { return loopNotesShown.load(); }
+    double getLoopPosition() const noexcept { return loopPosShown.load(); }   // 0..1 through the loop
     /** Plays a note from the screen / tests as if it came from a keyboard. */
     void playKeyboardNote (const juce::MidiMessage& m) { if (prepared) liveMidiIn.addMessageToQueue (m); }
     void setLivePad (int pad) noexcept { livePad.store (pad); }
@@ -243,6 +251,14 @@ private:
     juce::MidiMessageCollector liveMidiIn;
     juce::MidiBuffer liveMidi;
     std::atomic<int> keyboardTrackNow { -1 };
+    struct LoopEvent { double beat; juce::MidiMessage msg; int take; };
+    std::vector<LoopEvent> loopEvents;                 // audio thread only (reserved in prepare)
+    std::atomic<int> loopRecordRequest { -1 }, loopNotesShown { 0 };
+    std::atomic<bool> loopRecording { false }, loopClearRequest { false }, loopUndoRequest { false };
+    std::atomic<double> loopPosShown { 0.0 };
+    int loopTake = 0;
+    std::array<bool, 128> loopHeld {};
+    void runLoop (int n, double samplesPerBeat, juce::MidiBuffer& out, bool playingNow);
     int pickKeyboardTrack() const;
     cat::SafetyLimiter limiter;
     juce::AudioBuffer<float> catAudio, lifeAudio, sendAudio, mixAudio;

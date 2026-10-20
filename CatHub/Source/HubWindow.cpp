@@ -762,6 +762,7 @@ ComposePage::ComposePage (HubMain& o, HubEngine& e) : owner (o), engine (e)
         b->setTooltip (tips[t]);
         b->onClick = [this, t]
         {
+            owner.pushUndo();
             engine.regenerateSong (t, (juce::uint32) (1 + juce::Random().nextInt (0x7ffffff)));
             owner.songChanged();
         };
@@ -1339,6 +1340,15 @@ HubMain::HubMain (HubEngine& e, juce::AudioDeviceManager& dm, juce::PropertiesFi
         m.addItem (2, "Open jam...  (Ctrl+O)");
         m.addSeparator();
         m.addItem (3, "Start a fresh jam");
+        m.addItem (5, "Undo  (Ctrl+Z)", undoSteps() > 0);
+        m.addSeparator();
+        juce::PopupMenu loop, bars;
+        loop.addItem (10, engine.isLoopRecording() ? "Stop recording the loop  (L)" : "Record a loop from the MIDI keyboard  (L)");
+        loop.addItem (11, "Undo the last take", engine.getLoopNotes() > 0);
+        loop.addItem (12, "Clear the loop", engine.getLoopNotes() > 0);
+        for (int b : { 1, 2, 4, 8 }) bars.addItem (20 + b, juce::String (b) + (b == 1 ? " bar" : " bars"), true, engine.loopBars.load() == b);
+        loop.addSubMenu ("Loop length", bars);
+        m.addSubMenu ("Loop recorder", loop);
         m.addSeparator();
         auto* w = findParentComponentOfClass<juce::ResizableWindow>();
         m.addItem (4, "Full screen  (F11)", w != nullptr, w != nullptr && w->isFullScreen());
@@ -1350,6 +1360,11 @@ HubMain::HubMain (HubEngine& e, juce::AudioDeviceManager& dm, juce::PropertiesFi
             else if (r == 2) sp->openJam();
             else if (r == 3) sp->changeCatsLater ([e = &sp->engine] { e->applyStyle (0); });
             else if (r == 4) sp->toggleFullScreen();
+            else if (r == 5) sp->undo();
+            else if (r == 10) sp->toggleLoopRecord();
+            else if (r == 11) sp->engine.undoLoopTake();
+            else if (r == 12) sp->engine.clearLoop();
+            else if (r > 20 && r <= 28) sp->engine.loopBars = r - 20;
         });
     };
     fxButton.setTooltip ("Master effects: room, tone, glue, warmth, width");
@@ -1485,8 +1500,37 @@ void HubMain::showCatWindow (juce::AudioPluginInstance* p)
     if (idx >= 0) tabs.setCurrentTabIndex (idx);
 }
 
+void HubMain::pushUndo()
+{
+    if (restoringUndo) return;
+    undoStack.push_back (engine.saveState());
+    if (undoStack.size() > 20) undoStack.erase (undoStack.begin());
+}
+
+bool HubMain::undo()
+{
+    if (undoStack.empty()) { status = "Nothing to undo"; resized(); repaint(); return false; }
+    const auto t = undoStack.back();
+    undoStack.pop_back();
+    restoringUndo = true;
+    changeCats ([this, t] { engine.restoreState (t); });
+    restoringUndo = false;
+    status = "Undone" + (undoStack.empty() ? juce::String() : "  (" + juce::String ((int) undoStack.size()) + " more steps)");
+    resized();
+    repaint();
+    return true;
+}
+
+void HubMain::toggleLoopRecord()
+{
+    if (engine.getKeyboardTrackNow() < 0) { status = "Add a part first: the loop plays on the MIDI keyboard's part"; resized(); repaint(); return; }
+    if (! engine.isPlaying() && ! engine.isLoopRecording()) engine.setPlaying (true);
+    engine.setLoopRecording (! engine.isLoopRecording());
+}
+
 void HubMain::changeCats (std::function<void()> fn)
 {
+    pushUndo();
     closeCatTabs();
     if (fn) fn();
     rack->rebuild();
@@ -2017,6 +2061,17 @@ void HubMain::timerCallback()
     rack->tick();
     pads.tick();
     updateTopBar();
+    const bool loopRec = engine.isLoopRecording();
+    const int loopNotes = engine.getLoopNotes();
+    if (loopRec != shownLoopRec || (loopRec && loopNotes != shownLoopNotes))
+    {
+        shownLoopRec = loopRec;
+        shownLoopNotes = loopNotes;
+        status = loopRec ? "Recording a " + juce::String (engine.loopBars.load()) + "-bar loop from the MIDI keyboard (" + juce::String (loopNotes) + " notes) - press L to stop"
+                         : (loopNotes > 0 ? "The loop plays " + juce::String (loopNotes) + " notes - Jam > Loop recorder to undo or clear" : juce::String());
+        resized();
+        repaint();
+    }
 }
 
 void HubMain::togglePlay() { engine.setPlaying (! engine.isPlaying()); }
@@ -2045,6 +2100,8 @@ bool HubMain::keyPressed (const juce::KeyPress& key)
     if (tutorial != nullptr && (key == juce::KeyPress::returnKey || key == juce::KeyPress::spaceKey)) { tutorial->next(); return true; }
     if (key == juce::KeyPress::spaceKey) { togglePlay(); return true; }
     if (key == juce::KeyPress (juce::KeyPress::F11Key)) { toggleFullScreen(); return true; }
+    if (key.getModifiers().isCommandDown() && (key.getKeyCode() == 'Z' || key.getKeyCode() == 'z')) { undo(); return true; }
+    if (! key.getModifiers().isAnyModifierKeyDown() && (key.getKeyCode() == 'L' || key.getKeyCode() == 'l')) { toggleLoopRecord(); return true; }
     if (key.getModifiers().isCommandDown() && (key.getKeyCode() == 'S' || key.getKeyCode() == 's')) { saveJam(); return true; }
     if (key.getModifiers().isCommandDown() && (key.getKeyCode() == 'O' || key.getKeyCode() == 'o')) { openJam(); return true; }
     if (key == juce::KeyPress::escapeKey)

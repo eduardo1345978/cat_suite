@@ -702,6 +702,7 @@ void HubEngine::prepare (double newRate, int maxBlock)
     masterFx.prepare (sampleRate);
     liveMidiIn.reset (sampleRate);
     liveMidi.ensureSize (1024);
+    loopEvents.reserve (8192);
     catAudio.setSize (8, maxBlockSize);
     lifeAudio.setSize (2, maxBlockSize);
     sendAudio.setSize (2, maxBlockSize);
@@ -925,6 +926,7 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
             case SrcCounter: if (song) copyMidi (t.midi, counterOut); else makeLead (t, chordOut, t.midi); break;
             default:       copyMidi (t.midi, chordOut); break;
         }
+        if (i == kbTrack) runLoop (n, samplesPerBeat, t.midi, playing.load());
         if (i == kbTrack && ! liveMidi.isEmpty())
             for (const auto m : liveMidi)
             {
@@ -1106,6 +1108,74 @@ void MasterFx::process (float* l, float* r, int n, float tone, float glue, float
 }
 
 //==============================================================================
+void HubEngine::runLoop (int n, double samplesPerBeat, juce::MidiBuffer& out, bool playingNow)
+{
+    // requests from the message thread
+    const double loopLen = 4.0 * juce::jlimit (1, 16, loopBars.load());
+    const double pos0 = std::fmod (juce::jmax (0.0, clockPpq), loopLen);
+    if (loopClearRequest.exchange (false))
+    {
+        loopEvents.clear();
+        for (int k = 0; k < 128; ++k) if (loopHeld[(size_t) k]) out.addEvent (juce::MidiMessage::noteOff (1, k), 0);
+        loopHeld.fill (false);
+    }
+    if (loopUndoRequest.exchange (false) && ! loopEvents.empty())
+    {
+        int last = 0;
+        for (auto& e : loopEvents) last = juce::jmax (last, e.take);
+        loopEvents.erase (std::remove_if (loopEvents.begin(), loopEvents.end(), [last] (const LoopEvent& e) { return e.take == last; }), loopEvents.end());
+        for (int k = 0; k < 128; ++k) if (loopHeld[(size_t) k]) out.addEvent (juce::MidiMessage::noteOff (1, k), 0);
+        loopHeld.fill (false);
+    }
+    const int req = loopRecordRequest.exchange (-1);
+    if (req == 1 && ! loopRecording) { loopRecording = true; ++loopTake; }
+    if (req == 0 && loopRecording)
+    {
+        loopRecording = false;
+        // close notes still held, so nothing hangs in the loop
+        std::array<bool, 128> open {};
+        for (auto& e : loopEvents)
+            if (e.take == loopTake)
+            {
+                if (e.msg.isNoteOn()) open[(size_t) e.msg.getNoteNumber()] = true;
+                else if (e.msg.isNoteOff()) open[(size_t) e.msg.getNoteNumber()] = false;
+            }
+        for (int k = 0; k < 128; ++k)
+            if (open[(size_t) k] && loopEvents.size() < loopEvents.capacity())
+                loopEvents.push_back ({ pos0, juce::MidiMessage::noteOff (1, k), loopTake });
+    }
+    if (! playingNow) { loopPosShown = 0.0; return; }
+
+    // play what is in the loop
+    const double blockBeats = n / samplesPerBeat;
+    for (auto& e : loopEvents)
+    {
+        double d = e.beat - pos0;
+        if (d < 0.0) d += loopLen;
+        if (d < blockBeats)
+        {
+            if (loopRecording && e.take == loopTake) continue;   // don't double what is being played right now
+            out.addEvent (e.msg, juce::jlimit (0, n - 1, (int) (d * samplesPerBeat)));
+            if (e.msg.isNoteOn()) loopHeld[(size_t) e.msg.getNoteNumber()] = true;
+            else if (e.msg.isNoteOff()) loopHeld[(size_t) e.msg.getNoteNumber()] = false;
+        }
+    }
+    // record what the keyboard plays
+    if (loopRecording)
+        for (const auto m : liveMidi)
+        {
+            const auto msg = m.getMessage();
+            if (! msg.isNoteOnOrOff() || loopEvents.size() >= loopEvents.capacity()) continue;
+            auto copy = msg;
+            copy.setChannel (1);
+            loopEvents.push_back ({ std::fmod (pos0 + m.samplePosition / samplesPerBeat, loopLen), copy, loopTake });
+        }
+    int notes = 0;
+    for (auto& e : loopEvents) if (e.msg.isNoteOn()) ++notes;
+    loopNotesShown = notes;
+    loopPosShown = pos0 / loopLen;
+}
+
 int HubEngine::pickKeyboardTrack() const
 {
     const int count = numTracks.load();

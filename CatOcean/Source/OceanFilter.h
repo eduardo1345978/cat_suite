@@ -71,6 +71,18 @@ inline bool isClean (const juce::String& text)
 }
 
 /** A name that may be shown: simple characters, at most 16 long, nothing rude (else "Fish123"). */
+/** A neutral name for a fish: "Fish" + a number - but never one that reads as a bad word once the digits
+    are read as letters ("Fish127" would read "fishit"). */
+inline juce::String neutralName (int number)
+{
+    for (int k = 0; k < 900; ++k)
+    {
+        const auto name = "Fish" + juce::String (100 + (std::abs (number) + k * 37) % 900);
+        if (isClean (name)) return name;
+    }
+    return "Fishy";
+}
+
 inline juce::String cleanName (const juce::String& raw, int fallbackNumber)
 {
     juce::String s;
@@ -81,7 +93,7 @@ inline juce::String cleanName (const juce::String& raw, int fallbackNumber)
             s << juce::String::charToString (c);
     }
     s = s.trim().substring (0, 16).trim();
-    if (s.isEmpty() || ! isClean (s)) return "Fish" + juce::String (100 + std::abs (fallbackNumber) % 900);
+    if (s.isEmpty() || ! isClean (s)) return neutralName (fallbackNumber);
     return s;
 }
 } // namespace ocean::filter

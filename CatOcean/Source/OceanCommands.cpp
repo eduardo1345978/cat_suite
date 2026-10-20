@@ -160,7 +160,7 @@ bool Sim::modCommand (const juce::String& cmd, const juce::StringArray& tok, con
     {
         if (auto* f = fishOf (target()))
         {
-            f->name = "Fish" + juce::String (100 + f->id % 900);
+            f->name = filter::neutralName (f->id);
             if (f->familyId == f->id) f->familyName = f->name;
             toast (*f, "name reset by a moderator", 0xffc0a7f0);
         }

@@ -163,7 +163,23 @@ bool YouTubeChat::parseInitial (const juce::var& data, juce::String& continuatio
             for (auto* r : { "liveChatTextMessageRenderer", "liveChatPaidMessageRenderer" })
                 if (item[r].isObject()) seenIds.add (item[r]["id"].toString());
         }
-    return continuationOf (chat["continuations"], continuation, nullptr);
+    if (! continuationOf (chat["continuations"], continuation, nullptr)) return false;
+    // The page opens on "Top chat", which hides many messages (often new viewers' ones - exactly the !fish
+    // people). Switch to "Live chat": every message. Its continuation sits in the chat header's menu.
+    if (auto* items = chat["header"]["liveChatHeaderRenderer"]["viewSelector"]["sortFilterSubMenuRenderer"]["subMenuItems"].getArray())
+    {
+        juce::String live;
+        for (auto& item : *items)
+        {
+            const auto c = item["continuation"]["reloadContinuationData"]["continuation"].toString();
+            if (c.isEmpty()) continue;
+            if (item["title"].toString().containsIgnoreCase ("live")) live = c;      // "Live chat"
+        }
+        if (live.isEmpty() && items->size() > 1)
+            live = (*items)[items->size() - 1]["continuation"]["reloadContinuationData"]["continuation"].toString();
+        if (live.isNotEmpty()) continuation = live;
+    }
+    return true;
 }
 
 bool YouTubeChat::parseChat (const juce::var& json, std::vector<Message>& out, juce::String& continuation, int& waitMs)
@@ -304,6 +320,7 @@ void YouTubeChat::run()
         setStatus ("connected to the chat of video " + video);
 
         int errors = 0;
+        bool firstAnswer = true;   // the first answer repeats recent messages: they are old, don't run them again
         while (! threadShouldExit() && cont.isNotEmpty())
         {
             juce::DynamicObject::Ptr client = new juce::DynamicObject(), context = new juce::DynamicObject(), body = new juce::DynamicObject();
@@ -331,12 +348,16 @@ void YouTubeChat::run()
                 {
                     if (seen.contains (m.id)) continue;
                     seen.add (m.id);
+                    if (firstAnswer) continue;
                     inbox.push_back (m);
                     ++received;
                 }
                 if (inbox.size() > 2000) inbox.erase (inbox.begin(), inbox.begin() + 1000);
             }
             if (seen.size() > 600) seen.removeRange (0, 300);
+            if (firstAnswer || messages.size() > 0)
+                setStatus ("connected to the live chat of video " + video + " - " + juce::String (received.load()) + " messages read");
+            firstAnswer = false;
             cont = next;
             checkSubscribers (channel);
             if (! waitOrQuit (juce::jlimit (1000, 5000, waitMs))) return;

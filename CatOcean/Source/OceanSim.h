@@ -29,7 +29,8 @@ juce::String styleName (int style);
 int findStyle (const juce::String& word);         // -1 if none
 
 /** Where the ocean is (chat votes where it goes next). */
-enum Place { PlaceReef = 0, PlaceKelp, PlaceDeep, PlaceWreck, PlaceCave, PlaceIce, PlaceLagoon, PlaceRuins, NumPlaces };
+enum Place { PlaceReef = 0, PlaceKelp, PlaceDeep, PlaceWreck, PlaceCave, PlaceIce, PlaceLagoon, PlaceRuins,
+             PlaceVolcano, PlaceJelly, PlaceOpenSea, NumPlaces };
 juce::String placeName (int place);
 int findPlace (const juce::String& word);
 

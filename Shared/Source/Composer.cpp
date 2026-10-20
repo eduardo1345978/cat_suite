@@ -1693,6 +1693,87 @@ void regenerate (Song& s, int target, juce::uint32 seed)
     }
 }
 
+juce::StringArray splitSyllables (const juce::String& word)
+{
+    juce::StringArray out;
+    if (word.containsChar ('-'))
+    {
+        out.addTokens (word, "-", "");
+        out.removeEmptyStrings();
+        return out;
+    }
+    // vowel groups make syllables; consonants between two vowel groups are split (one goes to the next syllable)
+    auto isVowel = [] (juce::juce_wchar c) { c = juce::CharacterFunctions::toLowerCase (c); if (juce::String ("aeiouy").containsChar (c)) return true;
+                            static const juce::juce_wchar accented[] = { 0xe0, 0xe1, 0xe2, 0xe4, 0xe5, 0xe8, 0xe9, 0xea, 0xec, 0xed, 0xee, 0xf2, 0xf3, 0xf4, 0xf6,
+                                                                         0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0x11b, 0x16f };   // á ä é í ó ô ú ý ě ů ...
+                            for (auto a : accented) if (c == a) return true;
+                            return false; };
+    const int n = word.length();
+    std::vector<int> nuclei;   // start of each vowel group
+    for (int i = 0; i < n; ++i)
+        if (isVowel (word[i]) && (i == 0 || ! isVowel (word[i - 1]))) nuclei.push_back (i);
+    // a silent final e ("time", "stone") is not its own syllable
+    if (nuclei.size() > 1 && n > 2 && juce::CharacterFunctions::toLowerCase (word[n - 1]) == 'e' && ! isVowel (word[n - 2]) && nuclei.back() == n - 1)
+        nuclei.pop_back();
+    if (nuclei.size() <= 1) { out.add (word); return out; }
+    int start = 0;
+    for (size_t k = 1; k < nuclei.size(); ++k)
+    {
+        // end of the previous vowel group
+        int e = nuclei[k - 1];
+        while (e < n && isVowel (word[e])) ++e;
+        const int consonants = nuclei[k] - e;
+        const int cut = consonants <= 1 ? e : e + consonants / 2 + (consonants % 2);   // "mor-ning", "a-way"
+        out.add (word.substring (start, juce::jmin (cut, nuclei[(size_t) k])));
+        start = juce::jmin (cut, nuclei[(size_t) k]);
+    }
+    out.add (word.substring (start));
+    out.removeEmptyStrings();
+    return out;
+}
+
+void setLyrics (Song& s, const juce::StringArray& lines)
+{
+    auto& mel = s.parts[Melody];
+    const int numLines = (int) s.lyricLineStarts.size();
+    if (numLines == 0 || mel.empty()) return;
+    for (int li = 0; li < juce::jmin (numLines, lines.size()); ++li)
+    {
+        const auto text = lines[li].trim();
+        if (text.isEmpty()) continue;
+        const double from = s.lyricLineStarts[(size_t) li] - 0.01;
+        const double to = li + 1 < numLines ? s.lyricLineStarts[(size_t) li + 1] - 0.01 : 1.0e9;
+        std::vector<size_t> notes;
+        for (size_t i = 0; i < mel.size(); ++i)
+            if (mel[i].syllable >= 0 && mel[i].start >= from && mel[i].start < to) notes.push_back (i);
+        if (notes.empty()) continue;
+        juce::StringArray syl;
+        for (auto& w : juce::StringArray::fromTokens (text, " ", ""))
+            if (w.isNotEmpty()) syl.addArray (splitSyllables (w));
+        if (syl.isEmpty()) continue;
+        while (syl.size() > (int) notes.size()) { syl.set (syl.size() - 2, syl[syl.size() - 2] + syl[syl.size() - 1]); syl.remove (syl.size() - 1); }
+        for (size_t k = 0; k < notes.size(); ++k)
+        {
+            const int idx = mel[notes[k]].syllable;
+            if (juce::isPositiveAndBelow (idx, s.syllables.size()))
+                s.syllables.set (idx, (int) k < syl.size() ? syl[(int) k] : juce::String ("-"));   // "-" = hold the last syllable
+        }
+        if (li < s.lyricLines.size()) s.lyricLines.set (li, text);
+    }
+    // the hyphenated text for Talk-Cat / Sing-Cat, line by line
+    juce::StringArray textLines;
+    for (int li = 0; li < numLines; ++li)
+    {
+        const double from = s.lyricLineStarts[(size_t) li] - 0.01;
+        const double to = li + 1 < numLines ? s.lyricLineStarts[(size_t) li + 1] - 0.01 : 1.0e9;
+        juce::StringArray parts;
+        for (auto& nn : mel)
+            if (nn.syllable >= 0 && nn.start >= from && nn.start < to && s.syllables[nn.syllable] != "-") parts.add (s.syllables[nn.syllable]);
+        textLines.add (parts.joinIntoString (" "));
+    }
+    s.lyricsText = textLines.joinIntoString ("\n");
+}
+
 void arrange (Song& s, std::vector<Section> sections)
 {
     if (sections.empty() || s.progressions.empty()) return;

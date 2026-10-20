@@ -137,6 +137,9 @@ namespace
             { 0xffbff4ff, 0xff5fbfe6, 0xff1d5c99, 0xfff4fbff, 0xffc6dbe8, 0xff9fb8cc, 1.0f },   // ice ocean
             { 0xff6ff2e0, 0xff22c4cc, 0xff0f7aa0, 0xfffff4d6, 0xffefd9a4, 0xff9ab6a0, 1.5f },   // tropical lagoon
             { 0xff4fc8d6, 0xff1f7fa8, 0xff0d3f66, 0xffe8dcc0, 0xffb9a77e, 0xffc9c2b0, 0.9f },   // sunken ruins
+            { 0xff6fa9b8, 0xff2f5568, 0xff141c28, 0xff5a5052, 0xff2a2426, 0xff3c3436, 0.4f },   // volcano vents: warm murky water, ash
+            { 0xff8fe4ff, 0xff4a7fd8, 0xff1d236e, 0xffe2d8f6, 0xffaa9ccc, 0xff8e84bc, 1.0f },   // jellyfish bay: lavender sand
+            { 0xff40d4ff, 0xff1572cc, 0xff051f58, 0xff1c4a86, 0xff0b2552, 0xff2a5a8e, 1.6f },   // open sea: no beach, just blue
         };
         return looks[juce::jlimit (0, NumPlaces - 1, place)];
     }
@@ -182,6 +185,10 @@ Painter::Painter()
         weedSets[PlaceRuins].push_back ({ 6.0f + r.nextFloat() * (W - 12), 10 + r.nextInt (34), mixc (0xff3f8a4a, 0xff9ab04a, r.nextFloat()), r.nextFloat() * 6.0f });
     for (int i = 0; i < 18; ++i)
         weedSets[PlaceWreck].push_back ({ 6.0f + r.nextFloat() * (W - 12), 10 + r.nextInt (30), mixc (0xff4d6b2a, 0xff8a8a3a, r.nextFloat()), r.nextFloat() * 6.0f });
+    for (int i = 0; i < 10; ++i)   // dark, tough weeds near the vents
+        weedSets[PlaceVolcano].push_back ({ 6.0f + r.nextFloat() * (W - 12), 6 + r.nextInt (12), mixc (0xff4a5a2a, 0xff7a6a3a, r.nextFloat()), r.nextFloat() * 6.0f });
+    for (int i = 0; i < 14; ++i)   // pale glowing anemones in the jellyfish bay
+        weedSets[PlaceJelly].push_back ({ 6.0f + r.nextFloat() * (W - 12), 5 + r.nextInt (9), mixc (0xffffb6e6, 0xffc8b6ff, r.nextFloat()), r.nextFloat() * 6.0f, i % 3 == 0 });
     sandNoise.resize ((size_t) W);
     for (auto& n : sandNoise) n = r.nextInt (1000);
 }
@@ -450,6 +457,52 @@ void Painter::background (Canvas& c, const Sim& sim, float t)
             for (int y = -r; y <= r; ++y)
                 for (int x = -r - 2; x <= r + 2; ++x)
                     if (x * x * 0.6f + y * y * 1.4f <= r * r && by + y < surfaceY - 2) c.set (bx + x, by + y, y > r / 2 ? shade (col, 0.85f) : col);
+        }
+    }
+
+    // above the water: a rainbow after a shower, birds on calm days, lightning in storms
+    if (sim.weatherLevel > 0.35f) lastRainAt = t;
+    {
+        const float since = t - lastRainAt;
+        if (since > 2.0f && since < 150.0f && day > 0.45f && storm < 0.3f)
+        {
+            const float a = juce::jmin (1.0f, (since - 2.0f) / 10.0f) * juce::jmin (1.0f, (150.0f - since) / 30.0f) * 0.35f * day;
+            static const Colour bands[] = { 0xffff5a5a, 0xffffa64a, 0xfffff05a, 0xff5aff7a, 0xff5ab4ff, 0xffa05aff };
+            const float cx = W * 0.32f, cy = surfaceY + 26.0f;
+            for (int y = 0; y < (int) surfaceY - 1; ++y)
+                for (int x = 0; x < W; ++x)
+                {
+                    const float d = std::sqrt ((x - cx) * (x - cx) + (y - cy) * (y - cy) * 1.6f);
+                    const int band = (int) (68.0f - d);
+                    if (band >= 0 && band < 6) c.blend (x, y, bands[band], a);
+                }
+        }
+    }
+    if (day > 0.35f && storm < 0.5f && sim.place != PlaceCave)
+        for (int i = 0; i < 5; ++i)
+        {
+            const float speed = 9.0f + hashf ((juce::uint32) i * 31 + 7) * 8.0f;
+            const int bx = (int) std::fmod (hashf ((juce::uint32) i * 17 + 3) * (W + 60) + t * speed + i * 40.0f, (float) (W + 60)) - 30;
+            const int by = 6 + (int) (hashf ((juce::uint32) i * 5 + 9) * 16.0f + 2.0f * std::sin (t * 0.7f + i));
+            const int flap = std::sin (t * 9.0f + i * 1.3f) > 0.0f ? -1 : 0;
+            const Colour bc = shade (0xff2a3442, 0.6f + 0.4f * day);
+            c.set (bx, by, bc); c.set (bx - 1, by - 1 - flap, bc); c.set (bx + 1, by - 1 - flap, bc);
+            c.set (bx - 2, by - 1 - 2 * flap, bc); c.set (bx + 2, by - 1 - 2 * flap, bc);
+        }
+    if (storm > 0.6f && sim.place != PlaceCave)
+    {
+        const float slot = std::floor (t * 1.1f), frac = t * 1.1f - slot;
+        const auto h = hash ((juce::uint32) slot * 2654435761u);
+        if (h % 6 == 0 && frac < 0.12f)
+        {
+            const float a = (1.0f - frac / 0.12f) * (storm - 0.6f) * 2.5f;
+            for (int y = 0; y < (int) surfaceY; ++y) for (int x = 0; x < W; ++x) c.add (x, y, 0xffd8e4ff, a * 0.35f);
+            int lx = 40 + (int) (h % (juce::uint32) (W - 80));
+            for (int y = 2; y < (int) surfaceY - 1; ++y)
+            {
+                if (y % 4 == 0) lx += (int) ((h >> (y % 16)) % 3) - 1;
+                c.blend (lx, y, 0xffffffff, a); c.blend (lx + 1, y, 0xffcfe0ff, a * 0.6f);
+            }
         }
     }
 
@@ -1336,6 +1389,105 @@ void Painter::decor (Canvas& c, const Sim& sim, float t)
                 const Colour col = stars[i % 3];
                 c.set (sx, sy, col); c.set (sx - 1, sy, col); c.set (sx + 1, sy, col); c.set (sx, sy - 1, col); c.set (sx, sy - 2, col);
                 c.set (sx - 2, sy + 1, col); c.set (sx + 2, sy + 1, col); c.set (sx, sy, light (col, 0.4f));
+            }
+            break;
+        }
+        case PlaceVolcano:
+        {
+            // three vents: dark cones with glowing mouths, hot water shimmering up, cracks of lava in the floor
+            const int vents[] = { 90, 250, 370 };
+            const int heights[] = { 26, 38, 20 };
+            for (int k = 0; k < 3; ++k)
+            {
+                const int vx = vents[k], vh = heights[k], base = (int) floorY + 4;
+                for (int y = 0; y < vh; ++y)
+                {
+                    const int half = 3 + (vh - y) * 14 / vh;
+                    for (int x = -half; x <= half; ++x)
+                    {
+                        Colour col = x < -half / 3 ? 0xff4a4042 : (x > half / 2 ? 0xff241e20 : 0xff362e30);
+                        if (y > vh - 4 && std::abs (x) < 3) col = mixc (0xffff8a2a, 0xffffd25a, (float) (y - (vh - 4)) / 4.0f);   // the glowing mouth
+                        c.set (vx + x, base - y, col);
+                    }
+                }
+                // glow and rising heat
+                const int my = base - vh;
+                for (int y = -10; y <= 10; ++y) for (int x = -10; x <= 10; ++x)
+                {
+                    const float d = std::sqrt ((float) (x * x + y * y)) / 10.0f;
+                    if (d < 1.0f) c.add (vx + x, my + y, 0xffff7a2a, 0.22f * (1.0f - d) * (0.8f + 0.2f * std::sin (t * 4.0f + k)));
+                }
+                for (int i = 0; i < 6; ++i)
+                {
+                    const float life = std::fmod (t * 0.5f + i / 6.0f + k * 0.37f, 1.0f);
+                    const int px = vx + (int) (std::sin (t * 2.0f + i * 1.7f) * (2.0f + life * 6.0f)), py = my - (int) (life * 70.0f);
+                    c.blend (px, py, life < 0.3f ? 0xffffb25a : 0xffc8e8ff, 0.5f * (1.0f - life));
+                }
+            }
+            // lava cracks
+            for (int x = 0; x < W; ++x)
+            {
+                const float v = std::sin (x * 0.11f) + std::sin (x * 0.037f + 1.0f);
+                if (v > 1.55f) { const float g = 0.6f + 0.4f * std::sin (t * 2.0f + x * 0.2f); c.blend (x, (int) floorY + 8 + (x % 3), 0xffff6a1a, 0.7f * g); }
+            }
+            break;
+        }
+        case PlaceJelly:
+        {
+            // jellyfish drifting: soft glowing bells that pulse, trailing tentacles
+            static const Colour jc[] = { 0xffff9ad8, 0xffc89aff, 0xff9ad8ff, 0xffffc89a };
+            for (int i = 0; i < 9; ++i)
+            {
+                const float sp = 2.0f + hashf ((juce::uint32) i * 13 + 1) * 3.0f;
+                const float jx = std::fmod (hashf ((juce::uint32) i * 7 + 2) * (W + 40) + t * sp * 0.6f, (float) (W + 40)) - 20.0f;
+                const float pulse = 0.5f + 0.5f * std::sin (t * 1.8f + i * 1.1f);
+                const float jy = 70.0f + hashf ((juce::uint32) i * 3 + 5) * 120.0f + std::sin (t * 0.4f + i) * 12.0f - pulse * 3.0f;
+                const Colour col = jc[i % 4];
+                const int rx = 5 + (int) (hashf ((juce::uint32) i * 11) * 4.0f), ry = rx - 1 + (int) (pulse * 1.5f);
+                for (int y = -ry; y <= 0; ++y)
+                    for (int x = -rx; x <= rx; ++x)
+                        if ((float) (x * x) / (float) (rx * rx) + (float) (y * y) / (float) (ry * ry) <= 1.0f)
+                            c.blend ((int) jx + x, (int) jy + y, y < -ry / 2 ? light (col, 0.4f) : col, 0.55f);
+                for (int k = -rx + 1; k < rx; k += 2)   // tentacles
+                    for (int y = 1; y < 14 + (k & 3) * 3; ++y)
+                        c.blend ((int) jx + k + (int) std::lround (std::sin (t * 2.0f + y * 0.4f + k) * 1.2f), (int) jy + y, col, 0.35f * (1.0f - y / 24.0f));
+                for (int y = -12; y <= 8; ++y) for (int x = -12; x <= 12; ++x)   // their soft light
+                {
+                    const float d = std::sqrt ((float) (x * x + y * y)) / 12.0f;
+                    if (d < 1.0f) c.add ((int) jx + x, (int) jy + y, col, 0.06f * (1.0f - d) * (0.6f + 0.4f * pulse) * (1.4f - sim.daylight * 0.6f));
+                }
+            }
+            break;
+        }
+        case PlaceOpenSea:
+        {
+            // the open sea: a big whale gliding far away, and little schools of fish turning together
+            {
+                const float wx = std::fmod (t * 6.0f, (float) (W + 260)) - 130.0f, wy = 150.0f + std::sin (t * 0.2f) * 10.0f;
+                const Colour wc = mixc (0xff0c3a78, 0xff1a5aa0, 0.3f);
+                for (int y = -14; y <= 14; ++y)
+                    for (int x = -60; x <= 60; ++x)
+                    {
+                        const float u = (x + 60) / 120.0f;
+                        const float half = 14.0f * std::sin (juce::jlimit (0.0f, 1.0f, u * 1.05f) * 3.14159f) * (u < 0.8f ? 1.0f : 0.6f);
+                        if (std::abs ((float) y) <= half) c.blend ((int) wx + x, (int) wy + y, wc, 0.45f);
+                    }
+                for (int k = 0; k < 12; ++k)   // the tail
+                {
+                    const int tx = (int) wx - 60 - k, ty = (int) wy + (int) (std::sin (t * 1.2f) * k * 0.3f);
+                    c.blend (tx, ty - k / 2, wc, 0.45f); c.blend (tx, ty + k / 2, wc, 0.45f);
+                }
+            }
+            for (int s = 0; s < 3; ++s)
+            {
+                const float cx = std::fmod (hashf ((juce::uint32) s * 19 + 4) * W + t * (8.0f + s * 3.0f), (float) (W + 60)) - 30.0f;
+                const float cy = 90.0f + s * 45.0f + std::sin (t * 0.5f + s) * 15.0f;
+                for (int i = 0; i < 14; ++i)
+                {
+                    const float a = i * 0.45f + t * 0.8f;
+                    const int fx = (int) (cx + std::cos (a) * (6 + i % 5)), fy = (int) (cy + std::sin (a * 1.3f) * (4 + i % 3));
+                    c.blend (fx, fy, 0xffcfe8ff, 0.7f); c.blend (fx - 1, fy, 0xff9fc8f0, 0.5f);
+                }
             }
             break;
         }

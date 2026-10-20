@@ -293,6 +293,39 @@ static int runSelfTest (const juce::StringArray& args)
         check (kt >= 0 && heard, "a MIDI keyboard plays part " + juce::String (kt + 1) + (kt >= 0 ? " (" + juce::String (sourceName (engine.track (kt).source.load())) + ")" : juce::String()));
     }
 
+    // the loop recorder: record a note from the keyboard, then the loop plays it again by itself
+    {
+        engine.loopBars = 1;
+        engine.bpm = 120.0;
+        juce::AudioBuffer<float> b (2, block);
+        auto renderBlocks = [&] (int k) { for (int i = 0; i < k; ++i) engine.render (b.getWritePointer (0), b.getWritePointer (1), block); };
+        engine.setLoopRecording (true);
+        renderBlocks (2);
+        engine.playKeyboardNote (juce::MidiMessage::noteOn (1, 101, (juce::uint8) 100));
+        renderBlocks (10);
+        engine.playKeyboardNote (juce::MidiMessage::noteOff (1, 101));
+        renderBlocks (2);
+        engine.setLoopRecording (false);
+        renderBlocks (2);
+        const int kt = engine.getKeyboardTrackNow();
+        const int recorded = engine.getLoopNotes();
+        bool replayed = false;
+        if (kt >= 0)
+        {
+            engine.track (kt).takeNotes();
+            for (int i = 0; i < 260 && ! replayed; ++i)   // one bar at 120 bpm = 2 s = 200 blocks of 480
+            {
+                renderBlocks (1);
+                for (int nn : engine.track (kt).takeNotes()) replayed = replayed || nn == 101;
+            }
+        }
+        check (recorded == 1 && replayed, "loop recorder: a recorded note plays again in the loop (" + juce::String (recorded) + " notes)");
+        engine.undoLoopTake();
+        renderBlocks (2);
+        check (engine.getLoopNotes() == 0, "loop recorder: undo removes the last take");
+        engine.loopBars = 4;
+    }
+
     // stop: everything should fade out (no hanging notes in the built-in synths)
     engine.applyStyle (0);
     engine.setPlaying (true);

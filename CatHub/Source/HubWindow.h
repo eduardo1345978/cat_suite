@@ -228,6 +228,11 @@ public:
     bool openJamFrom (const juce::File&);
     void toggleFullScreen();
     void showMasterFx();
+    // undo: a snapshot of the jam before every big change (styles, dice, songs, renewing parts, opening jams)
+    void pushUndo();
+    bool undo();
+    int undoSteps() const noexcept { return (int) undoStack.size(); }
+    void toggleLoopRecord();
     /** Writes the song (or each part as a stem) to Music \ Cat Hub, faster than real time. */
     void exportSong (int what);       // 0 = WAV, 1 = stems, 2 = MIDI
     void songChanged();
@@ -279,6 +284,9 @@ private:
     juce::Rectangle<int> logoArea, positionArea, masterMeterArea, songLabelArea, padsLabelArea;
     juce::String status;
     std::unique_ptr<juce::FileChooser> chooser;
+    std::vector<juce::ValueTree> undoStack;
+    bool restoringUndo = false, shownLoopRec = false;
+    int shownLoopNotes = -1;
     std::unique_ptr<juce::ThreadWithProgressWindow> exportJob;
     int heldKeyPad = -1, heldKeyCode = 0, ticks = 0;
     bool shownPlaying = false, shownRecording = false;

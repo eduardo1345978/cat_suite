@@ -58,6 +58,11 @@ void testFilter()
            && ! filter::isClean ("pica") && ! filter::isClean ("P!CA"), "word filter: catches English and Slovak words, also written with numbers");
     check (filter::cleanName (juce::String::fromUTF8 ("\xc5\xbd" "ofia \xc5\xa0" "tef\xc3\xa1nkov\xc3\xa1"), 1) == "Zofia Stefankova", "names: Slovak letters become plain ones for the pixel font");
     check (filter::cleanName ("fuck you", 5).startsWith ("Fish"), "names: a rude name becomes FishNNN");
+    {
+        bool allClean = true;
+        for (int i = 0; i < 2000; ++i) allClean = allClean && filter::isClean (filter::neutralName (i));
+        check (allClean, "names: the neutral FishNNN names are never rude themselves (no Fish127 = fishit)");
+    }
     check (filter::cleanName ("ThisNameIsWayTooLongForAFish", 1).length() <= 16, "names: at most 16 letters");
 }
 
@@ -76,6 +81,16 @@ void testChatReader()
     const auto data = juce::JSON::parse (YouTubeChat::jsonObjectAfter (page, "ytInitialData"));
     check (YouTubeChat::parseInitial (data, cont, seen) && cont == "ABC123" && seen.contains ("old1"), "chat: reads the chat page (continuation, old messages)");
     check (YouTubeChat::quotedValueAfter (page, "INNERTUBE_CLIENT_VERSION") == "2.20241001.01.00", "chat: finds the client version");
+    {
+        // "Top chat" hides messages: the reader switches to "Live chat" (all messages)
+        const auto withMenu = juce::JSON::parse (R"({"contents":{"liveChatRenderer":{"continuations":[{"invalidationContinuationData":{"continuation":"TOP"}}],
+            "header":{"liveChatHeaderRenderer":{"viewSelector":{"sortFilterSubMenuRenderer":{"subMenuItems":[
+              {"title":"Top chat","selected":true,"continuation":{"reloadContinuationData":{"continuation":"TOPCHAT"}}},
+              {"title":"Live chat","selected":false,"continuation":{"reloadContinuationData":{"continuation":"LIVECHAT"}}}]}}}}}}})");
+        juce::String c2;
+        juce::StringArray seen2;
+        check (YouTubeChat::parseInitial (withMenu, c2, seen2) && c2 == "LIVECHAT", "chat: reads Live chat (every message), not Top chat (" + c2 + ")");
+    }
 
     const juce::String answer = R"({"continuationContents":{"liveChatContinuation":{"continuations":[{"timedContinuationData":{"continuation":"NEXT","timeoutMs":2500}}],
         "actions":[{"addChatItemAction":{"item":{"liveChatTextMessageRenderer":{"id":"m1","authorExternalChannelId":"UCabc","authorName":{"simpleText":"Miro"},
@@ -234,7 +249,7 @@ void testCommandsAndLife (const juce::File& outDir)
     
 
     // places
-    for (auto* where : { "kelp", "crystal", "ship", "cave", "ice", "lagoon", "ruins", "reef" })
+    for (auto* where : { "kelp", "crystal", "ship", "cave", "ice", "lagoon", "ruins", "volcano", "jelly", "open", "reef" })
     {
         engine.say ("UCmod", "Mod", juce::String ("!place ") + where, true);
         engine.runFrames (30 * 5);
@@ -548,7 +563,8 @@ int renderPlaces (const juce::File& outDir)
         sim.daylight = night ? 0.0f : 1.0f;
         for (int p = 0; p < NumPlaces; ++p)
         {
-            engine.say ("UCmod", "Mod", "!place " + juce::String (p == 0 ? "reef" : p == 1 ? "kelp" : p == 2 ? "crystal" : p == 3 ? "ship" : p == 4 ? "cave" : p == 5 ? "ice" : p == 6 ? "lagoon" : "ruins"), true);
+            static const char* words[NumPlaces] = { "reef", "kelp", "crystal", "ship", "cave", "ice", "lagoon", "ruins", "volcano", "jelly", "open" };
+            engine.say ("UCmod", "Mod", "!place " + juce::String (words[p]), true);
             engine.runFrames (30 * 5);
             savePng (engine.canvasForTests(), outDir.getChildFile (juce::String ("place-") + juce::String (p) + (night ? "-night" : "-day") + ".png"));
         }
