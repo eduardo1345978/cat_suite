@@ -61,6 +61,9 @@ private:
     void background (Canvas&, const Sim&, float t);
     void decor (Canvas&, const Sim&, float t);
     void boat (Canvas&, const Sim&, float t);
+    void sky (Canvas&, const Sim&, float t);          // meteors and fireworks
+    void school (Canvas&, const Sim&, float t);       // the migration
+    void glow (Canvas&, const Sim&, float t);         // plankton bloom
     void floor (Canvas&, const Sim&, float t);
     void bubbles (Canvas&, const Sim&, float dt);
     void weather (Canvas&, const Sim&, float t);

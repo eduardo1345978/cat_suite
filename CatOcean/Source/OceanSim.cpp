@@ -1,4 +1,5 @@
 #include "OceanSim.h"
+#include "OceanFilter.h"
 #include <algorithm>
 #include <cmath>
 
@@ -73,7 +74,7 @@ int findPlace (const juce::String& w)
 }
 juce::String eventName (int e)
 {
-    static const char* n[NumEvents] = { "Storm", "Calm seas", "Feast", "Baby boom", "Rare hunt" };
+    static const char* n[NumEvents] = { "Storm", "Calm seas", "Feast", "Baby boom", "Rare hunt", "Plankton bloom", "Migration", "Meteor shower" };
     return n[juce::jlimit (0, NumEvents - 1, e)];
 }
 int findEvent (const juce::String& w)
@@ -84,7 +85,15 @@ int findEvent (const juce::String& w)
     if (x == "feast" || x == "food") return EventFeast;
     if (x == "babyboom" || x == "babies") return EventBabyBoom;
     if (x == "rarehunt" || x == "rare") return EventRareHunt;
+    if (x == "plankton" || x == "bloom" || x == "planktonbloom" || x == "glow") return EventPlankton;
+    if (x == "migration" || x == "school" || x == "turtles") return EventMigration;
+    if (x == "meteors" || x == "meteor" || x == "meteorshower" || x == "stars" || x == "shootingstars") return EventMeteors;
     return -1;
+}
+juce::String catchName (int item)
+{
+    static const char* n[NumCatchItems] = { "an old boot", "a bottle with a message", "a tin can", "a starfish", "a little fish", "a rubber duck", "a pretty shell", "TREASURE" };
+    return item >= 0 && item < NumCatchItems ? juce::String (n[item]) : juce::String();
 }
 int xpForLevel (int level) { const int l = juce::jmax (1, level) - 1; return 10 * l * l; }
 int Fish::level() const noexcept { return 1 + (int) std::floor (std::sqrt (juce::jmax (0, xp) / 10.0)); }
@@ -188,6 +197,7 @@ Fish& Sim::spawnWild (bool fromSide)
 
 Fish& Sim::newViewerFish (const juce::String& ownerId, const juce::String& name)
 {
+    ++today.newFish;
     Fish f;
     f.id = nextId++;
     f.genes = Genes::random (rng);
@@ -334,6 +344,17 @@ void Sim::step (float dt)
     keepPopulation (dt);
     babyBoom = juce::jmax (0.0f, babyBoom - dt);
     rareHunt = juce::jmax (0.0f, rareHunt - dt);
+    // plankton: fish nibble it and grow a little faster
+    if (plankton > 0.0f)
+        for (auto& f : fish) if (f.present && ! f.dying) f.energy = juce::jmin (1.0f, f.energy + dt * 0.01f);
+    plankton = juce::jmax (0.0f, plankton - dt);
+    migration = juce::jmax (0.0f, migration - dt);
+    meteors = juce::jmax (0.0f, meteors - dt);
+    fireworks = juce::jmax (0.0f, fireworks - dt);
+    for (auto& a : alerts) a.life -= dt;
+    while (! alerts.empty() && alerts.front().life <= 0.0f) alerts.pop_front();
+    recap = juce::jmax (0.0f, recap - dt);
+    stepDay();
 
     foodTimer -= dt;
     if (foodTimer <= 0.0f)
@@ -524,6 +545,7 @@ void Sim::tryBreeding (float dt)
             a.breedCooldown = b.breedCooldown = 240.0f;
             ++a.babies; ++b.babies;
             ++births;
+            ++today.births;
             if (mutated) ++mutations;
 
             const juce::String an = label (a), bn = label (b);
@@ -644,6 +666,10 @@ void Sim::applyEvent (int e)
         case EventFeast:    dropFood (35); break;
         case EventBabyBoom: babyBoom = 150.0f; for (auto& f : fish) f.breedCooldown = juce::jmin (f.breedCooldown, 10.0f); break;
         case EventRareHunt: rareHunt = 240.0f; break;
+        case EventPlankton: plankton = 180.0f; babyBoom = juce::jmax (babyBoom, 90.0f); dropFood (10);
+                            catSay ("Ooh, the water is glowing!"); break;
+        case EventMigration: migration = 100.0f; catSay ("Look! A big school is swimming by!"); break;
+        case EventMeteors:  meteors = 150.0f; wishers.clear(); catSay ("Shooting stars! Type !wish"); break;
         default: break;
     }
 }
@@ -721,6 +747,14 @@ Board Sim::board (int which) const
             for (auto* f : all) if (f->viewer()) v.push_back (f);
             std::sort (v.begin(), v.end(), [] (auto* x, auto* y) { return x->xp > y->xp; });
             for (size_t i = 0; i < v.size() && i < 3; ++i) b.lines.add (v[i]->name + "  LV" + juce::String (v[i]->level()));
+            break;
+        }
+        case 6:
+        {
+            b.title = "MOST ACTIVE TODAY";
+            std::vector<std::pair<juce::String, int>> list (today.chatters.begin(), today.chatters.end());
+            std::sort (list.begin(), list.end(), [] (auto& x, auto& y) { return x.second > y.second; });
+            for (size_t i = 0; i < list.size() && i < 3; ++i) b.lines.add (list[i].first + "  " + juce::String (list[i].second) + " msgs");
             break;
         }
         default:
@@ -983,6 +1017,19 @@ void Sim::party (int count)
 
 void Sim::celebrateSubscribers (int newCount, int gained)
 {
+    today.newSubscribers += gained;
+    // a milestone: 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000 ...
+    for (int m : { 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000 })
+        if (newCount >= m && newCount - gained < m)
+        {
+            alerts.push_back ({ juce::String (m) + " SUBSCRIBERS!", "Thank you all - the whole ocean is partying!", 0xfffee761, 12.0f, 3 });
+            fireworks = 12.0f;
+            party (300);
+            dropFood (30);
+            catSay (juce::String (m) + " FRIENDS! I'm so happy!", 8.0f);
+            cat.hearts = 6.0f;
+            return;
+        }
     announce (gained > 1 ? juce::String (gained) + " NEW SUBSCRIBERS! THANK YOU! (" + juce::String (newCount) + ")"
                          : "NEW SUBSCRIBER! THANK YOU! (" + juce::String (newCount) + " subscribers)", 0xfffee761);
     party (120);
@@ -1019,25 +1066,193 @@ void Sim::stepXp (float dt)
         if (f.viewer() && f.present && ! f.leaving) addXp (f, 1);
 }
 
+void Sim::catSay (const juce::String& text, float seconds)
+{
+    cat.say = text;
+    cat.sayTime = seconds;
+    cat.nextTalk = 70.0f + rng.nextFloat() * 110.0f;
+}
+
 void Sim::stepCat (float dt)
 {
-    // the cat in the boat drifts along, fishes, naps, and waves at fish that arrive
+    // the cat in the boat drifts along, fishes, naps, waves at fish that arrive, talks, gets hungry and sleepy
     cat.moodTime += dt;
     cat.x += cat.vx * dt;
     if (cat.x < 40.0f) cat.vx = std::abs (cat.vx);
     if (cat.x > W - 120.0f) cat.vx = -std::abs (cat.vx);
+    cat.hunger = juce::jmin (1.0f, cat.hunger + dt / 1500.0f);                       // hungry again after ~25 minutes
+    cat.sleepy = cat.mood == 1 ? juce::jmax (0.0f, cat.sleepy - dt / 120.0f) : juce::jmin (1.0f, cat.sleepy + dt / 900.0f);
+    cat.happy = juce::jlimit (0.0f, 1.0f, cat.happy + dt * (cat.hunger > 0.75f ? -1.0f / 900.0f : 1.0f / 1800.0f));
+    cat.sayTime = juce::jmax (0.0f, cat.sayTime - dt);
+    cat.itemTime = juce::jmax (0.0f, cat.itemTime - dt);
+    cat.hearts = juce::jmax (0.0f, cat.hearts - dt);
+    if (cat.itemTime <= 0.0f) cat.item = CatchNone;
+
     if (cat.mood == 2)
     {
         cat.wave += dt;
         if (cat.moodTime > 3.5f) { cat.mood = 0; cat.moodTime = 0; }
     }
-    else if (cat.moodTime > 40.0f + rng.nextFloat() * 40.0f)
+    else if (cat.mood == 1)
     {
-        cat.mood = cat.mood == 0 ? 1 : 0;   // fishing <-> napping
+        if (cat.sleepy <= 0.0f || cat.moodTime > 150.0f) { cat.mood = 0; cat.moodTime = 0; catSay ("*yawn* ... good nap!"); }
+    }
+    else if (cat.sleepy >= 1.0f || (cat.moodTime > 60.0f && cat.sleepy > 0.6f && rng.nextFloat() < dt * 0.02f))
+    {
+        cat.mood = 1;   // nap time
         cat.moodTime = 0;
         cat.vx = (rng.nextBool() ? 1.0f : -1.0f) * (2.0f + rng.nextFloat() * 4.0f);
+        catSay ("zzz...", 3.0f);
+    }
+
+    // fishing: every minute or two something bites
+    if (cat.mood == 0)
+    {
+        cat.nextCatch -= dt;
+        if (cat.nextCatch <= 0.0f)
+        {
+            cat.nextCatch = 60.0f + rng.nextFloat() * 90.0f;
+            const float r = rng.nextFloat();
+            cat.item = r < 0.03f ? CatchTreasure : r < 0.2f ? CatchFish : r < 0.33f ? CatchBoot : r < 0.46f ? CatchBottle
+                     : r < 0.58f ? CatchCan : r < 0.72f ? CatchStarfish : r < 0.86f ? CatchShell : CatchDuck;
+            cat.itemTime = 7.0f;
+            ++cat.catches;
+            switch (cat.item)
+            {
+                case CatchTreasure:
+                {
+                    catSay ("TREASURE!!! Gold for everyone!", 7.0f);
+                    announce ("The boat cat fished up TREASURE! Every fish here gets 20 XP", 0xfffee761);
+                    for (auto& f : fish) if (f.viewer() && f.present && ! f.leaving) addXp (f, 20);
+                    party (80);
+                    cat.happy = 1.0f;
+                    break;
+                }
+                case CatchFish:
+                    catSay (cat.hunger > 0.4f ? "A snack! *munch*" : "A little fish... I'll let you go!");
+                    if (cat.hunger > 0.4f) cat.hunger = juce::jmax (0.0f, cat.hunger - 0.3f);
+                    break;
+                case CatchBottle:
+                {
+                    static const char* notes[] = { "\"Be kind to every fish\"", "\"The treasure is under the boat\"", "\"Drink water, take breaks\"",
+                                                   "\"Hello from a faraway island!\"", "\"You are doing great\"", "\"Feed the cat\" - signed, the cat" };
+                    catSay (juce::String ("A message: ") + notes[rng.nextInt (6)], 8.0f);
+                    break;
+                }
+                case CatchBoot:     catSay (rng.nextBool() ? "A boot. Again." : "Who keeps losing boots?!"); break;
+                case CatchCan:      catSay ("A tin can... I'll recycle it."); break;
+                case CatchStarfish: catSay ("Hello little star! Back you go."); break;
+                case CatchDuck:     catSay ("Squeak! A rubber duck!"); break;
+                default:            catSay ("Ooh, " + catchName (cat.item) + "!"); break;
+            }
+        }
+    }
+
+    // talking now and then: about the weather, the time, how it feels, or a viewer
+    cat.nextTalk -= dt;
+    if (cat.nextTalk <= 0.0f && cat.sayTime <= 0.0f && cat.mood != 1)
+    {
+        juce::StringArray lines;
+        if (cat.hunger > 0.75f) { lines.add ("I'm SO hungry... !feedcat please?"); lines.add ("My tummy is rumbling... !feedcat"); }
+        else if (cat.happy < 0.35f) lines.add ("Nobody pets me... !pet");
+        else
+        {
+            if (weather == WeatherStorm) lines.add ("What a storm! Hold on, fish!");
+            else if (weather == WeatherRain) lines.add ("I don't like getting wet...");
+            if (daylight < 0.2f) { lines.add ("Look at all the stars tonight"); lines.add ("The fish glow so pretty at night"); }
+            else if (daylight < 0.9f) lines.add ("What a sunset...");
+            else lines.add ("Lovely day for fishing!");
+            lines.add ("Type !fish to get your own fish!");
+            lines.add ("Have you liked this song? !like");
+            lines.add ("I caught " + juce::String (cat.catches) + " things today!");
+            int here = 0;
+            juce::String someone;
+            for (auto& f : fish) if (f.viewer() && f.present && ! f.leaving) { ++here; if (rng.nextInt (here) == 0) someone = f.name; }
+            if (someone.isNotEmpty()) { lines.add ("Hi " + someone + "! Nice fins!"); lines.add (someone + ", want to go fishing with me?"); }
+            if (plankton > 0.0f) lines.add ("The plankton tastes like stars");
+        }
+        catSay (lines[rng.nextInt (lines.size())]);
+    }
+
+    // visitors: a seagull, the grey cat from the next island, or a dog
+    if (cat.visitor != VisitorNone)
+    {
+        cat.visitorTime -= dt;
+        if (cat.visitorTime <= 0.0f) { cat.visitor = VisitorNone; cat.nextVisitor = 300.0f + rng.nextFloat() * 400.0f; }
+    }
+    else if ((cat.nextVisitor -= dt) <= 0.0f && weather != WeatherStorm)
+    {
+        cat.visitor = 1 + rng.nextInt (NumVisitors - 1);
+        cat.visitorTime = 50.0f + rng.nextFloat() * 40.0f;
+        static const char* hello[] = { "", "A seagull! Don't steal my fish!", "My friend from the next island is here!", "Woof? Who let the dog on the boat?" };
+        catSay (hello[cat.visitor]);
     }
 }
+
+void Sim::stepDay()
+{
+    // a new day (by the real clock): show yesterday's recap, start counting again
+    const auto date = juce::Time::getCurrentTime().formatted ("%Y-%m-%d");
+    if (today.date.isEmpty()) { today.date = date; return; }
+    if (date == today.date) return;
+    recapStats = today;
+    if (recapStats.messages > 0 || recapStats.newFish > 0) recap = 60.0f;
+    today = DayStats();
+    today.date = date;
+}
+
+void Sim::showRecap()
+{
+    recapStats = today;
+    recap = 45.0f;
+}
+
+juce::String Sim::dayRecapText (const DayStats& d) const
+{
+    juce::String t;
+    t << d.messages << " messages, " << d.newFish << " new fish, " << d.births << " babies";
+    if (d.superChats > 0) t << ", " << d.superChats << " Super Chats";
+    if (d.members > 0) t << ", " << d.members << " new members";
+    if (d.newSubscribers > 0) t << ", " << d.newSubscribers << " new subscribers";
+    return t;
+}
+
+void Sim::memberJoined (const juce::String& authorId, const juce::String& name, const juce::String& text)
+{
+    const auto who = filter::cleanName (name, (int) (authorId.hashCode() & 0x7fffffff));
+    ++today.members;
+    alerts.push_back ({ "WELCOME, NEW MEMBER!", who + (text.isNotEmpty() ? " - " + filter::cleanName (text, 1) : juce::String()), 0xfffee761, 10.0f, 1 });
+    party (160);
+    fireworks = juce::jmax (fireworks, 6.0f);
+    cat.hearts = 4.0f;
+    catSay ("Welcome to the family, " + who + "!", 7.0f);
+    if (auto* f = fishOf (authorId))
+    {
+        f->genes.accessory = AccCrown;          // members wear a crown, whatever their level
+        addXp (*f, 50);
+        bringBack (*f);
+    }
+}
+
+void Sim::superChat (const juce::String& authorId, const juce::String& name, const juce::String& amount, const juce::String& text)
+{
+    const auto who = filter::cleanName (name, (int) (authorId.hashCode() & 0x7fffffff));
+    ++today.superChats;
+    // bigger amounts, a bigger show (the number, whatever the currency)
+    const double value = amount.retainCharacters ("0123456789.,").replaceCharacter (',', '.').getDoubleValue();
+    const float show = (float) juce::jlimit (1.0, 5.0, 1.0 + std::log10 (juce::jmax (1.0, value)) * 1.6);
+    juce::String said;
+    for (auto c : text) { c = filter::fold (c); if (c >= 32 && c < 127) said << juce::String::charToString (c); }
+    said = said.trim().substring (0, 60);
+    if (! filter::isClean (said)) said = {};
+    alerts.push_back ({ "SUPER CHAT " + amount.toUpperCase() + " - THANK YOU " + who.toUpperCase() + "!", said, 0xff2ce8f5, 8.0f + show * 2.0f, 2 });
+    party ((int) (60 * show));
+    fireworks = juce::jmax (fireworks, 3.0f * show);
+    cat.hearts = 3.0f;
+    catSay ("Thank you " + who + "!!!", 6.0f);
+    if (auto* f = fishOf (authorId)) addXp (*f, (int) (10 * show));
+}
+
 int Sim::discoverSpeciesForTests()
 {
     if (fish.size() < 2) return 0;

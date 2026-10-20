@@ -86,7 +86,11 @@ Viewers type commands in the live chat:
 - **Day and night** follow the real clock: sunrise, a pink sunset, stars and a moon, glowing fish and calmer music at night. Waves, bubbles, rain and far-away whale songs play under the music. A chat message becomes a **speech bubble** above your fish.
 - **Admin console** (in the app, under the picture): `/help`, `/stats`, `/fish @name`, `/viewers`, `/spawn 5`, `/feed 10`, `/give @name 50`, `/level @name 8`, `/rare @name gold`, `/weather storm`, `/time night` (or `auto`), `/place lagoon`, `/music bubble`, `/event feast`, `/vote start`, `/announce text`, `/party`, `/species`, `/newspecies`, `/sleepall`, `/wakeall`, `/clear food`, `/save`, `/health` and every moderator command. `!` commands run as the host.
 - **Health check**: a stream that stops or gets stuck restarts by itself; if the whole ocean freezes, the app restarts itself and goes live again. The uptime and restarts show in the app. Chat votes where the ocean goes, which music plays, and events (storm, feast, baby boom, rare hunt).
-- New **subscribers** (the channel's count going up) start a confetti party. Leaderboards: oldest fish, biggest families, rare fish, most babies, species, highest levels.
+- New **subscribers** (the channel's count going up) start a confetti party. Leaderboards: oldest fish, biggest families, rare fish, most babies, species, highest levels, most active today.
+- **Alerts:** new members get a golden welcome and a crown, Super Chats / Super Stickers get a big panel and fireworks, subscriber milestones (10, 25, 50, 100, 250 ...) get fireworks.
+- **The boat cat** has hunger, sleepiness and happiness, naps, talks to chat, fishes up items (boots, bottles, shells - treasure gives every viewer fish XP) and gets visitors (a gull, a grey cat, a dog). Chat: `!pet`, `!feedcat`.
+- **Events:** plankton bloom (glowing water), migration (a school of fish and turtles), meteor shower (`!wish` for +5 XP).
+- **End of day:** a recap panel with the day's numbers; `!today` shows them any time. Admin: `/today /recap /testalert member|superchat|milestone /cat /catvisit`.
 - **No spam**: one fish per viewer, a word filter (English and Slovak) for names and bubbles, pauses per command (looks 8 s, emotes 20 s, name 1 min, food 45 s, help once for everyone every 90 s), the same message twice is ignored, more than 10 commands a minute mutes a viewer for 2 minutes, shouting bubbles are lowered, at most 6 bubbles and 40 viewers' fish on screen.
 
 ### The composer (Cat Hub's Compose tab, Dice and Muse-Cat)

@@ -45,7 +45,8 @@ juce::String Sim::admin (const juce::String& line)
     if (cmd == "help" || cmd == "?")
         return "/stats  /fish @name  /viewers  /spawn 5  /feed 10  /give @name 50  /level @name 8  /rare @name gold|rainbow|ghost|glow|crystal|none\n"
                "/weather calm|rain|storm  /time day|night|sunset|sunrise|auto|0-24  /place reef|kelp|crystal|ship|cave|ice|lagoon|ruins\n"
-               "/music aqua|lounge|crystal|bubble  /event storm|calm|feast|babyboom|rarehunt  /vote start|end  /announce text  /party\n"
+               "/music aqua|lounge|crystal|bubble|...  /event storm|calm|feast|babyboom|rarehunt|plankton|migration|meteors  /vote start|end  /announce text  /party\n"
+               "/today  /recap (show today's recap)  /testalert member|superchat|milestone  /cat (how the boat cat is)  /catvisit\n"
                "/species  /newspecies  /kick @name  /ban @name  /unban @name  /bans  /favourites  /requests  /clearrequests  /rename @name New Name  /resetname @name\n"
                "/sleepall  /wakeall  /clear food|bubbles|speech  /save   (chat commands like !fish also work here, as the host)";
 
@@ -156,7 +157,7 @@ juce::String Sim::admin (const juce::String& line)
     if (cmd == "event")
     {
         const int e = findEvent (tok.joinIntoString (""));
-        if (e < 0) return "/event storm|calm|feast|babyboom|rarehunt";
+        if (e < 0) return "/event storm|calm|feast|babyboom|rarehunt|plankton|migration|meteors";
         announce (eventName (e) + "!", 0xff2ce8f5);
         applyEvent (e);
         return "event: " + eventName (e);
@@ -202,6 +203,20 @@ juce::String Sim::admin (const juce::String& line)
             lines.add (juce::String ((int) i + 1) + ". " + top[i]->title + "  (" + styleName (top[i]->style) + ", " + juce::String (top[i]->likers.size()) + " likes)");
         return lines.joinIntoString ("\n");
     }
+    if (cmd == "today") return "today: " + dayRecapText (today);
+    if (cmd == "recap") { showRecap(); return "showing today's recap for 45 s"; }
+    if (cmd == "testalert")
+    {
+        const auto what = tok.size() < 2 ? juce::String ("member") : tok[1];
+        if (what.startsWith ("super")) superChat ("test", "Test Viewer", "$5.00", "this is how a Super Chat looks");
+        else if (what.startsWith ("mile")) { celebrateSubscribers (100, 100); return "a milestone alert (100 subscribers) - only a test"; }
+        else memberJoined ("test", "Test Viewer", "");
+        return "test alert shown";
+    }
+    if (cmd == "cat")
+        return "boat cat: " + juce::String (cat.mood == 1 ? "napping" : "awake") + ", hunger " + juce::String (juce::roundToInt (cat.hunger * 100)) + "%, sleepy "
+               + juce::String (juce::roundToInt (cat.sleepy * 100)) + "%, happy " + juce::String (juce::roundToInt (cat.happy * 100)) + "%, caught " + juce::String (cat.catches) + " things";
+    if (cmd == "catvisit") { cat.nextVisitor = 0.0f; cat.visitor = VisitorNone; return "a visitor is coming to the boat"; }
     if (cmd == "requests")
     {
         if (requests.empty()) return "no song requests waiting";

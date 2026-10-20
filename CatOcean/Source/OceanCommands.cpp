@@ -14,7 +14,7 @@ namespace
 
     int indexIn (const juce::StringArray& names, const juce::String& w) { return names.indexOf (w, true); }
 
-    const char* helpText = "!fish NAME  !color red blue  !body cat  !pattern stripes  !hat crown  !voice bell  !melody 1353  !dance  !feed  !vote 1  !level  !request jazz  !like";
+    const char* helpText = "!fish NAME  !color red blue  !body cat  !pattern stripes  !hat crown  !voice bell  !melody 1353  !dance  !feed  !vote 1  !level  !request jazz  !like  !pet  !feedcat";
 }
 
 bool Sim::spamCheck (Viewer& v, const juce::String& text, bool isCommand)
@@ -46,8 +46,11 @@ void Sim::chat (const juce::String& authorId, const juce::String& authorName, co
     auto& v = viewers[authorId];
     if (v.name.isEmpty())
         v.name = filter::cleanName (authorName, (int) (authorId.hashCode() & 0x7fffffff));
+    if (v.lastMessage < -1e8) ++today.viewersSeen;
     v.lastMessage = time;
     if (! moderator && ! spamCheck (v, text, text.trim().startsWithChar ('!'))) return;
+    ++today.messages;
+    ++today.chatters[v.name];
 
     if (auto* f = findFish (v.fishId))
     {
@@ -319,6 +322,51 @@ void Sim::command (Viewer& v, const juce::String& ownerId, const juce::String& t
         if (time - lastSongShown < 30.0) return;
         lastSongShown = time;
         announce ("Now playing: " + nowPlaying.title + " (" + styleName (nowPlaying.style) + ")", 0xff9ff3ff);
+        return;
+    }
+
+    if (cmd == "pet" || cmd == "petcat" || cmd == "pat")
+    {
+        if (time - v.lastPet < 30.0) return;
+        v.lastPet = time;
+        cat.happy = juce::jmin (1.0f, cat.happy + 0.15f);
+        cat.hearts = 2.5f;
+        if (cat.mood == 1) catSay ("*purr* ... zzz", 3.0f);
+        else catSay (rng.nextBool() ? "*purrrr* thank you " + v.name + "!" : "Mrrrow! More pets, " + v.name + "!", 4.0f);
+        if (f != nullptr && f->present) addXp (*f, 1);
+        return;
+    }
+
+    if (cmd == "feedcat" || cmd == "catfood" || cmd == "fishforcat")
+    {
+        if (time - lastCatFed < 20.0) return;
+        if (cat.hunger < 0.15f) { catSay ("I'm full, thank you " + v.name + "!", 4.0f); lastCatFed = time; return; }
+        lastCatFed = time;
+        cat.hunger = juce::jmax (0.0f, cat.hunger - 0.45f);
+        cat.happy = juce::jmin (1.0f, cat.happy + 0.2f);
+        cat.hearts = 3.0f;
+        catSay ("Yum! Thank you " + v.name + "!", 5.0f);
+        if (f != nullptr && f->present) addXp (*f, 2);
+        return;
+    }
+
+    if (cmd == "wish")
+    {
+        if (meteors <= 0.0f || wishers.count (ownerId) > 0) return;
+        wishers.insert (ownerId);
+        if (f != nullptr && f->present)
+        {
+            addXp (*f, 5);
+            toast (*f, "wish made *", 0xfffee761);
+        }
+        return;
+    }
+
+    if (cmd == "today" || cmd == "stats")
+    {
+        if (time - lastToday < 60.0) return;
+        lastToday = time;
+        announce ("Today: " + dayRecapText (today), 0xff9ff3ff);
         return;
     }
 

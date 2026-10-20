@@ -108,6 +108,17 @@ void testChatReader()
     check (ok && msgs.size() == 2 && msgs[0].authorName == "Miro" && msgs[0].authorId == "UCabc" && msgs[0].text == "!fish Miro :cat: blue"
            && msgs[1].text == "!feed" && next == "NEXT" && wait == 2500, "chat: reads new messages (text, emoji, super chat) and the next poll");
     check (msgs.size() == 2 && msgs[0].moderator && ! msgs[1].moderator, "chat: knows who is a moderator");
+    {
+        const auto paid = juce::JSON::parse (R"({"continuationContents":{"liveChatContinuation":{"actions":[
+            {"addChatItemAction":{"item":{"liveChatPaidMessageRenderer":{"id":"p1","authorExternalChannelId":"UCp","authorName":{"simpleText":"Rich"},"purchaseAmountText":{"simpleText":"$5.00"}}}}},
+            {"addChatItemAction":{"item":{"liveChatMembershipItemRenderer":{"id":"mb1","authorExternalChannelId":"UCm","authorName":{"simpleText":"Newbie"},"headerSubtext":{"runs":[{"text":"Welcome to Cat Ocean!"}]}}}}}]}}})");
+        std::vector<YouTubeChat::Message> pm;
+        juce::String nx;
+        int w2 = 0;
+        YouTubeChat::parseChat (paid, pm, nx, w2);
+        check (pm.size() == 2 && pm[0].kind == 1 && pm[0].amount == "$5.00" && pm[1].kind == 3 && pm[1].authorName == "Newbie",
+               "chat: reads Super Chats (with the amount) and new members");
+    }
 }
 
 void testGenes()
@@ -327,6 +338,40 @@ void testCommandsAndLife (const juce::File& outDir)
     engine.runFrames (20);
     check (! sim.confetti.empty(), "subscribers: a new subscriber makes a party");
     savePng (engine.canvasForTests(), outDir.getChildFile ("10-party.png"));
+
+    // alerts: a subscriber milestone, a new member (their fish gets a crown), a Super Chat
+    sim.alerts.clear();
+    sim.celebrateSubscribers (100, 2);
+    check (! sim.alerts.empty() && sim.alerts.back().title.contains ("100 SUBSCRIBERS"), "alerts: a subscriber milestone (100) gets a big alert");
+    sim.memberJoined ("UC1", "Miro", "hi!");
+    check (M() != nullptr && M()->genes.accessory == AccCrown && sim.alerts.back().title.contains ("MEMBER"), "alerts: a new member is welcomed and their fish gets a crown");
+    sim.superChat ("UC1", "Miro", "EUR 5.00", "love this ocean");
+    engine.runFrames (30);
+    check (sim.alerts.back().title.contains ("SUPER CHAT") && sim.alerts.back().text == "love this ocean" && sim.fireworks > 0.0f, "alerts: a Super Chat shows its message with fireworks");
+    savePng (engine.canvasForTests(), outDir.getChildFile ("13-alert.png"));
+    engine.runFrames (30 * 25);
+    check (sim.alerts.empty(), "alerts: they go away by themselves");
+
+    // the boat cat: pets, food, it fishes things up and talks
+    sim.cat.hunger = 0.9f;
+    engine.say ("UC1", "Miro", "!feedcat");
+    engine.runFrames (100);
+    check (sim.cat.hunger < 0.6f && sim.cat.say.contains ("Miro"), "boat cat: !feedcat feeds it (it says thank you)");
+    engine.say ("UC1", "Miro", "!pet");
+    engine.runFrames (5);
+    check (sim.cat.hearts > 0.0f, "boat cat: !pet makes it purr (hearts)");
+
+    // the new events
+    for (auto* ev : { "plankton", "migration", "meteors" })
+    {
+        engine.say ("UCmod", "Mod", juce::String ("!event ") + ev, true);
+        engine.runFrames (100);
+    }
+    check (sim.plankton > 0.0f && sim.migration > 0.0f && sim.meteors > 0.0f, "events: plankton bloom, migration and meteor shower start");
+    engine.say ("UC1", "Miro", "!wish");
+    engine.runFrames (3);
+    check (sim.wishers.count ("UC1") == 1, "events: !wish during a meteor shower");
+    savePng (engine.canvasForTests(), outDir.getChildFile ("14-events.png"));
 
     engine.say ("UC4", "Nobody", "!hat crown");
     engine.runFrames (2);

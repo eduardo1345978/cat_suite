@@ -190,15 +190,29 @@ bool YouTubeChat::parseChat (const juce::var& json, std::vector<Message>& out, j
         for (auto& a : *actions)
         {
             const auto& item = a["addChatItemAction"]["item"];
-            for (auto* r : { "liveChatTextMessageRenderer", "liveChatPaidMessageRenderer" })
+            static const char* renderers[] = { "liveChatTextMessageRenderer", "liveChatPaidMessageRenderer", "liveChatPaidStickerRenderer",
+                                               "liveChatMembershipItemRenderer", "liveChatSponsorshipsGiftPurchaseAnnouncementRenderer" };
+            for (int kind = 0; kind < 5; ++kind)
             {
-                const auto& m = item[r];
+                const auto& m = kind == 4 ? item[renderers[kind]]["header"]["liveChatSponsorshipsHeaderRenderer"] : item[renderers[kind]];
                 if (! m.isObject()) continue;
                 Message msg;
-                msg.id = m["id"].toString();
-                msg.authorId = m["authorExternalChannelId"].toString();
+                msg.kind = kind;
+                msg.id = (kind == 4 ? item[renderers[kind]]["id"] : m["id"]).toString();
+                msg.authorId = (kind == 4 ? item[renderers[kind]]["authorExternalChannelId"] : m["authorExternalChannelId"]).toString();
                 msg.authorName = m["authorName"]["simpleText"].toString();
                 msg.text = runsText (m["message"]);
+                if (kind == 1 || kind == 2) msg.amount = m["purchaseAmountText"]["simpleText"].toString();
+                if (kind == 3)
+                {
+                    // "Welcome to <channel>!" / "Member for 6 months" + their own message
+                    msg.amount = runsText (m["headerPrimaryText"]);
+                    if (msg.amount.isEmpty()) msg.amount = runsText (m["headerSubtext"]);
+                    if (msg.amount.isEmpty()) msg.amount = m["headerSubtext"]["simpleText"].toString();
+                }
+                if (kind == 4) msg.amount = runsText (m["primaryText"]);
+                if (msg.id.isEmpty()) msg.id = msg.authorId + msg.amount + msg.text;
+                if (kind >= 1 && msg.authorId.isNotEmpty()) { out.push_back (msg); continue; }   // paid / member items even without a message
                 if (auto* badges = m["authorBadges"].getArray())
                     for (auto& b : *badges)
                     {

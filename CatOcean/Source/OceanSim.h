@@ -85,7 +85,7 @@ struct Vote
     std::map<juce::String, int> voters;
     float left = 0;                               // seconds
 };
-enum Event { EventStorm = 0, EventCalm, EventFeast, EventBabyBoom, EventRareHunt, NumEvents };
+enum Event { EventStorm = 0, EventCalm, EventFeast, EventBabyBoom, EventRareHunt, EventPlankton, EventMigration, EventMeteors, NumEvents };
 juce::String eventName (int e);
 int findEvent (const juce::String& word);
 
@@ -108,12 +108,42 @@ struct SongRequest { int style = 0; juce::String by; };
 struct Species { int id = 0; juce::String name; int trait = 0; double discoveredAt = 0; juce::String firstFish; };
 
 /** The cat in the boat on the surface. */
+/** Things the boat cat can fish up. */
+enum CatchItem { CatchNone = -1, CatchBoot = 0, CatchBottle, CatchCan, CatchStarfish, CatchFish, CatchDuck, CatchShell, CatchTreasure, NumCatchItems };
+/** Who visits the boat now and then. */
+enum Visitor { VisitorNone = 0, VisitorGull, VisitorGreyCat, VisitorDog, NumVisitors };
+
 struct BoatCat
 {
     float x = 120, vx = 4;
     int mood = 0;                                 // 0 fishing, 1 sleeping, 2 waving
     float moodTime = 0, wave = 0;
     juce::String waveAt;                          // who it waves at
+    // needs: 0 .. 1 (fed and petted by chat: !feedcat, !pet)
+    float hunger = 0.25f, sleepy = 0.0f, happy = 0.7f;
+    // what it just caught (shown over the boat for a few seconds)
+    int item = CatchNone;
+    float itemTime = 0, nextCatch = 75;
+    // what it says (a bubble over the boat)
+    juce::String say;
+    float sayTime = 0, nextTalk = 45;
+    // a visitor on the boat
+    int visitor = VisitorNone;
+    float visitorTime = 0, nextVisitor = 240;
+    float hearts = 0;                             // > 0: hearts float up (petted / fed)
+    int catches = 0;
+};
+juce::String catchName (int item);
+
+/** A big alert in the middle of the screen: new members, Super Chats, subscriber milestones. */
+struct Alert { juce::String title, text; juce::uint32 colour = 0xfffee761; float life = 9.0f; int kind = 0; };
+
+/** Today's numbers (for the end-of-day recap and the "most active today" board). */
+struct DayStats
+{
+    juce::String date;                            // "2026-10-20"
+    int messages = 0, newFish = 0, births = 0, viewersSeen = 0, superChats = 0, members = 0, newSubscribers = 0;
+    std::map<juce::String, int> chatters;         // name -> messages today
 };
 
 struct Board { juce::String title; juce::StringArray lines; bool empty = false; };
@@ -137,8 +167,21 @@ public:
     float timeOverride = -1.0f;                   // admin "/time": hours, or -1 = the real clock
     static float daylightAt (float hours);
 
-    /** The channel got more subscribers: a little party. */
+    /** The channel got more subscribers: a little party (a big one at 10, 25, 50, 100, 250, 500, 1000 ...). */
     void celebrateSubscribers (int newCount, int gained);
+    /** Somebody became a member (or reached a member milestone): a golden welcome, their fish gets a crown. */
+    void memberJoined (const juce::String& authorId, const juce::String& name, const juce::String& text);
+    /** A Super Chat / Super Sticker: a big bubble with the message and fireworks (more for bigger amounts). */
+    void superChat (const juce::String& authorId, const juce::String& name, const juce::String& amount, const juce::String& text);
+    std::deque<Alert> alerts;
+    float fireworks = 0;                          // seconds of fireworks left
+
+    // today
+    DayStats today;
+    float recap = 0;                              // > 0: the end-of-day recap is on screen
+    DayStats recapStats;
+    juce::String dayRecapText (const DayStats&) const;
+    void showRecap();
 
     juce::ValueTree save() const;
     void load (const juce::ValueTree&);
@@ -162,8 +205,8 @@ public:
     int getStyle() const noexcept { return style; }
     void setStyle (int s) noexcept { style = juce::jlimit (0, NumStyles - 1, s); styleTimer = 0.0f; }
 
-    Board board (int which) const;                // 0 oldest, 1 families, 2 rare, 3 most babies, 4 species, 5 levels
-    static constexpr int numBoards = 6;
+    Board board (int which) const;                // 0 oldest, 1 families, 2 rare, 3 most babies, 4 species, 5 levels, 6 most active today
+    static constexpr int numBoards = 7;
     int wildCount() const;
     int viewerFishOnScreen() const;
     int viewerCount() const { return (int) viewers.size(); }
@@ -193,6 +236,8 @@ public:
     float placeFade = 0;                          // 0 .. 1 .. 0 while the ocean moves to a new place
     double time = 0;                              // seconds of ocean life
     float babyBoom = 0, rareHunt = 0;             // seconds left of those events
+    float plankton = 0, migration = 0, meteors = 0;
+    std::set<juce::String> wishers;               // who made a wish in this meteor shower
     int births = 0, mutations = 0;
 
     /** Tests: evolution discovers a species right now (returns its id). */
@@ -212,13 +257,15 @@ private:
         juce::String lastText;
         double lastTextAt = -1e9;
         bool warned = false;
-        double lastRequest = -1e9;
+        double lastRequest = -1e9, lastPet = -1e9;
     };
 
     void stepFish (Fish&, float dt);
     void stepWeather (float dt);
     void stepVote (float dt);
     void stepCat (float dt);
+    void catSay (const juce::String&, float seconds = 6.0f);
+    void stepDay();
     void stepXp (float dt);
     void tryBreeding (float dt);
     void keepPopulation (float dt);
@@ -249,7 +296,8 @@ private:
     float weatherTimer = 600, foodTimer = 120, voteTimer = 180, wildTimer = 0, xpTimer = 0;
     int voteKindNext = 0;
     bool newSpeciesBorn = false;
-    double lastHelp = -1e9, lastFeedAnyone = -1e9;
+    double lastHelp = -1e9, lastFeedAnyone = -1e9, lastCatFed = -1e9, lastToday = -1e9;
+    int lastPeriod = -1;   // part of the day the cat last talked about
     bool spamCheck (Viewer&, const juce::String& text, bool isCommand);
     int style = StyleDreamy, styleRequest = -1;
     double lastFavouritesShown = -1e9, lastSongShown = -1e9;

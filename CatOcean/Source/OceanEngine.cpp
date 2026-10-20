@@ -181,7 +181,13 @@ void Engine::frame()
             else log (sim.admin (l));
         }
     }
-    for (auto& m : chat.take()) sim.chat (m.authorId, m.authorName, m.text, m.moderator);
+    for (auto& m : chat.take())
+    {
+        if (m.kind == 1 || m.kind == 2) sim.superChat (m.authorId, m.authorName, m.amount.isNotEmpty() ? m.amount : juce::String ("!"), m.text);
+        else if (m.kind == 3) sim.memberJoined (m.authorId, m.authorName, m.text);
+        else if (m.kind == 4) sim.memberJoined (m.authorId, m.authorName, m.amount);   // gifted memberships
+        if (m.text.isNotEmpty()) sim.chat (m.authorId, m.authorName, m.text, m.moderator);
+    }
     // new subscribers: a little party
     if (const int subs = chat.getSubscribers(); subs >= 0)
     {

@@ -198,7 +198,9 @@ void Painter::paint (Canvas& c, const Sim& sim, const MusicInfo& music, float dt
     clock += dt;
     const float t = clock;
     background (c, sim, t);
+    if (sim.place != PlaceCave) sky (c, sim, t);
     decor (c, sim, t);
+    school (c, sim, t);
     if (sim.place != PlaceCave) boat (c, sim, t);
 
     // food
@@ -223,6 +225,7 @@ void Painter::paint (Canvas& c, const Sim& sim, const MusicInfo& music, float dt
                     if (d < 1.0f) c.add ((int) f->x + x, (int) f->y + y, colourARGB (f->genes.colour1), 0.10f * (1.0f - d) * f->fade);
                 }
 
+    glow (c, sim, t);
     bubbles (c, sim, dt);
     // little light sparkles drifting in the water
     for (int i = 0; i < 18; ++i)
@@ -1247,6 +1250,9 @@ void Painter::overlay (Canvas& c, const Sim& sim, const MusicInfo& m, float dt)
         "YOUR FISH SWIMS IN WHEN YOU CHAT AND SLEEPS IN THE CAVE WHEN YOU'RE AWAY",
         "FISH HAVE BABIES. RARE ONES ARE GOLDEN, RAINBOW, GHOST, GLOWING OR CRYSTAL",
         "THE MUSIC FOLLOWS THE FISH: THEIR GENES PULL THE TEMPO AND THE KEY",
+        "THE BOAT CAT GETS HUNGRY: !FEEDCAT   AND LOVES PETS: !PET",
+        "!REQUEST JAZZ PLAYS YOUR STYLE NEXT   !LIKE A SONG AND IT COMES BACK",
+        "!TODAY SHOWS TODAY'S OCEAN NUMBERS",
     };
     tipTimer += 1.0f / 30.0f;
     if (tipTimer > 9.0f) { tipTimer = 0; tip = (tip + 1) % (int) (sizeof (tips) / sizeof (tips[0])); }
@@ -1265,6 +1271,156 @@ void Painter::overlay (Canvas& c, const Sim& sim, const MusicInfo& m, float dt)
     if (! sim.news.empty()) { line = sim.news.back().text.toUpperCase(); col = sim.news.back().colour; }
     line = line.substring (0, 118);
     c.text (line, W / 2 - Canvas::textWidth (line) / 2, H - 8, col, 1, 0xff06264a, true);
+
+    // a big alert in the middle: new members, Super Chats, subscriber milestones
+    if (! sim.alerts.empty())
+    {
+        const auto& a = sim.alerts.front();
+        const float in = juce::jmin (1.0f, (9.0f + 20.0f - a.life) * 0.0f + 1.0f);
+        juce::ignoreUnused (in);
+        const auto title = a.title.toUpperCase().substring (0, 60), text = a.text.toUpperCase().substring (0, 70);
+        const int w = juce::jmax (Canvas::textWidth (title, 2), Canvas::textWidth (text)) + 20;
+        const int h = text.isNotEmpty() ? 34 : 24;
+        const int bob = (int) std::lround (std::sin (clock * 3.0f) * 1.5f);
+        const int x = W / 2 - w / 2, y = 70 + bob;
+        panel (x, y, w, h);
+        // a golden / aqua rim that shimmers
+        for (int i = 0; i < w; ++i)
+        {
+            const float sh = 0.5f + 0.5f * std::sin (clock * 6.0f + i * 0.15f);
+            c.blend (x + i, y - 1, a.colour, 0.5f + 0.5f * sh); c.blend (x + i, y + h, a.colour, 0.5f + 0.5f * sh);
+        }
+        c.text (title, W / 2 - Canvas::textWidth (title, 2) / 2, y + 6, a.colour, 2, 0xff06264a, true);
+        if (text.isNotEmpty()) c.text (text, W / 2 - Canvas::textWidth (text) / 2, y + 24, 0xffffffff, 1, 0xff06264a, true);
+    }
+
+    // the end-of-day recap
+    if (sim.recap > 0.0f)
+    {
+        const auto& d = sim.recapStats;
+        juce::StringArray lines;
+        lines.add ("TODAY IN THE OCEAN" + (d.date.isNotEmpty() ? "  (" + d.date + ")" : juce::String()));
+        lines.add (juce::String (d.messages) + " MESSAGES   " + juce::String (d.viewersSeen) + " VIEWERS   " + juce::String (d.newFish) + " NEW FISH");
+        lines.add (juce::String (d.births) + " BABIES   " + juce::String (d.newSubscribers) + " NEW SUBSCRIBERS   " + juce::String (d.members) + " NEW MEMBERS");
+        std::vector<std::pair<juce::String, int>> top (d.chatters.begin(), d.chatters.end());
+        std::sort (top.begin(), top.end(), [] (auto& p, auto& q) { return p.second > q.second; });
+        juce::String best = "TOP CHATTERS: ";
+        for (size_t i = 0; i < juce::jmin ((size_t) 3, top.size()); ++i) best << (i > 0 ? ", " : "") << top[i].first.toUpperCase() << " (" << top[i].second << ")";
+        if (! top.empty()) lines.add (best);
+        if (! sim.favourites.empty())
+        {
+            const Favourite* fav = &sim.favourites.front();
+            for (auto& f : sim.favourites) if (f.likers.size() > fav->likers.size()) fav = &f;
+            lines.add ("MOST LIKED SONG: " + fav->title.toUpperCase() + " (" + juce::String (fav->likers.size()) + ")");
+        }
+        lines.add ("THANK YOU FOR SWIMMING WITH US!");
+        int w = 0;
+        for (auto& l : lines) w = juce::jmax (w, Canvas::textWidth (l));
+        w += 20;
+        const int h = 8 + lines.size() * 8, x = W / 2 - w / 2, y = 112;
+        panel (x, y, w, h);
+        for (int i = 0; i < lines.size(); ++i)
+            c.text (lines[i], W / 2 - Canvas::textWidth (lines[i]) / 2, y + 5 + i * 8, i == 0 ? 0xfffee761 : (i == lines.size() - 1 ? 0xff9ff3ff : 0xffffffff), 1, 0xff06264a, true);
+    }
+}
+
+//==============================================================================
+void Painter::sky (Canvas& c, const Sim& sim, float t)
+{
+    // shooting stars (a meteor shower)
+    if (sim.meteors > 0.0f)
+    {
+        const float a = juce::jmin (1.0f, sim.meteors / 10.0f) * (0.4f + 0.6f * (1.0f - sim.daylight));
+        for (int i = 0; i < 6; ++i)
+        {
+            const float period = 1.6f + (i % 3) * 0.7f;
+            const float life = std::fmod (t + i * 0.83f, period) / period;
+            if (life > 0.45f) continue;
+            const auto h = hash ((juce::uint32) i * 977 + (juce::uint32) ((t + i * 0.83f) / period));
+            const float sx = (float) (h % (juce::uint32) W), sy = 2.0f + (float) ((h >> 10) % 18u);
+            const float k = life / 0.45f;
+            const int hx = (int) (sx - k * 60.0f), hy = (int) (sy + k * 22.0f);
+            for (int j = 0; j < 14; ++j)
+            {
+                const int px = hx + j * 3 / 1, py = hy - j * 22 / 60;
+                if (py < (int) surfaceY - 2) c.blend (px, py, j == 0 ? 0xffffffff : 0xffcfe4ff, a * (1.0f - j / 14.0f) * (1.0f - k * 0.5f));
+            }
+        }
+    }
+    // fireworks (alerts, milestones)
+    if (sim.fireworks > 0.0f)
+    {
+        static const Colour cols[] = { 0xffff5a7a, 0xfffee761, 0xff5affc8, 0xff7ab8ff, 0xffd08aff, 0xffffa64a };
+        for (int i = 0; i < 4; ++i)
+        {
+            const float period = 1.7f + i * 0.31f;
+            const float life = std::fmod (t + i * 0.57f, period) / period;
+            const auto h = hash ((juce::uint32) i * 131 + (juce::uint32) ((t + i * 0.57f) / period) * 7);
+            const int cx = 40 + (int) (h % (juce::uint32) (W - 80)), cy = 8 + (int) ((h >> 8) % 22u);
+            const Colour col = cols[(h >> 4) % 6];
+            if (life < 0.2f)   // the rocket going up
+            {
+                const int ry = (int) surfaceY - (int) ((float) ((int) surfaceY - cy) * life / 0.2f);
+                c.blend (cx, ry, 0xffffffff, 0.9f);
+                continue;
+            }
+            const float k = (life - 0.2f) / 0.8f;
+            for (int j = 0; j < 16; ++j)
+            {
+                const float ang = j * 0.3927f;
+                const float r = k * 16.0f;
+                const int px = cx + (int) std::lround (std::cos (ang) * r), py = cy + (int) std::lround (std::sin (ang) * r * 0.8f + k * k * 6.0f);
+                if (py < (int) surfaceY - 1) { c.blend (px, py, col, 1.0f - k); c.add (px, py, col, 0.3f * (1.0f - k)); }
+            }
+        }
+    }
+}
+
+void Painter::school (Canvas& c, const Sim& sim, float t)
+{
+    if (sim.migration <= 0.0f) return;
+    // a big school of silver fish and three sea turtles crossing the ocean
+    const float total = 100.0f, p = (total - sim.migration) / total;   // 0 .. 1
+    const float head = -80.0f + p * (W + 200.0f);
+    for (int i = 0; i < 70; ++i)
+    {
+        const float ox = hashf ((juce::uint32) i * 13 + 1) * 90.0f, oy = hashf ((juce::uint32) i * 7 + 3) * 50.0f;
+        const float x = head - ox + std::sin (t * 2.0f + i) * 2.0f;
+        const float y = 120.0f + oy + std::sin (t * 1.3f + x * 0.03f) * 8.0f;
+        const int ix = (int) x, iy = (int) y;
+        const bool flash = std::sin (t * 3.0f + i) > 0.85f;
+        c.set (ix, iy, flash ? 0xffffffff : 0xffbcd4e6); c.set (ix - 1, iy, 0xff8fb0c8); c.set (ix + 1, iy, 0xffdfeef8);
+        c.set (ix - 2, iy - 1, 0xff8fb0c8); c.set (ix - 2, iy + 1, 0xff8fb0c8);
+    }
+    for (int k = 0; k < 3; ++k)
+    {
+        const float x = head - 30.0f - k * 45.0f, y = 90.0f + k * 22.0f + std::sin (t * 0.8f + k) * 4.0f;
+        const int tx = (int) x, ty = (int) y;
+        const float flap = std::sin (t * 2.5f + k);
+        for (int yy = -4; yy <= 4; ++yy) for (int xx = -7; xx <= 7; ++xx)   // the shell
+            if (xx * xx / 49.0f + yy * yy / 16.0f <= 1.0f)
+                c.set (tx + xx, ty + yy, (std::abs (xx) + std::abs (yy)) % 4 == 0 ? 0xff4a6a2a : (yy < -1 ? 0xff7aa04a : 0xff5f8a3a));
+        for (int j = 0; j < 3; ++j) { c.set (tx + 8 + j, ty - 1, 0xff9ac07a); c.set (tx + 8 + j, ty, 0xff9ac07a); }   // head
+        c.set (tx + 10, ty - 1, 0xff10121c);
+        const int fy = (int) std::lround (flap * 3.0f);
+        for (int j = 0; j < 4; ++j) { c.set (tx + 2 - j, ty - 5 - j + fy * j / 3, 0xff8ab06a); c.set (tx + 2 - j, ty + 5 + j - fy * j / 3, 0xff8ab06a); }
+    }
+}
+
+void Painter::glow (Canvas& c, const Sim& sim, float t)
+{
+    if (sim.plankton <= 0.0f) return;
+    // a plankton bloom: the water fills with tiny glowing specks, brighter at night
+    const float a = juce::jmin (1.0f, sim.plankton / 15.0f) * (0.35f + 0.65f * (1.0f - sim.daylight * 0.7f));
+    for (int i = 0; i < 260; ++i)
+    {
+        const float x = std::fmod (hashf ((juce::uint32) i * 17 + 5) * W + t * (2.0f + (i % 5)) + std::sin (t * 0.7f + i) * 4.0f, (float) W);
+        const float y = surfaceY + 6.0f + hashf ((juce::uint32) i * 29 + 1) * (floorY - surfaceY - 12.0f) + std::sin (t * 0.5f + i * 0.3f) * 3.0f;
+        const float tw = 0.5f + 0.5f * std::sin (t * (1.5f + (i % 7) * 0.3f) + i);
+        const Colour col = i % 3 == 0 ? 0xff7affd8 : (i % 3 == 1 ? 0xff5ad8ff : 0xffb6ff8a);
+        c.add ((int) x, (int) y, col, a * (0.3f + 0.7f * tw));
+        if (tw > 0.8f) { c.add ((int) x + 1, (int) y, col, a * 0.4f); c.add ((int) x, (int) y + 1, col, a * 0.4f); }
+    }
 }
 //==============================================================================
 void Painter::decor (Canvas& c, const Sim& sim, float t)
@@ -1633,6 +1789,91 @@ void Painter::boat (Canvas& c, const Sim& sim, float t)
             }
             for (int k = 0; k < 5; ++k) c.set (cx + 1, base - 13 + k, ink);
         }
+    }
+
+    // a visitor on the bow
+    if (cat.visitor != VisitorNone)
+    {
+        const int vx = bx + 9, vy = sy - 5 + tilt (9);
+        if (cat.visitor == VisitorGull)
+        {
+            for (int y = 0; y < 3; ++y) for (int x = -2; x <= 2; ++x) c.set (vx + x, vy - y, y == 0 ? 0xffc8ccd4 : 0xfff4f6fa);
+            c.set (vx + 2, vy - 3, 0xfff4f6fa); c.set (vx + 3, vy - 3, 0xfff4f6fa); c.set (vx + 3, vy - 4, 0xfff4f6fa);   // head
+            c.set (vx + 4, vy - 3, 0xffffb02e); c.set (vx + 3, vy - 4, ink);                                           // beak, eye
+            c.set (vx - 2, vy - 2, 0xff8a92a0); c.set (vx - 3, vy - 1, 0xff8a92a0);                                   // wing
+        }
+        else if (cat.visitor == VisitorGreyCat)
+        {
+            const Colour g = 0xffa8acb8, gd = 0xff7a7e8c;
+            for (int y = 0; y < 4; ++y) for (int x = -2; x <= 1; ++x) c.set (vx + x, vy - y, x == 1 || y == 0 ? gd : g);
+            for (int y = 0; y < 3; ++y) for (int x = -1; x <= 2; ++x) c.set (vx + x, vy - 4 - y, g);
+            c.set (vx - 1, vy - 7, gd); c.set (vx + 2, vy - 7, gd); c.set (vx, vy - 5, ink); c.set (vx + 2, vy - 5, ink);
+            for (int k = 0; k < 3; ++k) c.set (vx - 3 - k / 2, vy - 1 - k, g);
+        }
+        else
+        {
+            const Colour d = 0xffc8925a, dd = 0xff8a5a32;
+            for (int y = 0; y < 3; ++y) for (int x = -3; x <= 1; ++x) c.set (vx + x, vy - y, y == 0 ? dd : d);
+            for (int y = 0; y < 3; ++y) for (int x = 0; x <= 3; ++x) c.set (vx + x, vy - 3 - y, d);
+            c.set (vx + 4, vy - 4, dd); c.set (vx, vy - 6, dd); c.set (vx + 1, vy - 7, dd);   // nose, floppy ear
+            c.set (vx + 2, vy - 5, ink);
+            if (std::sin (t * 10.0f) > 0.0f) c.set (vx - 4, vy - 2, d); else c.set (vx - 4, vy - 3, d);   // wagging tail
+        }
+    }
+
+    // what it caught, bobbing over the boat
+    if (cat.item != CatchNone && cat.itemTime > 0.0f)
+    {
+        const int ix = cx + 4, iy = base - 22 - (int) std::lround (std::sin (t * 3.0f) * 1.5f);
+        switch (cat.item)
+        {
+            case CatchBoot:     c.fillRect (ix - 2, iy - 4, 3, 5, 0xff5a3a24); c.fillRect (ix - 2, iy, 6, 2, 0xff5a3a24); c.set (ix - 1, iy - 4, 0xff7a5a3a); break;
+            case CatchBottle:   c.fillRect (ix - 1, iy - 5, 3, 7, 0xff7ad8a8, 0.8f); c.set (ix, iy - 6, 0xff8a6a4a); c.fillRect (ix, iy - 3, 1, 3, 0xfff4e8c8); break;
+            case CatchCan:      c.fillRect (ix - 2, iy - 3, 4, 5, 0xffa8b0bc); c.fillRect (ix - 2, iy - 1, 4, 1, 0xffe43b44); break;
+            case CatchStarfish: for (int k = -2; k <= 2; ++k) { c.set (ix + k, iy, 0xffff8a5a); c.set (ix, iy + k, 0xffff8a5a); } c.set (ix - 1, iy - 1, 0xffff8a5a); c.set (ix + 1, iy - 1, 0xffff8a5a); break;
+            case CatchFish:     c.fillRect (ix - 2, iy - 1, 4, 3, 0xff7ab8ff); c.set (ix - 3, iy - 1, 0xff5a98df); c.set (ix - 3, iy + 1, 0xff5a98df); c.set (ix + 1, iy - 1, ink); break;
+            case CatchDuck:     c.fillRect (ix - 2, iy - 1, 5, 3, 0xfffee761); c.fillRect (ix + 1, iy - 3, 2, 2, 0xfffee761); c.set (ix + 3, iy - 2, 0xffffa02e); c.set (ix + 1, iy - 3, ink); break;
+            case CatchShell:    for (int y = 0; y < 3; ++y) for (int x = -2; x <= 2; ++x) if (std::abs (x) <= 2 - y / 2) c.set (ix + x, iy - y, x % 2 == 0 ? 0xffffd8e8 : 0xffffb6d0); break;
+            case CatchTreasure:
+            {
+                c.fillRect (ix - 3, iy - 3, 7, 5, 0xff8a5a2a); c.fillRect (ix - 3, iy - 4, 7, 2, 0xffb07a3a); c.set (ix, iy - 2, 0xfffee761);
+                for (int k = 0; k < 5; ++k) { const float a2 = t * 2.0f + k * 1.26f; c.add (ix + (int) (std::cos (a2) * 6.0f), iy - 2 + (int) (std::sin (a2) * 4.0f), 0xfffee761, 0.8f); }
+                break;
+            }
+            default: break;
+        }
+    }
+
+    // hearts when petted or fed
+    if (cat.hearts > 0.0f)
+        for (int k = 0; k < 3; ++k)
+        {
+            const float life = std::fmod (t * 0.8f + k * 0.33f, 1.0f);
+            const int hx = cx + 2 + (int) (std::sin (t * 2.0f + k * 2.0f) * 4.0f), hy = base - 12 - (int) (life * 14.0f);
+            const float a = juce::jmin (1.0f, cat.hearts) * (1.0f - life);
+            c.blend (hx - 1, hy, 0xffff5a8a, a); c.blend (hx + 1, hy, 0xffff5a8a, a); c.blend (hx, hy + 1, 0xffff5a8a, a);
+            c.blend (hx - 1, hy + 1, 0xffff5a8a, a); c.blend (hx + 1, hy + 1, 0xffff5a8a, a); c.blend (hx, hy + 2, 0xffff5a8a, a);
+        }
+
+    // a speech bubble
+    if (cat.say.isNotEmpty() && cat.sayTime > 0.0f && cat.mood != 2)
+    {
+        const auto text = cat.say.toUpperCase().substring (0, 44);
+        const int tw = Canvas::textWidth (text);
+        const int x0 = juce::jlimit (2, W - tw - 8, cx - tw / 2), y0 = base - 30;
+        const float a = juce::jmin (1.0f, cat.sayTime * 2.0f);
+        c.fillRect (x0 - 3, y0 - 2, tw + 6, 9, 0xfff4fbff, 0.92f * a);
+        c.fillRect (x0 - 3, y0 - 3, tw + 6, 1, 0xffffffff, 0.7f * a);
+        for (int k = 0; k < 3; ++k) c.blend (cx + 1 - k, y0 + 7 + k, 0xfff4fbff, 0.92f * a);   // the tail of the bubble
+        c.text (text, x0, y0, 0xff1b2a4a, 1, 0xfff4fbff, false);
+    }
+    // hungry: a little fish-bone thought
+    else if (cat.hunger > 0.75f && cat.mood == 0)
+    {
+        const int hx = cx + 6, hy = base - 16;
+        for (int k = 0; k < 5; ++k) c.set (hx + k, hy, 0xffe8ecf4);
+        c.set (hx + 1, hy - 1, 0xffe8ecf4); c.set (hx + 1, hy + 1, 0xffe8ecf4); c.set (hx + 3, hy - 1, 0xffe8ecf4); c.set (hx + 3, hy + 1, 0xffe8ecf4);
+        c.set (hx + 5, hy - 1, 0xffe8ecf4); c.set (hx + 5, hy + 1, 0xffe8ecf4);
     }
 }
 } // namespace ocean

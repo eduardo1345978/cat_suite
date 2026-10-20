@@ -13,7 +13,8 @@ namespace ocean
 class YouTubeChat : private juce::Thread
 {
 public:
-    struct Message { juce::String id, authorId, authorName, text; bool moderator = false; };
+    /** kind: 0 a chat message, 1 a Super Chat, 2 a Super Sticker, 3 a new member / member milestone, 4 gifted memberships */
+    struct Message { juce::String id, authorId, authorName, text; bool moderator = false; int kind = 0; juce::String amount; };
 
     YouTubeChat();
     ~YouTubeChat() override;
