@@ -101,7 +101,8 @@ struct Song
     std::vector<double> lyricLineStarts;   // beat where each lyric line starts
 
     // what the composer remembers to keep the song (or the endless stream) recognisable
-    struct MotifNote { double start = 0, length = 1; int step = 0; bool reset = false, phraseEnd = false, sectionEnd = false; float velocity = 0.8f; };
+    struct MotifNote { double start = 0, length = 1; int step = 0; bool reset = false, phraseEnd = false, sectionEnd = false; float velocity = 0.8f;
+                      int cadence = 0; };   // phrase ends: 1 = open (a question: lands on the 2nd / 5th), 2 = closed (the answer: home)
     struct Motif { std::vector<MotifNote> notes; int bars = 0; int centre = 2; };
     std::vector<std::vector<int>> progressions;   // encoded chords: verse, chorus, pre-chorus, bridge
     std::array<Motif, NumSectionTypes> motifs;    // the melody idea for each kind of section

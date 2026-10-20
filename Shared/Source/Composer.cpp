@@ -214,7 +214,7 @@ const std::vector<const char*> preps = { "through", "in-to", "un-der", "a-cross"
 // R = a rhyming thing, Q = a rhyming how / where, W = a rhyming action
 const std::vector<const char*> lineTemplates = {
     "S V P the R", "S V P the A R", "P the A R", "V with me P the R", "S will V P the R", "A R", "all the A R",
-    "we are the R", "S V P the N of R", "oh S V Q", "and S V Q", "S V Q", "S will V Q", "V with me Q", "S V P the N Q",
+    "we are the R", "oh S V Q", "and S V Q", "S V Q", "S will V Q", "V with me Q", "S V P the N Q",
     "S V and W", "S can W", "S will W", "let us W", "S V P the N and W", "oh S W",
 };
 // pieces to fill the start of a long line (no rhyme)
@@ -1195,17 +1195,19 @@ public:
         const char* c1 = r.pick (cad);
         const char* c2 = r.pick (cad);
 
-        struct BarPlan { const char* rhythm; int shape; int anchor; bool reset; bool phraseEnd; };
+        // cadence: 0 = none, 1 = open (call / question), 2 = closed (response / answer). mirror: the shape of
+        // another bar turned upside down (the answer echoes the call's rhythm with the opposite curve).
+        struct BarPlan { const char* rhythm; int shape; int anchor; bool reset; bool phraseEnd; int cadence = 0; int mirror = -1; };
         std::vector<BarPlan> plan;
         const int seqStep = r.chance (0.5) ? -1 : 1;
-        if (type == Chorus)        // the hook: one bar idea repeated (and sequenced) = catchy
-            plan = { { m1, 0, 0, true, false }, { m1, 0, seqStep, true, false }, { m2, 1, 0, false, false }, { c1, 2, 0, false, true },
-                     { m1, 0, 0, true, false }, { m1, 0, seqStep, true, false }, { m3, 3, 0, false, false }, { c2, 4, 0, false, true } };
-        else if (pre)              // climbing sequence into the chorus
-            plan = { { m1, 0, 0, true, false }, { m1, 0, 1, true, false }, { m1, 0, 2, true, false }, { c1, 2, 3, true, true } };
-        else                       // A A' : statement - answer, statement - other answer
-            plan = { { m1, 0, 0, true, false }, { m2, 1, 0, false, false }, { m3, 2, 0, false, false }, { c1, 3, 0, false, true },
-                     { m1, 0, 0, true, false }, { m2, 1, 0, false, false }, { r.pick (pl), 4, 0, false, false }, { c2, 5, 0, false, true } };
+        if (type == Chorus)        // the hook: one bar idea repeated (and sequenced) = catchy; first half asks, second half answers
+            plan = { { m1, 0, 0, true, false }, { m1, 0, seqStep, true, false }, { m2, 1, 0, false, false }, { c1, 2, 0, false, true, 1 },
+                     { m1, 0, 0, true, false }, { m1, 0, seqStep, true, false }, { m3, 3, 0, false, false }, { c2, 4, 0, false, true, 2 } };
+        else if (pre)              // climbing sequence into the chorus, ending open (it wants the chorus)
+            plan = { { m1, 0, 0, true, false }, { m1, 0, 1, true, false }, { m1, 0, 2, true, false }, { c1, 2, 3, true, true, 1 } };
+        else                       // call and response: 2 bars ask, 2 bars answer (the answer mirrors the call), twice
+            plan = { { m1, 0, 0, true, false }, { m2, 1, 0, false, true, 1 }, { m1, 6, 0, true, false, 0, 0 }, { c1, 3, 0, false, true, 2 },
+                     { m1, 0, 0, true, false }, { m2, 1, 0, false, true, 1 }, { r.pick (pl), 4, 0, false, false }, { c2, 5, 0, false, true, 2 } };
 
         std::map<int, std::vector<int>> shapes;
         for (int bar = 0; bar < (int) plan.size(); ++bar)
@@ -1216,8 +1218,20 @@ public:
             auto& sh = shapes[bp.shape * 100 + (int) hits.size()];
             if (sh.empty())
             {
-                const int bias = pre ? 1 : (bp.phraseEnd ? -1 : (bar < 2 ? 1 : 0));
-                sh = contour ((int) hits.size() + 1, bias, r);
+                const auto mirrored = bp.mirror >= 0 ? shapes.find (plan[(size_t) bp.mirror].shape * 100 + (int) hits.size()) : shapes.end();
+                if (mirrored != shapes.end())
+                    for (int st : mirrored->second) sh.push_back (-st);
+                else
+                {
+                    const int bias = pre ? 1 : (bp.phraseEnd ? -1 : (bar < 2 ? 1 : 0));
+                    sh = contour ((int) hits.size() + 1, bias, r);
+                    // the hook's signature: a leap up (a 4th or 5th) right after its first note, then a step back
+                    if (type == Chorus && bp.shape == 0 && sh.size() >= 2)
+                    {
+                        sh[1] = r.chance (0.5) ? 3 : 4;
+                        if (sh.size() >= 3) sh[2] = -1;
+                    }
+                }
             }
             for (size_t i = 0; i < hits.size(); ++i)
             {
@@ -1227,6 +1241,7 @@ public:
                 n.reset = i == 0 && bp.reset;
                 n.step = n.reset ? bp.anchor : sh[i];
                 n.phraseEnd = bp.phraseEnd && i + 1 == hits.size();
+                n.cadence = n.phraseEnd ? bp.cadence : 0;
                 n.sectionEnd = bar == (int) plan.size() - 1 && i + 1 == hits.size();
                 const double inBar = std::fmod (n.start, 4.0);
                 n.velocity = inBar < 1e-6 ? 0.9f : (std::fmod (inBar, 1.0) < 1e-6 ? 0.8f : 0.7f);
@@ -1297,6 +1312,19 @@ public:
                         }
                         idx = best;
                     }
+                    else if (mn.cadence != 0 && ch != nullptr)
+                    {
+                        // a question ends up in the air (the 2nd or 5th), an answer comes home (the 1st or 3rd)
+                        int best = nearestTone (idx, ch, mn.step >= 0 ? 1 : -1), bestD = 99;
+                        for (int k = juce::jmax (lo, idx - 3); k <= juce::jmin (hi, idx + 3); ++k)
+                        {
+                            if (! idxIsTone (k, ch)) continue;
+                            const int deg = ((k % 7) + 7) % 7;
+                            const bool fits = mn.cadence == 1 ? (deg == 1 || deg == 4) : (deg == 0 || deg == 2);
+                            if (fits && std::abs (k - idx) < bestD) { bestD = std::abs (k - idx); best = k; }
+                        }
+                        idx = best;
+                    }
                     else if (strong) idx = nearestTone (idx, ch, mn.step >= 0 ? 1 : -1);
                     else if (ch != nullptr && ! ch->isTone (idxToMidi (idx)))
                     {
@@ -1304,6 +1332,8 @@ public:
                         const int p = idxToMidi (idx);
                         if (mn.length >= 0.75 && (ch->isTone (p + 1) || ch->isTone (p - 1))) idx = nearestTone (idx, ch, mn.step >= 0 ? 1 : -1);
                     }
+                    while (idx > hi + 1) idx -= 7;          // never out of a singer's range: the same note an octave down / up
+                    while (idx < lo - 1) idx += 7;
                     out.push_back ({ t, mn.length, idxToMidi (idx), mn.velocity * (0.85f + sec.energy * 0.15f), -1 });
                 }
         }
@@ -1419,12 +1449,19 @@ public:
             const bool repeats = key == Chorus || key == PreChorus;
             const u64 base = repeats ? mix (5000, (u64) key) : mix (6000 + (u64) s.chunk * 1000, si);
             juce::String pairWord;
+            std::map<int, juce::StringArray> lineWords;
             for (auto& [li, idxs] : lines)
             {
-                Rng famR = partRng (NewLyrics, mix (base, (u64) (li / 2)));
+                // rhyming pairs share a family; a chorus rhymes lines 3-4 like 1-2 (its hook line comes back)
+                Rng famR = partRng (NewLyrics, mix (base, (u64) (key == Chorus ? li / 4 : li / 2)));
                 const int family = fams[(size_t) famR.range (0, (int) fams.size() - 1)];
                 Rng lr = partRng (NewLyrics, mix (base, 100 + (u64) li));
-                auto words = makeLine ((int) idxs.size(), family, li % 2 == 1 ? pairWord : juce::String(), lr);
+                juce::StringArray words;
+                // the chorus sings its hook line again (same rhythm = same words): that is what people remember
+                if (key == Chorus && li % 4 == 2 && lineWords.count (li - 2) && syllables (lineWords[li - 2]) == (int) idxs.size())
+                    words = lineWords[li - 2];
+                else words = makeLine ((int) idxs.size(), family, li % 2 == 1 ? pairWord : juce::String(), lr);
+                lineWords[li] = words;
                 if (li % 2 == 0) pairWord = words[words.size() - 1];   // the next line must not end the same
                 juce::StringArray syl;
                 for (auto& w : words) syl.addArray (juce::StringArray::fromTokens (w, "-", ""));
