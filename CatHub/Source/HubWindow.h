@@ -114,6 +114,10 @@ public:
     void refresh();
     void tick();
     void showSettings (const cat::muse::Settings&);
+    /** The arranger menu for one section (also used by the tests: item ids are in HubWindow.cpp). */
+    void arrangeSection (int index, int menuResult);
+    int sectionAt (juce::Point<int>) const;
+    bool canUndoArrangement() const noexcept { return ! undoForm.empty(); }
 
     juce::ComboBox genreBox, moodBox;
     juce::TextEditor seedBox;
@@ -131,6 +135,8 @@ private:
     juce::Image mapImage;
     juce::Rectangle<int> headerArea, mapBounds, lyricsArea, renewLabelArea;
     const cat::muse::Song* shownSong = nullptr;
+    std::vector<cat::muse::Section> undoForm;
+    juce::uint32 undoKey = 0;
     double shownBeat = -1.0;
     int shownLine = -2;
 };
@@ -145,12 +151,33 @@ public:
     void refresh();
     juce::ComboBox themeBox;
     juce::ToggleButton advancedToggle { "Advanced mode: effects, MIDI-effect Cats, extra parts" };
+    juce::ComboBox keyboardBox;
     juce::TextButton tutorialButton { "Show the tutorial again" }, findButton { "Find Cats folder..." }, resetButton { "Start a fresh jam" };
 private:
     HubMain& owner;
     HubEngine& engine;
     juce::AudioDeviceSelectorComponent audio;
     juce::Rectangle<int> catsArea;
+};
+
+/** The master effects (the FX button): room, tone, glue, warmth, width. */
+class MasterFxPanel : public juce::Component, private juce::Timer
+{
+public:
+    explicit MasterFxPanel (HubEngine&);
+    void paint (juce::Graphics&) override;
+    void resized() override;
+private:
+    void timerCallback() override;
+    void load();
+    HubEngine& engine;
+    CaptionKnob room { "ROOM", "How much of the shared reverb you hear" },
+                tone { "TONE", "Tilt: left = warmer and darker, right = brighter", true },
+                glue { "GLUE", "A gentle compressor that holds the mix together" },
+                warmth { "WARMTH", "Soft tape saturation: rounder and fuller" },
+                width { "WIDTH", "Left = mono, middle = as it is, right = extra wide", true };
+    juce::TextButton resetButton { "Reset" };
+    float shownReduction = 0.0f;
 };
 
 /** First-launch tutorial: bubbles that point at the real controls. */
@@ -194,6 +221,13 @@ public:
     void applyTheme (int index);
     void startTutorial();
     void findCats();
+    // jams: everything (Cats, parts, sounds, effects, the song) in one .catjam file
+    void saveJam();
+    void openJam();
+    bool saveJamTo (const juce::File&);
+    bool openJamFrom (const juce::File&);
+    void toggleFullScreen();
+    void showMasterFx();
     /** Writes the song (or each part as a stem) to Music \ Cat Hub, faster than real time. */
     void exportSong (int what);       // 0 = WAV, 1 = stems, 2 = MIDI
     void songChanged();
@@ -228,7 +262,7 @@ private:
 
     // transport bar
     juce::TextButton playButton { "Play" }, recordButton { "Rec" }, simpleButton { "Simple" }, advancedButton { "Advanced" },
-                     helpButton { "?" }, diceButton { "Dice" };
+                     helpButton { "?" }, diceButton { "Dice" }, jamMenuButton { "Jam" }, fxButton { "FX" };
     juce::Slider bpm, master;
     // song bar
     juce::ComboBox styleBox, keyBox, progressionBox, lengthBox;

@@ -82,7 +82,18 @@ struct Track
     run them through a MIDI-effect Cat (Patt / Bend / Orbit), plays them with a built-in sound or
     a sound Cat (Glide / Sing / Talk), then filter, drive, chorus, echo, crush, room, pan, volume.
 */
-class HubEngine : public juce::AudioIODeviceCallback
+/** The master bus: tone (tilt EQ), glue (a gentle compressor), warmth (tape-like saturation), width. */
+struct MasterFx
+{
+    void prepare (double sampleRate);
+    void process (float* l, float* r, int n, float tone, float glue, float warmth, float width);
+    float gainReduction() const noexcept { return lastReduction; }
+private:
+    double sr = 48000.0;
+    float lpL = 0, lpR = 0, env = 0, gain = 1.0f, lastReduction = 0;
+};
+
+class HubEngine : public juce::AudioIODeviceCallback, public juce::MidiInputCallback
 {
 public:
     HubEngine();
@@ -114,6 +125,16 @@ public:
     std::atomic<int> barsPerChord { 1 };
     std::atomic<bool> autoChords { true };
     std::atomic<float> masterVolume { 0.8f };
+    // the master effects (Master FX button)
+    std::atomic<float> masterRoom { 0.5f }, masterTone { 0.0f }, masterGlue { 0.0f }, masterWarmth { 0.0f }, masterWidth { 1.0f };
+    float getMasterReduction() const noexcept { return masterReduction.load(); }
+
+    //==== a MIDI keyboard: notes from every enabled MIDI input play one track (-1 = the Lead, or the first keys track)
+    std::atomic<int> keyboardTrack { -1 };
+    int getKeyboardTrackNow() const noexcept { return keyboardTrackNow.load(); }
+    void handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage&) override;
+    /** Plays a note from the screen / tests as if it came from a keyboard. */
+    void playKeyboardNote (const juce::MidiMessage& m) { if (prepared) liveMidiIn.addMessageToQueue (m); }
     void setLivePad (int pad) noexcept { livePad.store (pad); }
     int getCurrentPad() const noexcept { return currentPad.load(); }
     int getNumPads() const noexcept { return numPads.load(); }
@@ -144,6 +165,8 @@ public:
     void composeSong (const cat::muse::Settings&, bool newTracks, juce::Random* dice = nullptr);
     /** Renews one thing in the song (see cat::muse::Target) and keeps playing. */
     void regenerateSong (int target, juce::uint32 seed);
+    /** The arranger: plays the song with these sections (see cat::muse::arrange). Not in endless mode. */
+    bool arrangeSong (std::vector<cat::muse::Section> sections);
     void setSongEndless (bool endless);
     void leaveSongMode();
     bool isSongMode() const noexcept { return songMode.load(); }
@@ -213,6 +236,12 @@ private:
     int heldTrigger = -1;
 
     juce::Reverb reverb;
+    MasterFx masterFx;
+    std::atomic<float> masterReduction { 0.0f };
+    juce::MidiMessageCollector liveMidiIn;
+    juce::MidiBuffer liveMidi;
+    std::atomic<int> keyboardTrackNow { -1 };
+    int pickKeyboardTrack() const;
     cat::SafetyLimiter limiter;
     juce::AudioBuffer<float> catAudio, lifeAudio, sendAudio, mixAudio;
     juce::MidiBuffer songMidi, chordOut, bassOut, drumOut, lifeOut, leadOut, melodyOut, counterOut;
@@ -228,6 +257,7 @@ private:
     double clockPpq = 0.0;
     std::atomic<double> songBeatShown { 0.0 };
     const cat::muse::Song* lyricsSentFor = nullptr;
+    std::vector<cat::muse::Section> arrangedForm;   // the arranger's sections (saved with the jam)
     juce::String sungLyrics;
 
     juce::TimeSliceThread writerThread { "Cat Hub recorder" };

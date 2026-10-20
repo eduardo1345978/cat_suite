@@ -1606,6 +1606,41 @@ void regenerate (Song& s, int target, juce::uint32 seed)
     }
 }
 
+void arrange (Song& s, std::vector<Section> sections)
+{
+    if (sections.empty() || s.progressions.empty()) return;
+    double t = 0.0;
+    for (auto& sec : sections)
+    {
+        sec.type = juce::jlimit (0, NumSectionTypes - 1, sec.type);
+        sec.bars = juce::jlimit (1, 64, sec.bars);
+        sec.progression = juce::jlimit (0, (int) s.progressions.size() - 1, sec.progression);
+        sec.energy = juce::jlimit (0.0f, 1.0f, sec.energy);
+        sec.start = t;
+        t = sec.end();
+    }
+    s.sections = std::move (sections);
+    s.lengthBeats = t;
+    Writer w (s);
+    w.layChords();
+    w.writeAllParts();
+}
+
+Section makeSection (const Song& song, int type, int bars, juce::uint32 seed)
+{
+    Song tmp;
+    tmp.settings = song.settings;
+    Writer w (tmp);
+    Section sec;
+    sec.type = juce::jlimit (0, NumSectionTypes - 1, type);
+    sec.bars = juce::jlimit (1, 64, bars);
+    sec.energy = Writer::baseEnergy (sec.type);
+    Rng r (mix ((u64) seed, (u64) sec.type + 77));
+    sec.progression = Writer::progressionFor (sec.type, r);
+    w.decideParts (sec, r);
+    return sec;
+}
+
 juce::MidiFile toMidiFile (const Song& s)
 {
     constexpr int tpq = 960;

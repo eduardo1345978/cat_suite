@@ -944,7 +944,17 @@ void ComposePage::paint (juce::Graphics& g)
     g.drawText ("NEW:", renewLabelArea, juce::Justification::centredLeft);
 
     // the map + playhead
-    if (mapImage.isValid()) g.drawImageAt (mapImage, mapBounds.getX(), mapBounds.getY());
+    if (mapImage.isValid())
+    {
+        g.drawImageAt (mapImage, mapBounds.getX(), mapBounds.getY());
+        if (song != nullptr && engine.isSongMode() && ! song->settings.endless)
+        {
+            g.setColour (th.textDim);
+            g.setFont (hubFont (11.0f));
+            g.drawText ("Click a section to arrange the song", mapBounds.withTrimmedBottom (2).removeFromBottom (14).withTrimmedRight (12),
+                        juce::Justification::centredRight);
+        }
+    }
     else
     {
         g.setColour (th.panel);
@@ -1017,7 +1027,108 @@ void ComposePage::paint (juce::Graphics& g)
     }
 }
 
-void ComposePage::mouseDown (const juce::MouseEvent&) {}
+//==============================================================================
+// the arranger: click a section on the map
+namespace arr
+{
+    constexpr int Renew = 1, Louder = 2, Softer = 3, Duplicate = 4, Earlier = 5, Later = 6, Delete = 7, Undo = 8,
+                  ChangeTo = 100, AddAfter = 200, Length = 300, PartToggle = 400;
+    const int lengths[] = { 4, 8, 12, 16 };
+}
+
+int ComposePage::sectionAt (juce::Point<int> p) const
+{
+    auto song = engine.getSong();
+    if (song == nullptr || ! engine.isSongMode() || song->lengthBeats <= 0.0 || ! mapBounds.contains (p)) return -1;
+    const float x0 = (float) mapBounds.getX() + 10.0f + 92.0f, w = (float) mapBounds.getWidth() - 20.0f - 92.0f;
+    if (w <= 0.0f || (float) p.x < x0) return -1;
+    const double beat = ((float) p.x - x0) / w * song->lengthBeats;
+    for (int i = 0; i < (int) song->sections.size(); ++i)
+        if (beat >= song->sections[(size_t) i].start && beat < song->sections[(size_t) i].end()) return i;
+    return -1;
+}
+
+void ComposePage::mouseDown (const juce::MouseEvent& e)
+{
+    const int idx = sectionAt (e.getPosition());
+    auto song = engine.getSong();
+    if (idx < 0 || song == nullptr) return;
+    const auto& sec = song->sections[(size_t) idx];
+    juce::PopupMenu m;
+    m.addSectionHeader (cat::muse::sectionName (sec.type) + " (" + juce::String (sec.bars) + " bars)");
+    if (song->settings.endless)
+        m.addItem (1, "Endless songs arrange themselves - turn Endless off to arrange", false);
+    else
+    {
+        m.addItem (arr::Renew, "Other chords for this section");
+        juce::PopupMenu change, add, length, parts;
+        for (int t = 0; t < cat::muse::NumSectionTypes; ++t)
+        {
+            change.addItem (arr::ChangeTo + t, cat::muse::sectionName (t), true, t == sec.type);
+            add.addItem (arr::AddAfter + t, cat::muse::sectionName (t));
+        }
+        for (int k = 0; k < 4; ++k) length.addItem (arr::Length + k, juce::String (arr::lengths[k]) + " bars", true, sec.bars == arr::lengths[k]);
+        for (int p = 0; p < cat::muse::NumParts; ++p) parts.addItem (arr::PartToggle + p, cat::muse::partNames()[p], true, sec.on[(size_t) p]);
+        m.addSubMenu ("Make it a...", change);
+        m.addSubMenu ("Length", length);
+        m.addSubMenu ("Parts that play", parts);
+        m.addItem (arr::Louder, "More energy", sec.energy < 0.99f);
+        m.addItem (arr::Softer, "Less energy", sec.energy > 0.11f);
+        m.addSeparator();
+        m.addSubMenu ("Add a section after it", add, song->sections.size() < 40);
+        m.addItem (arr::Duplicate, "Play it twice", song->sections.size() < 40);
+        m.addItem (arr::Earlier, "Move earlier", idx > 0);
+        m.addItem (arr::Later, "Move later", idx < (int) song->sections.size() - 1);
+        m.addItem (arr::Delete, "Remove it", song->sections.size() > 1);
+        m.addSeparator();
+        m.addItem (arr::Undo, "Undo the last change", ! undoForm.empty()
+                   && undoKey == song->settings.seed * 131u + (juce::uint32) song->settings.genre * 7u + (juce::uint32) song->settings.mood);
+    }
+    juce::Component::SafePointer<ComposePage> sp (this);
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withTargetScreenArea (
+                         juce::Rectangle<int> (e.getScreenX(), e.getScreenY(), 1, 1)),
+                     [sp, idx] (int result) { if (sp != nullptr && result > 0) sp->arrangeSection (idx, result); });
+}
+
+void ComposePage::arrangeSection (int idx, int result)
+{
+    auto song = engine.getSong();
+    if (song == nullptr || song->settings.endless || ! juce::isPositiveAndBelow (idx, (int) song->sections.size())) return;
+    auto form = song->sections;
+    auto& sec = form[(size_t) idx];
+    const auto seed = (juce::uint32) (1 + juce::Random().nextInt (0x7ffffff));
+    const int numProgressions = juce::jmax (1, (int) song->progressions.size());
+    if (result == arr::Undo)
+    {
+        if (undoForm.empty() || undoKey != song->settings.seed * 131u + (juce::uint32) song->settings.genre * 7u + (juce::uint32) song->settings.mood) return;
+        form = undoForm;
+        undoForm.clear();
+    }
+    else
+    {
+        if (result == arr::Renew) sec.progression = (sec.progression + 1 + juce::Random().nextInt (juce::jmax (1, numProgressions - 1))) % numProgressions;
+        else if (result == arr::Louder) sec.energy = juce::jmin (1.0f, sec.energy + 0.15f);
+        else if (result == arr::Softer) sec.energy = juce::jmax (0.1f, sec.energy - 0.15f);
+        else if (result == arr::Duplicate) { if (form.size() >= 40) return; const auto copy = sec; form.insert (form.begin() + idx + 1, copy); }
+        else if (result == arr::Earlier) { if (idx == 0) return; std::swap (form[(size_t) idx], form[(size_t) idx - 1]); }
+        else if (result == arr::Later) { if (idx + 1 >= (int) form.size()) return; std::swap (form[(size_t) idx], form[(size_t) idx + 1]); }
+        else if (result == arr::Delete) { if (form.size() <= 1) return; form.erase (form.begin() + idx); }
+        else if (result >= arr::PartToggle && result < arr::PartToggle + cat::muse::NumParts) { auto& on = sec.on[(size_t) (result - arr::PartToggle)]; on = ! on; }
+        else if (result >= arr::Length && result < arr::Length + 4) sec.bars = arr::lengths[result - arr::Length];
+        else if (result >= arr::ChangeTo && result < arr::ChangeTo + cat::muse::NumSectionTypes)
+            sec = cat::muse::makeSection (*song, result - arr::ChangeTo, sec.bars, seed);
+        else if (result >= arr::AddAfter && result < arr::AddAfter + cat::muse::NumSectionTypes)
+        {
+            if (form.size() >= 40) return;
+            const int type = result - arr::AddAfter;
+            form.insert (form.begin() + idx + 1, cat::muse::makeSection (*song, type, type == cat::muse::PreChorus || type == cat::muse::Build ? 4 : 8, seed));
+        }
+        else return;
+        undoForm = song->sections;
+        undoKey = song->settings.seed * 131u + (juce::uint32) song->settings.genre * 7u + (juce::uint32) song->settings.mood;
+    }
+    if (engine.arrangeSong (form)) owner.songChanged();
+}
 
 void ComposePage::resized()
 {
@@ -1055,8 +1166,11 @@ void ComposePage::resized()
 
 //==============================================================================
 SettingsPage::SettingsPage (HubMain& o, HubEngine& e, juce::AudioDeviceManager& dm)
-    : owner (o), engine (e), audio (dm, 0, 0, 2, 2, false, false, true, false)
+    : owner (o), engine (e), audio (dm, 0, 0, 2, 2, true, false, true, false)
 {
+    keyboardBox.setTooltip ("Which part a MIDI keyboard plays (turn the keyboard on under Sound card - Active MIDI inputs)");
+    keyboardBox.onChange = [this] { engine.keyboardTrack = keyboardBox.getSelectedId() - 2; };
+    addAndMakeVisible (keyboardBox);
     for (int i = 0; i < (int) themes().size(); ++i) themeBox.addItem (themes()[(size_t) i].name, i + 1);
     themeBox.onChange = [this] { owner.applyTheme (themeBox.getSelectedId() - 1); };
     advancedToggle.onClick = [this] { owner.setAdvanced (advancedToggle.getToggleState()); };
@@ -1073,6 +1187,11 @@ SettingsPage::SettingsPage (HubMain& o, HubEngine& e, juce::AudioDeviceManager& 
 void SettingsPage::refresh()
 {
     themeBox.setSelectedId (themeIndex() + 1, juce::dontSendNotification);
+    keyboardBox.clear (juce::dontSendNotification);
+    keyboardBox.addItem ("Automatic (the Lead)", 1);
+    for (int i = 0; i < engine.getNumTracks(); ++i)
+        keyboardBox.addItem (juce::String (i + 1) + ": " + sourceName (engine.track (i).source.load()) + " - " + soundName (engine.track (i).sound.load()), i + 2);
+    keyboardBox.setSelectedId (juce::jlimit (-1, engine.getNumTracks() - 1, engine.keyboardTrack.load()) + 2, juce::dontSendNotification);
     advancedToggle.setToggleState (owner.isAdvanced(), juce::dontSendNotification);
     repaint();
 }
@@ -1100,6 +1219,7 @@ void SettingsPage::paint (juce::Graphics& g)
     head (themeBox.getBounds().withY (themeBox.getY() - 26).withHeight (22), "Theme");
     head (advancedToggle.getBounds().withY (advancedToggle.getY() - 26).withHeight (22), "Mode");
     head (tutorialButton.getBounds().withY (tutorialButton.getY() - 26).withHeight (22), "Help");
+    head (keyboardBox.getBounds().withY (keyboardBox.getY() - 26).withHeight (22), "MIDI keyboard plays");
     head (catsArea.withHeight (22), "The Cats");
     head (audio.getBounds().withY (audio.getY() - 26).withHeight (22), "Sound card");
     if (audio.getNumChildComponents() == 0 || audio.getHeight() < 40)
@@ -1135,7 +1255,10 @@ void SettingsPage::resized()
     auto left = r.removeFromLeft (r.getWidth() / 2).reduced (28, 20);
     auto right = r.reduced (28, 20);
     left.removeFromTop (28);
-    themeBox.setBounds (left.removeFromTop (30).withWidth (240));
+    auto first = left.removeFromTop (30);
+    themeBox.setBounds (first.removeFromLeft (juce::jmin (240, first.getWidth() / 2 - 8)));
+    first.removeFromLeft (16);
+    keyboardBox.setBounds (first.withWidth (juce::jmin (300, first.getWidth())));
     left.removeFromTop (40);
     advancedToggle.setBounds (left.removeFromTop (28));
     left.removeFromTop (40);
@@ -1263,6 +1386,29 @@ HubMain::HubMain (HubEngine& e, juce::AudioDeviceManager& dm, juce::PropertiesFi
     };
     helpButton.setTooltip ("Show the tutorial again");
     helpButton.onClick = [this] { startTutorial(); };
+    jamMenuButton.setTooltip ("Save or open a jam (everything: Cats, parts, sounds, effects, the song), full screen");
+    jamMenuButton.onClick = [this]
+    {
+        juce::PopupMenu m;
+        m.addItem (1, "Save jam...  (Ctrl+S)");
+        m.addItem (2, "Open jam...  (Ctrl+O)");
+        m.addSeparator();
+        m.addItem (3, "Start a fresh jam");
+        m.addSeparator();
+        auto* w = findParentComponentOfClass<juce::ResizableWindow>();
+        m.addItem (4, "Full screen  (F11)", w != nullptr, w != nullptr && w->isFullScreen());
+        juce::Component::SafePointer<HubMain> sp (this);
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&jamMenuButton), [sp] (int r)
+        {
+            if (sp == nullptr) return;
+            if (r == 1) sp->saveJam();
+            else if (r == 2) sp->openJam();
+            else if (r == 3) sp->changeCatsLater ([e = &sp->engine] { e->applyStyle (0); });
+            else if (r == 4) sp->toggleFullScreen();
+        });
+    };
+    fxButton.setTooltip ("Master effects: room, tone, glue, warmth, width");
+    fxButton.onClick = [this] { showMasterFx(); };
     for (auto* b : { &simpleButton, &advancedButton })
     {
         b->setClickingTogglesState (true);
@@ -1313,6 +1459,7 @@ HubMain::HubMain (HubEngine& e, juce::AudioDeviceManager& dm, juce::PropertiesFi
 
     for (juce::Component* c : { (juce::Component*) &playButton, (juce::Component*) &recordButton, (juce::Component*) &diceButton,
                                 (juce::Component*) &helpButton, (juce::Component*) &simpleButton, (juce::Component*) &advancedButton,
+                                (juce::Component*) &jamMenuButton, (juce::Component*) &fxButton,
                                 (juce::Component*) &bpm, (juce::Component*) &master, (juce::Component*) &styleBox, (juce::Component*) &keyBox,
                                 (juce::Component*) &progressionBox, (juce::Component*) &lengthBox, (juce::Component*) &autoChords,
                                 (juce::Component*) &tabs, (juce::Component*) &pads })
@@ -1512,6 +1659,162 @@ void HubMain::findCats()
 }
 
 //==============================================================================
+static juce::File jamFolder (juce::PropertiesFile& settings)
+{
+    juce::File dir (settings.getValue ("jamFolder"));
+    if (! dir.isDirectory())
+    {
+        dir = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile ("Cat Hub jams");
+        dir.createDirectory();
+    }
+    return dir;
+}
+
+bool HubMain::saveJamTo (const juce::File& file)
+{
+    auto xml = engine.saveState().createXml();
+    if (xml == nullptr) return false;
+    xml->setAttribute ("theme", themeIndex());
+    xml->setAttribute ("advanced", advanced);
+    const bool ok = xml->writeTo (file);
+    status = ok ? "Saved the jam: " + file.getFullPathName() : "Could not save " + file.getFullPathName();
+    resized();
+    repaint();
+    return ok;
+}
+
+bool HubMain::openJamFrom (const juce::File& file)
+{
+    auto xml = juce::XmlDocument::parse (file);
+    const auto tree = xml != nullptr ? juce::ValueTree::fromXml (*xml) : juce::ValueTree();
+    if (! tree.hasType ("CATHUB"))
+    {
+        status = "That is not a Cat Hub jam: " + file.getFileName();
+        resized();
+        repaint();
+        return false;
+    }
+    changeCats ([this, tree] { engine.restoreState (tree); });
+    if (xml->hasAttribute ("advanced")) setAdvanced (xml->getBoolAttribute ("advanced"));
+    status = "Opened the jam: " + file.getFileNameWithoutExtension();
+    resized();
+    repaint();
+    return true;
+}
+
+void HubMain::saveJam()
+{
+    const auto dir = jamFolder (settings);
+    auto name = juce::File::createLegalFileName (engine.currentStyle.isNotEmpty() ? engine.currentStyle : juce::String ("My jam"));
+    chooser = std::make_unique<juce::FileChooser> ("Save the jam", dir.getNonexistentChildFile (name, ".catjam", false), "*.catjam");
+    juce::Component::SafePointer<HubMain> sp (this);
+    chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting, [sp] (const juce::FileChooser& fc)
+    {
+        if (sp == nullptr) return;
+        auto f = fc.getResult();
+        if (f == juce::File()) return;
+        if (! f.hasFileExtension ("catjam")) f = f.withFileExtension ("catjam");
+        sp->settings.setValue ("jamFolder", f.getParentDirectory().getFullPathName());
+        sp->saveJamTo (f);
+    });
+}
+
+void HubMain::openJam()
+{
+    chooser = std::make_unique<juce::FileChooser> ("Open a jam", jamFolder (settings), "*.catjam");
+    juce::Component::SafePointer<HubMain> sp (this);
+    chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [sp] (const juce::FileChooser& fc)
+    {
+        if (sp == nullptr) return;
+        const auto f = fc.getResult();
+        if (! f.existsAsFile()) return;
+        sp->settings.setValue ("jamFolder", f.getParentDirectory().getFullPathName());
+        sp->openJamFrom (f);
+    });
+}
+
+void HubMain::toggleFullScreen()
+{
+    if (auto* w = findParentComponentOfClass<juce::ResizableWindow>())
+    {
+        w->setFullScreen (! w->isFullScreen());
+        grabKeyboardFocus();
+    }
+}
+
+void HubMain::showMasterFx()
+{
+    auto panel = std::make_unique<MasterFxPanel> (engine);
+    panel->setSize (400, 130);
+    juce::CallOutBox::launchAsynchronously (std::move (panel), fxButton.getScreenBounds(), nullptr);
+}
+
+//==============================================================================
+MasterFxPanel::MasterFxPanel (HubEngine& e) : engine (e)
+{
+    for (auto* k : { &room, &tone, &glue, &warmth, &width }) addAndMakeVisible (k);
+    load();
+    room.knob.setDoubleClickReturnValue (true, 0.5);
+    room.knob.onValueChange = [this] { engine.masterRoom = (float) room.knob.getValue(); };
+    tone.knob.onValueChange = [this] { engine.masterTone = (float) (tone.knob.getValue() * 2.0 - 1.0); };
+    glue.knob.onValueChange = [this] { engine.masterGlue = (float) glue.knob.getValue(); };
+    warmth.knob.onValueChange = [this] { engine.masterWarmth = (float) warmth.knob.getValue(); };
+    width.knob.onValueChange = [this] { engine.masterWidth = (float) (width.knob.getValue() * 2.0); };
+    resetButton.setTooltip ("Back to a clean master");
+    resetButton.onClick = [this]
+    {
+        engine.masterRoom = 0.5f; engine.masterTone = 0.0f; engine.masterGlue = 0.0f; engine.masterWarmth = 0.0f; engine.masterWidth = 1.0f;
+        load();
+    };
+    addAndMakeVisible (resetButton);
+    startTimerHz (20);
+}
+
+void MasterFxPanel::load()
+{
+    room.knob.setValue (engine.masterRoom.load(), juce::dontSendNotification);
+    tone.knob.setValue ((engine.masterTone.load() + 1.0) * 0.5, juce::dontSendNotification);
+    glue.knob.setValue (engine.masterGlue.load(), juce::dontSendNotification);
+    warmth.knob.setValue (engine.masterWarmth.load(), juce::dontSendNotification);
+    width.knob.setValue (engine.masterWidth.load() * 0.5, juce::dontSendNotification);
+}
+
+void MasterFxPanel::timerCallback()
+{
+    const float red = engine.getMasterReduction();
+    if (std::abs (red - shownReduction) > 0.1f) { shownReduction = red; repaint(); }
+}
+
+void MasterFxPanel::paint (juce::Graphics& g)
+{
+    const auto& th = theme();
+    g.setColour (th.text);
+    g.setFont (hubFont (14.0f, true));
+    auto r = getLocalBounds().reduced (8, 4);
+    auto head = r.removeFromTop (22);
+    g.drawText ("Master effects", head, juce::Justification::centredLeft);
+    // how hard the glue squeezes
+    auto meter = head.removeFromRight (140).withTrimmedRight (70).reduced (0, 7).toFloat();
+    g.setColour (th.raised);
+    g.fillRoundedRectangle (meter, 3.0f);
+    g.setColour (th.accent);
+    g.fillRoundedRectangle (meter.withWidth (meter.getWidth() * juce::jlimit (0.0f, 1.0f, shownReduction / 12.0f)), 3.0f);
+    g.setColour (th.textDim);
+    g.setFont (hubFont (10.0f));
+    g.drawText ("glue", meter.toNearestInt().translated (0, 10).withHeight (12), juce::Justification::centredLeft);
+}
+
+void MasterFxPanel::resized()
+{
+    auto r = getLocalBounds().reduced (8, 4);
+    auto head = r.removeFromTop (22);
+    resetButton.setBounds (head.removeFromRight (60).reduced (0, 1));
+    r.removeFromTop (4);
+    const int w = r.getWidth() / 5;
+    for (auto* k : { &room, &tone, &glue, &warmth, &width }) k->setBounds (r.removeFromLeft (w).reduced (4, 0));
+}
+
+//==============================================================================
 namespace
 {
     /** Renders the song (or its stems) with a progress window; the sound card is paused meanwhile. */
@@ -1694,22 +1997,27 @@ void HubMain::resized()
 {
     auto r = getLocalBounds();
     auto top = r.removeFromTop (64).reduced (12, 10);
-    logoArea = top.removeFromLeft (150);
-    top.removeFromLeft (8);
-    auto col = [&top] (int w) { auto c = top.removeFromLeft (w); top.removeFromLeft (10); return c; };
-    playButton.setBounds (col (96));
-    positionArea = col (96);
-    bpm.setBounds (col (150).withTrimmedTop (14));
-    diceButton.setBounds (col (76));
-    recordButton.setBounds (col (70));
-    helpButton.setBounds (top.removeFromRight (40));
-    top.removeFromRight (10);
-    advancedButton.setBounds (top.removeFromRight (96));
-    simpleButton.setBounds (top.removeFromRight (80));
-    top.removeFromRight (14);
+    const bool narrow = top.getWidth() < 1200;     // small windows: no logo, tighter buttons
+    const int gap = narrow ? 7 : 10;
+    logoArea = top.removeFromLeft (narrow ? 0 : 150);
+    top.removeFromLeft (narrow ? 0 : 8);
+    auto col = [&top, gap] (int w) { auto c = top.removeFromLeft (w); top.removeFromLeft (gap); return c; };
+    playButton.setBounds (col (narrow ? 80 : 96));
+    positionArea = col (narrow ? 80 : 96);
+    bpm.setBounds (col (narrow ? 124 : 150).withTrimmedTop (14));
+    diceButton.setBounds (col (narrow ? 62 : 76));
+    recordButton.setBounds (col (narrow ? 62 : 70));
+    jamMenuButton.setBounds (col (narrow ? 56 : 66));
+    helpButton.setBounds (top.removeFromRight (narrow ? 32 : 40));
+    top.removeFromRight (gap);
+    advancedButton.setBounds (top.removeFromRight (narrow ? 84 : 96));
+    simpleButton.setBounds (top.removeFromRight (narrow ? 66 : 80));
+    top.removeFromRight (narrow ? 10 : 14);
+    fxButton.setBounds (top.removeFromRight (narrow ? 40 : 46));
+    top.removeFromRight (8);
     masterMeterArea = top.removeFromRight (8);
     top.removeFromRight (6);
-    master.setBounds (top.removeFromRight (140).withTrimmedTop (14));
+    master.setBounds (top.removeFromRight (juce::jlimit (60, 140, top.getWidth())).withTrimmedTop (14));
 
     auto song = r.removeFromTop (50).reduced (12, 9);
     songLabelArea = song.removeFromLeft (60);
@@ -1791,6 +2099,11 @@ bool HubMain::keyPressed (const juce::KeyPress& key)
 {
     if (tutorial != nullptr && (key == juce::KeyPress::returnKey || key == juce::KeyPress::spaceKey)) { tutorial->next(); return true; }
     if (key == juce::KeyPress::spaceKey) { togglePlay(); return true; }
+    if (key == juce::KeyPress (juce::KeyPress::F11Key)) { toggleFullScreen(); return true; }
+    if (key.getModifiers().isCommandDown() && (key.getKeyCode() == 'S' || key.getKeyCode() == 's')) { saveJam(); return true; }
+    if (key.getModifiers().isCommandDown() && (key.getKeyCode() == 'O' || key.getKeyCode() == 'o')) { openJam(); return true; }
+    if (key == juce::KeyPress::escapeKey)
+        if (auto* w = findParentComponentOfClass<juce::ResizableWindow>(); w != nullptr && w->isFullScreen()) { w->setFullScreen (false); return true; }
     const auto ch = key.getTextCharacter();
     if (ch >= '1' && ch <= '9')
     {

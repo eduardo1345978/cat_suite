@@ -193,6 +193,69 @@ static int runSelfTest (const juce::StringArray& args)
         engine.restoreState (saved);
         check (engine.isSongMode() && engine.getSong() != nullptr && engine.getSong()->title == title, "the saved song comes back (\"" + title + "\")");
 
+        // the arranger: remove a section, play the chorus twice, turn one into a bridge, add an outro
+        {
+            auto form = engine.getSong()->sections;
+            const auto before = form.size();
+            int chorus = -1;
+            for (int i = 0; i < (int) form.size(); ++i) if (form[(size_t) i].type == cat::muse::Chorus) { chorus = i; break; }
+            if (chorus >= 0) form.insert (form.begin() + chorus, form[(size_t) chorus]);
+            form.erase (form.begin());
+            form[0] = cat::muse::makeSection (*engine.getSong(), cat::muse::Bridge, 8, 5);
+            form.push_back (cat::muse::makeSection (*engine.getSong(), cat::muse::Outro, 4, 6));
+            double beats = 0.0;
+            for (auto& sec : form) beats += sec.bars * 4.0;
+            const bool arranged = engine.arrangeSong (form);
+            auto sg = engine.getSong();
+            bool notesInside = true;
+            for (const auto& part : sg->parts) for (const auto& n : part) notesInside = notesInside && n.start >= 0.0 && n.start < sg->lengthBeats + 1e-6;
+            check (arranged && sg->sections.size() == form.size() && std::abs (sg->lengthBeats - beats) < 1e-6 && sg->sections[0].type == cat::muse::Bridge
+                       && ! sg->chords.empty() && ! sg->parts[cat::muse::Melody].empty() && notesInside,
+                   "arranger: " + juce::String ((int) before) + " -> " + juce::String ((int) sg->sections.size()) + " sections, "
+                       + juce::String (sg->lengthBeats / 4.0, 0) + " bars, every part re-written");
+            const bool wasPlaying = engine.isPlaying();
+            engine.setPlaying (true);
+            auto [apk, aok] = renderFor (6.0);
+            check (aok && apk > 0.01f && apk <= 1.0f, "the arranged song plays (peak " + juce::String (apk, 2) + ", was playing "
+                                                       + juce::String ((int) wasPlaying) + ", song mode " + juce::String ((int) engine.isSongMode()) + ")");
+            const auto savedArr = engine.saveState();
+            engine.applyStyle (1);
+            engine.restoreState (savedArr);
+            check (engine.isSongMode() && engine.getSong()->sections.size() == form.size() && std::abs (engine.getSong()->lengthBeats - beats) < 1e-6,
+                   "a saved jam keeps the arrangement");
+            st.endless = true;
+            engine.composeSong (st, false);
+            check (! engine.arrangeSong (form), "endless songs are not arranged by hand");
+            st.endless = false;
+            engine.composeSong (st, false);
+        }
+
+        // the master effects: squeezed, warm and mono still never clips and stays mono
+        {
+            engine.masterGlue = 1.0f; engine.masterWarmth = 1.0f; engine.masterWidth = 0.0f; engine.masterTone = 1.0f; engine.masterRoom = 1.0f;
+            juce::AudioBuffer<float> b (2, block);
+            float pk = 0.0f, side = 0.0f, red = 0.0f;
+            bool ok = true;
+            for (int pos = 0; pos < (int) (6.0 * sr); pos += block)
+            {
+                engine.render (b.getWritePointer (0), b.getWritePointer (1), block);
+                for (int i = 0; i < block; ++i)
+                {
+                    ok = ok && std::isfinite (b.getSample (0, i)) && std::isfinite (b.getSample (1, i));
+                    pk = juce::jmax (pk, std::abs (b.getSample (0, i)), std::abs (b.getSample (1, i)));
+                    if (pos > (int) (2.0 * sr)) side = juce::jmax (side, std::abs (b.getSample (0, i) - b.getSample (1, i)));   // after the limiter's DC filter settles
+                }
+                red = juce::jmax (red, engine.getMasterReduction());
+            }
+            check (ok && pk <= 1.0f && pk > 0.01f && side < 2.0e-3f && red > 1.0f,
+                   "master FX (glue, warmth, tone, mono): peak " + juce::String (pk, 2) + ", side " + juce::String (side, 5) + ", glue squeezes " + juce::String (red, 1) + " dB");
+            const auto savedFx = engine.saveState();
+            engine.masterGlue = 0.0f; engine.masterWarmth = 0.0f; engine.masterWidth = 1.0f; engine.masterTone = 0.0f; engine.masterRoom = 0.5f;
+            engine.restoreState (savedFx);
+            check (engine.masterGlue.load() > 0.99f && engine.masterWidth.load() < 0.01f, "a saved jam keeps the master effects");
+            engine.masterGlue = 0.0f; engine.masterWarmth = 0.0f; engine.masterWidth = 1.0f; engine.masterTone = 0.0f; engine.masterRoom = 0.5f;
+        }
+
         // endless: the next part gets written while it plays
         st.endless = true;
         st.genre = cat::muse::House;
@@ -205,6 +268,29 @@ static int runSelfTest (const juce::StringArray& args)
         check (engine.getSong()->chunk >= 1, "endless: moved on to part " + juce::String (engine.getSong()->chunk + 1) + " after " + juce::String (played, 0) + " s");
         auto [pk, ok] = renderFor (4.0);
         check (ok && pk <= 1.0f && pk > 0.01f, "endless keeps playing (peak " + juce::String (pk, 2) + ")");
+    }
+
+    // a MIDI keyboard plays the Lead part
+    {
+        engine.applyStyle (0);
+        engine.setPlaying (true);
+        juce::AudioBuffer<float> b (2, block);
+        engine.render (b.getWritePointer (0), b.getWritePointer (1), block);
+        const int kt = engine.getKeyboardTrackNow();
+        bool heard = false;
+        if (kt >= 0)
+        {
+            engine.track (kt).takeNotes();
+            engine.playKeyboardNote (juce::MidiMessage::noteOn (3, 97, (juce::uint8) 110));
+            for (int k = 0; k < 20 && ! heard; ++k)
+            {
+                engine.render (b.getWritePointer (0), b.getWritePointer (1), block);
+                for (int nn : engine.track (kt).takeNotes()) heard = heard || nn == 97;
+            }
+            engine.playKeyboardNote (juce::MidiMessage::noteOff (3, 97));
+            for (int k = 0; k < 4; ++k) engine.render (b.getWritePointer (0), b.getWritePointer (1), block);
+        }
+        check (kt >= 0 && heard, "a MIDI keyboard plays part " + juce::String (kt + 1) + (kt >= 0 ? " (" + juce::String (sourceName (engine.track (kt).source.load())) + ")" : juce::String()));
     }
 
     // stop: everything should fade out (no hanging notes in the built-in synths)
@@ -333,6 +419,21 @@ private:
             return;
         }
 
+        if (what >= 94)
+        {
+            // the arranger: a random change to a random section (or start a song first)
+            if (! engine.isSongMode() || engine.getSong() == nullptr || engine.getSong()->settings.endless)
+            {
+                cat::muse::Settings st;
+                st.seed = (juce::uint32) rng.nextInt (100000); st.genre = rng.nextInt (cat::muse::NumGenres);
+                main->changeCats ([this, st] { engine.composeSong (st, rng.nextBool()); });
+                return;
+            }
+            static const int results[] = { 1, 2, 3, 4, 5, 6, 7, 8, 100, 103, 104, 206, 208, 300, 303, 400, 402 };
+            const int n = (int) engine.getSong()->sections.size();
+            main->getComposePage()->arrangeSection (rng.nextInt (n + 1) - (rng.nextInt (10) == 0 ? 1 : 0), results[rng.nextInt ((int) std::size (results))]);
+            return;
+        }
         juce::Array<juce::Component*> comps;
         collect (*main, comps);
         if (comps.isEmpty()) return;
@@ -488,6 +589,13 @@ public:
         const auto audioState = settings->getXmlValue ("audio");
         deviceManager.initialise (0, 2, audioState.get(), true);
         deviceManager.addAudioCallback (engine.get());
+        // MIDI keyboards: the first time, turn every one on (Settings - Sound card lists them)
+        if (! settings->getBoolValue ("midiSetUp", false))
+        {
+            for (const auto& d : juce::MidiInput::getAvailableDevices()) deviceManager.setMidiInputDeviceEnabled (d.identifier, true);
+            settings->setValue ("midiSetUp", true);
+        }
+        deviceManager.addMidiInputDeviceCallback ({}, engine.get());
 
         window = std::make_unique<MainWindow> (*engine, deviceManager, *settings);
     }
@@ -500,6 +608,7 @@ public:
         if (auto xml = deviceManager.createStateXml()) settings->setValue ("audio", xml.get());
         settings->saveIfNeeded();
         window.reset();                                   // Cat windows first
+        deviceManager.removeMidiInputDeviceCallback ({}, engine.get());
         deviceManager.removeAudioCallback (engine.get());
         deviceManager.closeAudioDevice();
         engine.reset();                                   // then the Cats

@@ -118,6 +118,12 @@ Song compose (const Settings&);
 Song composeNext (const Song& previous);
 /** Renews one part (chords also re-fit bass, melody and counter to the new chords). */
 void regenerate (Song&, int target, juce::uint32 seed);
+/** The song arranger: give it the sections you want (type, bars, progression, energy and which parts
+    play; the starts are worked out). It lays the chords again and re-writes every part, keeping the
+    song's key, chord progressions and melody ideas, so it still sounds like the same song. */
+void arrange (Song&, std::vector<Section> sections);
+/** A section of this type as the composer would write it (energy, progression, which parts play). */
+Section makeSection (const Song&, int type, int bars, juce::uint32 seed);
 /** All parts as a MIDI file: chords ch 1, bass ch 2, melody ch 3 (with lyrics), counter ch 4, drums ch 10. */
 juce::MidiFile toMidiFile (const Song&);
 /** The MIDI channel each part plays on. */

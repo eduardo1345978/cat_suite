@@ -686,6 +686,9 @@ void HubEngine::prepare (double newRate, int maxBlock)
     reverb.setParameters (rp);
     reverb.reset();
     limiter.prepare (sampleRate);
+    masterFx.prepare (sampleRate);
+    liveMidiIn.reset (sampleRate);
+    liveMidi.ensureSize (1024);
     catAudio.setSize (8, maxBlockSize);
     lifeAudio.setSize (2, maxBlockSize);
     sendAudio.setSize (2, maxBlockSize);
@@ -887,6 +890,10 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
     sendAudio.clear();
 
     const int count = numTracks.load();
+    liveMidi.clear();
+    liveMidiIn.removeNextBlockOfMessages (liveMidi, n);
+    const int kbTrack = pickKeyboardTrack();
+    keyboardTrackNow = kbTrack;
     bool anySolo = false;
     for (int i = 0; i < count; ++i) anySolo = anySolo || tracks[(size_t) i]->solo.load();
 
@@ -905,6 +912,13 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
             case SrcCounter: if (song) copyMidi (t.midi, counterOut); else makeLead (t, chordOut, t.midi); break;
             default:       copyMidi (t.midi, chordOut); break;
         }
+        if (i == kbTrack && ! liveMidi.isEmpty())
+            for (const auto m : liveMidi)
+            {
+                auto msg = m.getMessage();
+                if (msg.getChannel() > 0 && src != SrcDrums) msg.setChannel (1);
+                t.midi.addEvent (msg, juce::jlimit (0, n - 1, m.samplePosition));
+            }
         if (panic) addPanic (t.midi, 0);
 
         // MIDI effect Cat
@@ -977,12 +991,16 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
 
     // ---- reverb send, master, safety limiter
     reverb.processStereo (sendAudio.getWritePointer (0), sendAudio.getWritePointer (1), n);
-    mixAudio.addFrom (0, 0, sendAudio, 0, 0, n, 0.5f);
-    mixAudio.addFrom (1, 0, sendAudio, 1, 0, n, 0.5f);
-    const float master = masterVolume.load();
-    mixAudio.applyGain (master * master);
+    const float room = juce::jlimit (0.0f, 1.0f, masterRoom.load());
+    mixAudio.addFrom (0, 0, sendAudio, 0, 0, n, room);
+    mixAudio.addFrom (1, 0, sendAudio, 1, 0, n, room);
     auto* l = mixAudio.getWritePointer (0);
     auto* r = mixAudio.getWritePointer (1);
+    masterFx.process (l, r, n, juce::jlimit (-1.0f, 1.0f, masterTone.load()), juce::jlimit (0.0f, 1.0f, masterGlue.load()),
+                      juce::jlimit (0.0f, 1.0f, masterWarmth.load()), juce::jlimit (0.0f, 2.0f, masterWidth.load()));
+    masterReduction = masterFx.gainReduction();
+    const float master = masterVolume.load();
+    mixAudio.applyGain (master * master);
     limiter.process (l, r, n);
     juce::FloatVectorOperations::copy (outL, l, n);
     juce::FloatVectorOperations::copy (outR, r, n);
@@ -1006,6 +1024,91 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
     }
     ppqShown = playHead.ppq;
     if (song) songBeatShown = songPlayer.getPlayPosition();
+}
+
+//==============================================================================
+void MasterFx::prepare (double sampleRate)
+{
+    sr = sampleRate > 0.0 ? sampleRate : 48000.0;
+    lpL = lpR = env = 0.0f;
+    gain = 1.0f;
+    lastReduction = 0.0f;
+}
+
+void MasterFx::process (float* l, float* r, int n, float tone, float glue, float warmth, float width)
+{
+    // tone: a tilt around ~700 Hz (negative = warmer / darker, positive = brighter)
+    if (std::abs (tone) > 0.001f)
+    {
+        const float a = 1.0f - std::exp (-juce::MathConstants<float>::twoPi * 700.0f / (float) sr);
+        const float lo = 1.0f - 0.35f * tone, hi = 1.0f + 0.55f * tone;
+        for (int i = 0; i < n; ++i)
+        {
+            lpL += a * (l[i] - lpL); lpR += a * (r[i] - lpR);
+            l[i] = lpL * lo + (l[i] - lpL) * hi;
+            r[i] = lpR * lo + (r[i] - lpR) * hi;
+        }
+        if (! std::isfinite (lpL) || ! std::isfinite (lpR)) lpL = lpR = 0.0f;
+    }
+    // glue: a slow, gentle compressor that holds the mix together
+    float maxRed = 0.0f;
+    if (glue > 0.001f)
+    {
+        const float thrDb = -6.0f - 18.0f * glue, ratio = 1.0f + 4.0f * glue;
+        const float makeupDb = -thrDb * (1.0f - 1.0f / ratio) * 0.45f;
+        const float att = std::exp (-1.0f / (0.010f * (float) sr)), rel = std::exp (-1.0f / (0.180f * (float) sr));
+        const float gs = std::exp (-1.0f / (0.004f * (float) sr));
+        for (int i = 0; i < n; ++i)
+        {
+            const float x = juce::jmax (std::abs (l[i]), std::abs (r[i]));
+            env = x > env ? att * env + (1.0f - att) * x : rel * env + (1.0f - rel) * x;
+            const float lev = juce::Decibels::gainToDecibels (env, -100.0f);
+            const float red = lev > thrDb ? (lev - thrDb) * (1.0f - 1.0f / ratio) : 0.0f;
+            maxRed = juce::jmax (maxRed, red);
+            const float target = juce::Decibels::decibelsToGain (makeupDb - red);
+            gain = gs * gain + (1.0f - gs) * target;
+            l[i] *= gain; r[i] *= gain;
+        }
+        if (! std::isfinite (env) || ! std::isfinite (gain)) { env = 0.0f; gain = 1.0f; }
+    }
+    else gain = 1.0f;
+    lastReduction = maxRed;
+    // warmth: soft tape-like saturation (the same loudness, rounder peaks)
+    if (warmth > 0.001f)
+    {
+        const float d = 1.0f + 2.5f * warmth, norm = 1.0f / std::tanh (d);
+        for (int i = 0; i < n; ++i)
+        {
+            l[i] = l[i] * (1.0f - warmth) + warmth * std::tanh (l[i] * d) * norm;
+            r[i] = r[i] * (1.0f - warmth) + warmth * std::tanh (r[i] * d) * norm;
+        }
+    }
+    // width: 0 = mono, 1 = as it is, 2 = extra wide
+    if (std::abs (width - 1.0f) > 0.001f)
+        for (int i = 0; i < n; ++i)
+        {
+            const float m = 0.5f * (l[i] + r[i]), s = 0.5f * (l[i] - r[i]) * width;
+            l[i] = m + s; r[i] = m - s;
+        }
+}
+
+//==============================================================================
+int HubEngine::pickKeyboardTrack() const
+{
+    const int count = numTracks.load();
+    if (count <= 0) return -1;
+    const int chosen = keyboardTrack.load();
+    if (chosen >= 0) return chosen < count ? chosen : -1;
+    for (int i = 0; i < count; ++i) if (tracks[(size_t) i]->source.load() == SrcLead) return i;
+    for (int i = 0; i < count; ++i) if (isKeysSound (tracks[(size_t) i]->sound.load())) return i;
+    return 0;
+}
+
+void HubEngine::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage& m)
+{
+    if (! prepared) return;
+    if (m.isNoteOnOrOff() || m.isPitchWheel() || m.isController() || m.isAftertouch() || m.isChannelPressure())
+        liveMidiIn.addMessageToQueue (m);
 }
 
 //==============================================================================
@@ -1071,6 +1174,12 @@ juce::ValueTree HubEngine::saveState() const
     t.setProperty ("autoChords", autoChords.load(), nullptr);
     t.setProperty ("master", masterVolume.load(), nullptr);
     t.setProperty ("style", currentStyle, nullptr);
+    t.setProperty ("room", masterRoom.load(), nullptr);
+    t.setProperty ("tone", masterTone.load(), nullptr);
+    t.setProperty ("glue", masterGlue.load(), nullptr);
+    t.setProperty ("warmth", masterWarmth.load(), nullptr);
+    t.setProperty ("width", masterWidth.load(), nullptr);
+    t.setProperty ("keyboardTrack", keyboardTrack.load(), nullptr);
     auto stateOf = [] (juce::AudioPluginInstance* p)
     {
         juce::MemoryBlock mb;
@@ -1109,6 +1218,18 @@ juce::ValueTree HubEngine::saveState() const
         juce::StringArray seeds;
         for (auto v : songSettings.partSeeds) seeds.add (juce::String ((juce::int64) v));
         sg.setProperty ("partSeeds", seeds.joinIntoString (","), nullptr);
+        if (! arrangedForm.empty())
+        {
+            juce::StringArray form;
+            for (const auto& sec : arrangedForm)
+            {
+                int on = 0;
+                for (int p = 0; p < cat::muse::NumParts; ++p) if (sec.on[(size_t) p]) on |= 1 << p;
+                form.add (juce::String (sec.type) + ":" + juce::String (sec.bars) + ":" + juce::String (sec.progression) + ":"
+                          + juce::String (sec.energy, 3) + ":" + juce::String (on));
+            }
+            sg.setProperty ("form", form.joinIntoString (";"), nullptr);
+        }
         t.appendChild (sg, nullptr);
     }
     for (int id = 0; id < (int) core.size(); ++id)
@@ -1130,6 +1251,12 @@ void HubEngine::restoreState (const juce::ValueTree& t)
     autoChords = (bool) t.getProperty ("autoChords", true);
     masterVolume = juce::jlimit (0.0f, 1.0f, (float) t.getProperty ("master", 0.8f));
     currentStyle = t.getProperty ("style", "").toString();
+    masterRoom = juce::jlimit (0.0f, 1.0f, (float) t.getProperty ("room", 0.5f));
+    masterTone = juce::jlimit (-1.0f, 1.0f, (float) t.getProperty ("tone", 0.0f));
+    masterGlue = juce::jlimit (0.0f, 1.0f, (float) t.getProperty ("glue", 0.0f));
+    masterWarmth = juce::jlimit (0.0f, 1.0f, (float) t.getProperty ("warmth", 0.0f));
+    masterWidth = juce::jlimit (0.0f, 2.0f, (float) t.getProperty ("width", 1.0f));
+    keyboardTrack = juce::jlimit (-1, maxTracks - 1, (int) t.getProperty ("keyboardTrack", -1));
 
     auto load = [] (juce::AudioPluginInstance* p, const juce::var& v)
     {
@@ -1183,6 +1310,21 @@ void HubEngine::restoreState (const juce::ValueTree& t)
         for (int i = 0; i < juce::jmin (seeds.size(), (int) st.partSeeds.size()); ++i) st.partSeeds[(size_t) i] = (juce::uint32) seeds[i].getLargeIntValue();
         const double savedBpm = bpm.load();
         composeSong (st, false);
+        if (! st.endless)
+        {
+            std::vector<cat::muse::Section> form;
+            for (const auto& item : juce::StringArray::fromTokens (sg.getProperty ("form", "").toString(), ";", ""))
+            {
+                const auto f = juce::StringArray::fromTokens (item, ":", "");
+                if (f.size() < 5) continue;
+                cat::muse::Section sec;
+                sec.type = f[0].getIntValue(); sec.bars = f[1].getIntValue(); sec.progression = f[2].getIntValue();
+                sec.energy = f[3].getFloatValue();
+                for (int p = 0; p < cat::muse::NumParts; ++p) sec.on[(size_t) p] = (f[4].getIntValue() >> p) & 1;
+                form.push_back (sec);
+            }
+            if (! form.empty()) arrangeSong (form);
+        }
         bpm = savedBpm;
     }
     else leaveSongMode();
@@ -1217,6 +1359,7 @@ void HubEngine::setSong (std::shared_ptr<const cat::muse::Song> song)
 void HubEngine::composeSong (const cat::muse::Settings& settings, bool newTracks, juce::Random* dice)
 {
     auto song = std::make_shared<cat::muse::Song> (cat::muse::compose (settings));
+    arrangedForm.clear();
     if (newTracks) setUpSongTracks (settings.genre, dice);
     setSong (song);
 }
@@ -1227,8 +1370,23 @@ void HubEngine::regenerateSong (int target, juce::uint32 seed)
     if (now == nullptr) return;
     auto s = std::make_shared<cat::muse::Song> (*now);
     cat::muse::regenerate (*s, target, seed);
+    if (target == cat::muse::NewArrangement) arrangedForm.clear();
+    else if (! arrangedForm.empty()) arrangedForm = s->sections;
     if (s->chunk == 0) songSettings = s->settings;
     setSong (s);
+}
+
+bool HubEngine::arrangeSong (std::vector<cat::muse::Section> sections)
+{
+    auto now = songPlayer.getSong();
+    if (now == nullptr || now->settings.endless || sections.empty()) return false;
+    auto s = std::make_shared<cat::muse::Song> (*now);
+    cat::muse::arrange (*s, sections);
+    arrangedForm = s->sections;
+    const double keepBpm = bpm.load();
+    setSong (s);
+    bpm = keepBpm;
+    return true;
 }
 
 void HubEngine::setSongEndless (bool endless)
