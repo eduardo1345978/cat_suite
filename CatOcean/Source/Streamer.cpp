@@ -101,7 +101,6 @@ public:
     void run() override
     {
         char buffer[512];
-        juce::String line;
         while (! threadShouldExit())
         {
             auto* p = owner.process.get();
@@ -110,9 +109,22 @@ public:
             if (n > 0)
             {
                 const juce::String text (juce::CharPointer_UTF8 (buffer), (size_t) n);
+                pending << text;
+                // ffmpeg's progress report (-progress pipe:1): key=value lines every couple of seconds
+                juce::StringArray lines;
+                lines.addLines (pending);
+                pending = pending.endsWithChar ('\n') ? juce::String() : lines[lines.size() - 1];
+                if (pending.isNotEmpty()) lines.remove (lines.size() - 1);
                 const juce::ScopedLock sl (owner.lock);
-                owner.log << text;
+                for (auto& l : lines)
+                {
+                    if (l.startsWith ("total_size=")) { owner.outBytes = l.fromFirstOccurrenceOf ("=", false, false).getLargeIntValue(); continue; }
+                    if (l.containsChar ('=') && ! l.containsChar (' ')) continue;   // other progress keys
+                    if (l.trim().isEmpty()) continue;
+                    owner.log << l << "\n";
+                }
                 if (owner.log.length() > 6000) owner.log = owner.log.getLastCharacters (4000);
+                updateStatus();
                 continue;
             }
             if (! p->isRunning())
@@ -132,14 +144,24 @@ public:
                 }
                 return;
             }
-            // status: once both sockets are connected, it is live
-            if (owner.video != nullptr && owner.audio != nullptr && owner.video->connected && owner.audio->connected)
-                owner.setStatus ("streaming (" + juce::String (owner.sent.load() / 30) + " s sent)");
+            updateStatus();
             juce::Thread::sleep (200);
         }
     }
+    void updateStatus()
+    {
+        if (owner.failed.load() || ! owner.running.load()) return;
+        const auto bytes = owner.outBytes.load();
+        const bool live = owner.target.startsWithIgnoreCase ("rtmp");
+        const juce::String secs = juce::String (owner.sent.load() / 30) + " s";
+        if (bytes > 0)
+            owner.setStatus ((live ? "LIVE - sending to YouTube (" : "recording (") + juce::String ((double) bytes / 1048576.0, 1) + " MB, " + secs + ")");
+        else if (owner.sent.load() > 0)
+            owner.setStatus (live ? "ffmpeg is running, connecting to YouTube ..." : "recording ...");
+    }
 private:
     Streamer& owner;
+    juce::String pending;
 };
 
 //==============================================================================
@@ -182,7 +204,8 @@ juce::StringArray Streamer::buildArgs (const juce::File& ffmpeg, const juce::Str
 {
     juce::StringArray a;
     a.add (ffmpeg.getFullPathName());
-    a.addArray ({ "-hide_banner", "-loglevel", "warning", "-nostats", "-nostdin" });
+    // -progress pipe:1: ffmpeg reports what it has sent every 2 s (so the app can show it's really live)
+    a.addArray ({ "-hide_banner", "-loglevel", "warning", "-nostats", "-nostdin", "-progress", "pipe:1", "-stats_period", "2" });
     // (no -thread_queue_size on the inputs: new ffmpeg versions only accept it on outputs and refuse to start)
     a.addArray ({ "-f", "rawvideo", "-pixel_format", "bgra",
                   "-video_size", juce::String (w) + "x" + juce::String (h), "-framerate", juce::String (fps),
@@ -207,6 +230,8 @@ bool Streamer::start (const juce::File& ffmpeg, const juce::String& target, int 
     failed = false;
     dropped = 0;
     sent = 0;
+    outBytes = -1;
+    this->target = target;
     { const juce::ScopedLock sl (lock); log.clear(); }
     if (! ffmpeg.existsAsFile()) { setStatus ("ffmpeg is missing - press \"Get ffmpeg\" first"); failed = true; return false; }
 

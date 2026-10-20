@@ -6,7 +6,7 @@ SoundSet defaultSounds (int genre)
 {
     switch (genre)
     {
-        case Pop:       return { 1, 0, 3, 2, 2 };
+        case Pop:       return { 6, 0, 3, 2, 2 };   // piano chords
         case LoFi:      return { 1, 0, 2, 1, 1 };
         case Trap:      return { 0, 0, 1, 2, 2 };
         case House:     return { 2, 3, 0, 2, 2 };
@@ -15,15 +15,15 @@ SoundSet defaultSounds (int genre)
         case Rock:      return { 3, 1, 3, 3, 1 };
         case Aero:       return { 0, 0, 2, 5, 5 };   // glassy pad, glass bells
         case Synthwave:  return { 0, 1, 3, 2, 2 };   // pad, saw bass, plucky arps
-        case BossaNova:  return { 1, 3, 2, 1, 2 };   // e-piano, plucked bass, soft kit
+        case BossaNova:  return { 7, 3, 2, 1, 2 };   // nylon guitar, plucked bass, soft kit
         case Chiptune:   return { 4, 1, 1, 4, 4 };   // square waves
         case Orchestral: return { 3, 0, 3, 3, 3 };   // strings
         case CityPop:    return { 1, 3, 3, 2, 1 };   // e-piano, plucked bass, live kit
         case Reggae:     return { 1, 0, 3, 2, 0 };   // e-piano skank, round sub bass
-        case Folk:       return { 2, 3, 3, 2, 3 };   // plucked "guitar", strings answering
+        case Folk:       return { 7, 3, 3, 2, 3 };   // nylon guitar, strings answering
         case DreamPop:   return { 0, 0, 2, 5, 0 };   // hazy pad, glass bell melody
         case Funk:       return { 1, 1, 3, 2, 1 };   // e-piano stabs, saw bass
-        default:         return { 3, 0, 3, 3, 3 };   // Cinematic
+        default:         return { 3, 0, 3, 6, 3 };   // Cinematic: strings, a piano melody
     }
 }
 

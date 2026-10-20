@@ -41,7 +41,7 @@ juce::StringArray MuseCatProcessor::soundChoices (int part)
     {
         case Bass:  return { "Auto (fits the genre)", "Sub", "Saw", "Reese", "Pluck" };
         case Drums: return { "Auto (fits the genre)", "Boom Bap", "808", "Lo-fi", "Live" };
-        default:    return { "Auto (fits the genre)", "Soft Pad", "E-Piano", "Pluck", "Strings" };
+        default:    return { "Auto (fits the genre)", "Soft Pad", "E-Piano", "Pluck", "Strings", "Chip", "Glass Bell", "Piano", "Nylon Guitar" };
     }
 }
 

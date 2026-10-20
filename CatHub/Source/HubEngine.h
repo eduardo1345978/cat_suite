@@ -35,9 +35,11 @@ enum Sound
     SndGlide, SndSing, SndTalk,                       // sound Cats
     SndLifeOwn,                                       // Life-Cat's own sound (Life source only)
     SndChip, SndBell,                                 // more keys (added later, so saved jams keep their numbers)
+    SndPiano, SndGuitar,
     NumSounds
 };
-/** A keys sound by its number in the keys synth (0 pad .. 5 glass bell). */
+/** A keys sound by its number in the keys synth (0 pad .. 5 glass bell, 6 piano, 7 nylon guitar). */
+int keysIndexOf (int sound);
 int keysSound (int keysIndex);
 bool isKeysSound (int s);
 const char* soundName (int);

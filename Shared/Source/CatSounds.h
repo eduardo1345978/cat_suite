@@ -41,16 +41,18 @@ inline float polyBlepSaw (float ph, float inc) noexcept
 class KeysSynth
 {
 public:
-    static juce::StringArray soundNames() { return { "Soft Pad", "E-Piano", "Pluck", "Strings", "Chip", "Glass Bell" }; }
+    static juce::StringArray soundNames() { return { "Soft Pad", "E-Piano", "Pluck", "Strings", "Chip", "Glass Bell", "Piano", "Nylon Guitar" }; }
+    static constexpr int numSounds = 8;
 
     void prepare (double sampleRate);
-    void setSound (int s) noexcept { sound = juce::jlimit (0, 5, s); }
+    void setSound (int s) noexcept { sound = juce::jlimit (0, numSounds - 1, s); }
     void setBendRange (float semitones) noexcept { bendRange = semitones; }
     void handle (const juce::MidiMessage&);
     void allOff();
     void render (float* l, float* r, int n);
 
 private:
+    static constexpr int pianoPartials = 12;
     struct Voice
     {
         bool active = false, released = false;
@@ -60,11 +62,26 @@ private:
         float env = 0.0f;
         OnePole f1, f2;
         uint32_t age = 0;
+        // piano: one rotating phasor per partial (cheap: no sin per sample), each with a quick and a long decay
+        float pre[pianoPartials + 3] {}, pim[pianoPartials + 3] {}, pc[pianoPartials + 3] {}, ps[pianoPartials + 3] {};
+        float pa1[pianoPartials + 3] {}, pa2[pianoPartials + 3] {}, pm1[pianoPartials + 3] {}, pm2[pianoPartials + 3] {};
+        int partials = 0;
+        bool pianoInit = false;
+        uint32_t renorm = 0;
+        float hammerLp = 0.0f;
+        // nylon guitar (Karplus-Strong): the string lives in ksBuf[voice index]
+        int ksW = 0;
+        float ksPrev = 0.0f, ksLen = 100.0f, ksDamp = 0.996f;
+        bool ksInit = false;
+        Noise rnd;
     };
+    void pluckString (Voice&, std::vector<float>&);
+    void strikePiano (Voice&);
     void noteOn (int ch, int note, float vel);
     void noteOff (int ch, int note);
 
     std::array<Voice, 16> voices;
+    std::array<std::vector<float>, 16> ksBuf;   // guitar strings (allocated in prepare, never on the audio thread)
     std::array<float, 17> chanBend {};     // semitones per MIDI channel (Bend-Cat: one voice per channel)
     float bendRange = 2.0f;
     double sr = 48000.0;

@@ -48,7 +48,7 @@ const char* soundName (int s)
 {
     static const char* names[] = { "Soft Pad", "E-Piano", "Pluck", "Strings", "Sub Bass", "Saw Bass", "Reese Bass", "Pluck Bass",
                                    "Boom Bap Kit", "808 Kit", "Lo-fi Kit", "Live Kit", "Glide-Cat", "Sing-Cat", "Talk-Cat", "Life-Cat's own",
-                                   "Chip", "Glass Bell" };
+                                   "Chip", "Glass Bell", "Piano", "Nylon Guitar" };
     return names[juce::jlimit (0, (int) NumSounds - 1, s)];
 }
 
@@ -65,8 +65,21 @@ int catForSound (int s)
 
 juce::StringArray soundGroups() { return { "Keys", "Bass", "Drum kits", "Sound Cats", "Life" }; }
 
-int keysSound (int i) { return i <= 3 ? SndPad + juce::jmax (0, i) : (i == 4 ? SndChip : SndBell); }
-bool isKeysSound (int s) { return s <= SndStrings || s == SndChip || s == SndBell; }
+int keysSound (int i)
+{
+    if (i <= 3) return SndPad + juce::jmax (0, i);
+    static const int more[] = { SndChip, SndBell, SndPiano, SndGuitar };
+    return more[juce::jlimit (0, 3, i - 4)];
+}
+int keysIndexOf (int s)
+{
+    if (s <= SndStrings) return s - SndPad;
+    if (s == SndChip) return 4;
+    if (s == SndBell) return 5;
+    if (s == SndPiano) return 6;
+    return 7;
+}
+bool isKeysSound (int s) { return s <= SndStrings || s == SndChip || s == SndBell || s == SndPiano || s == SndGuitar; }
 
 int soundGroup (int s)
 {
@@ -947,7 +960,7 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
         }
         else if (isKeysSound (snd))
         {
-            t.keys.setSound (snd <= SndStrings ? snd - SndPad : (snd == SndChip ? 4 : 5));
+            t.keys.setSound (keysIndexOf (snd));
             t.keys.setBendRange (bend);
             renderWithMidi (t.keys, t.midi, l, r, n);
         }

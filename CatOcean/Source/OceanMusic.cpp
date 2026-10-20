@@ -269,15 +269,15 @@ void Music::startStyle (int st, int key, double bpm, bool crossfade, const Favou
         case StyleDeepSea:   ss = { 0, 0, 2, 3, 0 }; break;   // crystal deep: pads and strings
         case StyleSunrise:   ss = { 1, 3, 2, 2, 2 }; break;   // bubble pop: e-piano, plucky bass and melody
         case StyleGlass:     ss = { 0, 0, 2, 5, 5 }; break;   // glass garden: pad and glass bells
-        case StyleBossa:     ss = { 1, 3, 2, 1, 2 }; break;   // bossa breeze: e-piano, plucked bass, a soft kit
+        case StyleBossa:     ss = { 7, 3, 2, 1, 2 }; break;   // bossa breeze: nylon guitar, plucked bass, a soft kit
         case StylePixel:     ss = { 0, 0, 2, 4, 5 }; break;   // pixel lullaby: soft chip melody over a pad
-        case StyleStrings:   ss = { 3, 0, 2, 3, 3 }; break;   // strings at dusk
+        case StyleStrings:   ss = { 3, 0, 2, 6, 3 }; break;   // strings at dusk, a piano melody
         case StyleCity:      ss = { 1, 3, 2, 2, 1 }; break;   // city lights: e-piano, plucked bass
         case StyleIsland:    ss = { 1, 0, 2, 5, 2 }; break;   // island drift: e-piano skank, glass bell melody
-        case StyleFolk:      ss = { 2, 3, 2, 2, 3 }; break;   // folk tide: plucked "guitar", strings
+        case StyleFolk:      ss = { 7, 3, 2, 2, 3 }; break;   // folk tide: nylon guitar, strings
         case StyleDreamHaze: ss = { 0, 0, 2, 5, 0 }; break;   // dream haze: hazy pads, bells
         case StyleFunky:     ss = { 1, 3, 2, 2, 1 }; break;   // funky reef: e-piano stabs, plucked bass
-        case StyleNightJazz: ss = { 1, 3, 2, 1, 3 }; break;   // night jazz: e-piano, walking bass, strings
+        case StyleNightJazz: ss = { 6, 3, 2, 1, 3 }; break;   // night jazz: piano, walking bass, strings
         default:             ss = { 0, 0, 2, 2, 3 }; break;   // aqua dream: glassy pad, plucks, strings
     }
 

@@ -50,6 +50,8 @@ private:
     std::atomic<bool> failed { false }, running { false };
     std::atomic<int> dropped { 0 };
     std::atomic<juce::int64> sent { 0 };
+    std::atomic<juce::int64> outBytes { -1 };   // what ffmpeg has written out (to YouTube / the file), from its progress report
+    juce::String target;
     int frameBytes = 0;
     friend class Watcher;
 };

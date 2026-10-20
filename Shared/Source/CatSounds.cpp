@@ -17,13 +17,15 @@ namespace
     }
 
     struct KeysPatch { float a, d, s, r, gain; };
-    const KeysPatch keysPatches[6] = {
+    const KeysPatch keysPatches[KeysSynth::numSounds] = {
         { 0.25f, 1.00f, 0.70f, 0.90f, 0.15f },   // Soft Pad
         { 0.003f, 1.50f, 0.12f, 0.35f, 0.30f },  // E-Piano
         { 0.002f, 0.35f, 0.00f, 0.20f, 0.24f },  // Pluck
         { 0.35f, 2.00f, 0.85f, 1.20f, 0.12f },   // Strings
         { 0.002f, 0.25f, 0.55f, 0.06f, 0.09f },  // Chip (square wave, like an old game console)
         { 0.002f, 1.60f, 0.00f, 1.40f, 0.20f },  // Glass Bell (Frutiger Aero chimes)
+        { 0.001f, 8.00f, 1.00f, 0.30f, 0.22f },  // Piano (the strings decay by themselves; release = the damper)
+        { 0.001f, 8.00f, 1.00f, 0.18f, 0.34f },  // Nylon Guitar (Karplus-Strong string)
     };
 }
 
@@ -31,7 +33,60 @@ namespace
 void KeysSynth::prepare (double sampleRate)
 {
     sr = sampleRate > 0.0 ? sampleRate : 48000.0;
+    for (auto& b : ksBuf) b.assign ((size_t) (sr / 25.0) + 8, 0.0f);   // down to ~25 Hz
     allOff();
+}
+
+void KeysSynth::strikePiano (Voice& v)
+{
+    const float f0 = v.freq;
+    const float B = 0.00012f + 0.0000006f * f0;                                     // string stiffness
+    const float tau = juce::jlimit (0.6f, 9.0f, 7.0f * std::sqrt (130.0f / f0));    // low notes ring longer
+    const float bright = 0.55f + 0.9f * v.vel;
+    const float dt = 1.0f / (float) sr;
+    int n = 0;
+    for (int k = 1; k <= pianoPartials + 3 && n < pianoPartials + 3; ++k)
+    {
+        const bool second = k > pianoPartials;                  // partials 13..15 = the second string of 1..3
+        const int kk = second ? k - pianoPartials : k;
+        float fk = f0 * (float) kk * std::sqrt (1.0f + B * (float) (kk * kk));
+        if (second) fk *= 1.0012f;
+        if (fk > 0.45f * (float) sr) continue;
+        const float tk = tau / (1.0f + 0.45f * (float) (kk - 1));
+        float amp = std::pow ((float) kk, -1.15f) * std::exp (-(float) (kk - 1) / (2.2f * bright));
+        if (second) amp *= 0.6f;
+        v.pa1[n] = 0.6f * amp; v.pa2[n] = 0.4f * amp;          // double decay: a quick drop after the strike, then the long ring
+        v.pm1[n] = std::exp (-dt / (0.18f * tk)); v.pm2[n] = std::exp (-dt / tk);
+        const float w = twoPi * fk * dt;
+        v.pc[n] = std::cos (w); v.ps[n] = std::sin (w);
+        v.pre[n] = 1.0f; v.pim[n] = 0.0f;
+        ++n;
+    }
+    v.partials = n;
+    v.pianoInit = true;
+}
+
+void KeysSynth::pluckString (Voice& v, std::vector<float>& buf)
+{
+    // fill the string with a burst of noise, softer (low-passed) for quiet notes, with a pluck-position comb
+    const int len = juce::jlimit (2, (int) buf.size() - 2, (int) v.ksLen + 1);
+    float lp = 0.0f;
+    const float bright = 0.25f + 0.7f * v.vel;
+    for (int i = 0; i < len; ++i)
+    {
+        lp += bright * (v.rnd.next() - lp);
+        buf[(size_t) i] = lp;
+    }
+    const int comb = juce::jmax (1, len / 7);   // plucked a seventh of the way along: warmer
+    for (int i = len - 1; i >= comb; --i) buf[(size_t) i] -= 0.6f * buf[(size_t) (i - comb)];
+    float mean = 0.0f;
+    for (int i = 0; i < len; ++i) mean += buf[(size_t) i];
+    mean /= (float) len;
+    for (int i = 0; i < len; ++i) buf[(size_t) i] -= mean;
+    for (size_t i = (size_t) len; i < buf.size(); ++i) buf[i] = 0.0f;
+    v.ksW = len;          // the first read (ksW - length) starts at the plucked noise
+    v.ksPrev = 0.0f;
+    v.ksInit = true;
 }
 
 void KeysSynth::allOff()
@@ -74,6 +129,13 @@ void KeysSynth::noteOn (int ch, int note, float vel)
     pick->env = oldEnv;                       // no click when a voice is re-used
     pick->ph[1] = 0.33f; pick->ph[2] = 0.66f;
     pick->age = ++ageCounter;
+    pick->rnd.s = 0x9e3779b9u ^ (uint32_t) (note * 2654435761u) ^ pick->age;
+    // the guitar string: delay length for this pitch (the averaging filter adds half a sample)
+    pick->ksLen = juce::jlimit (2.0f, (float) (ksBuf[0].size() - 4), (float) sr / pick->freq - 0.5f);
+    // low strings ring longer, loud plucks a little shorter
+    pick->ksDamp = juce::jlimit (0.990f, 0.9995f, 1.0f - (0.0012f + 0.0000035f * pick->freq) * (48000.0f / (float) sr));
+    if (sound == 7) pluckString (*pick, ksBuf[(size_t) (pick - voices.data())]);
+    if (sound == 6) strikePiano (*pick);
 }
 
 void KeysSynth::noteOff (int ch, int note)
@@ -86,11 +148,14 @@ void KeysSynth::render (float* l, float* r, int n)
     const auto& p = keysPatches[sound];
     const float dt = 1.0f / (float) sr;
     const float rel = std::exp (-1.0f / (p.r * (float) sr));
-    for (auto& v : voices)
+    for (size_t vi = 0; vi < voices.size(); ++vi)
     {
+        auto& v = voices[vi];
         if (! v.active) continue;
         float gl, gr;
         panGains (v.pan, gl, gr);
+        if (sound == 7 && ! v.ksInit) pluckString (v, ksBuf[vi]);
+        if (sound == 6 && ! v.pianoInit) strikePiano (v);
         const float baseFreq = v.freq;
         v.freq = baseFreq * std::pow (2.0f, chanBend[(size_t) v.ch] / 12.0f);   // pitch bend (Bend-Cat)
         for (int i = 0; i < n; ++i)
@@ -147,6 +212,49 @@ void KeysSynth::render (float* l, float* r, int n)
                     v.ph[0] = wrap (v.ph[0] + v.freq * dt);
                     v.ph[1] = wrap (v.ph[1] + v.freq * 2.0f * dt);
                     v.mph = wrap (v.mph + v.freq * 3.5f * dt);
+                    break;
+                }
+                case 6:   // piano: inharmonic partials (stiff strings), each dying at its own speed, the lowest three
+                {         //        doubled by a second string a touch sharp (beating), a felt hammer thump at the start
+                    for (int k = 0; k < v.partials; ++k)
+                    {
+                        x += (v.pa1[k] + v.pa2[k]) * v.pim[k];
+                        const float re = v.pre[k] * v.pc[k] - v.pim[k] * v.ps[k];
+                        v.pim[k] = v.pre[k] * v.ps[k] + v.pim[k] * v.pc[k];
+                        v.pre[k] = re;
+                        v.pa1[k] *= v.pm1[k];
+                        v.pa2[k] *= v.pm2[k];
+                    }
+                    if ((++v.renorm & 1023) == 0)   // keep the phasors on the unit circle
+                        for (int k = 0; k < v.partials; ++k)
+                        {
+                            const float m = 1.0f / juce::jmax (1.0e-6f, std::sqrt (v.pre[k] * v.pre[k] + v.pim[k] * v.pim[k]));
+                            v.pre[k] *= m; v.pim[k] *= m;
+                        }
+                    x *= 0.62f;
+                    if (v.t < 0.02f)
+                    {
+                        v.hammerLp += 0.25f * (v.rnd.next() - v.hammerLp);
+                        x += v.hammerLp * 0.35f * v.vel * std::exp (-v.t * 260.0f);
+                    }
+                    break;
+                }
+                case 7:   // nylon guitar: a Karplus-Strong string (a delay line with a gentle low-pass in the loop)
+                {
+                    auto& buf = ksBuf[vi];
+                    const int size = (int) buf.size();
+                    const float len = juce::jlimit (2.0f, (float) (size - 4), v.ksLen / std::pow (2.0f, -chanBend[(size_t) v.ch] / 12.0f));
+                    float rp = (float) v.ksW - len;
+                    while (rp < 0.0f) rp += (float) size;
+                    const int i0 = (int) rp, i1 = (i0 + 1) % size;
+                    const float fr = rp - (float) i0;
+                    const float y = buf[(size_t) i0] * (1.0f - fr) + buf[(size_t) i1] * fr;
+                    const float damp = v.released ? 0.97f : v.ksDamp;
+                    const float nv = 0.5f * (y + v.ksPrev) * damp;
+                    v.ksPrev = y;
+                    buf[(size_t) v.ksW] = nv;
+                    v.ksW = (v.ksW + 1) % size;
+                    x = v.f1.lp (y, lpCoef (2500.0f + 4000.0f * v.vel, sr)) * 1.6f;   // the body takes the edge off
                     break;
                 }
                 default:  // pluck: saw through a closing filter
