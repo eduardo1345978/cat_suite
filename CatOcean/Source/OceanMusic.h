@@ -65,7 +65,7 @@ public:
     juce::ValueTree save() const;
     void load (const juce::ValueTree&);
     /** A new song in this style. crossfade: it starts on the next bar and the old song fades out under it. */
-    void startStyle (int style, int key, double bpm, bool crossfade = false);
+    void startStyle (int style, int key, double bpm, bool crossfade = false, const Favourite* replay = nullptr);
     bool isCrossfading() const noexcept { return decks[0].active && decks[1].active; }
     int songsStarted = 0;                               // test counter
 
@@ -96,6 +96,10 @@ private:
     std::array<Deck, 2> decks;
     int cur = 0;
     juce::AudioBuffer<float> deckBuf;
+    const cat::muse::Song* shownNow = nullptr;
+public:
+    int requestsPlayed = 0, favouritesPlayed = 0;   // test counters
+private:
     FishSynth fish;
     Ambience ambience;
     juce::Reverb fishVerb;

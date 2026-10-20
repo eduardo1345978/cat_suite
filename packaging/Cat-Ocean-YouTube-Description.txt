@@ -36,6 +36,9 @@ The music never stops: it is written live, and the fishes' genes slowly change i
 !dance  !spin  !jump
 !feed                  drop some food (every 45 s)
 !vote 1 / 2 / 3        vote for the next music, place or event
+!request jazz          ask for a music style: it plays as the next song (one request per 10 min)
+!like                  like the song that's playing - liked songs come back now and then
+!favorites  /  !np     the most liked songs / what's playing now
 (just chat)            your fish says your message in a speech bubble
 
 ━━━━━━━━━━━━━━━━━━━━

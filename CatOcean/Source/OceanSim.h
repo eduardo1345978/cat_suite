@@ -89,6 +89,21 @@ juce::String eventName (int e);
 int findEvent (const juce::String& word);
 
 /** A species that evolution discovered (its fish carry its trait). */
+/** What is playing now (the music fills it in), so viewers can !like it. */
+struct NowPlaying { juce::String title; int style = 0, genre = 0, mood = 0, key = 0; juce::uint32 seed = 0; double bpm = 0; };
+/** A song viewers liked: it can come back later (the same settings write the same song). */
+struct Favourite
+{
+    juce::String title;
+    int style = 0, genre = 0, mood = 0, key = 0;
+    juce::uint32 seed = 0;
+    double bpm = 0;
+    juce::StringArray likers;   // channel ids, one like each
+    double lastPlayed = -1e9;
+};
+/** A song request from chat: a style, played as the next song. */
+struct SongRequest { int style = 0; juce::String by; };
+
 struct Species { int id = 0; juce::String name; int trait = 0; double discoveredAt = 0; juce::String firstFish; };
 
 /** The cat in the boat on the surface. */
@@ -131,6 +146,18 @@ public:
     float targetTempo() const;                    // average of the fish on screen (inside the style's range)
     int targetKey() const;                        // the key most fish like (weighted)
     int takeStyleRequest() { const int s = styleRequest; styleRequest = -1; return s; }
+
+    // song requests and favourites
+    NowPlaying nowPlaying;
+    std::vector<Favourite> favourites;
+    std::deque<SongRequest> requests;
+    static constexpr int maxRequests = 5;
+    static constexpr double requestCooldown = 600.0, favouritesCooldown = 60.0;
+    bool takeSongRequest (SongRequest& out) { if (requests.empty()) return false; out = requests.front(); requests.pop_front(); return true; }
+    /** A liked song to play again now and then (not one played in the last hour), or nullptr. */
+    const Favourite* pickFavourite (juce::Random&);
+    void markFavouritePlayed (juce::uint32 seed, int style);
+    int likeNowPlaying (const juce::String& viewerId);   // returns the song's likes, or -1 if nothing to like / liked already
     int getStyle() const noexcept { return style; }
     void setStyle (int s) noexcept { style = juce::jlimit (0, NumStyles - 1, s); styleTimer = 0.0f; }
 
@@ -184,6 +211,7 @@ private:
         juce::String lastText;
         double lastTextAt = -1e9;
         bool warned = false;
+        double lastRequest = -1e9;
     };
 
     void stepFish (Fish&, float dt);
@@ -223,6 +251,7 @@ private:
     double lastHelp = -1e9, lastFeedAnyone = -1e9;
     bool spamCheck (Viewer&, const juce::String& text, bool isCommand);
     int style = StyleDreamy, styleRequest = -1;
+    double lastFavouritesShown = -1e9, lastSongShown = -1e9;
     float styleTimer = 0.0f;   // the music drifts to another style after a while
 };
 } // namespace ocean

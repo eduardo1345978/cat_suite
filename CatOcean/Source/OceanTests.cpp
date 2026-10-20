@@ -356,6 +356,8 @@ void testCommandsAndLife (const juce::File& outDir)
     {
         // a few viewers keep chatting, Miro's owner too
         if (minute % 5 == 0) engine.say ("UC1", "Miro", "hello");
+        if (minute == 1) engine.say ("UC1", "Miro", "!request night jazz");
+        if (minute == 4) { engine.say ("UC1", "Miro", "!like"); engine.runFrames (100); engine.say ("UC1", "Miro", "!like"); }
         for (int s = 0; s < 60; ++s)
         {
             engine.runFrames (30);
@@ -389,6 +391,19 @@ void testCommandsAndLife (const juce::File& outDir)
     check (music.fishNotes > 500, "music: the fish sing (" + juce::String (music.fishNotes) + " notes)");
     check (music.songsStarted - startSongs >= 3 && titles.size() >= 3,
            "music: new songs keep coming (" + juce::String (music.songsStarted - startSongs) + " in an hour: " + titles.joinIntoString (", ").substring (0, 120) + ")");
+    check (music.requestsPlayed >= 1, "music: a !request plays as the next song (" + juce::String (music.requestsPlayed) + " played)");
+    {
+        int likes = 0;
+        for (auto& fv : sim.favourites) likes += fv.likers.size();
+        check (sim.favourites.size() >= 1 && likes == 1, "music: !like saves the song as a favourite, one like per viewer (" + juce::String (likes) + " likes)");
+        // a liked song comes back: the same settings write the same song
+        if (! sim.favourites.empty())
+        {
+            const auto fav = sim.favourites.front();
+            cat::muse::Settings a; a.seed = fav.seed; a.genre = fav.genre; a.mood = fav.mood; a.key = fav.key; a.endless = true;
+            check (cat::muse::compose (a).title == fav.title, "music: a favourite can be played again (\"" + fav.title + "\")");
+        }
+    }
     check (crossfadeFrames > 0, "music: songs crossfade into each other (" + juce::String (crossfadeFrames) + " s of crossfade)");
     check (silentFrames < 3, "music: never a silent gap (" + juce::String (silentFrames) + " silent seconds)");
     check (music.outOfKey * 50 < music.fishNotes + 1, "music: fish sing in the song's key (" + juce::String (music.outOfKey) + " out of key)");

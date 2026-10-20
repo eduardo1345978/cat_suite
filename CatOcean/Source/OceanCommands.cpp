@@ -14,7 +14,7 @@ namespace
 
     int indexIn (const juce::StringArray& names, const juce::String& w) { return names.indexOf (w, true); }
 
-    const char* helpText = "!fish NAME  !color red blue  !body cat  !pattern stripes  !hat crown  !voice bell  !melody 1353  !dance  !feed  !vote 1  !level";
+    const char* helpText = "!fish NAME  !color red blue  !body cat  !pattern stripes  !hat crown  !voice bell  !melody 1353  !dance  !feed  !vote 1  !level  !request jazz  !like";
 }
 
 bool Sim::spamCheck (Viewer& v, const juce::String& text, bool isCommand)
@@ -271,6 +271,54 @@ void Sim::command (Viewer& v, const juce::String& ownerId, const juce::String& t
         lastFeedAnyone = time;
         dropFood (4, f != nullptr && f->present ? f->x : -1.0f);
         if (f != nullptr && f->present) toast (*f, "yum!", 0xfffee761);
+        return;
+    }
+
+    if (cmd == "request" || cmd == "req" || cmd == "play")
+    {
+        const int st = tok.isEmpty() ? -1 : findStyle (tok.joinIntoString (""));
+        if (st < 0)
+        {
+            if (f != nullptr && f->present) toast (*f, "try !request city / jazz / folk ...", 0xffffb36b);
+            return;
+        }
+        if (! moderator && time - v.lastRequest < requestCooldown) { if (f != nullptr && f->present) toast (*f, "one request per 10 min", 0xffffb36b); return; }
+        for (auto& rq : requests) if (rq.style == st) { if (f != nullptr && f->present) toast (*f, "already in line!", 0xff9ff3ff); return; }
+        if ((int) requests.size() >= maxRequests) { if (f != nullptr && f->present) toast (*f, "the request list is full", 0xffffb36b); return; }
+        v.lastRequest = time;
+        requests.push_back ({ st, v.name });
+        announce (v.name + " requested " + styleName (st) + (requests.size() == 1 ? " - it plays next!" : " - " + juce::String ((int) requests.size()) + " in line"), 0xff2ce8f5);
+        return;
+    }
+
+    if (cmd == "like" || cmd == "love" || cmd == "heart" || cmd == "fav")
+    {
+        const int likes = likeNowPlaying (ownerId);
+        if (likes < 0) return;
+        if (f != nullptr && f->present) toast (*f, "<3 " + nowPlaying.title, 0xffff8ad0);
+        if (likes == 1 || likes % 5 == 0) announce ("\"" + nowPlaying.title + "\" has " + juce::String (likes) + (likes == 1 ? " like" : " likes") + " - liked songs come back!", 0xffff8ad0);
+        return;
+    }
+
+    if (cmd == "favorites" || cmd == "favourites" || cmd == "favs" || cmd == "top")
+    {
+        if (time - lastFavouritesShown < favouritesCooldown) return;
+        lastFavouritesShown = time;
+        std::vector<const Favourite*> top;
+        for (auto& fv : favourites) top.push_back (&fv);
+        std::sort (top.begin(), top.end(), [] (const Favourite* a, const Favourite* b) { return a->likers.size() > b->likers.size(); });
+        juce::String line = "Top songs: ";
+        for (size_t i = 0; i < juce::jmin ((size_t) 3, top.size()); ++i)
+            line << (i > 0 ? ", " : "") << juce::String ((int) i + 1) << ". " << top[i]->title << " (" << top[i]->likers.size() << ")";
+        announce (top.empty() ? juce::String ("No favourite songs yet - type !like when you love one") : line, 0xffff8ad0);
+        return;
+    }
+
+    if (cmd == "nowplaying" || cmd == "np" || cmd == "songname")
+    {
+        if (time - lastSongShown < 30.0) return;
+        lastSongShown = time;
+        announce ("Now playing: " + nowPlaying.title + " (" + styleName (nowPlaying.style) + ")", 0xff9ff3ff);
         return;
     }
 

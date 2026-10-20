@@ -183,10 +183,11 @@ juce::StringArray Streamer::buildArgs (const juce::File& ffmpeg, const juce::Str
     juce::StringArray a;
     a.add (ffmpeg.getFullPathName());
     a.addArray ({ "-hide_banner", "-loglevel", "warning", "-nostats", "-nostdin" });
-    a.addArray ({ "-thread_queue_size", "1024", "-f", "rawvideo", "-pixel_format", "bgra",
+    // (no -thread_queue_size on the inputs: new ffmpeg versions only accept it on outputs and refuse to start)
+    a.addArray ({ "-f", "rawvideo", "-pixel_format", "bgra",
                   "-video_size", juce::String (w) + "x" + juce::String (h), "-framerate", juce::String (fps),
                   "-i", "tcp://127.0.0.1:" + juce::String (vp) });
-    a.addArray ({ "-thread_queue_size", "1024", "-f", "s16le", "-ar", juce::String (sr), "-ac", "2",
+    a.addArray ({ "-f", "s16le", "-ar", juce::String (sr), "-ac", "2",
                   "-i", "tcp://127.0.0.1:" + juce::String (ap) });
     a.addArray ({ "-map", "0:v", "-map", "1:a",
                   "-vf", "scale=" + juce::String (w * 4) + ":" + juce::String (h * 4) + ":flags=neighbor,format=yuv420p",

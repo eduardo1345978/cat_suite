@@ -233,14 +233,26 @@ void Music::prepare (double sampleRate)
     fishBuf.setSize (2, 4096);
 }
 
-void Music::startStyle (int st, int key, double bpm, bool crossfade)
+void Music::startStyle (int st, int key, double bpm, bool crossfade, const Favourite* replay)
 {
-    style = juce::jlimit (0, NumStyles - 1, st);
+    style = juce::jlimit (0, NumStyles - 1, replay != nullptr ? replay->style : st);
     const auto& info = styleInfo (style);
     Settings s;
-    s.seed = seed = seed * 1664525u + 1013904223u;
-    s.genre = info.genre;
-    s.mood = info.mood;
+    if (replay != nullptr)
+    {
+        // a liked song comes back: the same settings write the same song
+        s.seed = replay->seed;
+        s.genre = replay->genre;
+        s.mood = replay->mood;
+        key = replay->key;
+        bpm = replay->bpm;
+    }
+    else
+    {
+        s.seed = seed = seed * 1664525u + 1013904223u;
+        s.genre = info.genre;
+        s.mood = info.mood;
+    }
     s.endless = true;
     s.key = ((key % 12) + 12) % 12;
     auto first = compose (s);
@@ -313,25 +325,49 @@ void Music::nextPiece (Sim& sim)
     auto& d = decks[(size_t) cur];
     auto now = d.player.getSong();
     if (now == nullptr) return;
+    // slowly towards what the fish like: a few bpm and one step round the circle of fifths per piece
+    const double target = sim.targetTempo() * (0.88 + 0.12 * sim.daylight);   // slower at night
+    const auto& info = styleInfo (style);
+    const double nextBpm = std::round (juce::jlimit ((double) info.bpmLo, (double) info.bpmHi, juce::jlimit (now->bpm - 3.0, now->bpm + 3.0, target)));
+    int nextKey = now->key;
+    {
+        const int want = sim.targetKey(), curKey = now->key;
+        const int fWant = (want * 7) % 12, fCur = (curKey * 7) % 12, diff = (fWant - fCur + 12) % 12;
+        if (diff != 0) nextKey = (curKey + (diff <= 6 ? 7 : 5)) % 12;
+    }
+
+    // a request from chat plays as the next song
+    SongRequest rq;
+    if (sim.takeSongRequest (rq))
+    {
+        sim.setStyle (rq.style);
+        startStyle (rq.style, nextKey, nextBpm, true);
+        ++requestsPlayed;
+        sim.announce (rq.by + "'s request: " + styleName (rq.style) + " - " + currentTitle(), 0xff2ce8f5);
+        return;
+    }
     if (++piecesInSong > 3)
     {
         // every few pieces a brand new song (new chords and melodies), crossfaded in so it never gets samey
-        // and never jumps: same key and tempo, the new one starts on a bar line
-        const int key = now->key;
-        const double bpm = now->bpm;
-        startStyle (style, key, bpm, true);
+        // and never jumps: it starts on a bar line. Now and then a song the viewers liked comes back instead.
+        if (rng.nextFloat() < 0.3f)
+            if (const auto* fav = sim.pickFavourite (rng))
+            {
+                const auto favCopy = *fav;
+                sim.setStyle (favCopy.style);
+                sim.markFavouritePlayed (favCopy.seed, favCopy.style);
+                startStyle (favCopy.style, favCopy.key, favCopy.bpm, true, &favCopy);
+                ++favouritesPlayed;
+                sim.announce ("A favourite comes back: " + currentTitle() + " (" + juce::String (favCopy.likers.size()) + " likes)", 0xffff8ad0);
+                return;
+            }
+        startStyle (style, nextKey, nextBpm, true);
         sim.announce ("Now playing: " + currentTitle(), 0xff9ff3ff);
         return;
     }
     Song prev = *now;
-    // slowly towards what the fish like: a few bpm and one step round the circle of fifths per piece
-    const double target = sim.targetTempo() * (0.88 + 0.12 * sim.daylight);   // slower at night
-    const double base = prev.bpm;
-    const auto& info = styleInfo (style);
-    prev.bpm = std::round (juce::jlimit ((double) info.bpmLo, (double) info.bpmHi, juce::jlimit (base - 3.0, base + 3.0, target)));
-    const int want = sim.targetKey(), curKey = prev.key;
-    const int fWant = (want * 7) % 12, fCur = (curKey * 7) % 12, diff = (fWant - fCur + 12) % 12;
-    if (diff != 0) prev.key = (curKey + (diff <= 6 ? 7 : 5)) % 12;
+    prev.bpm = nextBpm;
+    prev.key = nextKey;
     d.player.queueNext (std::make_shared<Song> (composeNext (prev)));
     ++pieceCount;
 }
@@ -382,6 +418,13 @@ void Music::render (float* l, float* r, int n, Sim& sim)
         }
     }
     if (auto now = decks[(size_t) cur].player.getSong()) song = now;
+    if (song != nullptr && song.get() != shownNow)
+    {
+        shownNow = song.get();
+        auto& np = sim.nowPlaying;
+        np.title = song->title; np.style = style; np.genre = song->settings.genre; np.mood = song->settings.mood;
+        np.key = song->key; np.seed = song->settings.seed; np.bpm = song->bpm;
+    }
 
     const double pps = currentBpm() / 60.0 / sr;
     const double ppq = decks[(size_t) cur].ppq - pps * n;

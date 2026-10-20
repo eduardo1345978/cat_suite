@@ -732,6 +732,47 @@ Board Sim::board (int which) const
 }
 
 //==============================================================================
+const Favourite* Sim::pickFavourite (juce::Random& r)
+{
+    std::vector<const Favourite*> pool;
+    for (auto& f : favourites) if (! f.likers.isEmpty() && time - f.lastPlayed > 3600.0) pool.push_back (&f);
+    if (pool.empty()) return nullptr;
+    // songs with more likes come back more often
+    int total = 0;
+    for (auto* f : pool) total += f->likers.size();
+    int pick = r.nextInt (juce::jmax (1, total));
+    for (auto* f : pool) { pick -= f->likers.size(); if (pick < 0) return f; }
+    return pool.back();
+}
+
+void Sim::markFavouritePlayed (juce::uint32 seed, int st)
+{
+    for (auto& f : favourites) if (f.seed == seed && f.style == st) f.lastPlayed = time;
+}
+
+int Sim::likeNowPlaying (const juce::String& viewerId)
+{
+    if (nowPlaying.title.isEmpty() || nowPlaying.seed == 0) return -1;
+    Favourite* fav = nullptr;
+    for (auto& f : favourites) if (f.seed == nowPlaying.seed && f.style == nowPlaying.style) fav = &f;
+    if (fav == nullptr)
+    {
+        if (favourites.size() >= 200)   // keep the list small: forget the least liked
+        {
+            auto least = std::min_element (favourites.begin(), favourites.end(), [] (const Favourite& a, const Favourite& b) { return a.likers.size() < b.likers.size(); });
+            favourites.erase (least);
+        }
+        Favourite f;
+        f.title = nowPlaying.title; f.style = nowPlaying.style; f.genre = nowPlaying.genre; f.mood = nowPlaying.mood;
+        f.key = nowPlaying.key; f.seed = nowPlaying.seed; f.bpm = nowPlaying.bpm; f.lastPlayed = time;
+        favourites.push_back (f);
+        fav = &favourites.back();
+    }
+    if (fav->likers.contains (viewerId)) return -1;
+    fav->likers.add (viewerId);
+    return fav->likers.size();
+}
+
 juce::ValueTree Sim::save() const
 {
     juce::ValueTree t ("OCEAN");
@@ -781,6 +822,15 @@ juce::ValueTree Sim::save() const
         x.addChild (f.genes.toTree(), -1, nullptr);
         t.addChild (x, -1, nullptr);
     }
+    for (auto& fv : favourites)
+    {
+        juce::ValueTree x ("FAVOURITE");
+        x.setProperty ("title", fv.title, nullptr); x.setProperty ("style", fv.style, nullptr);
+        x.setProperty ("genre", fv.genre, nullptr); x.setProperty ("mood", fv.mood, nullptr);
+        x.setProperty ("key", fv.key, nullptr); x.setProperty ("seed", (juce::int64) fv.seed, nullptr);
+        x.setProperty ("bpm", fv.bpm, nullptr); x.setProperty ("likers", fv.likers.joinIntoString (","), nullptr);
+        t.addChild (x, -1, nullptr);
+    }
     for (auto& v : viewers)
     {
         juce::ValueTree x ("VIEWER");
@@ -797,6 +847,7 @@ void Sim::load (const juce::ValueTree& t)
     if (! t.hasType ("OCEAN")) return;
     fish.clear(); food.clear(); toasts.clear(); news.clear(); viewers.clear();
     speciesList.clear(); banned.clear(); bannedNamesById.clear(); confetti.clear();
+    favourites.clear(); requests.clear();
     time = (double) t.getProperty ("time", 0.0);
     nextId = juce::jmax (1, (int) t.getProperty ("nextId", 1));
     weather = juce::jlimit (0, 2, (int) t.getProperty ("weather", 0));
@@ -809,6 +860,19 @@ void Sim::load (const juce::ValueTree& t)
     mutations = t.getProperty ("mutations", 0);
     for (auto x : t)
     {
+        if (x.hasType ("FAVOURITE"))
+        {
+            Favourite fv;
+            fv.title = x.getProperty ("title").toString();
+            fv.style = juce::jlimit (0, NumStyles - 1, (int) x.getProperty ("style", 0));
+            fv.genre = x.getProperty ("genre", 0); fv.mood = x.getProperty ("mood", 0); fv.key = x.getProperty ("key", 0);
+            fv.seed = (juce::uint32) (juce::int64) x.getProperty ("seed", 0);
+            fv.bpm = x.getProperty ("bpm", 70.0);
+            fv.likers = juce::StringArray::fromTokens (x.getProperty ("likers").toString(), ",", "");
+            fv.likers.removeEmptyStrings();
+            if (fv.seed != 0) favourites.push_back (fv);
+            continue;
+        }
         if (x.hasType ("FISH"))
         {
             Fish f;

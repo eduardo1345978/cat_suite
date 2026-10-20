@@ -46,7 +46,7 @@ juce::String Sim::admin (const juce::String& line)
         return "/stats  /fish @name  /viewers  /spawn 5  /feed 10  /give @name 50  /level @name 8  /rare @name gold|rainbow|ghost|glow|crystal|none\n"
                "/weather calm|rain|storm  /time day|night|sunset|sunrise|auto|0-24  /place reef|kelp|crystal|ship|cave|ice|lagoon|ruins\n"
                "/music aqua|lounge|crystal|bubble  /event storm|calm|feast|babyboom|rarehunt  /vote start|end  /announce text  /party\n"
-               "/species  /newspecies  /kick @name  /ban @name  /unban @name  /bans  /rename @name New Name  /resetname @name\n"
+               "/species  /newspecies  /kick @name  /ban @name  /unban @name  /bans  /favourites  /requests  /clearrequests  /rename @name New Name  /resetname @name\n"
                "/sleepall  /wakeall  /clear food|bubbles|speech  /save   (chat commands like !fish also work here, as the host)";
 
     if (cmd == "stats")
@@ -191,6 +191,25 @@ juce::String Sim::admin (const juce::String& line)
         const int id = discoverSpeciesForTests();
         return id > 0 && species (id) != nullptr ? "discovered: " + species (id)->name : juce::String ("evolution needs at least two fish");
     }
+    if (cmd == "favourites" || cmd == "favorites" || cmd == "favs")
+    {
+        if (favourites.empty()) return "no liked songs yet";
+        std::vector<const Favourite*> top;
+        for (auto& fv : favourites) top.push_back (&fv);
+        std::sort (top.begin(), top.end(), [] (const Favourite* a, const Favourite* b) { return a->likers.size() > b->likers.size(); });
+        juce::StringArray lines;
+        for (size_t i = 0; i < juce::jmin ((size_t) 15, top.size()); ++i)
+            lines.add (juce::String ((int) i + 1) + ". " + top[i]->title + "  (" + styleName (top[i]->style) + ", " + juce::String (top[i]->likers.size()) + " likes)");
+        return lines.joinIntoString ("\n");
+    }
+    if (cmd == "requests")
+    {
+        if (requests.empty()) return "no song requests waiting";
+        juce::StringArray lines;
+        for (auto& rq : requests) lines.add (styleName (rq.style) + " (" + rq.by + ")");
+        return "next: " + lines.joinIntoString (", ");
+    }
+    if (cmd == "clearrequests") { requests.clear(); return "song requests cleared"; }
     if (cmd == "bans")
     {
         const auto b = bannedNames();
