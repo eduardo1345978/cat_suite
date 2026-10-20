@@ -1,19 +1,36 @@
 @echo off
-rem Copies the built VST3 bundles into the per-user VST3 folder that Cubase scans:
-rem %LOCALAPPDATA%\Programs\Common\VST3  (no administrator rights needed)
+rem Installs everything that was built:
+rem  - the VST3 plug-ins into the per-user VST3 folder that Cubase scans:
+rem    %LOCALAPPDATA%\Programs\Common\VST3  (no administrator rights needed)
+rem  - the apps (Cat Hub, Cat Ocean, Muse-Cat) into the "Cat Hub" folder next to this script,
+rem    with a copy of the Cats in "Cat Hub\Hub Cats" for Cat Hub to load
+setlocal
 cd /d "%~dp0"
 set "DEST=%LOCALAPPDATA%\Programs\Common\VST3"
+set "APPS=%~dp0Cat Hub"
 if not exist "%DEST%" mkdir "%DEST%"
+if not exist "%APPS%\Hub Cats" mkdir "%APPS%\Hub Cats"
 set "LOG=%~dp0install_log.txt"
 echo Installing to %DEST% > "%LOG%"
-xcopy /E /I /Y "build\ChordCat\ChordCat_artefacts\Release\VST3\Chord-Cat.vst3" "%DEST%\Chord-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Chord-Cat (is Cubase still running?) >> "%LOG%"
-xcopy /E /I /Y "build\PattCat\PattCat_artefacts\Release\VST3\Patt-Cat.vst3" "%DEST%\Patt-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Patt-Cat (is Cubase still running?) >> "%LOG%"
-xcopy /E /I /Y "build\BendCat\BendCat_artefacts\Release\VST3\Bend-Cat.vst3" "%DEST%\Bend-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Bend-Cat (is Cubase still running?) >> "%LOG%"
-xcopy /E /I /Y "build\DrumCat\DrumCat_artefacts\Release\VST3\Drum-Cat.vst3" "%DEST%\Drum-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Drum-Cat (is Cubase still running?) >> "%LOG%"
-xcopy /E /I /Y "build\OrbitCat\OrbitCat_artefacts\Release\VST3\Orbit-Cat.vst3" "%DEST%\Orbit-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Orbit-Cat (is Cubase still running?) >> "%LOG%"
-xcopy /E /I /Y "build\SingCat\SingCat_artefacts\Release\VST3\Sing-Cat.vst3" "%DEST%\Sing-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Sing-Cat (is Cubase still running?) >> "%LOG%"
-xcopy /E /I /Y "build\BassCat\BassCat_artefacts\Release\VST3\Bass-Cat.vst3" "%DEST%\Bass-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Bass-Cat (is Cubase still running?) >> "%LOG%"
-xcopy /E /I /Y "build\GlideCat\GlideCat_artefacts\Release\VST3\Glide-Cat.vst3" "%DEST%\Glide-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Glide-Cat (is Cubase still running?) >> "%LOG%"
-xcopy /E /I /Y "build\TalkCat\TalkCat_artefacts\Release\VST3\Talk-Cat.vst3" "%DEST%\Talk-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Talk-Cat (is Cubase still running?) >> "%LOG%"
-xcopy /E /I /Y "build\LifeCat\LifeCat_artefacts\Release\VST3\Life-Cat.vst3" "%DEST%\Life-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Life-Cat (is Cubase still running?) >> "%LOG%"
+for %%C in (Chord Patt Bend Drum Orbit Sing Bass Glide Talk Life Muse) do call :plugin %%C
+echo. >> "%LOG%"
+echo Apps to %APPS% >> "%LOG%"
+call :app CatHub Cat-Hub.exe
+call :app CatOcean Cat-Ocean.exe
+call :app MuseCat Standalone\Muse-Cat.exe
+copy /Y "packaging\Cat-Ocean-YouTube-Description.txt" "%APPS%\" >> "%LOG%" 2>&1
 echo INSTALL FINISHED >> "%LOG%"
+exit /b 0
+
+:plugin
+set "SRC=build\%1Cat\%1Cat_artefacts\Release\VST3\%1-Cat.vst3"
+if not exist "%SRC%" (echo NOT BUILT: %1-Cat >> "%LOG%" & exit /b 0)
+xcopy /E /I /Y "%SRC%" "%DEST%\%1-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: %1-Cat (is Cubase still running?) >> "%LOG%"
+if /I not "%1"=="Muse" xcopy /E /I /Y "%SRC%" "%APPS%\Hub Cats\%1-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Hub Cats\%1-Cat (is Cat Hub still running?) >> "%LOG%"
+exit /b 0
+
+:app
+set "SRC=build\%1\%1_artefacts\Release\%2"
+if not exist "%SRC%" (echo NOT BUILT: %2 >> "%LOG%" & exit /b 0)
+copy /Y "%SRC%" "%APPS%\" >> "%LOG%" 2>&1 || echo COPY FAILED: %2 (is it still running?) >> "%LOG%"
+exit /b 0
