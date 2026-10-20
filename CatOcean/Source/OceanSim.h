@@ -21,7 +21,8 @@ constexpr double viewerIdleSeconds = 20.0 * 60.0; // a viewer's fish swims away 
 enum Weather { WeatherCalm = 0, WeatherRain, WeatherStorm };
 
 /** The music: always relaxing, four flavours of ambient. */
-enum MusicStyle { StyleDreamy = 0, StyleLoFi, StyleDeepSea, StyleSunrise, StyleGlass, StyleBossa, StylePixel, StyleStrings, NumStyles };
+enum MusicStyle { StyleDreamy = 0, StyleLoFi, StyleDeepSea, StyleSunrise, StyleGlass, StyleBossa, StylePixel, StyleStrings,
+                  StyleCity, StyleIsland, StyleFolk, StyleDreamHaze, StyleFunky, StyleNightJazz, NumStyles };
 struct StyleInfo { const char* name; const char* word; int genre, mood; float bpmLo, bpmHi; bool drums; };
 const StyleInfo& styleInfo (int style);
 juce::String styleName (int style);
@@ -101,8 +102,10 @@ struct BoatCat
 
 struct Board { juce::String title; juce::StringArray lines; bool empty = false; };
 
+class Music;
 class Sim
 {
+    friend class Music;   // announces each new song
 public:
     explicit Sim (juce::uint32 seed = 1);
 

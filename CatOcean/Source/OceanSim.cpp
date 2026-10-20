@@ -6,7 +6,8 @@ namespace ocean
 {
 const StyleInfo& styleInfo (int s)
 {
-    // cat::muse genres: Pop 0, LoFi 1, Trap 2, House 3, Ambient 4, Jazz 5, Rock 6, Cinematic 7
+    // cat::muse genres: Pop 0, LoFi 1, Trap 2, House 3, Ambient 4, Jazz 5, Rock 6, Cinematic 7, Aero 8, Synthwave 9,
+    // Bossa 10, Chiptune 11, Orchestral 12, City pop 13, Reggae 14, Folk 15, Dream pop 16, Funk 17
     // moods: Happy 0, Sad 1, Dark 2, Dreamy 3, Epic 4, Chill 5
     static const StyleInfo styles[NumStyles] = {
         // Frutiger Aero: bright, airy, glassy - major keys, pads, bells, soft beats
@@ -18,6 +19,12 @@ const StyleInfo& styleInfo (int s)
         { "Bossa breeze",   "bossa",  10, 5, 70.0f, 84.0f, true  },
         { "Pixel lullaby",  "pixel",  11, 3, 62.0f, 74.0f, false },   // a soft chiptune lullaby
         { "Strings at dusk", "strings", 12, 3, 52.0f, 66.0f, false },
+        { "City lights",    "city",   13, 5, 70.0f, 84.0f, true  },   // City pop, soft and glossy
+        { "Island drift",   "island", 14, 0, 62.0f, 74.0f, true  },   // a lazy reggae one-drop
+        { "Folk tide",      "folk",   15, 5, 64.0f, 78.0f, false },   // strummed and warm
+        { "Dream haze",     "haze",   16, 3, 60.0f, 74.0f, true  },   // dream pop
+        { "Funky reef",     "funky",  17, 5, 76.0f, 88.0f, true  },   // gentle funk
+        { "Night jazz",     "jazz",    5, 5, 58.0f, 72.0f, true  },   // brushes and e-piano
     };
     return styles[juce::jlimit (0, NumStyles - 1, s)];
 }
@@ -33,6 +40,12 @@ int findStyle (const juce::String& w)
     if (x == "bossa" || x == "breeze" || x == "bossabreeze" || x == "bossanova") return StyleBossa;
     if (x == "pixel" || x == "lullaby" || x == "pixellullaby" || x == "chip" || x == "chiptune") return StylePixel;
     if (x == "strings" || x == "dusk" || x == "stringsatdusk" || x == "orchestra" || x == "orchestral") return StyleStrings;
+    if (x == "city" || x == "lights" || x == "citylights" || x == "citypop") return StyleCity;
+    if (x == "island" || x == "drift" || x == "islanddrift" || x == "reggae") return StyleIsland;
+    if (x == "folk" || x == "tide" || x == "folktide" || x == "acoustic") return StyleFolk;
+    if (x == "haze" || x == "dreamhaze" || x == "dreampop" || x == "shoegaze") return StyleDreamHaze;
+    if (x == "funky" || x == "funk" || x == "funkyreef" || x == "groove") return StyleFunky;
+    if (x == "jazz" || x == "night" || x == "nightjazz" || x == "smooth") return StyleNightJazz;
     return -1;
 }
 juce::String placeName (int p)

@@ -221,7 +221,8 @@ void Ambience::render (float* l, float* r, int n, const Sim& sim)
 void Music::prepare (double sampleRate)
 {
     sr = sampleRate;
-    renderer.prepare (sr, 4096);
+    for (auto& d : decks) { d.renderer.prepare (sr, 4096); for (auto& m : d.parts) m.ensureSize (2048); }
+    deckBuf.setSize (2, 4096);
     fish.prepare (sr);
     ambience.prepare (sr);
     fishVerb.setSampleRate (sr);
@@ -232,7 +233,7 @@ void Music::prepare (double sampleRate)
     fishBuf.setSize (2, 4096);
 }
 
-void Music::startStyle (int st, int key, double bpm)
+void Music::startStyle (int st, int key, double bpm, bool crossfade)
 {
     style = juce::jlimit (0, NumStyles - 1, st);
     const auto& info = styleInfo (style);
@@ -245,84 +246,145 @@ void Music::startStyle (int st, int key, double bpm)
     auto first = compose (s);
     // always relaxed: the style's tempo range, and inside it what the fish like
     first.bpm = std::round (juce::jlimit ((double) info.bpmLo, (double) info.bpmHi, bpm > 0 ? bpm : first.bpm));
-    song = std::make_shared<Song> (std::move (first));
+    auto newSong = std::make_shared<Song> (std::move (first));
 
-    // soft sounds for every style (KeysSynth: 0 pad 1 e-piano 2 pluck 3 strings; DrumKit 2 = lo-fi)
+    // soft sounds for every style (KeysSynth: 0 pad 1 e-piano 2 pluck 3 strings 4 chip 5 glass bell;
+    // bass 0 sub 1 saw 2 reese 3 pluck; DrumKit 2 = lo-fi)
     SoundSet ss;
     switch (style)
     {
-        case StyleLoFi:    ss = { 1, 0, 2, 2, 0 }; break;   // sky lounge: e-piano, soft beat, bell-like plucks
-        case StyleDeepSea: ss = { 0, 0, 2, 3, 0 }; break;   // crystal deep: pads and strings
-        case StyleSunrise: ss = { 1, 3, 2, 2, 2 }; break;   // bubble pop: e-piano, plucky bass and melody
-        case StyleGlass:   ss = { 0, 0, 2, 5, 5 }; break;   // glass garden: pad and glass bells
-        case StyleBossa:   ss = { 1, 3, 2, 1, 2 }; break;   // bossa breeze: e-piano, plucked bass, a soft kit
-        case StylePixel:   ss = { 0, 0, 2, 4, 5 }; break;   // pixel lullaby: soft chip melody over a pad
-        case StyleStrings: ss = { 3, 0, 2, 3, 3 }; break;   // strings at dusk
-        default:           ss = { 0, 0, 2, 2, 3 }; break;   // aqua dream: glassy pad, plucks, strings
+        case StyleLoFi:      ss = { 1, 0, 2, 2, 0 }; break;   // sky lounge: e-piano, soft beat, bell-like plucks
+        case StyleDeepSea:   ss = { 0, 0, 2, 3, 0 }; break;   // crystal deep: pads and strings
+        case StyleSunrise:   ss = { 1, 3, 2, 2, 2 }; break;   // bubble pop: e-piano, plucky bass and melody
+        case StyleGlass:     ss = { 0, 0, 2, 5, 5 }; break;   // glass garden: pad and glass bells
+        case StyleBossa:     ss = { 1, 3, 2, 1, 2 }; break;   // bossa breeze: e-piano, plucked bass, a soft kit
+        case StylePixel:     ss = { 0, 0, 2, 4, 5 }; break;   // pixel lullaby: soft chip melody over a pad
+        case StyleStrings:   ss = { 3, 0, 2, 3, 3 }; break;   // strings at dusk
+        case StyleCity:      ss = { 1, 3, 2, 2, 1 }; break;   // city lights: e-piano, plucked bass
+        case StyleIsland:    ss = { 1, 0, 2, 5, 2 }; break;   // island drift: e-piano skank, glass bell melody
+        case StyleFolk:      ss = { 2, 3, 2, 2, 3 }; break;   // folk tide: plucked "guitar", strings
+        case StyleDreamHaze: ss = { 0, 0, 2, 5, 0 }; break;   // dream haze: hazy pads, bells
+        case StyleFunky:     ss = { 1, 3, 2, 2, 1 }; break;   // funky reef: e-piano stabs, plucked bass
+        case StyleNightJazz: ss = { 1, 3, 2, 1, 3 }; break;   // night jazz: e-piano, walking bass, strings
+        default:             ss = { 0, 0, 2, 2, 3 }; break;   // aqua dream: glassy pad, plucks, strings
     }
-    renderer.setSounds (ss);
-    // calm: soft pads in front, a gentle melody, quiet counter-melody and (only in the lounge) a whisper of a beat
-    renderer.levels = { 0.55f, 0.5f, 0.16f, 0.55f, 0.28f };
-    baseMelodyLevel = renderer.levels[(size_t) Melody];
-    renderer.mute = {};
-    renderer.mute[(size_t) Drums] = ! info.drums;
-    renderer.reverbSend = 0.45f;
-    renderer.allOff();
-    player.setSong (song);
-    ppq = 0.0;
+
+    auto& old = decks[(size_t) cur];
+    const bool fade = crossfade && old.active && song != nullptr;
+    const int next = fade ? 1 - cur : cur;
+    auto& d = decks[(size_t) next];
+    d.renderer.allOff();
+    d.renderer.setSounds (ss);
+    // calm: soft pads in front, a gentle melody, quiet counter-melody and (only in some styles) a whisper of a beat
+    d.renderer.levels = { 0.55f, 0.5f, 0.16f, 0.55f, 0.28f };
+    d.baseMelodyLevel = d.renderer.levels[(size_t) Melody];
+    d.renderer.mute = {};
+    d.renderer.mute[(size_t) Drums] = ! info.drums;
+    d.renderer.reverbSend = 0.45f;
+    d.player.setSong (newSong);
+    d.active = true;
+    if (fade)
+    {
+        // the new song comes in on the old one's next bar (at the same tempo they stay in step) and swells up
+        // while the old song fades away under it
+        const double oldBpm = juce::jmax (30.0, old.player.songBpm());
+        const double beatsToBar = 4.0 - std::fmod (juce::jmax (0.0, old.ppq), 4.0);
+        const double seconds = (beatsToBar < 0.05 ? 0.0 : beatsToBar) * 60.0 / oldBpm;
+        d.ppq = -seconds * newSong->bpm / 60.0;
+        d.gain = 0.0f; d.target = 1.0f; d.step = (float) (1.0 / ((seconds + 7.0) * sr));
+        old.target = 0.0f; old.step = (float) (1.0 / (10.0 * sr));
+    }
+    else
+    {
+        if (next != cur) old.active = false;
+        d.ppq = 0.0;
+        d.gain = d.target = 1.0f;
+        for (auto& other : decks) if (&other != &d && other.active) { other.renderer.allOff(); other.player.setSong (nullptr); other.active = false; }
+    }
+    cur = next;
+    song = newSong;
     ++pieceCount;
+    ++songsStarted;
     piecesInSong = 1;
 }
 
-void Music::nextPiece (const Sim& sim)
+void Music::nextPiece (Sim& sim)
 {
-    auto now = player.getSong();
+    auto& d = decks[(size_t) cur];
+    auto now = d.player.getSong();
     if (now == nullptr) return;
+    if (++piecesInSong > 3)
+    {
+        // every few pieces a brand new song (new chords and melodies), crossfaded in so it never gets samey
+        // and never jumps: same key and tempo, the new one starts on a bar line
+        const int key = now->key;
+        const double bpm = now->bpm;
+        startStyle (style, key, bpm, true);
+        sim.announce ("Now playing: " + currentTitle(), 0xff9ff3ff);
+        return;
+    }
     Song prev = *now;
     // slowly towards what the fish like: a few bpm and one step round the circle of fifths per piece
     const double target = sim.targetTempo() * (0.88 + 0.12 * sim.daylight);   // slower at night
     const double base = prev.bpm;
     const auto& info = styleInfo (style);
     prev.bpm = std::round (juce::jlimit ((double) info.bpmLo, (double) info.bpmHi, juce::jlimit (base - 3.0, base + 3.0, target)));
-    const int want = sim.targetKey(), cur = prev.key;
-    const int fWant = (want * 7) % 12, fCur = (cur * 7) % 12, diff = (fWant - fCur + 12) % 12;
-    if (diff != 0) prev.key = (cur + (diff <= 6 ? 7 : 5)) % 12;
-    std::shared_ptr<Song> next;
-    if (++piecesInSong > 3)
-    {
-        // every few pieces a brand new song (new chords and melodies), so it never gets samey
-        Settings fresh = prev.settings;
-        fresh.seed = seed = seed * 1664525u + 1013904223u;
-        fresh.key = prev.key;
-        fresh.endless = true;
-        auto song2 = compose (fresh);
-        song2.bpm = prev.bpm;
-        song2.chunk = prev.chunk + 1;
-        next = std::make_shared<Song> (std::move (song2));
-        piecesInSong = 1;
-    }
-    else next = std::make_shared<Song> (composeNext (prev));
-    player.queueNext (next);
+    const int want = sim.targetKey(), curKey = prev.key;
+    const int fWant = (want * 7) % 12, fCur = (curKey * 7) % 12, diff = (fWant - fCur + 12) % 12;
+    if (diff != 0) prev.key = (curKey + (diff <= 6 ? 7 : 5)) % 12;
+    d.player.queueNext (std::make_shared<Song> (composeNext (prev)));
     ++pieceCount;
+}
+
+void Music::renderDeck (Deck& d, float* l, float* r, int n, const Sim& sim)
+{
+    const double bpm = juce::jmax (30.0, d.player.songBpm()), pps = bpm / 60.0 / sr;
+    std::array<juce::MidiBuffer*, NumParts> ptrs;
+    for (int p = 0; p < NumParts; ++p) { d.parts[(size_t) p].clear(); ptrs[(size_t) p] = &d.parts[(size_t) p]; }
+    d.player.process (d.ppq, pps, n, true, ptrs);
+    d.renderer.levels[(size_t) Melody] = d.baseMelodyLevel * (0.55f + 0.45f * sim.daylight);   // softer at night
+    for (int p = 0; p < NumParts; ++p) d.renderer.handle (p, d.parts[(size_t) p]);
+    d.renderer.render (l, r, n);
+    d.ppq += pps * n;
 }
 
 void Music::render (float* l, float* r, int n, Sim& sim)
 {
     if (song == nullptr) startStyle (sim.getStyle(), sim.targetKey(), sim.targetTempo());
     const int req = sim.takeStyleRequest();
-    if (req >= 0) { sim.setStyle (req); startStyle (req, currentKey(), currentBpm()); }
-    if (player.needNext()) nextPiece (sim);
+    if (req >= 0) { sim.setStyle (req); startStyle (req, currentKey(), currentBpm(), true); }
+    if (decks[(size_t) cur].player.needNext()) nextPiece (sim);
 
-    const double bpm = player.songBpm(), pps = bpm / 60.0 / sr;
-    std::array<juce::MidiBuffer*, NumParts> ptrs;
-    for (int p = 0; p < NumParts; ++p) { parts[(size_t) p].clear(); ptrs[(size_t) p] = &parts[(size_t) p]; }
-    player.process (ppq, pps, n, true, ptrs);
-    if (auto now = player.getSong()) song = now;
-    renderer.levels[(size_t) Melody] = baseMelodyLevel * (0.55f + 0.45f * sim.daylight);   // softer at night
-    for (int p = 0; p < NumParts; ++p) renderer.handle (p, parts[(size_t) p]);
-    renderer.render (l, r, n);
-    for (int i = 0; i < n; ++i) { l[i] *= 0.8f; r[i] *= 0.8f; }
+    if (deckBuf.getNumSamples() < n) deckBuf.setSize (2, n, false, false, true);
+    juce::FloatVectorOperations::clear (l, n);
+    juce::FloatVectorOperations::clear (r, n);
+    for (auto& d : decks)
+    {
+        if (! d.active) continue;
+        deckBuf.clear();
+        auto* dl = deckBuf.getWritePointer (0);
+        auto* dr = deckBuf.getWritePointer (1);
+        renderDeck (d, dl, dr, n, sim);
+        for (int i = 0; i < n; ++i)
+        {
+            d.gain = d.gain < d.target ? juce::jmin (d.target, d.gain + d.step) : juce::jmax (d.target, d.gain - d.step);
+            // equal-power curve, so the mix never dips in the middle of a crossfade
+            const float g = std::sin (d.gain * 1.5707963f) * 0.8f;
+            l[i] += dl[i] * g;
+            r[i] += dr[i] * g;
+        }
+        if (d.target <= 0.0f && d.gain <= 0.0f)
+        {
+            // faded out: free the deck
+            d.renderer.allOff();
+            d.player.setSong (nullptr);
+            d.active = false;
+        }
+    }
+    if (auto now = decks[(size_t) cur].player.getSong()) song = now;
 
+    const double pps = currentBpm() / 60.0 / sr;
+    const double ppq = decks[(size_t) cur].ppq - pps * n;
     if (fishBuf.getNumSamples() < n) fishBuf.setSize (2, n, false, false, true);
     fishBuf.clear();
     singFish (sim, ppq, ppq + pps * n, pps, n, 0);
@@ -336,7 +398,6 @@ void Music::render (float* l, float* r, int n, Sim& sim)
         limiter.processSample (a, b);
         l[i] = a; r[i] = b;
     }
-    ppq += pps * n;
 }
 
 void Music::singFish (Sim& sim, double fromBeat, double toBeat, double pps, int n, int)
@@ -363,7 +424,7 @@ void Music::singFish (Sim& sim, double fromBeat, double toBeat, double pps, int 
 
         const int stepInBar = ((int) std::llround (step)) % 16;
         const bool strong = stepInBar % 4 == 0;
-        const double local = player.getPlayPosition();
+        const double local = decks[(size_t) cur].player.getPlayPosition();
         const auto* chord = song->chordAt (local);
         int sung = 0;
         const int maxPerStep = strong ? maxStrong : (stepInBar % 2 == 0 ? 1 : 0);   // no busy 16ths: calm
@@ -414,7 +475,8 @@ MusicInfo Music::info (const Sim& sim) const
         m.key = keyName (song->key);
         m.scale = scaleName (song->scale).toUpperCase();
         m.bpm = (int) std::lround (song->bpm);
-        const int si = song->sectionIndexAt (player.getPlayPosition());
+        const int si = song->sectionIndexAt (decks[(size_t) cur].player.getPlayPosition());
+        m.title = song->title;
         if (si >= 0) m.section = sectionName (song->sections[(size_t) si].type).toUpperCase();
     }
     m.piece = pieceCount - 1;

@@ -80,6 +80,11 @@ const GenreInfo genreInfo[NumGenres] = {
     { 118, 138, 0.50f, 0.52f, 0.25, { 4, 2 }, 0.95f, 0.50f, 1 },   // Bossa nova
     { 130, 160, 0.50f, 0.50f, 0.25, { 4, 4 }, 0.00f, 0.00f, 2 },   // Chiptune
     {  66,  92, 0.50f, 0.50f, 0.25, { 4, 8 }, 0.02f, 0.05f, 0 },   // Orchestral
+    {  92, 112, 0.50f, 0.53f, 0.25, { 4, 2 }, 0.85f, 0.55f, 1 },   // City pop: glossy 80s Japan, maj7 / 9ths, busy chords
+    {  68,  84, 0.50f, 0.54f, 0.25, { 4, 4 }, 0.15f, 0.05f, 1 },   // Reggae: one-drop, off-beat skank
+    {  84, 106, 0.50f, 0.52f, 0.25, { 4, 4 }, 0.05f, 0.15f, 1 },   // Folk: strummed, simple and warm
+    {  74,  92, 0.50f, 0.50f, 0.25, { 4, 8 }, 0.45f, 0.70f, 0 },   // Dream pop: hazy, slow, lots of add9
+    {  96, 112, 0.53f, 0.57f, 0.25, { 4, 4 }, 0.80f, 0.35f, 2 },   // Funk: 16th stabs, slap-ish bass
 };
 
 /** The new genres borrow the song form, bass and harmony habits of an older one (and add their own drums / sounds). */
@@ -92,6 +97,11 @@ int baseGenre (int g)
         case BossaNova:  return Jazz;
         case Chiptune:   return Pop;
         case Orchestral: return Cinematic;
+        case CityPop:    return Pop;
+        case Reggae:     return Pop;
+        case Folk:       return Pop;
+        case DreamPop:   return Pop;
+        case Funk:       return Pop;
         default:         return g;
     }
 }
@@ -274,6 +284,11 @@ public:
         if (genre == Rock && mood == Happy) w[Mixolydian] += 3;
         if (real == Aero) { w[Major] += 6; w[Lydian] += 5; w[Minor] = w[Phrygian] = w[HarmonicMinor] = 0; }   // always bright
         if (real == Synthwave) { w[Minor] += 4; w[Dorian] += 2; }
+        if (real == CityPop)  { w[Major] += 3; w[Dorian] += 2; w[Phrygian] = w[HarmonicMinor] = 0; }
+        if (real == Reggae)   { w[Major] += 3; w[Minor] += 2; w[Phrygian] = w[HarmonicMinor] = w[Lydian] = 0; }
+        if (real == Folk)     { w[Major] += 3; w[Mixolydian] += 2; w[Dorian] += 2; w[Phrygian] = 0; }
+        if (real == DreamPop) { w[Lydian] += 3; w[Major] += 3; w[Phrygian] = w[HarmonicMinor] = 0; }
+        if (real == Funk)     { w[Dorian] += 4; w[Mixolydian] += 3; w[Phrygian] = w[HarmonicMinor] = w[Lydian] = 0; }
         s.scale = r.weighted (w, 7);
         s.bpm = s.settings.bpm > 0.0 ? s.settings.bpm : (double) juce::roundToInt (g.bpmLo + r.uni() * (g.bpmHi - g.bpmLo));
         if (mood == Sad || mood == Dreamy || mood == Chill) s.bpm = juce::jmax (g.bpmLo, s.bpm - 6.0);
@@ -681,6 +696,23 @@ public:
     std::vector<std::pair<double, double>> chordGroove (const Section& sec, Rng& r) const
     {
         std::vector<const char*> pats;
+        switch (real)
+        {
+            case CityPop: pats = sec.energy > 0.6f ? std::vector<const char*> { "x--x--x---x-x---", "x---..x-x--x----" } : std::vector<const char*> { "x-------x-------" }; break;
+            case Reggae:  pats = { "..x-..x-..x-..x-" }; break;                                       // the skank on the off-beats
+            case Folk:    pats = sec.energy > 0.5f ? std::vector<const char*> { "x-x-x-xxx-x-x-xx", "x---x-x---x-x-x-" } : std::vector<const char*> { "x---x---x---x---" }; break;
+            case DreamPop: pats = { "x---------------", "x-------x-------" }; break;
+            case Funk:    pats = { "..x..x..x.x..x..", "x..x..x...x.x..x", ".x.x..x..x.x..x." }; break;   // 16th stabs
+            default: break;
+        }
+        if (! pats.empty())
+        {
+            std::vector<std::pair<double, double>> gr;
+            for (int bar = 0; bar < 2; ++bar)
+                for (auto& h : parseRhythm (r.pick (pats), bar * 4.0))
+                    gr.push_back ({ h.start, h.length });
+            return gr;
+        }
         switch (genre)
         {
             case Pop:   pats = sec.energy > 0.75f ? std::vector<const char*> { "x-----x-----x---", "x---x---x---x---", "x-------x-x-x---" } : std::vector<const char*> { "x-------x-------", "x---------------" }; break;
@@ -805,10 +837,18 @@ public:
                         if (L >= 4.0 && r.chance (0.5)) approach (a + L - 0.5);
                         break;
                     }
-                    default:   // Pop, Trap without drums
+                    default:   // Pop, Trap without drums (and the genres that borrow Pop, with their own grooves)
                     {
                         static const char* pats[] = { "x-------x-x-----", "x--x--x-x--x--x-", "x---x---x---x---", "x-x-x-x-x-x-x-x-" };
+                        static const char* city[] = { "x--x--x-x-x-----", "x-----x-x--x-x--", "x--x----x-x--x--", "x-x---x-x---x-x-" };
+                        static const char* reggae[] = { "x-----x-x-------", "x-------x---x---", "--x---x-x-------", "x-----x---x-x---" };
+                        static const char* funk[] = { "x--x--x-x-x--x--", "x-xx--x--x-x-x--", "x---x-xx--x--x-x", "x--x-x--x-x--x-x" };
                         const char* p = sec.energy < 0.6f ? "x-------x-------" : pats[pat];
+                        if (real == CityPop) p = city[pat];
+                        else if (real == Reggae) p = reggae[pat];
+                        else if (real == Funk) p = sec.energy < 0.45f ? city[pat] : funk[pat];
+                        else if (real == Folk) p = sec.energy < 0.6f ? "x-------x-------" : "x---x---x---x---";
+                        else if (real == DreamPop) p = "x---------------";
                         for (double bar = a; bar < a + L - 1e-6; bar += 4.0)
                         {
                             int k = 0;
@@ -886,6 +926,16 @@ public:
                                       { shaker, { "7575757575757575" }, 0.35f, true } };
             case Chiptune:   return { { kick, { "9000000090900000", "9000000090000000" }, 0.95f, false }, { snare, { "0000900000009000" }, 0.85f, false },
                                       { hat, { "9090909090909090" }, 0.5f, true } };
+            case CityPop:    return { { kick, { "9000000090000000", "9000003090100000" }, 0.85f, false }, { snare, { "0000900000009000" }, 0.75f, false },
+                                      { hat, { "7575757575757575", "7575757575757577" }, 0.4f, true }, { openHat, { "0000000000000050" }, 0.4f, true } };
+            case Reggae:     return { { kick, { "0000000090000000" }, 0.9f, false }, { rim, { "0000000090000000", "0000000090000090" }, 0.7f, false },
+                                      { hat, { "9090909090909090", "9099909090999090" }, 0.4f, true } };
+            case Folk:       return { { kick, { "9000000090000000", "9000000000000000" }, 0.6f, false }, { shaker, { "0050005000500050", "5555555555555555" }, 0.3f, true },
+                                      { rim, { "0000900000009000" }, 0.35f, false } };
+            case DreamPop:   return { { kick, { "9000000000000000", "9000000000300000" }, 0.75f, false }, { snare, { "0000000090000000" }, 0.6f, false },
+                                      { shaker, { "5050505050505050" }, 0.25f, true } };
+            case Funk:       return { { kick, { "9000000090100000", "9010000000100100", "9000001090000000" }, 0.95f, false }, { snare, { "0000900000009000", "0000900100009000" }, 0.85f, false },
+                                      { hat, { "9595959595959595", "9595959595959599" }, 0.45f, true }, { openHat, { "0000000000000090" }, 0.4f, true } };
             default: break;
         }
         switch (genre)
@@ -1531,7 +1581,7 @@ public:
 } // namespace
 
 //==============================================================================
-juce::StringArray genreNames() { return { "Pop", "Lo-fi", "Trap", "House", "Ambient", "Jazz", "Rock", "Cinematic", "Frutiger Aero", "Synthwave", "Bossa nova", "Chiptune", "Orchestral" }; }
+juce::StringArray genreNames() { return { "Pop", "Lo-fi", "Trap", "House", "Ambient", "Jazz", "Rock", "Cinematic", "Frutiger Aero", "Synthwave", "Bossa nova", "Chiptune", "Orchestral", "City pop", "Reggae", "Folk", "Dream pop", "Funk" }; }
 juce::StringArray moodNames() { return { "Happy", "Sad", "Dark", "Dreamy", "Epic", "Chill" }; }
 juce::StringArray partNames() { return { "Chords", "Bass", "Drums", "Melody", "Counter" }; }
 juce::StringArray targetNames() { return { "Chords", "Bass", "Drums", "Melody", "Counter-melody", "Lyrics", "Song form" }; }

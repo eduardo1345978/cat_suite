@@ -10,6 +10,7 @@
 using namespace ocean;
 
 int runSelfTest (const juce::File& outDir);   // OceanTests.cpp
+int renderPlaces (const juce::File& outDir);  // OceanTests.cpp
 
 namespace
 {
@@ -493,6 +494,13 @@ public:
         args.trim();
         args.removeEmptyStrings();
         for (auto& a : args) a = a.unquoted();
+        if (args.contains ("--places"))
+        {
+            const int i = args.indexOf ("--places");
+            renderPlaces (juce::File::getCurrentWorkingDirectory().getChildFile (i + 1 < args.size() ? args[i + 1] : "ocean-places"));
+            quit();
+            return;
+        }
         if (args.contains ("--selftest"))
         {
             const int i = args.indexOf ("--selftest");

@@ -18,6 +18,11 @@ SoundSet defaultSounds (int genre)
         case BossaNova:  return { 1, 3, 2, 1, 2 };   // e-piano, plucked bass, soft kit
         case Chiptune:   return { 4, 1, 1, 4, 4 };   // square waves
         case Orchestral: return { 3, 0, 3, 3, 3 };   // strings
+        case CityPop:    return { 1, 3, 3, 2, 1 };   // e-piano, plucked bass, live kit
+        case Reggae:     return { 1, 0, 3, 2, 0 };   // e-piano skank, round sub bass
+        case Folk:       return { 2, 3, 3, 2, 3 };   // plucked "guitar", strings answering
+        case DreamPop:   return { 0, 0, 2, 5, 0 };   // hazy pad, glass bell melody
+        case Funk:       return { 1, 1, 3, 2, 1 };   // e-piano stabs, saw bass
         default:         return { 3, 0, 3, 3, 3 };   // Cinematic
     }
 }

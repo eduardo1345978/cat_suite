@@ -36,7 +36,7 @@ private:
 /** What the screen shows about the music. */
 struct MusicInfo
 {
-    juce::String style, key, scale, section;
+    juce::String style, key, scale, section, title;
     int bpm = 0, piece = 0;
     float targetBpm = 0;
     juce::String targetKey;

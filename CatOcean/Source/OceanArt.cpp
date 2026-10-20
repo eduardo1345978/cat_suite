@@ -331,9 +331,11 @@ void Painter::background (Canvas& c, const Sim& sim, float t)
     skyLow = mixc (skyLow, shade (0xff5d6676, 0.4f + 0.6f * day), storm);
     const auto& lk = look (sim.place);
     const float darkWater = (1.0f - day) * 0.75f;
-    const Colour waterTop = mixc (mixc (lk.top, shade (lk.top, 0.55f), storm), shade (lk.top, 0.3f), darkWater),
-                 waterMid = mixc (mixc (lk.mid, shade (lk.mid, 0.55f), storm), shade (lk.mid, 0.3f), darkWater),
-                 waterDeep = mixc (mixc (lk.deep, shade (lk.deep, 0.5f), storm), shade (lk.deep, 0.35f), darkWater);
+    // at night the water turns a deep moonlit blue (not just a darker, greyer version of the day colour)
+    auto nightOf = [] (Colour c, Colour moon, float keep) { return mixc (moon, shade (c, 0.35f), keep); };
+    const Colour waterTop = mixc (mixc (lk.top, shade (lk.top, 0.55f), storm), nightOf (lk.top, 0xff1a3c78, 0.35f), darkWater),
+                 waterMid = mixc (mixc (lk.mid, shade (lk.mid, 0.55f), storm), nightOf (lk.mid, 0xff0e2654, 0.35f), darkWater),
+                 waterDeep = mixc (mixc (lk.deep, shade (lk.deep, 0.5f), storm), nightOf (lk.deep, 0xff050f2a, 0.4f), darkWater);
 
     for (int x = 0; x < W; ++x)
     {
@@ -466,12 +468,30 @@ void Painter::background (Canvas& c, const Sim& sim, float t)
         }
     }
 
-    // far rocks (silhouettes)
-    for (int x = 0; x < W; ++x)
+    // the far reef: two soft layers of hills fading into the water (far = paler, near = deeper), so the
+    // ocean has depth instead of one flat band
+    if (sim.place != PlaceCave)
     {
-        const float hgt = 18.0f + 10.0f * std::sin (x * 0.021f + 1.3f) + 6.0f * std::sin (x * 0.057f);
-        for (int y = (int) (floorY - hgt); y < (int) floorY; ++y)
-            c.blend (x, y, waterDeep, 0.35f);
+        const float ph = (float) sim.place * 1.7f;
+        for (int x = 0; x < W; ++x)
+        {
+            const float far = 30.0f + 12.0f * std::sin (x * 0.013f + ph) + 7.0f * std::sin (x * 0.041f + 2.0f * ph) + 3.0f * std::sin (x * 0.11f + ph);
+            const int topF = (int) (floorY - far);
+            for (int y = topF; y < (int) floorY; ++y)
+            {
+                const float k = (float) (y - topF) / juce::jmax (1.0f, far);
+                c.blend (x, y, mixc (waterMid, waterDeep, 0.5f), 0.16f + 0.14f * k);
+            }
+            const float nearH = 16.0f + 7.0f * std::sin (x * 0.027f + 4.0f + ph) + 4.0f * std::sin (x * 0.083f + ph)
+                                + 2.5f * std::abs (std::sin (x * 0.31f + ph));                      // little coral bumps on top
+            const int topN = (int) (floorY - nearH);
+            for (int y = topN; y < (int) floorY; ++y)
+            {
+                const float k = (float) (y - topN) / juce::jmax (1.0f, nearH);
+                c.blend (x, y, waterDeep, 0.24f + 0.2f * k);
+            }
+            if (topN >= 0) c.blend (x, topN, light (waterMid, 0.3f), 0.18f * day);   // a lit edge
+        }
     }
 }
 
@@ -498,7 +518,19 @@ void Painter::floor (Canvas& c, const Sim& sim, float t)
             const int x = (int) (w.x + sway), y = (int) floorY + 2 - k;
             const Colour col = k % 6 < 3 ? w.colour : shade (w.colour, 0.85f);
             c.set (x, y, col);
-            if (kelp) { if (k % 5 == 2) c.set (x + 1, y, light (w.colour, 0.2f)); if (k % 5 == 4) c.set (x - 1, y, shade (w.colour, 0.75f)); }
+            if (kelp)
+            {
+                // a thicker stem with leaf blades on alternating sides, lit on one side
+                c.set (x + 1, y, shade (col, 0.78f));
+                if (k > 4 && k % 7 == 3)
+                {
+                    const int side = (k / 7) % 2 == 0 ? 1 : -1;
+                    const Colour leaf = light (w.colour, 0.15f);
+                    for (int j = 1; j <= 4; ++j)
+                        c.set (x + (side > 0 ? 1 : 0) + side * j, y - j / 2, j == 4 ? light (leaf, 0.2f) : leaf);
+                    c.set (x + (side > 0 ? 1 : 0) + side * 2, y - 2, shade (leaf, 0.85f));
+                }
+            }
             else if (k % 3 == 1) { c.set (x - 1 - k / 4, y, col); c.set (x + 1 + k / 4, y, col); }
         }
     }
@@ -514,6 +546,9 @@ void Painter::floor (Canvas& c, const Sim& sim, float t)
             if (h % 11 == 0) col = shade (col, 0.85f);
             else if (h % 17 == 0) col = light (col, 0.25f);
             if (y == top) col = light (col, 0.3f);
+            else if (y > top + 2 && std::sin (x * 0.16f + y * 1.1f + std::sin (x * 0.03f) * 3.0f) > 0.93f) col = shade (col, 0.9f);   // ripples in the sand
+            if (y > top + 3 && h % 997 == 0)                                                                                        // a shell or a pebble
+                col = (h >> 12) % 3 == 0 ? 0xfffff0f4 : ((h >> 12) % 3 == 1 ? 0xfff2b7a8 : shade (lk.rock, 0.9f));
             col = shade (col, 0.45f + 0.55f * sim.daylight);
             // dancing light from the surface (caustics)
             if (lk.rays > 0.0f)
@@ -524,29 +559,87 @@ void Painter::floor (Canvas& c, const Sim& sim, float t)
             c.set (x, y, col);
         }
     }
-    // rocks
-    for (auto& r : rocks)
+    // rocks: round boulders half sunk in the sand, lit from above, with a darker side and a soft shadow
+    const float lit = 0.45f + 0.55f * sim.daylight;
+    for (size_t ri = 0; ri < rocks.size(); ++ri)
     {
+        const auto& r = rocks[ri];
+        if (std::abs (r.x - 440) < 40) continue;                     // keep the home cave clear
+        const Colour base = mixc (lk.rock, light (lk.rock, 0.12f), (float) (r.x % 7) / 7.0f);
+        const int baseY = (int) floorY + 5;
+        for (int x = -r.w / 2 - 2; x <= r.w / 2 + 3; ++x)             // shadow on the sand
+            c.blend (r.x + x, baseY, 0xff000000, 0.18f);
         for (int y = 0; y < r.h; ++y)
             for (int x = 0; x < r.w; ++x)
             {
-                const float nx = (x - r.w * 0.5f) / (r.w * 0.5f), ny = (float) (r.h - y) / (float) r.h;
-                if (nx * nx + ny * ny * 0.9f > 1.0f) continue;
-                Colour col = mixc (lk.rock, light (lk.rock, 0.15f), (float) (r.x % 7) / 7.0f);
-                if (ny > 0.7f && nx < 0.2f) col = light (col, 0.2f);
-                else if (nx > 0.4f) col = shade (col, 0.8f);
-                c.set (r.x + x - r.w / 2, (int) floorY + 4 - y, col);
+                const float nx = (x - r.w * 0.5f + 0.5f) / (r.w * 0.5f), ny = (float) y / (float) r.h;   // ny: 0 bottom .. 1 top
+                const float bump = 0.08f * std::sin ((float) x * 1.7f + (float) ri);
+                if (nx * nx + ny * ny > 1.0f + bump) continue;
+                const float light01 = juce::jlimit (0.0f, 1.0f, 0.55f + 0.5f * ny - 0.45f * nx);
+                Colour col = mixc (shade (base, 0.62f), light (base, 0.22f), light01);
+                const auto h = hash ((juce::uint32) (ri * 977 + (size_t) x * 31 + (size_t) y * 7));
+                if (h % 9 == 0) col = shade (col, 0.9f);                       // speckles
+                const bool edge = nx * nx + ny * ny > 0.82f + bump;
+                if (edge) col = ny > 0.55f && nx < 0.3f ? light (col, 0.25f) : shade (col, 0.8f);
+                // a cap that suits the place: moss, snow, coral or glowing crystals
+                if (ny > 0.78f)
+                {
+                    if (sim.place == PlaceIce) col = mixc (0xfff4fbff, col, 0.15f);
+                    else if (sim.place == PlaceReef || sim.place == PlaceKelp || sim.place == PlaceRuins || sim.place == PlaceWreck)
+                        col = (h % 3 == 0) ? mixc (col, 0xff5aa04a, 0.6f) : col;
+                    else if (sim.place == PlaceLagoon && h % 4 == 0) col = 0xffff8aa0;
+                }
+                c.set (r.x + x - r.w / 2, baseY - 1 - y, shade (col, lit));
             }
-    }
-    // the cave where viewers' fish sleep while they're away
-    for (int y = 0; y < 30; ++y)
-        for (int x = -28; x <= 28; ++x)
+        if ((sim.place == PlaceDeep || sim.place == PlaceCave) && ri % 2 == 0)   // a little crystal glowing on top
         {
-            const float nx = x / 28.0f, ny = y / 30.0f;
-            if (nx * nx + ny * ny > 1.0f) continue;
-            const bool hole = (x / 14.0f) * (x / 14.0f) + (y / 16.0f) * (y / 16.0f) < 1.0f;
-            c.set (440 + x, (int) floorY + 6 - y, hole ? 0xff0a0e1c : (x > 10 ? 0xff3c4458 : 0xff4f5a73));
+            const int cx = r.x + (int) (ri % 3) - 1, cy = baseY - r.h - 1;
+            const Colour g = ri % 4 == 0 ? 0xff2ce8f5 : 0xffc06bff;
+            for (int k = 0; k < 4; ++k) c.set (cx, cy - k, k == 3 ? light (g, 0.6f) : g);
+            c.set (cx + 1, cy - 1, light (g, 0.3f));
+            for (int y = -5; y <= 5; ++y) for (int x = -5; x <= 5; ++x)
+            {
+                const float d = std::sqrt ((float) (x * x + y * y)) / 5.0f;
+                if (d < 1.0f) c.add (cx + x, cy - 2 + y, g, 0.12f * (1.0f - d));
+            }
         }
+    }
+    // the cave where viewers' fish sleep while they're away: a rocky arch in the place's own stone, dark inside,
+    // with a warm little lamp over the door
+    {
+        const int hx = 440, hy = (int) floorY + 6;
+        const Colour stone = lk.rock;
+        for (int y = 0; y < 34; ++y)
+            for (int x = -31; x <= 31; ++x)
+            {
+                const float nx = x / 31.0f, ny = y / 34.0f;
+                const float rough = 0.05f * std::sin (x * 0.9f) + 0.04f * std::sin (y * 1.3f + x * 0.4f);
+                if (nx * nx + ny * ny > 1.0f + rough) continue;
+                const float hole = (x / 13.0f) * (x / 13.0f) + (y / 17.0f) * (y / 17.0f);
+                Colour col;
+                if (hole < 1.0f) col = mixc (0xff1a2240, 0xff070a16, juce::jlimit (0.0f, 1.0f, 1.0f - hole + ny * 0.5f));   // the dark inside
+                else
+                {
+                    const float l01 = juce::jlimit (0.0f, 1.0f, 0.5f + 0.5f * ny - 0.4f * nx);
+                    col = mixc (shade (stone, 0.55f), light (stone, 0.15f), l01);
+                    const auto h = hash ((juce::uint32) ((x + 40) * 131 + y * 17));
+                    if (h % 7 == 0) col = shade (col, 0.88f);
+                    if (hole < 1.25f) col = shade (col, 0.7f);                          // the rim of the door
+                    if (ny > 0.86f && sim.place != PlaceCave && sim.place != PlaceDeep)
+                        col = sim.place == PlaceIce ? mixc (0xfff4fbff, col, 0.1f) : mixc (col, 0xff5aa04a, h % 2 == 0 ? 0.65f : 0.3f);
+                }
+                c.set (hx + x, hy - y, shade (col, hole < 1.0f ? 1.0f : lit));
+            }
+        // the lamp
+        const int lx = hx + 12, ly = hy - 24;
+        const float flick = 0.85f + 0.15f * std::sin (t * 7.0f) * std::sin (t * 3.1f);
+        for (int y = -7; y <= 7; ++y) for (int x = -7; x <= 7; ++x)
+        {
+            const float d = std::sqrt ((float) (x * x + y * y)) / 7.0f;
+            if (d < 1.0f) c.add (lx + x, ly + y, 0xffffd27a, 0.22f * (1.0f - d) * flick);
+        }
+        c.set (lx, ly - 2, 0xff5a4a3a); c.set (lx, ly - 1, 0xffffe9a8); c.set (lx, ly, 0xffffd27a); c.set (lx - 1, ly, 0xffffc25a); c.set (lx + 1, ly, 0xffffc25a);
+    }
     int sleeping = 0;
     for (auto& f : sim.fish) if (f.viewer() && ! f.present) ++sleeping;
     if (sleeping > 0)
@@ -972,6 +1065,29 @@ void Painter::drawFish (Canvas& c, const Fish& f, float time)
             c.blend (sx, sy - 1, 0xffffffff, 0.5f); c.blend (sx, sy + 1, 0xffffffff, 0.5f);
         }
 
+    // ripples: rings of light spread out from a fish while it sings (two rings, one after the other)
+    if (f.singFlash > 0.0f)
+    {
+        const Colour rc = light (c1, 0.6f);
+        for (int ring = 0; ring < 2; ++ring)
+        {
+            const float t = (1.0f - f.singFlash) - 0.22f * (float) ring;   // 0 .. 1 as the ring grows
+            if (t <= 0.0f) continue;
+            const float r = (float) L * 0.45f + 3.0f + t * ((float) L * 0.7f + 9.0f);
+            const float a = (1.0f - t) * (ring == 0 ? 0.55f : 0.35f) * f.fade;
+            const int steps = juce::jmax (16, (int) (r * 6.3f));
+            int lastX = 1 << 20, lastY = 1 << 20;
+            for (int k = 0; k < steps; ++k)
+            {
+                const float ang = 6.2831853f * (float) k / (float) steps;
+                const int rx = px + (int) std::lround (std::cos (ang) * r), ry = py + (int) std::lround (std::sin (ang) * r * 0.55f);   // flat, like on water
+                if (rx == lastX && ry == lastY) continue;
+                lastX = rx; lastY = ry;
+                c.blend (rx, ry, rc, a);
+            }
+        }
+    }
+
     // a note floats up while it sings
     if (f.singFlash > 0.0f)
     {
@@ -1011,10 +1127,11 @@ void Painter::overlay (Canvas& c, const Sim& sim, const MusicInfo& m, float dt)
 
     // now playing
     {
-        const juce::String l1 = "NOW PLAYING", l2 = m.style + "  " + m.key + " " + m.scale + "  " + juce::String (m.bpm) + " BPM",
+        juce::String l1 = m.title.isNotEmpty() ? "NOW PLAYING: " + m.title.toUpperCase() : juce::String ("NOW PLAYING"), l2 = m.style + "  " + m.key + " " + m.scale + "  " + juce::String (m.bpm) + " BPM",
                            l3 = "PART " + juce::String (m.piece + 1) + "  " + m.section + "   " + m.place,
                            l4 = "FISH PULL IT TO " + juce::String ((int) std::lround (m.targetBpm)) + " BPM " + m.targetKey;
         const int w = juce::jmax (Canvas::textWidth (l2), Canvas::textWidth (l4)) + 10;
+        while (l1.length() > 12 && Canvas::textWidth (l1) > w - 10) l1 = l1.dropLastCharacters (1);
         panel (4, 4, w, 31);
         c.text (l1, 9, 8, 0xff2ce8f5, 1, 0xff06264a, true);
         c.text (l2.toUpperCase(), 9, 15, 0xffffffff, 1, 0xff06264a, true);
@@ -1224,31 +1341,53 @@ void Painter::decor (Canvas& c, const Sim& sim, float t)
         }
         case PlaceRuins:
         {
-            // columns of a sunken city, an arch, and a big stone cat head
-            const Colour stone = 0xffd9d1bd, stoneDark = 0xffa69d86;
-            const int bases[] = { 70, 120, 300, 350 };
-            const int heights[] = { 80, 54, 92, 30 };
+            // columns of a sunken city, an arch, and a big stone cat head (lit like everything else, mossy, and
+            // seen through a little water so they sit in the scene)
+            const float lit = 0.45f + 0.55f * sim.daylight;
+            auto st = [&] (Colour col) { return shade (mixc (col, 0xff3f8fb0, 0.18f), lit); };
+            const Colour stone = st (0xffd9d1bd), stoneLight = st (0xffeee6d2), stoneDark = st (0xffa69d86), moss = st (0xff5f9a4a);
+            const int bases[] = { 70, 120, 300, 352 };
+            const int heights[] = { 80, 54, 92, 92 };
             for (int k = 0; k < 4; ++k)
             {
                 const int x0 = bases[k], hgt = heights[k];
                 for (int y = 0; y < hgt; ++y)
                     for (int x = 0; x < 10; ++x)
-                        c.set (x0 + x, (int) floorY + 2 - y, x % 3 == 0 ? stoneDark : (x > 7 ? shade (stone, 0.85f) : stone));
-                for (int x = -2; x < 12; ++x) { c.set (x0 + x, (int) floorY + 2 - hgt, stone); c.set (x0 + x, (int) floorY + 1 - hgt, stoneDark); }
+                    {
+                        Colour col = x == 0 || x == 9 ? stoneDark : (x < 3 ? stoneLight : (x > 6 ? shade (stone, 0.88f) : stone));
+                        if (x % 3 == 1 && x > 0 && x < 9) col = shade (col, 0.93f);                 // fluting
+                        const auto h = hash ((juce::uint32) (k * 977 + x * 31 + y * 7));
+                        if (y < 10 && h % 3 == 0) col = moss;                                          // moss at the foot
+                        else if (h % 41 == 0) col = stoneDark;                                         // cracks
+                        c.set (x0 + x, (int) floorY + 2 - y, col);
+                    }
+                // capital (top) and base
+                for (int x = -2; x < 12; ++x)
+                {
+                    c.set (x0 + x, (int) floorY + 2 - hgt, stoneLight); c.set (x0 + x, (int) floorY + 1 - hgt, stone); c.set (x0 + x, (int) floorY - hgt, stoneDark);
+                    c.set (x0 + x, (int) floorY + 3, stoneDark);
+                }
             }
-            for (int x = 0; x < 50; ++x)   // the arch between two columns
+            // the arch resting on the two tall columns at the right
+            for (int x = -2; x < 64; ++x)
             {
-                const int y = (int) (std::sin (x / 50.0f * 3.14159f) * 14.0f);
-                for (int k = 0; k < 5; ++k) c.set (300 + x, (int) floorY + 2 - 92 - y - k + 2, k == 0 ? stoneDark : stone);
+                const float u = (x + 2) / 65.0f;
+                const int y = (int) (std::sin (u * 3.14159f) * 16.0f);
+                for (int k = 0; k < 6; ++k)
+                    c.set (300 + x, (int) floorY - 92 - y - k + 1, k == 0 ? stoneDark : (k == 5 ? stoneLight : stone));
             }
+            // a fallen column piece lying in the sand
+            for (int y = 0; y < 8; ++y)
+                for (int x = 0; x < 30; ++x)
+                    c.set (150 + x, (int) floorY + 3 - y, y == 7 ? stoneLight : (y == 0 ? stoneDark : (x % 6 == 0 ? shade (stone, 0.9f) : stone)));
             // the stone cat head
-            const int hx = 210, hy = (int) floorY - 6;
+            const int hx = 220, hy = (int) floorY - 6;
             for (int y = -12; y <= 10; ++y)
                 for (int x = -14; x <= 14; ++x)
-                    if (x * x / 196.0f + y * y / 144.0f <= 1.0f) c.set (hx + x, hy + y, x > 6 ? stoneDark : stone);
+                    if (x * x / 196.0f + y * y / 144.0f <= 1.0f) c.set (hx + x, hy + y, x > 6 ? stoneDark : (x < -6 && y < 0 ? stoneLight : stone));
             for (int k = 0; k < 7; ++k) { c.set (hx - 11 + k / 2, hy - 10 - k, stone); c.set (hx + 11 - k / 2, hy - 10 - k, stoneDark); }
-            c.fillRect (hx - 7, hy - 3, 3, 3, 0xff4a4538); c.fillRect (hx + 4, hy - 3, 3, 3, 0xff4a4538);
-            c.set (hx - 1, hy + 2, 0xff8f6a5a); c.set (hx, hy + 2, 0xff8f6a5a);
+            c.fillRect (hx - 7, hy - 3, 3, 3, st (0xff4a4538)); c.fillRect (hx + 4, hy - 3, 3, 3, st (0xff4a4538));
+            c.set (hx - 1, hy + 2, st (0xff8f6a5a)); c.set (hx, hy + 2, st (0xff8f6a5a));
             break;
         }
         case PlaceDeep:

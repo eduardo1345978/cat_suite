@@ -349,7 +349,9 @@ void testCommandsAndLife (const juce::File& outDir)
     engine.paintEvery = 15;
     double peakMax = 0, rmsSum = 0;
     int frames = 0, weatherSeen = 0;
-    const int startPieces = music.pieces();
+    const int startPieces = music.pieces(), startSongs = music.songsStarted;
+    int crossfadeFrames = 0, silentFrames = 0;
+    juce::StringArray titles;
     for (int minute = 0; minute < 60; ++minute)
     {
         // a few viewers keep chatting, Miro's owner too
@@ -360,6 +362,9 @@ void testCommandsAndLife (const juce::File& outDir)
             peakMax = juce::jmax (peakMax, (double) engine.lastPeak());
             rmsSum += engine.lastPeak(); ++frames;
             weatherSeen |= 1 << sim.weather;
+            if (music.isCrossfading()) ++crossfadeFrames;
+            if (engine.lastPeak() < 0.002f) ++silentFrames;
+            titles.addIfNotAlreadyThere (music.currentTitle());
         }
     }
     engine.paintEvery = 1;
@@ -382,6 +387,10 @@ void testCommandsAndLife (const juce::File& outDir)
 
     check (peakMax > 0.05 && peakMax <= 1.0, "music: plays and never clips (peak " + juce::String (peakMax, 3) + ")");
     check (music.fishNotes > 500, "music: the fish sing (" + juce::String (music.fishNotes) + " notes)");
+    check (music.songsStarted - startSongs >= 3 && titles.size() >= 3,
+           "music: new songs keep coming (" + juce::String (music.songsStarted - startSongs) + " in an hour: " + titles.joinIntoString (", ").substring (0, 120) + ")");
+    check (crossfadeFrames > 0, "music: songs crossfade into each other (" + juce::String (crossfadeFrames) + " s of crossfade)");
+    check (silentFrames < 3, "music: never a silent gap (" + juce::String (silentFrames) + " silent seconds)");
     check (music.outOfKey * 50 < music.fishNotes + 1, "music: fish sing in the song's key (" + juce::String (music.outOfKey) + " out of key)");
     {
         const auto& st = styleInfo (sim.getStyle());
@@ -508,6 +517,29 @@ void testVideo (const juce::File& outDir)
     }
 }
 } // namespace
+
+/** --places <dir>: a quick picture of every place, by day and by night (for checking the look). */
+int renderPlaces (const juce::File& outDir)
+{
+    outDir.createDirectory();
+    const auto saveFile = outDir.getChildFile ("places.xml");
+    saveFile.deleteFile();
+    Engine engine (saveFile);
+    auto& sim = engine.simForTests();
+    engine.paintEvery = 1;
+    for (int night = 0; night < 2; ++night)
+    {
+        sim.timeOverride = night ? 23.0f : 12.0f;
+        sim.daylight = night ? 0.0f : 1.0f;
+        for (int p = 0; p < NumPlaces; ++p)
+        {
+            engine.say ("UCmod", "Mod", "!place " + juce::String (p == 0 ? "reef" : p == 1 ? "kelp" : p == 2 ? "crystal" : p == 3 ? "ship" : p == 4 ? "cave" : p == 5 ? "ice" : p == 6 ? "lagoon" : "ruins"), true);
+            engine.runFrames (30 * 5);
+            savePng (engine.canvasForTests(), outDir.getChildFile (juce::String ("place-") + juce::String (p) + (night ? "-night" : "-day") + ".png"));
+        }
+    }
+    return 0;
+}
 
 int runSelfTest (const juce::File& outDir)
 {

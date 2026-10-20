@@ -52,7 +52,8 @@ After many generations evolution can discover a whole NEW SPECIES with something
 
 🌊 THE OCEAN
 Places: Aqua reef, Emerald kelp, Crystal deep, Sunken ship, Coral cave, Ice ocean, Tropical lagoon, Sunken ruins (chat votes where it goes)
-Music (always relaxing, Frutiger Aero): Aqua dream, Sky lounge, Crystal deep, Bubble pop, Glass garden, Bossa breeze, Pixel lullaby, Strings at dusk
+Music (always relaxing, Frutiger Aero): Aqua dream, Sky lounge, Crystal deep, Bubble pop, Glass garden, Bossa breeze, Pixel lullaby, Strings at dusk, City lights, Island drift, Folk tide, Dream haze, Funky reef, Night jazz.
+   A new song starts every few minutes and fades in smoothly over the last one
 Day and night follow the real clock (sunsets, stars, glowing fish at night). Weather: calm, rain and storms.
 Waves, bubbles and far-away whale songs under the music. A cat in a boat says hi to every fish that arrives.
 New subscribers get a little party 🎉
@@ -65,7 +66,7 @@ New subscribers get a little party 🎉
 !ban @name / !unban @name no fish for them (their fish is removed)
 !event storm / calm / feast / babyboom / rarehunt
 !place reef / kelp / crystal / ship / cave / ice / lagoon / ruins
-!music aqua / lounge / crystal / bubble / glass / bossa / pixel / strings
+!music aqua / lounge / crystal / bubble / glass / bossa / pixel / strings / city / island / folk / haze / funky / jazz
 !startvote / !endvote
 
 Be kind - names and bubbles with rude words are replaced or hidden. One fish per person.
