@@ -36,6 +36,24 @@ private:
     juce::uint32 age = 0;
 };
 
+/** The ocean itself: waves, rain, bubbles, whale songs far away, drips in the cave. */
+class Ambience
+{
+public:
+    void prepare (double sampleRate) { sr = sampleRate; }
+    void render (float* l, float* r, int n, const Sim&);   // adds
+    int whales = 0;                                        // test counter
+private:
+    float next() noexcept { seed = seed * 1664525u + 1013904223u; return (float) (seed >> 9) / 4194304.0f - 1.0f; }
+    juce::uint32 seed = 12345;
+    double sr = 48000.0, t = 0.0;
+    float lpL = 0, lpR = 0, rainLp = 0;
+    struct Blip { float t = -1, f = 800, pan = 0.5f, amp = 0.03f, len = 0.05f, rise = 1.8f; };
+    std::array<Blip, 8> blips;
+    float whaleT = -1, whaleLen = 5, whaleBase = 150, whalePh = 0, whaleLp = 0, nextWhale = 40;
+    float nextBlip = 0.5f, nextDrip = 2.0f;
+};
+
 class Music
 {
 public:
@@ -52,6 +70,7 @@ public:
     double currentBpm() const noexcept { return song != nullptr ? song->bpm : 90.0; }
     int currentKey() const noexcept { return song != nullptr ? song->key : 0; }
     int fishNotes = 0;                                  // test counter
+    int whales() const noexcept { return ambience.whales; }
     int outOfKey = 0;                                   // test counter: fish notes not in the song's scale
 
 private:
@@ -61,15 +80,17 @@ private:
     cat::muse::SongPlayer player;
     cat::muse::SongRenderer renderer;
     FishSynth fish;
+    Ambience ambience;
     juce::Reverb fishVerb;
     cat::SafetyLimiter limiter;
     std::shared_ptr<const cat::muse::Song> song;
     std::array<juce::MidiBuffer, cat::muse::NumParts> parts;
     juce::AudioBuffer<float> fishBuf;
     double sr = 48000.0, ppq = 0.0;
-    int style = StyleDreamy, pieceCount = 0, singRotate = 0;
+    int style = StyleDreamy, pieceCount = 0, singRotate = 0, piecesInSong = 0;
     juce::uint32 seed = 1;
     juce::Random rng { 99 };
     int pendingStyle = -1;
+    float baseMelodyLevel = 0.55f;
 };
 } // namespace ocean

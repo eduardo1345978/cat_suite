@@ -226,7 +226,7 @@ void Genes::setRhythm (int density)
 
 float Genes::lengthPixels() const
 {
-    static const float base[NumBodies] = { 18.0f, 14.0f, 24.0f, 14.0f, 17.0f, 16.0f };
+    static const float base[NumBodies] = { 15.0f, 12.0f, 19.0f, 12.0f, 14.0f, 13.0f };
     static const float scale[3] = { 0.75f, 1.0f, 1.35f };
     return base[juce::jlimit (0, NumBodies - 1, body)] * scale[juce::jlimit (0, 2, size)];
 }

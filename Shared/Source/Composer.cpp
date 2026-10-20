@@ -75,7 +75,26 @@ const GenreInfo genreInfo[NumGenres] = {
     { 104, 150, 0.60f, 0.65f, 0.50, { 4, 2 }, 1.00f, 0.40f, 1 },   // Jazz
     { 112, 148, 0.50f, 0.50f, 0.25, { 4, 4 }, 0.00f, 0.00f, 1 },   // Rock
     {  72, 100, 0.50f, 0.50f, 0.25, { 4, 8 }, 0.05f, 0.10f, 0 },   // Cinematic
+    {  88, 108, 0.50f, 0.50f, 0.25, { 4, 4 }, 0.55f, 0.65f, 1 },   // Frutiger Aero: lush maj7 / add9, bright and airy
+    {  84, 112, 0.50f, 0.50f, 0.25, { 4, 8 }, 0.20f, 0.10f, 1 },   // Synthwave
+    { 118, 138, 0.50f, 0.52f, 0.25, { 4, 2 }, 0.95f, 0.50f, 1 },   // Bossa nova
+    { 130, 160, 0.50f, 0.50f, 0.25, { 4, 4 }, 0.00f, 0.00f, 2 },   // Chiptune
+    {  66,  92, 0.50f, 0.50f, 0.25, { 4, 8 }, 0.02f, 0.05f, 0 },   // Orchestral
 };
+
+/** The new genres borrow the song form, bass and harmony habits of an older one (and add their own drums / sounds). */
+int baseGenre (int g)
+{
+    switch (g)
+    {
+        case Aero:       return Pop;
+        case Synthwave:  return Rock;
+        case BossaNova:  return Jazz;
+        case Chiptune:   return Pop;
+        case Orchestral: return Cinematic;
+        default:         return g;
+    }
+}
 
 //==============================================================================
 // chords are encoded as: degree (0-6) | variant << 3 | extensions << 6
@@ -227,7 +246,8 @@ class Writer
 {
 public:
     explicit Writer (Song& songToWrite) : s (songToWrite), g (genreInfo[juce::jlimit (0, NumGenres - 1, s.settings.genre)]),
-                                          genre (juce::jlimit (0, NumGenres - 1, s.settings.genre)),
+                                          genre (baseGenre (juce::jlimit (0, NumGenres - 1, s.settings.genre))),
+                                          real (juce::jlimit (0, NumGenres - 1, s.settings.genre)),
                                           mood (juce::jlimit (0, NumMoods - 1, s.settings.mood)) {}
 
     Rng partRng (int target, u64 salt) const
@@ -252,6 +272,8 @@ public:
         for (int i = 0; i < 7; ++i) w[i] = moodScales[mood][i];
         if (genre == Jazz) w[Phrygian] = 0;
         if (genre == Rock && mood == Happy) w[Mixolydian] += 3;
+        if (real == Aero) { w[Major] += 6; w[Lydian] += 5; w[Minor] = w[Phrygian] = w[HarmonicMinor] = 0; }   // always bright
+        if (real == Synthwave) { w[Minor] += 4; w[Dorian] += 2; }
         s.scale = r.weighted (w, 7);
         s.bpm = s.settings.bpm > 0.0 ? s.settings.bpm : (double) juce::roundToInt (g.bpmLo + r.uni() * (g.bpmHi - g.bpmLo));
         if (mood == Sad || mood == Dreamy || mood == Chill) s.bpm = juce::jmax (g.bpmLo, s.bpm - 6.0);
@@ -854,6 +876,18 @@ public:
     std::vector<Layer> kit() const
     {
         using namespace drum;
+        switch (real)
+        {
+            case Aero:       return { { kick, { "9000000000900000", "9000000090000000" }, 0.7f, false }, { rim, { "0000900000009000" }, 0.5f, false },
+                                      { shaker, { "5555555555555555", "5050505050505050" }, 0.3f, true } };
+            case Synthwave:  return { { kick, { "9000000090000000", "9000000090900000" }, 1.0f, false }, { clap, { "0000900000009000" }, 1.0f, false },
+                                      { hat, { "5757575757575757" }, 0.4f, true } };
+            case BossaNova:  return { { kick, { "9000000090000000", "9000009090000000" }, 0.7f, false }, { rim, { "0090090000900900", "9001001000100100" }, 0.55f, false },
+                                      { shaker, { "7575757575757575" }, 0.35f, true } };
+            case Chiptune:   return { { kick, { "9000000090900000", "9000000090000000" }, 0.95f, false }, { snare, { "0000900000009000" }, 0.85f, false },
+                                      { hat, { "9090909090909090" }, 0.5f, true } };
+            default: break;
+        }
         switch (genre)
         {
             case Pop:  return { { kick, { "9000000090000000", "9000000090900000", "9000003090000000" }, 0.95f, false }, { snare, { "0000900000009000" }, 0.9f, false },
@@ -1038,7 +1072,7 @@ public:
                 auto tone = [&] (int i, int octaveUp) { const int n = (int) tones.size(); return tones[(size_t) (((i % n) + n) % n)] + 12 * (octaveUp + (i >= n ? 1 : 0)); };
                 const float vel = 0.45f + sec.energy * 0.25f;
 
-                switch (genre)
+                switch (real == Synthwave || real == Chiptune || real == Aero ? (int) Pop : genre)
                 {
                     case Rock:
                     {
@@ -1084,7 +1118,8 @@ public:
                     default:
                     {
                         // Pop / House: arpeggio (8ths, 16ths in a house drop)
-                        const double step = (genre == House && sec.type == Drop) ? 0.25 : (sec.energy > 0.7f ? 0.5 : 1.0);
+                        double step = (genre == House && sec.type == Drop) ? 0.25 : (sec.energy > 0.7f ? 0.5 : 1.0);
+                        if (real == Synthwave || real == Chiptune) step = sec.energy > 0.5f ? 0.25 : 0.5;   // running 16th arps
                         int k = 0;
                         for (double t = a; t < a + L - 1e-6; t += step, ++k)
                         {
@@ -1454,12 +1489,12 @@ public:
 
     Song& s;
     const GenreInfo& g;
-    const int genre, mood;
+    const int genre, real, mood;   // genre = how it behaves (new genres borrow an older one's habits), real = the genre picked
 };
 } // namespace
 
 //==============================================================================
-juce::StringArray genreNames() { return { "Pop", "Lo-fi", "Trap", "House", "Ambient", "Jazz", "Rock", "Cinematic" }; }
+juce::StringArray genreNames() { return { "Pop", "Lo-fi", "Trap", "House", "Ambient", "Jazz", "Rock", "Cinematic", "Frutiger Aero", "Synthwave", "Bossa nova", "Chiptune", "Orchestral" }; }
 juce::StringArray moodNames() { return { "Happy", "Sad", "Dark", "Dreamy", "Epic", "Chill" }; }
 juce::StringArray partNames() { return { "Chords", "Bass", "Drums", "Melody", "Counter" }; }
 juce::StringArray targetNames() { return { "Chords", "Bass", "Drums", "Melody", "Counter-melody", "Lyrics", "Song form" }; }

@@ -13,7 +13,12 @@ SoundSet defaultSounds (int genre)
         case Ambient:   return { 0, 0, 2, 3, 2 };
         case Jazz:      return { 1, 3, 3, 1, 1 };
         case Rock:      return { 3, 1, 3, 3, 1 };
-        default:        return { 3, 0, 3, 3, 3 };   // Cinematic
+        case Aero:       return { 0, 0, 2, 5, 5 };   // glassy pad, glass bells
+        case Synthwave:  return { 0, 1, 3, 2, 2 };   // pad, saw bass, plucky arps
+        case BossaNova:  return { 1, 3, 2, 1, 2 };   // e-piano, plucked bass, soft kit
+        case Chiptune:   return { 4, 1, 1, 4, 4 };   // square waves
+        case Orchestral: return { 3, 0, 3, 3, 3 };   // strings
+        default:         return { 3, 0, 3, 3, 3 };   // Cinematic
     }
 }
 

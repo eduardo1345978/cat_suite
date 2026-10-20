@@ -37,14 +37,14 @@ inline float polyBlepSaw (float ph, float inc) noexcept
 }
 
 //==============================================================================
-/** Polyphonic keys for Chord-Cat: Soft Pad, E-Piano, Pluck, Strings. */
+/** Polyphonic keys for Chord-Cat: Soft Pad, E-Piano, Pluck, Strings, Chip, Glass Bell. */
 class KeysSynth
 {
 public:
-    static juce::StringArray soundNames() { return { "Soft Pad", "E-Piano", "Pluck", "Strings" }; }
+    static juce::StringArray soundNames() { return { "Soft Pad", "E-Piano", "Pluck", "Strings", "Chip", "Glass Bell" }; }
 
     void prepare (double sampleRate);
-    void setSound (int s) noexcept { sound = juce::jlimit (0, 3, s); }
+    void setSound (int s) noexcept { sound = juce::jlimit (0, 5, s); }
     void setBendRange (float semitones) noexcept { bendRange = semitones; }
     void handle (const juce::MidiMessage&);
     void allOff();

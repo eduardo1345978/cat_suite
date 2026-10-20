@@ -34,8 +34,12 @@ enum Sound
     SndBoomBap, Snd808, SndLofi, SndLive,             // drum kits
     SndGlide, SndSing, SndTalk,                       // sound Cats
     SndLifeOwn,                                       // Life-Cat's own sound (Life source only)
+    SndChip, SndBell,                                 // more keys (added later, so saved jams keep their numbers)
     NumSounds
 };
+/** A keys sound by its number in the keys synth (0 pad .. 5 glass bell). */
+int keysSound (int keysIndex);
+bool isKeysSound (int s);
 const char* soundName (int);
 int catForSound (int);                  // -1 for built-in
 juce::StringArray soundGroups();        // for menus: "Keys", "Bass", "Drums", "Cats"

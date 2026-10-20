@@ -34,6 +34,17 @@ public:
     void stopLive();
     bool wantsLive() const noexcept { return liveWanted.load(); }
 
+    /** The admin console: "/..." admin commands, "!..." chat commands as the host. */
+    void console (const juce::String& line);
+    juce::String consoleText() const;
+    int consoleVersion() const noexcept { return consoleCount.load(); }
+
+    /** Health: when the clock last ticked (ms counter), how long the app runs, how often things were restarted. */
+    double lastFrameMs() const noexcept { return heartbeat.load(); }
+    juce::String health() const;
+    /** What plays and where we are now (for the pickers in the window). */
+    std::atomic<int> currentStyle { 0 }, currentPlace { 0 };
+
     /** The speakers: reads what the engine made (48 kHz stereo). */
     void readMonitor (float* l, float* r, int n);
     std::atomic<float> monitorGain { 0.8f };
@@ -63,6 +74,16 @@ private:
 
     struct ChatLine { juce::String id, name, text; bool moderator = false; };
     int lastSubscribers = -1;
+    std::vector<juce::String> consoleQueue;
+    juce::StringArray consoleLog;
+    mutable juce::CriticalSection consoleLock;
+    std::atomic<int> consoleCount { 0 };
+    void log (const juce::String&);
+    std::atomic<double> heartbeat { 0.0 };
+    const double startedMs = juce::Time::getMillisecondCounterHiRes();
+    int streamRestarts = 0;
+    juce::int64 lastSentCheck = 0;
+    double lastSentCheckMs = 0;
     juce::CriticalSection chatLock;
     std::vector<ChatLine> pending;
 

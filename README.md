@@ -71,15 +71,18 @@ Viewers type commands in the live chat:
 | `!dance`, `!spin`, `!jump` | moves |
 | `!feed`, `!vote 1`, `!name Miro`, `!random`, `!info`, `!level`, `!home`, `!release`, `!help` | food, votes, ... |
 
-**Moderators** (and the host typing in the app): `!rename @name New Name`, `!resetname @name`, `!kick @name`, `!ban @name`, `!unban @name`, `!event storm/calm/feast/babyboom/rarehunt`, `!place reef/kelp/crystal/ship`, `!music aqua/lounge/crystal/bubble`, `!startvote`, `!endvote`.
+**Moderators** (and the host typing in the app): `!rename @name New Name`, `!resetname @name`, `!kick @name`, `!ban @name`, `!unban @name`, `!event storm/calm/feast/babyboom/rarehunt`, `!place reef/kelp/crystal/ship/cave/ice/lagoon/ruins`, `!music aqua/lounge/crystal/bubble`, `!startvote`, `!endvote`.
 
 - **Levels**: a viewer's fish earns XP while it swims (1 a minute) and when they chat (2, at most every 30 s); the name shows the level (*MIRO LV7*). Some looks unlock with levels: LV2 puffer, gradient, sail fin, sleepy eyes, scarf, chip voice; LV3 flat, belly, spiky fin, star eyes, headphones, marimba; LV4 checker, veil tail, whistle; LV5 cat body, lamp; LV6 pad voice; LV8 crown.
 - Your fish swims in when you write in the chat; after 20 quiet minutes it naps in the cave (it is kept forever). A cat in a boat waves hello.
 - **Genetics**: babies mix their parents' genes (babies of your fish are called *Miro Jr.*), sometimes mutate, and a few are born **Golden, Rainbow, Ghost, Glowing or Crystal**. After many generations evolution discovers **new species** with something no fish had before (whiskers, a glowing antenna, a twin tail, starry spots, a frill, a horn).
 - **Music** is always relaxing: Aqua dream, Sky lounge, Crystal deep or Bubble pop (Frutiger Aero: bright, airy, glassy). The composer never stops; the fishes' genes slowly pull its **tempo and key**, and every fish sings its own melody (with a little fin wave).
-- **Places**: Aqua reef, Emerald kelp, Crystal deep (glowing plants, fish glow), Sunken ship (with a treasure chest). Chat votes where the ocean goes, which music plays, and events (storm, feast, baby boom, rare hunt).
+- **Places**: Aqua reef, Emerald kelp, Crystal deep (glowing plants, fish glow), Sunken ship (with a treasure chest), Coral cave, Ice ocean, Tropical lagoon (palm trees), Sunken ruins (a stone cat head).
+- **Day and night** follow the real clock: sunrise, a pink sunset, stars and a moon, glowing fish and calmer music at night. Waves, bubbles, rain and far-away whale songs play under the music. A chat message becomes a **speech bubble** above your fish.
+- **Admin console** (in the app, under the picture): `/help`, `/stats`, `/fish @name`, `/viewers`, `/spawn 5`, `/feed 10`, `/give @name 50`, `/level @name 8`, `/rare @name gold`, `/weather storm`, `/time night` (or `auto`), `/place lagoon`, `/music bubble`, `/event feast`, `/vote start`, `/announce text`, `/party`, `/species`, `/newspecies`, `/sleepall`, `/wakeall`, `/clear food`, `/save`, `/health` and every moderator command. `!` commands run as the host.
+- **Health check**: a stream that stops or gets stuck restarts by itself; if the whole ocean freezes, the app restarts itself and goes live again. The uptime and restarts show in the app. Chat votes where the ocean goes, which music plays, and events (storm, feast, baby boom, rare hunt).
 - New **subscribers** (the channel's count going up) start a confetti party. Leaderboards: oldest fish, biggest families, rare fish, most babies, species, highest levels.
-- One fish per viewer, a word filter for names (English and Slovak), a cooldown against spam, at most 40 viewers' fish on screen at once.
+- **No spam**: one fish per viewer, a word filter (English and Slovak) for names and bubbles, pauses per command (looks 8 s, emotes 20 s, name 1 min, food 45 s, help once for everyone every 90 s), the same message twice is ignored, more than 10 commands a minute mutes a viewer for 2 minutes, shouting bubbles are lowered, at most 6 bubbles and 40 viewers' fish on screen.
 
 ### The composer (Cat Hub's Compose tab, Dice and Muse-Cat)
 Songs are written with music theory, so they sound good:

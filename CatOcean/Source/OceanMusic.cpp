@@ -129,11 +129,101 @@ void FishSynth::render (float* l, float* r, int n)
 }
 
 //==============================================================================
+void Ambience::render (float* l, float* r, int n, const Sim& sim)
+{
+    const float dt = (float) (1.0 / sr), storm = sim.weatherLevel, night = 1.0f - sim.daylight;
+    const bool deep = sim.place == PlaceDeep || sim.place == PlaceIce || sim.place == PlaceCave;
+    const float waveA = 0.05f + 0.06f * storm, rainA = 0.035f * juce::jmax (0.0f, storm - 0.2f) / 0.8f;
+    const float lpCoef = 1.0f - std::exp (-2.0f * 3.14159f * 350.0f / (float) sr);
+    for (int i = 0; i < n; ++i)
+    {
+        const float time = (float) t;
+        // waves: soft filtered noise that swells in and out
+        const float swell = 0.55f + 0.45f * std::sin (time * 0.9f) * std::sin (time * 0.23f + 1.0f);
+        lpL += lpCoef * (next() - lpL);
+        lpR += lpCoef * (next() - lpR);
+        float a = lpL * waveA * swell * 2.5f, b = lpR * waveA * swell * 2.5f;
+        // rain: brighter noise
+        if (rainA > 0.0f)
+        {
+            const float nz = next();
+            rainLp += 0.3f * (nz - rainLp);
+            a += (nz - rainLp) * rainA; b += (next() - rainLp) * rainA;
+        }
+        // bubbles: little rising blips
+        for (auto& bl : blips)
+            if (bl.t >= 0.0f)
+            {
+                const float k = bl.t / bl.len;
+                const float f = bl.f * (1.0f + bl.rise * k);
+                const float v = std::sin (6.2831853f * f * bl.t) * bl.amp * std::sin (3.14159f * juce::jmin (1.0f, k));
+                a += v * (1.0f - bl.pan); b += v * bl.pan;
+                bl.t += dt;
+                if (bl.t > bl.len) bl.t = -1.0f;
+            }
+        // a whale far away: a slow, low gliding song
+        if (whaleT >= 0.0f)
+        {
+            const float k = whaleT / whaleLen;
+            const float f = whaleBase * (1.0f + 0.35f * std::sin (3.14159f * k) - 0.15f * k) * (1.0f + 0.01f * std::sin (time * 5.5f));
+            whalePh += f * dt;
+            const float raw = std::sin (6.2831853f * whalePh) + 0.3f * std::sin (6.2831853f * whalePh * 2.01f);
+            whaleLp += 0.05f * (raw - whaleLp);
+            const float env = std::sin (3.14159f * juce::jmin (1.0f, k));
+            const float v = whaleLp * env * (deep ? 0.07f : 0.045f);
+            a += v * 0.6f; b += v * 0.4f;
+            whaleT += dt;
+            if (whaleT > whaleLen) whaleT = -1.0f;
+        }
+        l[i] += a; r[i] += b;
+        t += dt;
+    }
+    // what happens next (block rate)
+    const float blockSecs = n * dt;
+    nextBlip -= blockSecs;
+    if (nextBlip <= 0.0f)
+    {
+        for (auto& bl : blips)
+            if (bl.t < 0.0f)
+            {
+                bl.t = 0.0f;
+                bl.f = 500.0f + (next() + 1.0f) * 500.0f;
+                bl.pan = 0.5f + next() * 0.4f;
+                bl.amp = 0.012f + (next() + 1.0f) * 0.01f;
+                bl.len = 0.03f + (next() + 1.0f) * 0.03f;
+                bl.rise = 1.2f + (next() + 1.0f) * 0.6f;
+                break;
+            }
+        nextBlip = (0.4f + (next() + 1.0f) * 1.2f) / (1.0f + storm * 2.0f);
+    }
+    nextWhale -= blockSecs;
+    if (nextWhale <= 0.0f && whaleT < 0.0f)
+    {
+        whaleT = 0.0f;
+        whaleLen = 4.0f + (next() + 1.0f) * 2.0f;
+        whaleBase = 110.0f + (next() + 1.0f) * 60.0f;
+        ++whales;
+        nextWhale = (deep || night > 0.5f ? 70.0f : 140.0f) + (next() + 1.0f) * 60.0f;
+    }
+    if (sim.place == PlaceCave)
+    {
+        nextDrip -= blockSecs;
+        if (nextDrip <= 0.0f)
+        {
+            for (auto& bl : blips)
+                if (bl.t < 0.0f) { bl = { 0.0f, 1800.0f + (next() + 1.0f) * 600.0f, 0.5f + next() * 0.4f, 0.03f, 0.08f, -0.3f }; break; }
+            nextDrip = 1.5f + (next() + 1.0f) * 2.5f;
+        }
+    }
+}
+
+//==============================================================================
 void Music::prepare (double sampleRate)
 {
     sr = sampleRate;
     renderer.prepare (sr, 4096);
     fish.prepare (sr);
+    ambience.prepare (sr);
     fishVerb.setSampleRate (sr);
     juce::Reverb::Parameters p;
     p.roomSize = 0.85f; p.damping = 0.5f; p.wetLevel = 0.45f; p.dryLevel = 0.75f; p.width = 1.0f;
@@ -164,17 +254,24 @@ void Music::startStyle (int st, int key, double bpm)
         case StyleLoFi:    ss = { 1, 0, 2, 2, 0 }; break;   // sky lounge: e-piano, soft beat, bell-like plucks
         case StyleDeepSea: ss = { 0, 0, 2, 3, 0 }; break;   // crystal deep: pads and strings
         case StyleSunrise: ss = { 1, 3, 2, 2, 2 }; break;   // bubble pop: e-piano, plucky bass and melody
+        case StyleGlass:   ss = { 0, 0, 2, 5, 5 }; break;   // glass garden: pad and glass bells
+        case StyleBossa:   ss = { 1, 3, 2, 1, 2 }; break;   // bossa breeze: e-piano, plucked bass, a soft kit
+        case StylePixel:   ss = { 0, 0, 2, 4, 5 }; break;   // pixel lullaby: soft chip melody over a pad
+        case StyleStrings: ss = { 3, 0, 2, 3, 3 }; break;   // strings at dusk
         default:           ss = { 0, 0, 2, 2, 3 }; break;   // aqua dream: glassy pad, plucks, strings
     }
     renderer.setSounds (ss);
-    renderer.levels = { 0.5f, 0.6f, style == StyleSunrise ? 0.3f : 0.26f, 0.8f, 0.45f };
+    // calm: soft pads in front, a gentle melody, quiet counter-melody and (only in the lounge) a whisper of a beat
+    renderer.levels = { 0.55f, 0.5f, 0.16f, 0.55f, 0.28f };
+    baseMelodyLevel = renderer.levels[(size_t) Melody];
     renderer.mute = {};
     renderer.mute[(size_t) Drums] = ! info.drums;
-    renderer.reverbSend = 0.32f;
+    renderer.reverbSend = 0.45f;
     renderer.allOff();
     player.setSong (song);
     ppq = 0.0;
     ++pieceCount;
+    piecesInSong = 1;
 }
 
 void Music::nextPiece (const Sim& sim)
@@ -183,14 +280,28 @@ void Music::nextPiece (const Sim& sim)
     if (now == nullptr) return;
     Song prev = *now;
     // slowly towards what the fish like: a few bpm and one step round the circle of fifths per piece
-    const double target = sim.targetTempo();
+    const double target = sim.targetTempo() * (0.88 + 0.12 * sim.daylight);   // slower at night
     const double base = prev.bpm;
     const auto& info = styleInfo (style);
     prev.bpm = std::round (juce::jlimit ((double) info.bpmLo, (double) info.bpmHi, juce::jlimit (base - 3.0, base + 3.0, target)));
     const int want = sim.targetKey(), cur = prev.key;
     const int fWant = (want * 7) % 12, fCur = (cur * 7) % 12, diff = (fWant - fCur + 12) % 12;
     if (diff != 0) prev.key = (cur + (diff <= 6 ? 7 : 5)) % 12;
-    auto next = std::make_shared<Song> (composeNext (prev));
+    std::shared_ptr<Song> next;
+    if (++piecesInSong > 3)
+    {
+        // every few pieces a brand new song (new chords and melodies), so it never gets samey
+        Settings fresh = prev.settings;
+        fresh.seed = seed = seed * 1664525u + 1013904223u;
+        fresh.key = prev.key;
+        fresh.endless = true;
+        auto song2 = compose (fresh);
+        song2.bpm = prev.bpm;
+        song2.chunk = prev.chunk + 1;
+        next = std::make_shared<Song> (std::move (song2));
+        piecesInSong = 1;
+    }
+    else next = std::make_shared<Song> (composeNext (prev));
     player.queueNext (next);
     ++pieceCount;
 }
@@ -207,6 +318,7 @@ void Music::render (float* l, float* r, int n, Sim& sim)
     for (int p = 0; p < NumParts; ++p) { parts[(size_t) p].clear(); ptrs[(size_t) p] = &parts[(size_t) p]; }
     player.process (ppq, pps, n, true, ptrs);
     if (auto now = player.getSong()) song = now;
+    renderer.levels[(size_t) Melody] = baseMelodyLevel * (0.55f + 0.45f * sim.daylight);   // softer at night
     for (int p = 0; p < NumParts; ++p) renderer.handle (p, parts[(size_t) p]);
     renderer.render (l, r, n);
     for (int i = 0; i < n; ++i) { l[i] *= 0.8f; r[i] *= 0.8f; }
@@ -214,12 +326,13 @@ void Music::render (float* l, float* r, int n, Sim& sim)
     if (fishBuf.getNumSamples() < n) fishBuf.setSize (2, n, false, false, true);
     fishBuf.clear();
     singFish (sim, ppq, ppq + pps * n, pps, n, 0);
+    ambience.render (fishBuf.getWritePointer (0), fishBuf.getWritePointer (1), n, sim);   // shares the fish's reverb
     auto* fl = fishBuf.getWritePointer (0);
     auto* fr = fishBuf.getWritePointer (1);
     fishVerb.processStereo (fl, fr, n);
     for (int i = 0; i < n; ++i)
     {
-        float a = l[i] + fl[i] * 0.5f, b = r[i] + fr[i] * 0.5f;
+        float a = l[i] + fl[i] * 0.4f, b = r[i] + fr[i] * 0.4f;
         limiter.processSample (a, b);
         l[i] = a; r[i] = b;
     }
@@ -253,7 +366,7 @@ void Music::singFish (Sim& sim, double fromBeat, double toBeat, double pps, int 
         const double local = player.getPlayPosition();
         const auto* chord = song->chordAt (local);
         int sung = 0;
-        const int maxPerStep = strong ? maxStrong : 1;
+        const int maxPerStep = strong ? maxStrong : (stepInBar % 2 == 0 ? 1 : 0);   // no busy 16ths: calm
         if (singers.empty()) continue;
         const int start = singRotate++ % (int) singers.size();
         for (size_t k = 0; k < singers.size() && sung < maxPerStep; ++k)
@@ -262,7 +375,7 @@ void Music::singFish (Sim& sim, double fromBeat, double toBeat, double pps, int 
             const auto& g = f.genes;
             if ((g.rhythmPattern & (1u << stepInBar)) == 0) continue;
             const float chance = g.rhythm == 0 ? 0.9f : g.rhythm == 1 ? 0.7f : 0.55f;
-            if (rng.nextFloat() > chance * 0.3f) continue;   // named or not: everyone sings now and then
+            if (rng.nextFloat() > chance * 0.2f) continue;   // named or not: everyone sings now and then
 
             const int deg = g.melody[(size_t) (f.melodyPos % juce::jmax (1, g.melodyLength))];
             ++f.melodyPos;

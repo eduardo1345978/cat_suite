@@ -133,6 +133,10 @@ namespace
             { 0xff74eab8, 0xff1fa58a, 0xff0b5a5c, 0xffe8efc0, 0xffb4c482, 0xff6fa59a, 1.1f },   // emerald kelp
             { 0xff2d8fd0, 0xff124c8e, 0xff051c40, 0xff3c5c94, 0xff1a2c58, 0xff2f4c80, 0.0f },   // crystal deep
             { 0xff5fd6de, 0xff2589b0, 0xff0f4672, 0xfff0dfb6, 0xffc4a878, 0xff6f90ae, 0.8f },   // sunken ship
+            { 0xff6a5fd0, 0xff35307a, 0xff120f33, 0xff8a6fa8, 0xff3d2f5c, 0xff4a3d6e, 0.0f },   // coral cave
+            { 0xffbff4ff, 0xff5fbfe6, 0xff1d5c99, 0xfff4fbff, 0xffc6dbe8, 0xff9fb8cc, 1.0f },   // ice ocean
+            { 0xff6ff2e0, 0xff22c4cc, 0xff0f7aa0, 0xfffff4d6, 0xffefd9a4, 0xff9ab6a0, 1.5f },   // tropical lagoon
+            { 0xff4fc8d6, 0xff1f7fa8, 0xff0d3f66, 0xffe8dcc0, 0xffb9a77e, 0xffc9c2b0, 0.9f },   // sunken ruins
         };
         return looks[juce::jlimit (0, NumPlaces - 1, place)];
     }
@@ -162,6 +166,20 @@ Painter::Painter()
         static const Colour glows[] = { 0xff2ce8f5, 0xffc06bff, 0xff7dffb0, 0xffff7ad9 };
         weedSets[PlaceDeep].push_back ({ 6.0f + r.nextFloat() * (W - 12), 8 + r.nextInt (22), glows[r.nextInt (4)], r.nextFloat() * 6.0f, true });
     }
+    for (int i = 0; i < 14; ++i)   // glowing crystals and corals in the cave
+    {
+        static const Colour cave[] = { 0xffff7ad9, 0xffc06bff, 0xff2ce8f5, 0xffffb36b };
+        weedSets[PlaceCave].push_back ({ 6.0f + r.nextFloat() * (W - 12), 6 + r.nextInt (16), cave[r.nextInt (4)], r.nextFloat() * 6.0f, i % 2 == 0 });
+    }
+    for (int i = 0; i < 6; ++i)    // a little pale sea grass under the ice
+        weedSets[PlaceIce].push_back ({ 6.0f + r.nextFloat() * (W - 12), 6 + r.nextInt (12), mixc (0xff8fd9c0, 0xffd8f8ee, r.nextFloat()), r.nextFloat() * 6.0f });
+    for (int i = 0; i < 30; ++i)   // bright corals and sea grass in the lagoon
+    {
+        static const Colour lag[] = { 0xffff6b8a, 0xffffb347, 0xffb06bff, 0xff4fd17a, 0xff5fe3ff };
+        weedSets[PlaceLagoon].push_back ({ 6.0f + r.nextFloat() * (W - 12), 6 + r.nextInt (18), lag[r.nextInt (5)], r.nextFloat() * 6.0f });
+    }
+    for (int i = 0; i < 16; ++i)
+        weedSets[PlaceRuins].push_back ({ 6.0f + r.nextFloat() * (W - 12), 10 + r.nextInt (34), mixc (0xff3f8a4a, 0xff9ab04a, r.nextFloat()), r.nextFloat() * 6.0f });
     for (int i = 0; i < 18; ++i)
         weedSets[PlaceWreck].push_back ({ 6.0f + r.nextFloat() * (W - 12), 10 + r.nextInt (30), mixc (0xff4d6b2a, 0xff8a8a3a, r.nextFloat()), r.nextFloat() * 6.0f });
     sandNoise.resize ((size_t) W);
@@ -174,7 +192,7 @@ void Painter::paint (Canvas& c, const Sim& sim, const MusicInfo& music, float dt
     const float t = clock;
     background (c, sim, t);
     decor (c, sim, t);
-    boat (c, sim, t);
+    if (sim.place != PlaceCave) boat (c, sim, t);
 
     // food
     for (auto& p : sim.food)
@@ -189,7 +207,7 @@ void Painter::paint (Canvas& c, const Sim& sim, const MusicInfo& music, float dt
     for (auto& f : sim.fish) if (f.present) order.push_back (&f);
     std::sort (order.begin(), order.end(), [] (auto* a, auto* b) { return a->genes.lengthPixels() * a->growth > b->genes.lengthPixels() * b->growth; });
     for (auto* f : order) drawFish (c, *f, (float) sim.time);
-    if (sim.place == PlaceDeep)
+    if (sim.place == PlaceDeep || sim.place == PlaceCave || sim.daylight < 0.4f)
         for (auto* f : order)   // in the dark, every fish glows a little
             for (int y = -8; y <= 8; ++y)
                 for (int x = -8; x <= 8; ++x)
@@ -229,6 +247,36 @@ void Painter::paint (Canvas& c, const Sim& sim, const MusicInfo& music, float dt
         }
         if (always) { r.translate (0, 14); used.push_back (r); c.text (text, r.getX() + 1, juce::jmax (41, r.getY() + 1), col); }
     };
+    for (auto& sp : sim.speech)
+    {
+        const auto* f = sim.findFish (sp.fishId);
+        if (f == nullptr || ! f->present) continue;
+        const auto text = sp.text.toUpperCase();
+        const int w = Canvas::textWidth (text) + 6, h = 9;
+        const float len = f->genes.lengthPixels() * (0.5f + 0.5f * f->growth);
+        juce::Rectangle<int> r (juce::jlimit (2, W - 2 - w, (int) f->x - w / 2), juce::jmax (42, (int) (f->y - len * 0.45f) - 22), w, h);
+        for (int tries = 0; tries < 3; ++tries)
+        {
+            bool free = true;
+            for (auto& u : used) free = free && ! u.intersects (r);
+            if (free) break;
+            r.translate (0, -9);
+        }
+        used.push_back (r);
+        const float a = juce::jmin (1.0f, sp.life);
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x)
+            {
+                const bool corner = (x == 0 || x == w - 1) && (y == 0 || y == h - 1);
+                if (corner) continue;
+                const bool edge = x == 0 || x == w - 1 || y == 0 || y == h - 1;
+                c.blend (r.getX() + x, r.getY() + y, edge ? 0xff6fc3ec : (y < h / 2 ? 0xffffffff : 0xffe8f8ff), a * (edge ? 0.9f : 0.92f));
+            }
+        // the little tail pointing at the fish
+        const int tx = juce::jlimit (r.getX() + 2, r.getRight() - 3, (int) f->x);
+        c.blend (tx, r.getBottom(), 0xffffffff, a); c.blend (tx + 1, r.getBottom(), 0xff6fc3ec, a); c.blend (tx, r.getBottom() + 1, 0xff6fc3ec, a);
+        c.text (text, r.getX() + 3, r.getY() + 2, 0xff0b2f55, 1, 0, false);
+    }
     for (auto& tst : sim.toasts)
     {
         const auto* f = sim.findFish (tst.fishId);
@@ -274,10 +322,18 @@ void Painter::paint (Canvas& c, const Sim& sim, const MusicInfo& music, float dt
 void Painter::background (Canvas& c, const Sim& sim, float t)
 {
     const float storm = sim.weatherLevel;
-    const Colour skyTop = mixc (0xff2b8ff0, 0xff2e3442, storm), skyLow = mixc (0xffc8f0ff, 0xff5d6676, storm);
+    // day and night from the real clock: blue sky, a pink-orange sunset, a starry night
+    const float day = juce::jlimit (0.0f, 1.0f, sim.daylight), dusk = day > 0.0f && day < 1.0f ? 1.0f - std::abs (2.0f * day - 1.0f) : 0.0f;
+    Colour skyTop = mixc (0xff070b26, 0xff2b8ff0, day), skyLow = mixc (0xff1d2a5c, 0xffc8f0ff, day);
+    skyTop = mixc (skyTop, 0xff4b4fa8, dusk * 0.7f);
+    skyLow = mixc (skyLow, 0xffff9f7a, dusk * 0.8f);
+    skyTop = mixc (skyTop, shade (0xff2e3442, 0.4f + 0.6f * day), storm);
+    skyLow = mixc (skyLow, shade (0xff5d6676, 0.4f + 0.6f * day), storm);
     const auto& lk = look (sim.place);
-    const Colour waterTop = mixc (lk.top, shade (lk.top, 0.55f), storm), waterMid = mixc (lk.mid, shade (lk.mid, 0.55f), storm),
-                 waterDeep = mixc (lk.deep, shade (lk.deep, 0.5f), storm);
+    const float darkWater = (1.0f - day) * 0.75f;
+    const Colour waterTop = mixc (mixc (lk.top, shade (lk.top, 0.55f), storm), shade (lk.top, 0.3f), darkWater),
+                 waterMid = mixc (mixc (lk.mid, shade (lk.mid, 0.55f), storm), shade (lk.mid, 0.3f), darkWater),
+                 waterDeep = mixc (mixc (lk.deep, shade (lk.deep, 0.5f), storm), shade (lk.deep, 0.35f), darkWater);
 
     for (int x = 0; x < W; ++x)
     {
@@ -300,19 +356,41 @@ void Painter::background (Canvas& c, const Sim& sim, float t)
         }
     }
 
-    // sun or a dark sky
-    if (storm < 0.6f)
+    // stars and the moon at night
+    if (day < 1.0f)
     {
-        const float a = 1.0f - storm / 0.6f;
+        const float a = (1.0f - day) * (1.0f - storm);
+        for (int i = 0; i < 70; ++i)
+        {
+            const int sx = (int) (hashf ((juce::uint32) i * 19 + 11) * W), sy = (int) (hashf ((juce::uint32) i * 7 + 3) * (surfaceY - 8.0f));
+            const float tw = 0.6f + 0.4f * std::sin (t * (1.0f + (i % 5) * 0.4f) + i);
+            c.blend (sx, sy, 0xffffffff, a * tw);
+        }
+        for (int y = -7; y <= 7; ++y)
+            for (int x = -7; x <= 7; ++x)
+            {
+                const int r2 = x * x + y * y;
+                if (r2 > 49) continue;
+                const bool shadow = (x + 3) * (x + 3) + (y - 2) * (y - 2) < 30;   // a crescent
+                if (! shadow) c.blend (250 + x, 14 + y, 0xfff2f4ff, a);
+            }
+    }
+    // the sun (sinks lower at sunrise / sunset)
+    const int sunY = 15 + (int) ((1.0f - day) * 24.0f);
+    if (storm < 0.6f && day > 0.0f)
+    {
+        const float a = (1.0f - storm / 0.6f) * juce::jmin (1.0f, day * 2.0f);
+        const Colour sunCol = mixc (0xffff9a4a, 0xfffff2a8, day);
         for (int y = -9; y <= 9; ++y)
             for (int x = -9; x <= 9; ++x)
-                if (x * x + y * y <= 64) c.blend (420 + x, 15 + y, 0xfffff2a8, a);
-                else if (x * x + y * y <= 81) c.blend (420 + x, 15 + y, 0xfffff2a8, a * 0.35f);
+                if (sunY + y >= (int) surfaceY - 1) continue;
+                else if (x * x + y * y <= 64) c.blend (420 + x, sunY + y, sunCol, a);
+                else if (x * x + y * y <= 81) c.blend (420 + x, sunY + y, sunCol, a * 0.35f);
     }
     // lens flare from the sun (Frutiger Aero!)
-    if (storm < 0.6f)
+    if (storm < 0.6f && day > 0.5f)
     {
-        const float a = 1.0f - storm / 0.6f;
+        const float a = (1.0f - storm / 0.6f) * (day - 0.5f) * 2.0f;
         static const Colour flare[] = { 0xff9ff3ff, 0xfffff2a8, 0xffffb6e6, 0xffb6ffcf };
         for (int k = 1; k <= 4; ++k)
         {
@@ -325,7 +403,8 @@ void Painter::background (Canvas& c, const Sim& sim, float t)
                 }
         }
     }
-    // green islands on the horizon
+    // islands on the horizon: green, snowy at the ice ocean, with palm trees at the lagoon
+    const bool snowy = sim.place == PlaceIce;
     for (int x = 0; x < W; ++x)
     {
         const float hill = 5.0f + 4.0f * std::sin (x * 0.035f + 0.6f) + 2.5f * std::sin (x * 0.09f);
@@ -333,10 +412,28 @@ void Painter::background (Canvas& c, const Sim& sim, float t)
         const int top = (int) (surfaceY - hill);
         for (int y = top; y < (int) surfaceY - 1; ++y)
         {
-            const Colour g = mixc (mixc (0xff7ee05a, 0xff3c9a3c, (float) (y - top) / juce::jmax (1.0f, hill)), 0xff59707a, storm);
-            c.set (x, y, y == top ? light (g, 0.4f) : g);
+            const float v = (float) (y - top) / juce::jmax (1.0f, hill);
+            Colour g = snowy ? mixc (0xfff4fbff, 0xffaac8de, v) : mixc (0xff7ee05a, 0xff3c9a3c, v);
+            g = shade (mixc (g, 0xff59707a, storm), 0.35f + 0.65f * day);
+            c.set (x, y, y == top ? light (g, 0.4f * day) : g);
         }
     }
+    if (sim.place == PlaceLagoon)
+        for (int p = 0; p < 6; ++p)
+        {
+            const int px = 30 + p * 83 + (p % 2) * 17;
+            const float hill = 5.0f + 4.0f * std::sin (px * 0.035f + 0.6f) + 2.5f * std::sin (px * 0.09f);
+            if (hill < 4.0f) continue;
+            const int base = (int) (surfaceY - hill);
+            const Colour trunk = shade (0xff9a6a34, 0.4f + 0.6f * day), leaf = shade (0xff3fbf4a, 0.4f + 0.6f * day);
+            for (int k = 0; k < 12; ++k) c.set (px + k / 5, base - k, trunk);
+            const int tx = px + 2, ty = base - 12;
+            for (int k = 1; k <= 6; ++k)
+            {
+                c.set (tx + k, ty + k / 2, leaf); c.set (tx - k, ty + k / 2, leaf);
+                c.set (tx + k / 2, ty - 1 + k / 3, leaf); c.set (tx - k / 2, ty - 1 + k / 3, leaf);
+            }
+        }
     // clouds
     const int clouds = 3 + (int) (storm * 6);
     for (int i = 0; i < clouds; ++i)
@@ -344,7 +441,7 @@ void Painter::background (Canvas& c, const Sim& sim, float t)
         const float speed = 3.0f + hashf ((juce::uint32) i * 7 + 1) * 4.0f;
         const int cx = (int) std::fmod (hashf ((juce::uint32) i * 13 + 5) * (W + 80) + t * speed, (float) (W + 80)) - 40;
         const int cy = 6 + (int) (hashf ((juce::uint32) i * 3 + 2) * 20);
-        const Colour col = mixc (0xfff4f8ff, 0xff7a8290, storm);
+        const Colour col = shade (mixc (mixc (0xfff4f8ff, 0xffffc2a8, dusk * 0.6f), 0xff7a8290, storm), 0.35f + 0.65f * day);
         for (int b = 0; b < 4; ++b)
         {
             const int bx = cx + b * 7 - 10, by = cy - (b == 1 || b == 2 ? 3 : 0), r = b == 1 || b == 2 ? 6 : 4;
@@ -355,9 +452,9 @@ void Painter::background (Canvas& c, const Sim& sim, float t)
     }
 
     // sun rays in calm water
-    if (storm < 0.8f && lk.rays > 0.0f)
+    if (storm < 0.8f && lk.rays > 0.0f && day > 0.2f)
     {
-        const float a = 0.07f * lk.rays * (1.0f - storm / 0.8f);
+        const float a = 0.07f * lk.rays * (1.0f - storm / 0.8f) * day;
         for (int y = (int) surfaceY + 3; y < (int) floorY; ++y)
         {
             const float depth = (y - surfaceY) / (floorY - surfaceY);
@@ -417,11 +514,12 @@ void Painter::floor (Canvas& c, const Sim& sim, float t)
             if (h % 11 == 0) col = shade (col, 0.85f);
             else if (h % 17 == 0) col = light (col, 0.25f);
             if (y == top) col = light (col, 0.3f);
+            col = shade (col, 0.45f + 0.55f * sim.daylight);
             // dancing light from the surface (caustics)
             if (lk.rays > 0.0f)
             {
                 const float v = std::sin (x * 0.21f + t * 1.3f) + std::sin (y * 0.5f - t * 0.9f + x * 0.07f) + std::sin ((x + y) * 0.13f + t * 0.7f);
-                if (v > 2.1f) col = light (col, 0.35f * (1.0f - sim.weatherLevel));
+                if (v > 2.1f) col = light (col, 0.35f * (1.0f - sim.weatherLevel) * sim.daylight);
             }
             c.set (x, y, col);
         }
@@ -1051,6 +1149,106 @@ void Painter::decor (Canvas& c, const Sim& sim, float t)
                     c.blend ((int) (kx + sway), (int) floorY - j, 0xff1d4a3a, 0.35f);
                 }
             }
+            break;
+        }
+        case PlaceCave:
+        {
+            // the cave roof hides the sky: rock with stalactites and glowing crystals
+            for (int x = 0; x < W; ++x)
+            {
+                const float edge = surfaceY + 6.0f + 6.0f * std::sin (x * 0.08f) + 4.0f * std::sin (x * 0.23f + 1.0f);
+                const int drip = (hash ((juce::uint32) x / 6 * 977) % 5 == 0) ? (int) (8 + hash ((juce::uint32) x / 6 * 31) % 14 - std::abs ((x % 6) - 3) * 3) : 0;
+                for (int y = 0; y < (int) edge + juce::jmax (0, drip); ++y)
+                {
+                    Colour col = mixc (0xff2a2140, 0xff4a3d6e, (float) y / edge);
+                    if (hash ((juce::uint32) (x * 131 + y * 17)) % 13 == 0) col = shade (col, 0.8f);
+                    c.set (x, y, col);
+                }
+            }
+            for (int i = 0; i < 9; ++i)
+            {
+                const int gx = 20 + (int) (hashf ((juce::uint32) i * 5 + 1) * (W - 40)), gy = 8 + (int) (hashf ((juce::uint32) i * 9 + 2) * 30);
+                static const Colour cols[] = { 0xffff7ad9, 0xff2ce8f5, 0xffc06bff };
+                const Colour col = cols[i % 3];
+                for (int k = 0; k < 4; ++k) { c.set (gx, gy + k, col); c.set (gx + 1, gy + k + 1, light (col, 0.3f)); }
+                for (int y = -7; y <= 7; ++y) for (int x = -7; x <= 7; ++x)
+                {
+                    const float d = std::sqrt ((float) (x * x + y * y)) / 7.0f;
+                    if (d < 1.0f) c.add (gx + x, gy + 2 + y, col, 0.08f * (1.0f - d) * (0.7f + 0.3f * std::sin (t * 1.3f + i)));
+                }
+            }
+            break;
+        }
+        case PlaceIce:
+        {
+            // ice floes on the surface and the hidden part of an iceberg
+            for (int i = 0; i < 5; ++i)
+            {
+                const float fx = std::fmod (hashf ((juce::uint32) i * 13 + 1) * (W + 120) + t * (1.0f + i * 0.3f), (float) (W + 120)) - 60.0f;
+                const int w = 26 + (int) (hashf ((juce::uint32) i * 7 + 5) * 40);
+                const int y = (int) surfaceY - 2;
+                for (int x = 0; x < w; ++x)
+                    for (int k = 0; k < 5; ++k)
+                    {
+                        if ((x < 2 || x > w - 3) && k > 2) continue;
+                        c.set ((int) fx + x, y + k, k == 0 ? 0xffffffff : k < 3 ? 0xffe6f7ff : 0xffbfe6f5);
+                    }
+                if (i == 2)   // an iceberg under this floe
+                    for (int k = 0; k < 60; ++k)
+                    {
+                        const int half = (int) (w * 0.5f * (1.0f - k / 60.0f)) + 4;
+                        for (int x = -half; x <= half; ++x) c.blend ((int) fx + w / 2 + x, y + 5 + k, 0xffd8f6ff, 0.28f);
+                    }
+            }
+            // a few snowflakes above the water
+            for (int i = 0; i < 40; ++i)
+            {
+                const float x = std::fmod (hashf ((juce::uint32) i * 37 + 2) * W + t * 3.0f + std::sin (t + i) * 3.0f, (float) W);
+                const float y = std::fmod (hashf ((juce::uint32) i * 11 + 9) * surfaceY + t * (4.0f + i % 4), surfaceY);
+                c.blend ((int) x, (int) y, 0xffffffff, 0.8f);
+            }
+            break;
+        }
+        case PlaceLagoon:
+        {
+            // starfish and shells on the bright sand
+            static const Colour stars[] = { 0xffff7a4a, 0xffff5f8a, 0xffffc04a };
+            for (int i = 0; i < 6; ++i)
+            {
+                const int sx = 30 + (int) (hashf ((juce::uint32) i * 23 + 4) * (W - 60)), sy = (int) floorY + 6 + (int) (hashf ((juce::uint32) i * 3 + 1) * 10);
+                const Colour col = stars[i % 3];
+                c.set (sx, sy, col); c.set (sx - 1, sy, col); c.set (sx + 1, sy, col); c.set (sx, sy - 1, col); c.set (sx, sy - 2, col);
+                c.set (sx - 2, sy + 1, col); c.set (sx + 2, sy + 1, col); c.set (sx, sy, light (col, 0.4f));
+            }
+            break;
+        }
+        case PlaceRuins:
+        {
+            // columns of a sunken city, an arch, and a big stone cat head
+            const Colour stone = 0xffd9d1bd, stoneDark = 0xffa69d86;
+            const int bases[] = { 70, 120, 300, 350 };
+            const int heights[] = { 80, 54, 92, 30 };
+            for (int k = 0; k < 4; ++k)
+            {
+                const int x0 = bases[k], hgt = heights[k];
+                for (int y = 0; y < hgt; ++y)
+                    for (int x = 0; x < 10; ++x)
+                        c.set (x0 + x, (int) floorY + 2 - y, x % 3 == 0 ? stoneDark : (x > 7 ? shade (stone, 0.85f) : stone));
+                for (int x = -2; x < 12; ++x) { c.set (x0 + x, (int) floorY + 2 - hgt, stone); c.set (x0 + x, (int) floorY + 1 - hgt, stoneDark); }
+            }
+            for (int x = 0; x < 50; ++x)   // the arch between two columns
+            {
+                const int y = (int) (std::sin (x / 50.0f * 3.14159f) * 14.0f);
+                for (int k = 0; k < 5; ++k) c.set (300 + x, (int) floorY + 2 - 92 - y - k + 2, k == 0 ? stoneDark : stone);
+            }
+            // the stone cat head
+            const int hx = 210, hy = (int) floorY - 6;
+            for (int y = -12; y <= 10; ++y)
+                for (int x = -14; x <= 14; ++x)
+                    if (x * x / 196.0f + y * y / 144.0f <= 1.0f) c.set (hx + x, hy + y, x > 6 ? stoneDark : stone);
+            for (int k = 0; k < 7; ++k) { c.set (hx - 11 + k / 2, hy - 10 - k, stone); c.set (hx + 11 - k / 2, hy - 10 - k, stoneDark); }
+            c.fillRect (hx - 7, hy - 3, 3, 3, 0xff4a4538); c.fillRect (hx + 4, hy - 3, 3, 3, 0xff4a4538);
+            c.set (hx - 1, hy + 2, 0xff8f6a5a); c.set (hx, hy + 2, 0xff8f6a5a);
             break;
         }
         case PlaceDeep:

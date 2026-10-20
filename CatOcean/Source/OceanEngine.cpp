@@ -89,6 +89,43 @@ void Engine::stopLive()
     streamer.stop();
 }
 
+void Engine::console (const juce::String& line)
+{
+    const auto t = line.trim();
+    if (t.isEmpty()) return;
+    log ("> " + t);
+    if (t.startsWithChar ('!')) { say ("host", "Host", t, true); return; }
+    const juce::ScopedLock sl (chatLock);
+    consoleQueue.push_back (t);
+}
+
+void Engine::log (const juce::String& text)
+{
+    const juce::ScopedLock sl (consoleLock);
+    juce::StringArray lines;
+    lines.addLines (text);
+    consoleLog.addArray (lines);
+    if (consoleLog.size() > 400) consoleLog.removeRange (0, consoleLog.size() - 400);
+    ++consoleCount;
+}
+
+juce::String Engine::consoleText() const
+{
+    const juce::ScopedLock sl (consoleLock);
+    return consoleLog.joinIntoString ("\n");
+}
+
+juce::String Engine::health() const
+{
+    const double up = (juce::Time::getMillisecondCounterHiRes() - startedMs) / 1000.0;
+    const int h = (int) (up / 3600.0), m = ((int) (up / 60.0)) % 60;
+    const double sinceFrame = juce::Time::getMillisecondCounterHiRes() - heartbeat.load();
+    juce::String s;
+    s << "running " << h << "h " << m << "m, " << (sinceFrame < 2000.0 ? "healthy" : "the ocean is stuck!")
+      << ", stream restarts " << streamRestarts << ", dropped frames " << streamer.droppedFrames();
+    return s;
+}
+
 void Engine::readMonitor (float* l, float* r, int n)
 {
     int s1, n1, s2, n2;
@@ -124,6 +161,26 @@ void Engine::run()
 void Engine::frame()
 {
     // chat: YouTube + typed in the app
+    heartbeat = juce::Time::getMillisecondCounterHiRes();
+    // day and night from the real clock (or the admin's /time)
+    {
+        const auto now = juce::Time::getCurrentTime();
+        const float hours = sim.timeOverride >= 0.0f ? sim.timeOverride : (float) now.getHours() + now.getMinutes() / 60.0f;
+        sim.clockHours = hours;
+        sim.daylight += (Sim::daylightAt (hours) - sim.daylight) * 0.02f;   // a gentle change when the admin jumps
+    }
+    // admin console
+    {
+        std::vector<juce::String> lines;
+        { const juce::ScopedLock sl (chatLock); lines.swap (consoleQueue); }
+        for (auto& l : lines)
+        {
+            const auto cmd = l.trimCharactersAtStart ("/").upToFirstOccurrenceOf (" ", false, false).toLowerCase();
+            if (cmd == "save") { saveNow(); log ("saved"); }
+            else if (cmd == "health") log (health());
+            else log (sim.admin (l));
+        }
+    }
     for (auto& m : chat.take()) sim.chat (m.authorId, m.authorName, m.text, m.moderator);
     // new subscribers: a little party
     if (const int subs = chat.getSubscribers(); subs >= 0)
@@ -139,6 +196,8 @@ void Engine::frame()
 
     const float dt = 1.0f / fps;
     sim.step (dt);
+    currentStyle = sim.getStyle();
+    currentPlace = sim.nextPlace >= 0 ? sim.nextPlace : sim.place;
     music.render (left.data(), right.data(), samplesPerFrame, sim);
     if (++frameCount % juce::jmax (1, paintEvery) == 0)
         painter.paint (canvas, sim, music.info (sim), dt * (float) juce::jmax (1, paintEvery));
@@ -176,7 +235,31 @@ void Engine::frame()
         if (sl.isLocked() && liveWanted.load() && now - lastRestart > 20.0)
         {
             lastRestart = now;
+            ++streamRestarts;
+            log ("the stream stopped (" + streamer.getStatus() + ") - restarting it");
             streamer.start (liveFFmpeg, liveTarget, W, H, fps, sampleRate);
+        }
+    }
+
+    // health: a stream that runs but sends nothing for 30 s gets restarted
+    if (liveWanted.load() && streamer.isRunning())
+    {
+        const double nowMs = juce::Time::getMillisecondCounterHiRes();
+        if (nowMs - lastSentCheckMs > 30000.0)
+        {
+            const auto sentNow = streamer.sentFrames();
+            if (lastSentCheckMs > 0 && sentNow == lastSentCheck)
+            {
+                const juce::ScopedTryLock sl (liveLock);
+                if (sl.isLocked())
+                {
+                    ++streamRestarts;
+                    log ("the stream got stuck - restarting it");
+                    streamer.start (liveFFmpeg, liveTarget, W, H, fps, sampleRate);
+                }
+            }
+            lastSentCheck = sentNow;
+            lastSentCheckMs = nowMs;
         }
     }
 
@@ -192,6 +275,7 @@ void Engine::frame()
           << "music: " << styleName (sim.getStyle()) << ", " << (int) std::lround (music.currentBpm()) << " bpm, key "
           << cat::muse::keyName (music.currentKey()) << ", piece " << music.pieces();
         s << "\nplace: " << placeName (sim.place) << ", species discovered: " << (int) sim.speciesList.size();
+        s << "\nhealth: " << health();
         const auto bans = sim.bannedNames();
         if (! bans.isEmpty()) s << "\nbanned: " << bans.joinIntoString (", ") << "  (type !unban @name to undo)";
         const juce::ScopedLock sl (statsLock);

@@ -17,11 +17,13 @@ namespace
     }
 
     struct KeysPatch { float a, d, s, r, gain; };
-    const KeysPatch keysPatches[4] = {
+    const KeysPatch keysPatches[6] = {
         { 0.25f, 1.00f, 0.70f, 0.90f, 0.15f },   // Soft Pad
         { 0.003f, 1.50f, 0.12f, 0.35f, 0.30f },  // E-Piano
         { 0.002f, 0.35f, 0.00f, 0.20f, 0.24f },  // Pluck
         { 0.35f, 2.00f, 0.85f, 1.20f, 0.12f },   // Strings
+        { 0.002f, 0.25f, 0.55f, 0.06f, 0.09f },  // Chip (square wave, like an old game console)
+        { 0.002f, 1.60f, 0.00f, 1.40f, 0.20f },  // Glass Bell (Frutiger Aero chimes)
     };
 }
 
@@ -128,6 +130,23 @@ void KeysSynth::render (float* l, float* r, int n)
                     v.ph[0] = wrap (v.ph[0] + v.freq * dt);
                     v.ph[1] = wrap (v.ph[1] + v.freq * dt);
                     v.mph = wrap (v.mph + v.freq * dt);
+                    break;
+                }
+                case 4:   // chip: a square wave, a touch of low-pass so it isn't harsh
+                {
+                    const float inc = v.freq * dt;
+                    x = (v.ph[0] < 0.5f ? 1.0f : -1.0f) * 0.8f;
+                    v.ph[0] = wrap (v.ph[0] + inc);
+                    x = v.f1.lp (x, lpCoef (7000.0f, sr));
+                    break;
+                }
+                case 5:   // glass bell: FM at 3.5 with a fading index, plus a soft octave partial
+                {
+                    const float index = (1.2f + 1.5f * v.vel) * std::exp (-v.t * 2.5f);
+                    x = std::sin (twoPi * v.ph[0] + index * std::sin (twoPi * v.mph)) + 0.25f * std::sin (twoPi * v.ph[1]) * std::exp (-v.t * 1.5f);
+                    v.ph[0] = wrap (v.ph[0] + v.freq * dt);
+                    v.ph[1] = wrap (v.ph[1] + v.freq * 2.0f * dt);
+                    v.mph = wrap (v.mph + v.freq * 3.5f * dt);
                     break;
                 }
                 default:  // pluck: saw through a closing filter

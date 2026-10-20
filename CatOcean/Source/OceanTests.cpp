@@ -124,6 +124,8 @@ void testCommandsAndLife (const juce::File& outDir)
     auto& sim = engine.simForTests();
     auto& music = engine.musicForTests();
     engine.paintEvery = 1;
+    sim.timeOverride = 12.0f;   // pictures at noon (the real clock could say night)
+    sim.daylight = 1.0f;
     engine.runFrames (30);
     savePng (engine.canvasForTests(), outDir.getChildFile ("01-start.png"));
     check (distinctColours (engine.canvasForTests()) > 40, "picture: the ocean is drawn (" + juce::String (distinctColours (engine.canvasForTests())) + " colours)");
@@ -131,18 +133,18 @@ void testCommandsAndLife (const juce::File& outDir)
     // a viewer joins
     engine.say ("UC1", "Miro", "!fish Miro blue stripes cat");
     engine.runFrames (90);
-    auto* miro = fishNamed (sim, "Miro");
-    check (miro != nullptr && miro->viewer() && miro->present, "chat: !fish makes a viewer fish that swims in");
-    if (miro != nullptr)
-        check (miro->genes.colour1 == findColour ("blue") && miro->genes.pattern == PatStripes && miro->genes.body != BodyCat,
+    auto M = [&sim] { return fishNamed (sim, "Miro"); };   // always fresh: the fish list moves when fish are born
+    check (M() != nullptr && M()->viewer() && M()->present, "chat: !fish makes a viewer fish that swims in");
+    if (M() != nullptr)
+        check (M()->genes.colour1 == findColour ("blue") && M()->genes.pattern == PatStripes && M()->genes.body != BodyCat,
                "chat: !fish Miro blue stripes cat sets the look (the cat body waits for LV5)");
-    if (miro != nullptr) miro->xp = 1000;   // a long-time viewer: everything unlocked
+    if (M() != nullptr) M()->xp = 1000;   // a long-time viewer: everything unlocked
     engine.say ("UC1", "Miro", "!body cat");
     engine.runFrames (90);
-    check (miro != nullptr && miro->genes.body == BodyCat && miro->level() >= 8, "levels: LV" + juce::String (miro != nullptr ? miro->level() : 0) + " may have a cat body");
+    check (M() != nullptr && M()->genes.body == BodyCat && M()->level() >= 8, "levels: LV" + juce::String (M() != nullptr ? M()->level() : 0) + " may have a cat body");
 
     // more commands (with the cooldown between them)
-    auto cmd = [&] (const juce::String& id, const juce::String& text) { engine.say (id, "Viewer", text); engine.runFrames (90); };
+    auto cmd = [&] (const juce::String& id, const juce::String& text) { engine.runFrames (270); engine.say (id, "Viewer", text); engine.runFrames (2); };
     cmd ("UC1", "!color red yellow white");
     cmd ("UC1", "!hat crown");
     cmd ("UC1", "!eyes big");
@@ -153,26 +155,34 @@ void testCommandsAndLife (const juce::File& outDir)
     cmd ("UC1", "!mood hyper");
     cmd ("UC1", "!notes long");
     cmd ("UC1", "!size big");
-    miro = fishNamed (sim, "Miro");
-    if (miro != nullptr)
+    
+    if (M() != nullptr)
     {
-        const auto& g = miro->genes;
+        const auto& g = M()->genes;
         check (g.colour1 == findColour ("red") && g.colour2 == findColour ("yellow") && g.colour3 == findColour ("white"), "chat: !color sets body, pattern and fin colours");
         check (g.accessory == AccCrown && g.eyes == EyesBig && g.tail == TailVeil && g.fin == FinSail, "chat: !hat !eyes !tail !fin");
         check (g.voice == VoiceBell && g.melodyString() == "1353" && g.mood() == MoodHyper && g.noteLength == 1 && g.size == 2,
                "chat: !voice !melody !mood !notes !size");
     }
+    engine.runFrames (270);
     const int before = sim.ignoredCommands;
     engine.say ("UC1", "Miro", "!hat glasses");
     engine.say ("UC1", "Miro", "!hat bow");
     engine.runFrames (3);
-    check (sim.ignoredCommands == before + 1 && miro != nullptr && miro->genes.accessory == AccGlasses, "chat: a second command right away is ignored (cooldown)");
+    check (sim.ignoredCommands == before + 1 && M() != nullptr && M()->genes.accessory == AccGlasses, "chat: a second command right away is ignored (cooldown)");
     engine.say ("UC2", "fuck", "!fish");
     engine.say ("UC3", "Ana", "!fish kurva");
     engine.runFrames (2);
     bool rude = false;
     for (auto& f : sim.fish) rude = rude || ! filter::isClean (f.name);
-    check (! rude && sim.fishOf ("UC2") != nullptr && sim.fishOf ("UC3") != nullptr, "chat: rude names are replaced");
+    {
+        juce::String rudeName;
+        for (auto& f : sim.fish) if (! filter::isClean (f.name)) rudeName = f.name;
+        check (! rude && sim.fishOf ("UC2") != nullptr && sim.fishOf ("UC3") != nullptr,
+               "chat: rude names are replaced (" + (rudeName.isNotEmpty() ? "rude: " + rudeName : juce::String ("none rude"))
+               + ", UC2 " + (sim.fishOf ("UC2") != nullptr ? sim.fishOf ("UC2")->name : juce::String ("no fish"))
+               + ", UC3 " + (sim.fishOf ("UC3") != nullptr ? sim.fishOf ("UC3")->name : juce::String ("no fish")) + ")");
+    }
     // a new viewer can't wear a crown yet
     engine.runFrames (90);
     engine.say ("UC3", "Ana", "!hat crown");
@@ -185,13 +195,16 @@ void testCommandsAndLife (const juce::File& outDir)
     // emotes
     engine.say ("UC1", "Miro", "!jump");
     engine.runFrames (2);
-    const float yBefore = miro != nullptr ? miro->y : 0.0f;
+    const float yBefore = M() != nullptr ? M()->y : 0.0f;
     engine.runFrames (12);
-    check (miro != nullptr && miro->y < yBefore - 10.0f, "emotes: !jump jumps");
-    engine.runFrames (90);
+    check (M() != nullptr && M()->y < yBefore - 10.0f, "emotes: !jump jumps");
+    engine.say ("UC1", "Miro", "!dance");
+    engine.runFrames (2);
+    check (M() != nullptr && M()->emote != EmoteDance, "spam: emotes need a pause (20 s)");
+    engine.runFrames (30 * 21);
     engine.say ("UC1", "Miro", "!dance");
     engine.runFrames (20);
-    check (miro != nullptr && miro->emote == EmoteDance, "emotes: !dance dances");
+    check (M() != nullptr && M()->emote == EmoteDance, "emotes: !dance dances (emote " + juce::String (M() != nullptr ? M()->emote : -1) + ")");
     savePng (engine.canvasForTests(), outDir.getChildFile ("02b-dance.png"));
     engine.runFrames (120);
 
@@ -215,19 +228,81 @@ void testCommandsAndLife (const juce::File& outDir)
     check (sim.fishOf ("UC3") != nullptr, "mods: !unban lets them back");
     engine.say ("host", "Host", "!kick @Miro", true);
     engine.runFrames (2);
-    check (miro != nullptr && miro->leaving, "mods: !kick sends a fish home (the host can do it too)");
+    check (M() != nullptr && M()->leaving, "mods: !kick sends a fish home (the host can do it too)");
     engine.say ("UC1", "Miro", "back!");
     engine.runFrames (2);
-    miro = fishNamed (sim, "Miro");
+    
 
     // places
-    for (auto* where : { "kelp", "crystal", "ship", "reef" })
+    for (auto* where : { "kelp", "crystal", "ship", "cave", "ice", "lagoon", "ruins", "reef" })
     {
         engine.say ("UCmod", "Mod", juce::String ("!place ") + where, true);
         engine.runFrames (30 * 5);
         savePng (engine.canvasForTests(), outDir.getChildFile (juce::String ("09-place-") + where + ".png"));
         check (sim.place == findPlace (where), juce::String ("places: the ocean moves to the ") + placeName (findPlace (where)));
     }
+
+    // spam: too many commands in a minute -> a 2 minute nap
+    {
+        engine.say ("UCspam", "Spammy", "!fish Spammy");
+        for (int i = 0; i < 14; ++i) { engine.runFrames (100); engine.say ("UCspam", "Spammy", "!info " + juce::String (i)); }
+        engine.runFrames (30 * 10);
+        auto* sp = sim.fishOf ("UCspam");
+        const int colourBefore = sp != nullptr ? sp->genes.colour1 : -1;
+        engine.say ("UCspam", "Spammy", colourBefore == findColour ("red") ? "!color blue" : "!color red");
+        engine.runFrames (2);
+        check (sp != nullptr && sp->genes.colour1 == colourBefore, "spam: a viewer who floods commands is muted for a while");
+        engine.say ("UCspam", "Spammy", "same same");
+        engine.runFrames (2);
+        const int ign = sim.ignoredCommands;
+        engine.say ("UCspam", "Spammy", "same same");
+        engine.runFrames (2);
+        check (sim.ignoredCommands > ign, "spam: the same message twice is ignored");
+    }
+
+    // speech bubbles
+    engine.say ("UC1", "Miro", "hello everyone!");
+    engine.runFrames (2);
+    check (! sim.speech.empty() && sim.speech.back().text == "hello everyone!", "chat: a normal message becomes a speech bubble");
+    engine.say ("UC1", "Miro", "you are a kokot");
+    engine.runFrames (2);
+    check (sim.speech.empty() || sim.speech.back().text == "hello everyone!", "chat: rude messages get no bubble");
+    engine.runFrames (20);
+    savePng (engine.canvasForTests(), outDir.getChildFile ("02c-speech.png"));
+
+    // the admin console
+    engine.console ("/give @Miro 50");
+    engine.console ("/rare @Miro gold");
+    engine.console ("/stats");
+    engine.runFrames (2);
+    check (M() != nullptr && M()->genes.rare == RareGold, "admin: /rare @name gold");
+    check (engine.consoleText().contains ("fish swimming") && engine.consoleText().contains ("LV"), "admin: /give and /stats answer in the console");
+    engine.console ("/spawn 3");
+    const int wildBefore = sim.wildCount();
+    engine.runFrames (2);
+    check (sim.wildCount() >= wildBefore + 2, "admin: /spawn adds wild fish");
+    engine.console ("/nonsense");
+    engine.runFrames (1);
+    check (engine.consoleText().contains ("unknown command"), "admin: unknown commands say so");
+    engine.console ("/kick @Miro");
+    engine.runFrames (2);
+    check (M() != nullptr && M()->leaving, "admin: mod commands work in the console");
+    engine.say ("UC1", "Miro", "back");
+    engine.runFrames (2);
+
+    // day and night
+    engine.console ("/time night");
+    engine.runFrames (30 * 8);
+    check (sim.daylight < 0.1f, "time: /time night makes it night");
+    savePng (engine.canvasForTests(), outDir.getChildFile ("11-night.png"));
+    engine.console ("/time sunset");
+    engine.runFrames (30 * 8);
+    savePng (engine.canvasForTests(), outDir.getChildFile ("12-sunset.png"));
+    engine.console ("/time day");
+    engine.runFrames (30 * 8);
+    check (sim.daylight > 0.9f, "time: and day again");
+    check (std::abs (Sim::daylightAt (3.0f)) < 0.01f && Sim::daylightAt (12.0f) > 0.99f && Sim::daylightAt (20.0f) > 0.2f && Sim::daylightAt (20.0f) < 0.8f,
+           "time: the real clock gives night at 3, day at 12, sunset at 20");
 
     // a new species and a subscriber party
     const int sp = sim.discoverSpeciesForTests();
@@ -254,7 +329,7 @@ void testCommandsAndLife (const juce::File& outDir)
     // a vote
     {
         bool started = false;
-        for (int i = 0; i < 30 * 300 && ! started; ++i) { engine.runFrames (1); started = sim.vote.active; }
+        for (int i = 0; i < 30 * 900 && ! started; ++i) { engine.runFrames (1); started = sim.vote.active; }
         check (started, "vote: a vote starts after a while");
         if (started)
         {
@@ -296,8 +371,8 @@ void testCommandsAndLife (const juce::File& outDir)
     check (gen2 > 0, "life: there are fish of generation 2 or later (up to " + juce::String (maxGen) + ")");
     check (juniors > 0 || sim.births < 20, "life: babies of viewer fish are named after them (" + juce::String (juniors) + " Jr.)");
     check (sim.wildCount() >= minWild - 2 && sim.wildCount() <= maxWild + 1, "life: the ocean stays full but not crowded (" + juce::String (sim.wildCount()) + " wild fish)");
-    miro = fishNamed (sim, "Miro");
-    check (miro != nullptr && miro->present, "viewers: a fish whose owner keeps chatting stays");
+    
+    check (M() != nullptr && M()->present, "viewers: a fish whose owner keeps chatting stays");
     int crowdHere = 0;
     for (int i = 0; i < 60; ++i) if (auto* f = sim.fishOf ("UCcrowd" + juce::String (i)); f != nullptr && f->present) ++crowdHere;
     check (crowdHere == 0, "viewers: fish of viewers who went quiet for 20 minutes swam home (" + juce::String (crowdHere) + " still here)");
@@ -313,6 +388,7 @@ void testCommandsAndLife (const juce::File& outDir)
         check (music.currentBpm() >= st.bpmLo - 0.5 && music.currentBpm() <= st.bpmHi + 0.5,
                "music: always relaxed (" + juce::String (music.currentBpm(), 0) + " bpm, " + styleName (sim.getStyle()) + ")");
     }
+    check (music.whales() > 3, "ambience: whales sing far away now and then (" + juce::String (music.whales()) + " in an hour)");
     check (music.pieces() > startPieces + 10, "music: the song keeps going, piece after piece (" + juce::String (music.pieces() - startPieces) + " new pieces)");
 
     // genes pull the music: make every fish like A at 120 bpm

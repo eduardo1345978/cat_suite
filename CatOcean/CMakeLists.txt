@@ -14,6 +14,7 @@ target_sources(CatOcean PRIVATE
     Source/OceanGenes.cpp
     Source/OceanSim.cpp
     Source/OceanCommands.cpp
+    Source/OceanAdmin.cpp
     Source/OceanArt.cpp
     Source/OceanMusic.cpp
     Source/OceanEngine.cpp

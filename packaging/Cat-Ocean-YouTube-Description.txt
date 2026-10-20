@@ -36,6 +36,7 @@ The music never stops: it is written live, and the fishes' genes slowly change i
 !dance  !spin  !jump
 !feed                  drop some food (every 30 s)
 !vote 1 / 2 / 3        vote for the next music, place or event
+(just chat)            your fish says your message in a speech bubble
 
 ━━━━━━━━━━━━━━━━━━━━
 ⭐ LEVELS
@@ -50,9 +51,10 @@ Babies sometimes mutate - and a few are born Golden, Rainbow, Ghost, Glowing or 
 After many generations evolution can discover a whole NEW SPECIES with something no fish had before.
 
 🌊 THE OCEAN
-Places: Aqua reef, Emerald kelp, Crystal deep, Sunken ship (chat votes where it goes)
+Places: Aqua reef, Emerald kelp, Crystal deep, Sunken ship, Coral cave, Ice ocean, Tropical lagoon, Sunken ruins (chat votes where it goes)
 Music (always relaxing, Frutiger Aero): Aqua dream, Sky lounge, Crystal deep, Bubble pop
-Weather: calm, rain and storms. Feeding time. A cat in a boat says hi to every fish that arrives.
+Day and night follow the real clock (sunsets, stars, glowing fish at night). Weather: calm, rain and storms.
+Waves, bubbles and far-away whale songs under the music. A cat in a boat says hi to every fish that arrives.
 New subscribers get a little party 🎉
 
 ━━━━━━━━━━━━━━━━━━━━
@@ -62,8 +64,9 @@ New subscribers get a little party 🎉
 !kick @name               send their fish home
 !ban @name / !unban @name no fish for them (their fish is removed)
 !event storm / calm / feast / babyboom / rarehunt
-!place reef / kelp / crystal / ship
+!place reef / kelp / crystal / ship / cave / ice / lagoon / ruins
 !music aqua / lounge / crystal / bubble
 !startvote / !endvote
 
-Be kind - names with rude words are replaced automatically. One fish per person. 🐾
+Be kind - names and bubbles with rude words are replaced or hidden. One fish per person.
+Commands have short pauses (looks 8 s, moves 20 s, name 1 min, food 45 s). More than 10 commands a minute = your fish naps for 2 minutes. 🐾

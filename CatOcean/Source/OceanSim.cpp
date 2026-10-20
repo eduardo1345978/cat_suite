@@ -10,10 +10,14 @@ const StyleInfo& styleInfo (int s)
     // moods: Happy 0, Sad 1, Dark 2, Dreamy 3, Epic 4, Chill 5
     static const StyleInfo styles[NumStyles] = {
         // Frutiger Aero: bright, airy, glassy - major keys, pads, bells, soft beats
-        { "Aqua dream",   "aqua",    4, 0, 66.0f, 84.0f, false },
-        { "Sky lounge",   "lounge",  1, 0, 76.0f, 92.0f, true  },
-        { "Crystal deep", "crystal", 4, 3, 56.0f, 72.0f, false },
-        { "Bubble pop",   "bubble",  0, 0, 84.0f, 98.0f, true  },
+        { "Aqua dream",   "aqua",    4, 0, 58.0f, 72.0f, false },
+        { "Sky lounge",   "lounge",  1, 0, 64.0f, 78.0f, true  },
+        { "Crystal deep", "crystal", 4, 3, 50.0f, 62.0f, false },
+        { "Bubble pop",   "bubble",  4, 0, 68.0f, 80.0f, false },
+        { "Glass garden",   "glass",   8, 3, 62.0f, 76.0f, false },   // Frutiger Aero genre, glass bells
+        { "Bossa breeze",   "bossa",  10, 5, 70.0f, 84.0f, true  },
+        { "Pixel lullaby",  "pixel",  11, 3, 62.0f, 74.0f, false },   // a soft chiptune lullaby
+        { "Strings at dusk", "strings", 12, 3, 52.0f, 66.0f, false },
     };
     return styles[juce::jlimit (0, NumStyles - 1, s)];
 }
@@ -25,11 +29,16 @@ int findStyle (const juce::String& w)
     if (x == "lounge" || x == "sky" || x == "skylounge" || x == "lofi" || x == "chill") return StyleLoFi;
     if (x == "crystal" || x == "crystaldeep" || x == "deep" || x == "deepsea") return StyleDeepSea;
     if (x == "bubble" || x == "pop" || x == "bubblepop" || x == "sunrise") return StyleSunrise;
+    if (x == "glass" || x == "garden" || x == "glassgarden" || x == "aero") return StyleGlass;
+    if (x == "bossa" || x == "breeze" || x == "bossabreeze" || x == "bossanova") return StyleBossa;
+    if (x == "pixel" || x == "lullaby" || x == "pixellullaby" || x == "chip" || x == "chiptune") return StylePixel;
+    if (x == "strings" || x == "dusk" || x == "stringsatdusk" || x == "orchestra" || x == "orchestral") return StyleStrings;
     return -1;
 }
 juce::String placeName (int p)
 {
-    static const char* n[NumPlaces] = { "Aqua reef", "Emerald kelp", "Crystal deep", "Sunken ship" };
+    static const char* n[NumPlaces] = { "Aqua reef", "Emerald kelp", "Crystal deep", "Sunken ship",
+                                        "Coral cave", "Ice ocean", "Tropical lagoon", "Sunken ruins" };
     return n[juce::jlimit (0, NumPlaces - 1, p)];
 }
 int findPlace (const juce::String& w)
@@ -39,6 +48,10 @@ int findPlace (const juce::String& w)
     if (x == "kelp" || x == "forest" || x == "emerald" || x == "emeraldkelp") return PlaceKelp;
     if (x == "trench" || x == "abyss" || x == "deep" || x == "crystal" || x == "crystaldeep") return PlaceDeep;
     if (x == "wreck" || x == "ship" || x == "shipwreck" || x == "sunken" || x == "sunkenship") return PlaceWreck;
+    if (x == "cave" || x == "coralcave" || x == "grotto") return PlaceCave;
+    if (x == "ice" || x == "iceocean" || x == "arctic" || x == "snow") return PlaceIce;
+    if (x == "lagoon" || x == "tropical" || x == "tropicallagoon" || x == "beach") return PlaceLagoon;
+    if (x == "ruins" || x == "sunkenruins" || x == "temple" || x == "city") return PlaceRuins;
     return -1;
 }
 juce::String eventName (int e)
@@ -264,6 +277,8 @@ void Sim::step (float dt)
         if (auto* f = findFish (t.fishId)) { t.x = f->x; t.y = f->y; }
     }
     toasts.erase (std::remove_if (toasts.begin(), toasts.end(), [] (const Toast& t) { return t.life <= 0.0f; }), toasts.end());
+    for (auto& sp : speech) sp.life -= dt;
+    speech.erase (std::remove_if (speech.begin(), speech.end(), [] (const Speech& sp) { return sp.life <= 0.0f; }), speech.end());
     for (auto& n : news) n.life -= dt;
     while (! news.empty() && news.front().life <= 0.0f) news.pop_front();
 
@@ -288,6 +303,16 @@ void Sim::step (float dt)
     stepVote (dt);
     stepCat (dt);
     stepXp (dt);
+    // if nobody picks music for a long time, it drifts to another calm style by itself
+    styleTimer += dt;
+    if (styleTimer > 1500.0f && ! vote.active && styleRequest < 0)
+    {
+        int next = style;
+        while (next == style) next = rng.nextInt (NumStyles);
+        styleRequest = next;
+        styleTimer = 0.0f;
+        announce ("The music drifts to " + styleName (next) + "...", 0xff9ff3ff);
+    }
     tryBreeding (dt);
     keepPopulation (dt);
     babyBoom = juce::jmax (0.0f, babyBoom - dt);

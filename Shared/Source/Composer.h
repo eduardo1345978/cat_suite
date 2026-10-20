@@ -21,7 +21,7 @@
 */
 namespace cat::muse
 {
-enum Genre { Pop = 0, LoFi, Trap, House, Ambient, Jazz, Rock, Cinematic, NumGenres };
+enum Genre { Pop = 0, LoFi, Trap, House, Ambient, Jazz, Rock, Cinematic, Aero, Synthwave, BossaNova, Chiptune, Orchestral, NumGenres };
 enum Mood { Happy = 0, Sad, Dark, Dreamy, Epic, Chill, NumMoods };
 enum Part { Chords = 0, Bass, Drums, Melody, Counter, NumParts };
 enum SectionType { Intro = 0, Verse, PreChorus, Chorus, Bridge, Build, Drop, Breakdown, Outro, NumSectionTypes };

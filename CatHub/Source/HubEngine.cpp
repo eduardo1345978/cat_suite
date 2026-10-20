@@ -47,7 +47,8 @@ int catForMidiFx (int f)
 const char* soundName (int s)
 {
     static const char* names[] = { "Soft Pad", "E-Piano", "Pluck", "Strings", "Sub Bass", "Saw Bass", "Reese Bass", "Pluck Bass",
-                                   "Boom Bap Kit", "808 Kit", "Lo-fi Kit", "Live Kit", "Glide-Cat", "Sing-Cat", "Talk-Cat", "Life-Cat's own" };
+                                   "Boom Bap Kit", "808 Kit", "Lo-fi Kit", "Live Kit", "Glide-Cat", "Sing-Cat", "Talk-Cat", "Life-Cat's own",
+                                   "Chip", "Glass Bell" };
     return names[juce::jlimit (0, (int) NumSounds - 1, s)];
 }
 
@@ -64,9 +65,12 @@ int catForSound (int s)
 
 juce::StringArray soundGroups() { return { "Keys", "Bass", "Drum kits", "Sound Cats", "Life" }; }
 
+int keysSound (int i) { return i <= 3 ? SndPad + juce::jmax (0, i) : (i == 4 ? SndChip : SndBell); }
+bool isKeysSound (int s) { return s <= SndStrings || s == SndChip || s == SndBell; }
+
 int soundGroup (int s)
 {
-    if (s <= SndStrings) return 0;
+    if (isKeysSound (s)) return 0;
     if (s <= SndBassPluck) return 1;
     if (s <= SndLive) return 2;
     if (s <= SndTalk) return 3;
@@ -927,9 +931,9 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
             if (src == SrcLife)
                 for (int ch = 0; ch < 2; ++ch) t.audio.copyFrom (ch, 0, lifeAudio, ch, 0, n);
         }
-        else if (snd <= SndStrings)
+        else if (isKeysSound (snd))
         {
-            t.keys.setSound (snd - SndPad);
+            t.keys.setSound (snd <= SndStrings ? snd - SndPad : (snd == SndChip ? 4 : 5));
             t.keys.setBendRange (bend);
             renderWithMidi (t.keys, t.midi, l, r, n);
         }
@@ -1246,13 +1250,13 @@ void HubEngine::setUpSongTracks (int genre, juce::Random* dice)
     // the parts a song has, with sounds that suit the genre
     const auto ss = cat::muse::defaultSounds (genre);
     struct Def { int src, sound; float vol, rev, pan; };
-    const bool wet = genre == cat::muse::Ambient || genre == cat::muse::Cinematic;
+    const bool wet = genre == cat::muse::Ambient || genre == cat::muse::Cinematic || genre == cat::muse::Aero || genre == cat::muse::Orchestral;
     std::vector<Def> defs = {
-        { SrcChords,  SndPad + ss.chords,     0.62f, wet ? 0.4f : 0.2f,  0.5f },
+        { SrcChords,  keysSound (ss.chords),  0.62f, wet ? 0.4f : 0.2f,  0.5f },
         { SrcBass,    SndSub + ss.bass,       0.72f, 0.05f,              0.5f },
         { SrcDrums,   SndBoomBap + ss.drums,  0.70f, 0.08f,              0.5f },
-        { SrcLead,    SndPad + ss.melody,     0.78f, wet ? 0.35f : 0.18f, 0.5f },
-        { SrcCounter, SndPad + ss.counter,    0.52f, wet ? 0.4f : 0.22f, 0.32f },
+        { SrcLead,    keysSound (ss.melody),  0.78f, wet ? 0.35f : 0.18f, 0.5f },
+        { SrcCounter, keysSound (ss.counter), 0.52f, wet ? 0.4f : 0.22f, 0.32f },
     };
     if (dice != nullptr)
     {

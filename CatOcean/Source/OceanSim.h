@@ -21,14 +21,14 @@ constexpr double viewerIdleSeconds = 20.0 * 60.0; // a viewer's fish swims away 
 enum Weather { WeatherCalm = 0, WeatherRain, WeatherStorm };
 
 /** The music: always relaxing, four flavours of ambient. */
-enum MusicStyle { StyleDreamy = 0, StyleLoFi, StyleDeepSea, StyleSunrise, NumStyles };
+enum MusicStyle { StyleDreamy = 0, StyleLoFi, StyleDeepSea, StyleSunrise, StyleGlass, StyleBossa, StylePixel, StyleStrings, NumStyles };
 struct StyleInfo { const char* name; const char* word; int genre, mood; float bpmLo, bpmHi; bool drums; };
 const StyleInfo& styleInfo (int style);
 juce::String styleName (int style);
 int findStyle (const juce::String& word);         // -1 if none
 
 /** Where the ocean is (chat votes where it goes next). */
-enum Place { PlaceReef = 0, PlaceKelp, PlaceDeep, PlaceWreck, NumPlaces };
+enum Place { PlaceReef = 0, PlaceKelp, PlaceDeep, PlaceWreck, PlaceCave, PlaceIce, PlaceLagoon, PlaceRuins, NumPlaces };
 juce::String placeName (int place);
 int findPlace (const juce::String& word);
 
@@ -71,6 +71,8 @@ struct Food { float x = 0, y = 0, vy = 10, life = 90; };
 struct Toast { juce::String text; int fishId = 0; float x = 0, y = 0, life = 4.0f; juce::uint32 colour = 0xffffffff; };
 struct Announcement { juce::String text; float life = 8.0f; juce::uint32 colour = 0xffffffff; };
 struct Confetti { float x, y, vx, vy, life; juce::uint32 colour; };
+/** What a viewer wrote in chat, shown in a bubble above their fish. */
+struct Speech { int fishId = 0; juce::String text; float life = 6.0f; };
 
 struct Vote
 {
@@ -111,6 +113,11 @@ public:
         moderator: the channel owner or a moderator (they may use the mod commands). */
     void chat (const juce::String& authorId, const juce::String& authorName, const juce::String& text, bool moderator = false);
 
+    /** The admin console (the app): "/help" lists everything. Returns what to print. */
+    juce::String admin (const juce::String& line);
+    float timeOverride = -1.0f;                   // admin "/time": hours, or -1 = the real clock
+    static float daylightAt (float hours);
+
     /** The channel got more subscribers: a little party. */
     void celebrateSubscribers (int newCount, int gained);
 
@@ -122,7 +129,7 @@ public:
     int targetKey() const;                        // the key most fish like (weighted)
     int takeStyleRequest() { const int s = styleRequest; styleRequest = -1; return s; }
     int getStyle() const noexcept { return style; }
-    void setStyle (int s) noexcept { style = juce::jlimit (0, NumStyles - 1, s); }
+    void setStyle (int s) noexcept { style = juce::jlimit (0, NumStyles - 1, s); styleTimer = 0.0f; }
 
     Board board (int which) const;                // 0 oldest, 1 families, 2 rare, 3 most babies, 4 species, 5 levels
     static constexpr int numBoards = 6;
@@ -141,6 +148,9 @@ public:
     std::vector<Food> food;
     std::vector<Toast> toasts;
     std::vector<Confetti> confetti;
+    std::vector<Speech> speech;
+    float daylight = 1.0f;                        // 0 night .. 1 day (from the real clock; the engine sets it)
+    float clockHours = 12.0f;
     std::deque<Announcement> news;
     std::vector<Species> speciesList;
     Vote vote;
@@ -165,6 +175,12 @@ private:
         juce::String name;
         int fishId = 0;
         double lastMessage = -1e9, lastCommand = -1e9, lastFeed = -1e9, lastXpMessage = -1e9;
+        // anti-spam: every kind of command has its own pause, and too many in a minute mutes the viewer for a while
+        double lastEmote = -1e9, lastLook = -1e9, lastName = -1e9, lastSpeech = -1e9, mutedUntil = -1e9;
+        std::deque<double> recent;
+        juce::String lastText;
+        double lastTextAt = -1e9;
+        bool warned = false;
     };
 
     void stepFish (Fish&, float dt);
@@ -201,6 +217,9 @@ private:
     float weatherTimer = 600, foodTimer = 120, voteTimer = 180, wildTimer = 0, xpTimer = 0;
     int voteKindNext = 0;
     bool newSpeciesBorn = false;
+    double lastHelp = -1e9, lastFeedAnyone = -1e9;
+    bool spamCheck (Viewer&, const juce::String& text, bool isCommand);
     int style = StyleDreamy, styleRequest = -1;
+    float styleTimer = 0.0f;   // the music drifts to another style after a while
 };
 } // namespace ocean

@@ -106,7 +106,7 @@ namespace aero
 class MainComponent : public juce::Component, private juce::Timer
 {
 public:
-    MainComponent (Engine& e, juce::PropertiesFile& p) : engine (e), props (p), monitor (e)
+    MainComponent (Engine& e, juce::PropertiesFile& p, bool resumeLive) : engine (e), props (p), monitor (e)
     {
         setLookAndFeel (&lnf);
         auto label = [this] (juce::Label& l, const juce::String& text, float size = 14.0f, bool bold = false)
@@ -140,6 +140,51 @@ public:
             ed->setFont (cat::catFont (14.0f));
             addAndMakeVisible (ed);
         }
+        // the admin console
+        consoleLog.setMultiLine (true);
+        consoleLog.setReadOnly (true);
+        consoleLog.setScrollbarsShown (true);
+        consoleLog.setFont (juce::Font (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 13.0f, juce::Font::plain)));
+        consoleLog.setColour (juce::TextEditor::backgroundColourId, juce::Colour (0xdd0b2f55));
+        consoleLog.setColour (juce::TextEditor::textColourId, juce::Colour (0xffd8f6ff));
+        consoleInput.setFont (juce::Font (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 14.0f, juce::Font::plain)));
+        consoleInput.setTextToShowWhenEmpty ("/help   /stats   /time night   /place lagoon   /give @name 50   !fish Miro", aero::inkDim);
+        consoleInput.onReturnKey = [this]
+        {
+            const auto t = consoleInput.getText().trim();
+            if (t.isNotEmpty()) { engine.console (t.startsWithChar ('!') || t.startsWithChar ('/') ? t : "/" + t); history.add (t); historyPos = history.size(); }
+            consoleInput.clear();
+        };
+        addAndMakeVisible (consoleLog);
+        addAndMakeVisible (consoleInput);
+        label (consoleLabel, "Admin console  (type /help - chat commands like !fish work too)", 13.0f, true);
+        engine.console ("/help");
+
+        if (resumeLive && props.getBoolValue ("wasLive", false))
+            juce::Timer::callAfterDelay (3000, [safe = juce::Component::SafePointer<MainComponent> (this)] { if (safe != nullptr) safe->goLive(); });
+
+        // one-click pickers: music, place, time of day
+        for (int st = 0; st < NumStyles; ++st) musicBox.addItem (styleName (st), st + 1);
+        for (int pl = 0; pl < NumPlaces; ++pl) placeBox.addItem (placeName (pl), pl + 1);
+        timeBox.addItemList ({ "Real clock", "Day", "Sunset", "Night", "Sunrise" }, 1);
+        timeBox.setSelectedId (1, juce::dontSendNotification);
+        musicBox.onChange = [this] { if (! updatingPickers) engine.console ("/music " + juce::String (styleInfo (musicBox.getSelectedId() - 1).word)); };
+        placeBox.onChange = [this]
+        {
+            if (updatingPickers) return;
+            static const char* words[NumPlaces] = { "reef", "kelp", "crystal", "ship", "cave", "ice", "lagoon", "ruins" };
+            engine.console (juce::String ("/place ") + words[juce::jlimit (0, NumPlaces - 1, placeBox.getSelectedId() - 1)]);
+        };
+        timeBox.onChange = [this]
+        {
+            static const char* words[] = { "auto", "day", "sunset", "night", "sunrise" };
+            engine.console (juce::String ("/time ") + words[juce::jlimit (0, 4, timeBox.getSelectedId() - 1)]);
+        };
+        for (auto* b : { &musicBox, &placeBox, &timeBox }) addAndMakeVisible (b);
+        label (musicLabel, "Music", 13.0f, true);
+        label (placeLabel, "Place", 13.0f, true);
+        label (timeLabel, "Time", 13.0f, true);
+
         hostEditor.onReturnKey = [this]
         {
             const auto text = hostEditor.getText().trim();
@@ -160,7 +205,7 @@ public:
             addAndMakeVisible (b);
         liveButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xffc0392b));
         liveButton.onClick = [this] { goLive(); };
-        stopButton.onClick = [this] { engine.stopLive(); engine.chat.stop(); };
+        stopButton.onClick = [this] { engine.stopLive(); engine.chat.stop(); props.setValue ("wasLive", false); props.saveIfNeeded(); };
         chatButton.onClick = [this] { save(); engine.chat.start (channelEditor.getText()); };
         testButton.onClick = [this] { recordTest(); };
         getFFmpegButton.onClick = [this] { downloadFFmpeg(); };
@@ -181,7 +226,7 @@ public:
         }
         if (channelEditor.getText().isNotEmpty()) engine.chat.start (channelEditor.getText());
 
-        setSize (1360, 700);
+        setSize (1400, 860);
         startTimerHz (30);
     }
 
@@ -216,7 +261,13 @@ public:
         auto r = getLocalBounds().reduced (12);
         auto side = r.removeFromRight (400);
         r.removeFromRight (12);
-        // the biggest 16:9 picture that fits
+        // the console under the picture, the biggest 16:9 picture that fits above it
+        auto consoleArea = r.removeFromBottom (juce::jlimit (130, 260, r.getHeight() / 4));
+        consoleLabel.setBounds (consoleArea.removeFromTop (20));
+        consoleInput.setBounds (consoleArea.removeFromBottom (26));
+        consoleArea.removeFromBottom (3);
+        consoleLog.setBounds (consoleArea);
+        r.removeFromBottom (6);
         const int w = juce::jmin (r.getWidth(), (r.getHeight() - 24) * 16 / 9);
         previewArea = juce::Rectangle<int> (r.getX(), r.getY(), w, w * 9 / 16);
 
@@ -245,6 +296,17 @@ public:
         getFFmpegButton.setBounds (row.removeFromLeft (190)); row.removeFromLeft (8);
         findFFmpegButton.setBounds (row);
         side.removeFromTop (8);
+        auto pickRow = [&] (juce::Label& l, juce::ComboBox& b)
+        {
+            auto row2 = side.removeFromTop (28);
+            l.setBounds (row2.removeFromLeft (60));
+            b.setBounds (row2);
+            side.removeFromTop (4);
+        };
+        pickRow (musicLabel, musicBox);
+        pickRow (placeLabel, placeBox);
+        pickRow (timeLabel, timeBox);
+        side.removeFromTop (4);
         hostLabel.setBounds (side.removeFromTop (20));
         hostEditor.setBounds (side.removeFromTop (28));
         side.removeFromTop (6);
@@ -259,6 +321,26 @@ private:
     void timerCallback() override
     {
         repaint (previewArea);
+        // the pickers follow votes and the console
+        updatingPickers = true;
+        if (musicBox.getSelectedId() != engine.currentStyle.load() + 1) musicBox.setSelectedId (engine.currentStyle.load() + 1, juce::dontSendNotification);
+        if (placeBox.getSelectedId() != engine.currentPlace.load() + 1) placeBox.setSelectedId (engine.currentPlace.load() + 1, juce::dontSendNotification);
+        updatingPickers = false;
+        if (engine.consoleVersion() != shownConsole)
+        {
+            shownConsole = engine.consoleVersion();
+            consoleLog.setText (engine.consoleText(), false);
+            consoleLog.moveCaretToEnd();
+        }
+        // health: if the ocean stopped ticking for 20 s, start a fresh copy of the app (it carries on live) and quit
+        if (engine.lastFrameMs() > 0.0 && juce::Time::getMillisecondCounterHiRes() - engine.lastFrameMs() > 20000.0 && ! restarting)
+        {
+            restarting = true;
+            props.saveIfNeeded();
+            juce::ChildProcess fresh;
+            if (fresh.start (juce::StringArray { juce::File::getSpecialLocation (juce::File::currentExecutableFile).getFullPathName(), "--resume" }, 0))
+                std::_Exit (3);
+        }
         if (++ticks % 10 != 0) return;
         streamStatus.setText ("Stream: " + engine.streamer.getStatus(), juce::dontSendNotification);
         chatStatus.setText ("Chat: " + engine.chat.getStatus() + (engine.chat.getMessageCount() > 0 ? "  (" + juce::String (engine.chat.getMessageCount()) + " messages)" : juce::String()),
@@ -286,6 +368,8 @@ private:
         const auto ff = Streamer::findFFmpeg (props.getValue ("ffmpeg"));
         if (! ff.existsAsFile()) { streamStatus.setText ("Stream: ffmpeg is missing - press \"Get ffmpeg\" first", juce::dontSendNotification); return; }
         engine.goLive (ff, "rtmp://a.rtmp.youtube.com/live2/" + key);
+        props.setValue ("wasLive", true);
+        props.saveIfNeeded();
         if (channelEditor.getText().isNotEmpty() && ! engine.chat.isActive()) engine.chat.start (channelEditor.getText());
     }
 
@@ -385,7 +469,13 @@ private:
     std::unique_ptr<juce::URL::DownloadTask> download;
     std::unique_ptr<juce::URL::DownloadTaskListener> listener;
     juce::String downloading;
-    int ticks = 0;
+    int ticks = 0, shownConsole = -1, historyPos = 0;
+    bool restarting = false;
+    juce::Label consoleLabel, musicLabel, placeLabel, timeLabel;
+    juce::ComboBox musicBox, placeBox, timeBox;
+    bool updatingPickers = false;
+    juce::TextEditor consoleLog, consoleInput;
+    juce::StringArray history;
 };
 
 //==============================================================================
@@ -422,7 +512,8 @@ public:
 
         engine = std::make_unique<Engine> (appFolder().getChildFile ("ocean.xml"));
         engine->start();
-        window = std::make_unique<Window> (*engine, *props);
+        // "--resume": started again by the health check (or after a crash): go live again if it was live
+        window = std::make_unique<Window> (*engine, *props, args.contains ("--resume"));
     }
 
     void shutdown() override
@@ -437,12 +528,12 @@ public:
 private:
     struct Window : juce::DocumentWindow
     {
-        Window (Engine& e, juce::PropertiesFile& p) : juce::DocumentWindow ("Cat Ocean", aero::sky, allButtons)
+        Window (Engine& e, juce::PropertiesFile& p, bool resume) : juce::DocumentWindow ("Cat Ocean", aero::sky, allButtons)
         {
             setUsingNativeTitleBar (true);
-            setContentOwned (new MainComponent (e, p), true);
+            setContentOwned (new MainComponent (e, p, resume), true);
             setResizable (true, true);
-            setResizeLimits (900, 520, 4000, 3000);
+            setResizeLimits (1000, 640, 4000, 3000);
             centreWithSize (getWidth(), getHeight());
             setVisible (true);
         }

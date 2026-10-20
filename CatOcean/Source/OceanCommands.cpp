@@ -7,11 +7,37 @@ namespace ocean
 {
 namespace
 {
-    constexpr double commandCooldown = 2.5, feedCooldown = 30.0, xpMessageGap = 30.0;
+    constexpr double commandCooldown = 3.0, feedCooldown = 45.0, xpMessageGap = 30.0;
+    constexpr double emoteCooldown = 20.0, lookCooldown = 8.0, nameCooldown = 60.0, speechCooldown = 8.0, helpCooldown = 90.0, feedAnyoneCooldown = 6.0;
+    constexpr int maxCommandsPerMinute = 10;
+    constexpr double muteSeconds = 120.0;
 
     int indexIn (const juce::StringArray& names, const juce::String& w) { return names.indexOf (w, true); }
 
     const char* helpText = "!fish NAME  !color red blue  !body cat  !pattern stripes  !hat crown  !voice bell  !melody 1353  !dance  !feed  !vote 1  !level";
+}
+
+bool Sim::spamCheck (Viewer& v, const juce::String& text, bool isCommand)
+{
+    // true = let it through. Muted viewers, the same text again and again, and floods are ignored.
+    if (time < v.mutedUntil) { ++ignoredCommands; return false; }
+    const auto norm = text.trim().toLowerCase();
+    if (! isCommand && norm == v.lastText && time - v.lastTextAt < 30.0) { ++ignoredCommands; return false; }   // commands have their own pauses
+    v.lastText = norm;
+    v.lastTextAt = time;
+    if (! isCommand) return true;
+    while (! v.recent.empty() && time - v.recent.front() > 60.0) v.recent.pop_front();
+    v.recent.push_back (time);
+    if ((int) v.recent.size() > maxCommandsPerMinute)
+    {
+        v.mutedUntil = time + muteSeconds;
+        v.recent.clear();
+        if (auto* f = findFish (v.fishId); f != nullptr && f->present)
+            toast (*f, "too many commands - taking a 2 minute nap", 0xfff6757a);
+        ++ignoredCommands;
+        return false;
+    }
+    return true;
 }
 
 void Sim::chat (const juce::String& authorId, const juce::String& authorName, const juce::String& text, bool moderator)
@@ -21,6 +47,7 @@ void Sim::chat (const juce::String& authorId, const juce::String& authorName, co
     if (v.name.isEmpty())
         v.name = filter::cleanName (authorName, (int) (authorId.hashCode() & 0x7fffffff));
     v.lastMessage = time;
+    if (! moderator && ! spamCheck (v, text, text.trim().startsWithChar ('!'))) return;
 
     if (auto* f = findFish (v.fishId))
     {
@@ -32,6 +59,33 @@ void Sim::chat (const juce::String& authorId, const juce::String& authorName, co
     const auto t = text.trim();
     if (t.startsWithChar ('!'))
         command (v, authorId, t, moderator);
+    else if (auto* f = findFish (v.fishId); f != nullptr && f->present && ! f->leaving)
+    {
+        // a normal chat message: the fish says it in a speech bubble (only kind words, short)
+        juce::String said;
+        for (auto c : t)
+        {
+            c = filter::fold (c);
+            if (c >= 32 && c < 127) said << juce::String::charToString (c);
+        }
+        said = said.trim().substring (0, 34).trim();
+        // no shouting, no walls of the same letter, one bubble every few seconds, at most 6 on screen
+        int upper = 0, letters = 0;
+        for (auto c : said) if (juce::CharacterFunctions::isLetter (c)) { ++letters; if (juce::CharacterFunctions::isUpperCase (c)) ++upper; }
+        if (letters > 6 && upper * 10 > letters * 7) said = said.toLowerCase();
+        juce::String squashed;
+        juce::juce_wchar prev = 0; int run = 0;
+        for (auto c : said) { run = c == prev ? run + 1 : 0; prev = c; if (run < 3) squashed << juce::String::charToString (c); }
+        said = squashed;
+        const bool roomy = speech.size() < 6 || time - v.lastSpeech > 20.0;
+        if (said.isNotEmpty() && filter::isClean (said) && time - v.lastSpeech >= speechCooldown && roomy)
+        {
+            speech.erase (std::remove_if (speech.begin(), speech.end(), [f] (const Speech& sp) { return sp.fishId == f->id; }), speech.end());
+            speech.push_back ({ f->id, said, 6.0f });
+            v.lastSpeech = time;
+            if (speech.size() > 12) speech.erase (speech.begin());
+        }
+    }
 }
 
 bool Sim::applyWord (Fish& f, const juce::String& word, juce::String& changed, juce::String& locked)
@@ -212,8 +266,9 @@ void Sim::command (Viewer& v, const juce::String& ownerId, const juce::String& t
 
     if (cmd == "feed")
     {
-        if (time - v.lastFeed < feedCooldown) { ++ignoredCommands; return; }
+        if (time - v.lastFeed < feedCooldown || time - lastFeedAnyone < feedAnyoneCooldown) { ++ignoredCommands; return; }
         v.lastFeed = time;
+        lastFeedAnyone = time;
         dropFood (4, f != nullptr && f->present ? f->x : -1.0f);
         if (f != nullptr && f->present) toast (*f, "yum!", 0xfffee761);
         return;
@@ -221,6 +276,8 @@ void Sim::command (Viewer& v, const juce::String& ownerId, const juce::String& t
 
     if (cmd == "help" || cmd == "commands")
     {
+        if (time - lastHelp < helpCooldown) return;   // one help line for everybody, not one each
+        lastHelp = time;
         announce (helpText, 0xffffffff);
         return;
     }
@@ -262,6 +319,8 @@ void Sim::command (Viewer& v, const juce::String& ownerId, const juce::String& t
 
     if (cmd == "dance" || cmd == "spin" || cmd == "jump")
     {
+        if (time - v.lastEmote < emoteCooldown) { ++ignoredCommands; return; }
+        v.lastEmote = time;
         f->emote = cmd == "dance" ? EmoteDance : cmd == "spin" ? EmoteSpin : EmoteJump;
         f->emoteTime = 0.0f;
         return;
@@ -274,11 +333,19 @@ void Sim::command (Viewer& v, const juce::String& ownerId, const juce::String& t
     }
     if (cmd == "name" || cmd == "rename")
     {
+        if (time - v.lastName < nameCooldown) { ++ignoredCommands; return; }
+        v.lastName = time;
         const auto name = filter::cleanName (raw.joinIntoString (" "), f->id);
         f->name = name;
         if (f->familyName.isEmpty() || f->familyId == f->id) f->familyName = name;
         toast (*f, "I'm " + name + " now", 0xff9ef0c2);
         return;
+    }
+    const bool changesLook = cmd != "home" && cmd != "bye" && cmd != "sleep" && cmd != "release" && cmd != "info" && cmd != "me";
+    if (changesLook)
+    {
+        if (time - v.lastLook < lookCooldown) { ++ignoredCommands; return; }
+        v.lastLook = time;
     }
     if (cmd == "color" || cmd == "colour" || cmd == "colors" || cmd == "colours")
     {
