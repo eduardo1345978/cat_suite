@@ -138,30 +138,55 @@ void drawBackground (juce::Graphics& g, juce::Rectangle<float> a, int theme, dou
             }
             break;
         }
-        case 1:   // ocean: blue depth, light rays, rising bubbles
+        case 1:   // ocean (Frutiger Aero): bright aqua at the top, sun glow, light rays, caustics, glossy bubbles
         {
-            g.setGradientFill (juce::ColourGradient (Colour (0xff10405e), a.getCentreX(), a.getY(), Colour (0xff04101d), a.getCentreX(), a.getBottom(), false));
+            juce::ColourGradient water (Colour (0xff2a9fc4), a.getCentreX(), a.getY(), Colour (0xff052033), a.getCentreX(), a.getBottom(), false);
+            water.addColour (0.35, Colour (0xff137299));
+            water.addColour (0.7, Colour (0xff0a3a58));
+            g.setGradientFill (water);
             g.fillRect (a);
-            for (int i = 0; i < 6; ++i)
+            const float w = a.getWidth(), h = a.getHeight(), unit = juce::jmin (w, h);
+            // the sun through the surface
+            softGlow (g, { a.getX() + w * 0.72f, a.getY() - unit * 0.02f }, unit * 0.45f, Colour (0xffe8fbff), 0.32f);
+            // light rays, swaying
+            for (int i = 0; i < 7; ++i)
             {
-                const float x = a.getX() + a.getWidth() * (0.05f + 0.18f * (float) i) + 20.0f * std::sin (ft * 0.15f + (float) i);
+                const float x = a.getX() + w * (0.02f + 0.15f * (float) i) + 18.0f * std::sin (ft * 0.13f + (float) i * 1.7f);
+                const float spread = w * (0.12f + 0.05f * std::sin (ft * 0.21f + (float) i));
                 Path ray;
                 ray.startNewSubPath (x, a.getY());
-                ray.lineTo (x + a.getWidth() * 0.05f, a.getY());
-                ray.lineTo (x + a.getWidth() * 0.18f, a.getBottom());
-                ray.lineTo (x + a.getWidth() * 0.09f, a.getBottom());
+                ray.lineTo (x + w * 0.035f, a.getY());
+                ray.lineTo (x + spread + w * 0.06f, a.getBottom());
+                ray.lineTo (x + spread, a.getBottom());
                 ray.closeSubPath();
-                g.setGradientFill (juce::ColourGradient (Colour (0x169fd8ff), x, a.getY(), Colour (0x009fd8ff), x, a.getBottom(), false));
+                const float alpha = 0.07f + 0.05f * std::sin (ft * 0.4f + (float) i * 2.3f);
+                g.setGradientFill (juce::ColourGradient (Colour (0xffd8f6ff).withAlpha (alpha), x, a.getY(), Colour (0x00d8f6ff), x, a.getY() + h * 0.85f, false));
                 g.fillPath (ray);
             }
-            for (int i = 0; i < 28; ++i)
+            // caustics: a soft net of light near the surface
+            for (int i = 0; i < 26; ++i)
+            {
+                const float cx = rnd.nextFloat(), cy = rnd.nextFloat() * 0.45f, sp = 0.3f + rnd.nextFloat() * 0.5f;
+                const float x = a.getX() + w * cx + 10.0f * std::sin (ft * sp + (float) i);
+                const float y = a.getY() + h * cy + 6.0f * std::cos (ft * sp * 0.8f + (float) i * 0.7f);
+                const float r = unit * (0.025f + 0.03f * rnd.nextFloat());
+                g.setColour (Colour (0xffcff4ff).withAlpha (0.05f + 0.05f * (0.5f + 0.5f * std::sin (ft * 0.9f + (float) i)) * (1.0f - cy)));
+                g.drawEllipse (x - r, y - r * 0.6f, r * 2.0f, r * 1.2f, 1.2f);
+            }
+            // glossy bubbles rising
+            for (int i = 0; i < 30; ++i)
             {
                 const float x0 = rnd.nextFloat(), speed = 0.02f + 0.04f * rnd.nextFloat(), ph = rnd.nextFloat();
                 const float y = 1.0f - std::fmod (ph + ft * speed, 1.0f);
                 const float x = x0 + 0.01f * std::sin (ft * 2.0f + (float) i);
-                const float r = 1.0f + 2.5f * rnd.nextFloat();
-                g.setColour (Colour (0x40bfe8ff));
-                g.drawEllipse (a.getX() + x * a.getWidth() - r, a.getY() + y * a.getHeight() - r, 2.0f * r, 2.0f * r, 0.8f);
+                const float r = 1.2f + (rnd.nextFloat() < 0.15f ? 5.0f : 2.5f) * rnd.nextFloat();
+                const float bx = a.getX() + x * w, by = a.getY() + y * h;
+                g.setColour (Colour (0x18bfeaff));
+                g.fillEllipse (bx - r, by - r, 2.0f * r, 2.0f * r);
+                g.setColour (Colour (0x70dff6ff));
+                g.drawEllipse (bx - r, by - r, 2.0f * r, 2.0f * r, 0.9f);
+                g.setColour (Colour (0xb0ffffff));
+                g.fillEllipse (bx - r * 0.55f, by - r * 0.6f, r * 0.55f, r * 0.4f);   // the shine
             }
             break;
         }

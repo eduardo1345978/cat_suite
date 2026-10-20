@@ -105,6 +105,22 @@ float Glottis::process (float f0, float sampleRate) noexcept
         flow = std::cos (0.5f * pi * u);
     }
 
+    // The closing phase ends with a sudden jump of the flow derivative (from its most negative
+    // value back to 0). A jump like that aliases into a buzzy, metallic hiss on high notes, so it
+    // is smoothed with a polyBLEP over the samples around it (a band-limited step).
+    {
+        const float dt = f0 / (periodScale * sampleRate);
+        const float tc = tp + tn;
+        if (dt > 0.0f && dt < 0.5f && tn > 2.0f * dt)
+        {
+            const float jump = 0.5f * pi / tn;           // the derivative's step up at closure
+            float t = (phase - tc) / dt;
+            if (t < -1.0f && phase + 1.0f - tc < dt) t = (phase + 1.0f - tc) / dt;   // closure just before a wrap
+            if (t >= 0.0f && t < 1.0f)       d += 0.5f * jump * (2.0f * t - t * t - 1.0f);
+            else if (t > -1.0f && t < 0.0f)  d += 0.5f * jump * (t * t + 2.0f * t + 1.0f);
+        }
+    }
+
     // Aspiration: band-limited noise, pulsed by the glottal flow while voiced
     const float white = noise.next();
     hp = 0.92f * (hp + white - lastNoise);

@@ -235,6 +235,19 @@ const std::vector<SingCatProcessor::Preset>& SingCatProcessor::presets()
                                 { "room", 4 }, { "roomMix", 22 }, { "release", 280 } }, {}, "la la la, la la la la, na na na" },
         { "Robot Words",      { { "mode", 1 }, { "singers", 4 }, { "cast", 2 }, { "style", 11 }, { "words", 1 }, { "diction", 80 },
                                 { "room", 4 }, { "roomMix", 20 }, { "release", 200 } }, {}, "we are the ro-bots, beep bop beep" },
+        // ---- Aero: airy, glossy, watery (Frutiger Aero)
+        { "Aero Choir",       { { "mode", 2 }, { "singers", 12 }, { "cast", 11 }, { "style", 5 }, { "vowelX", 0.95f }, { "vowelY", 0.06f },
+                                { "breath", 45 }, { "move", 1 }, { "vowelX2", 0.55f }, { "vowelY2", 0.95f }, { "moveRate", 0.1f }, { "spread", 70 },
+                                { "room", 4 }, { "roomMix", 50 }, { "micDist", 60 }, { "attack", 500 }, { "release", 2200 } }, {} },
+        { "Ocean Ooh",        { { "mode", 2 }, { "singers", 16 }, { "unison", 2 }, { "cast", 0 }, { "style", 0 }, { "vowelX", 0.95f }, { "vowelY", 0.06f },
+                                { "move", 1 }, { "vowelX2", 0.93f }, { "vowelY2", 0.4f }, { "moveRate", 0.06f }, { "drift", 40 },
+                                { "room", 3 }, { "roomMix", 60 }, { "micDist", 85 }, { "attack", 900 }, { "release", 3000 } }, {} },
+        { "Glass Ahh",        { { "mode", 1 }, { "singers", 6 }, { "cast", 11 }, { "style", 2 }, { "vowelX", 0.55f }, { "vowelY", 0.95f },
+                                { "breath", 25 }, { "vibrato", 30 }, { "room", 4 }, { "roomMix", 40 }, { "attack", 200 }, { "release", 1200 } }, {} },
+        { "Sky Whisper",      { { "mode", 1 }, { "singers", 8 }, { "unison", 2 }, { "cast", 11 }, { "style", 5 }, { "vowelX", 0.16f }, { "vowelY", 0.4f },
+                                { "breath", 90 }, { "spread", 80 }, { "room", 6 }, { "roomMix", 45 }, { "attack", 400 }, { "release", 1800 } }, {} },
+        { "Bubble Pop Duo",   { { "mode", 1 }, { "singers", 2 }, { "cast", 1 }, { "style", 2 }, { "words", 1 }, { "diction", 55 }, { "glide", 60 },
+                                { "room", 4 }, { "roomMix", 28 }, { "attack", 30 }, { "release", 350 } }, {}, "bub-ble, bub-ble, in the blue, o-cean sky" },
     };
     return list;
 }

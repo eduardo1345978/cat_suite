@@ -208,6 +208,14 @@ const std::vector<LifeCatProcessor::WorldPreset>& LifeCatProcessor::presets()
                                                                              { "reverbSize", 0.95f }, { "sp2Sound", 8 }, { "sp5Sound", 8 }, { "sp7Sound", 8 }, { "sp3Max", 0 } } },
         { "Dark Forest", 0, 307, { 12, 3, 4, 2, 2, 1, 6, 2, 2, 2 }, 50, { { "dayLength", 1 }, { "seasonLength", 2 }, { "weather", 0 }, { "scale", 1 }, { "key", 4 } }, 13 },
         { "Event Storm", 0, 308, { 14, 3, 3, 3, 2, 0, 6, 2, 2, 2 }, 60, { { "weather", 5 }, { "scale", 8 }, { "key", 0 }, { "grid", 2 }, { "sp5Max", 0 } }, 6 },
+
+        // v5: Frutiger Aero oceans (like Cat Ocean): glassy, bright, calm
+        { "Aero Lagoon", 1, 401, { 10, 1, 6, 0, 1, 1, 10, 3, 0, 2 }, 70, { { "scale", 4 }, { "key", 2 }, { "density", 0.45f }, { "reverbMix", 0.5f },
+                                                                      { "sp0Sound", 10 }, { "sp2Sound", 2 }, { "sp6Sound", 3 }, { "sp7Sound", 9 }, { "sp3Max", 0 }, { "sp8Max", 0 } }, 7 },
+        { "Bubble Reef", 1, 402, { 14, 2, 4, 0, 2, 0, 14, 2, 1, 2 }, 90, { { "scale", 7 }, { "key", 7 }, { "grid", 2 }, { "density", 0.5f },
+                                                                      { "sp0Sound", 3 }, { "sp6Sound", 10 }, { "sp7Sound", 9 }, { "sp3Max", 0 } }, 7 },
+        { "Glass Sea", 1, 403, { 6, 1, 10, 0, 0, 2, 0, 3, 0, 0 }, 40, { { "scale", 0 }, { "key", 9 }, { "quantize", 0 }, { "density", 0.4f }, { "reverbMix", 0.65f },
+                                                                    { "reverbSize", 0.85f }, { "sp2Sound", 10 }, { "sp5Sound", 2 }, { "sp7Sound", 10 }, { "sp3Max", 0 }, { "sp8Max", 0 } }, 3 },
     };
     return list;
 }

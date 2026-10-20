@@ -190,6 +190,23 @@ int main (int argc, char** argv)
     }
     ignoreXErrors();
 
+    // CAT_SNAPSHOT=<file.png> [CAT_PRESET=<n>]: load that preset, let it run a few seconds, save a picture of the editor and stop
+    if (auto shot = SystemStats::getEnvironmentVariable ("CAT_SNAPSHOT", {}); shot.isNotEmpty() && ed != nullptr)
+    {
+        const auto preset = SystemStats::getEnvironmentVariable ("CAT_PRESET", "-1").getIntValue();
+        if (preset >= 0) p->setCurrentProgram (preset);
+        pump (4000);
+        auto img = ed->createComponentSnapshot (ed->getLocalBounds());
+        File f (shot);
+        f.deleteFile();
+        if (auto os = f.createOutputStream()) PNGImageFormat().writeImageToStream (img, *os);
+        std::cout << "snapshot " << f.getFullPathName() << std::endl;
+        stop = true;
+        audio.join();
+        ed.reset();
+        return 0;
+    }
+
     const auto start = Time::getMillisecondCounterHiRes();
     int actions = 0;
     while (Time::getMillisecondCounterHiRes() - start < seconds * 1000.0)
