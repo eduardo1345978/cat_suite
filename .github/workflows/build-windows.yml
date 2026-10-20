@@ -36,7 +36,7 @@ jobs:
         run: cmake -B build -A x64 -DCAT_BUILD_TESTS=ON -DCAT_PLUGIN_FORMATS=VST3 -DCAT_SOUND_STANDALONE=ON
 
       - name: Build all plug-ins, the sound apps and the test host
-        run: cmake --build build --config Release --parallel --target CatSuiteHostTest SingCat_Standalone TalkCat_Standalone GlideCat_Standalone LifeCat_Standalone MuseCat_Standalone CatHub CatOcean
+        run: cmake --build build --config Release --parallel --target CatSuiteHostTest SingCat_Standalone TalkCat_Standalone GlideCat_Standalone LifeCat_Standalone MuseCat_Standalone MuseCat_VST3 CatHub CatOcean
 
       - name: Run the tests
         run: build\Tests\CatSuiteHostTest_artefacts\Release\CatSuiteHostTest.exe
