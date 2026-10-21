@@ -10,10 +10,11 @@ then copy changed files to the PC (D:\Projekty\vst_plugin) and run build_and_ins
 
 ## 1. FIRST: Cat Ocean chat + going live (user: "chat never connected", stream didn't show in Studio)
 - [ ] Check the chat reader end to end against a real live stream; clearer status lines (why it isn't connected)
+- [x] (part) key check (spaces removed, URL refused) + after 2 min sending with no live video: tells what to change in Studio
 - [ ] Going live: Cat Ocean said "streaming" but Studio showed nothing -> show ffmpeg's real output / RTMP errors,
       check the key (trim spaces, warn on wrong length), explain Dual stream must be Off/Auto (user keeps YouTube Auto for Shorts)
 - [ ] Polish every chat command (!fish, emotes, !pet, !feedcat ...) - test each one through the real chat path
-- [ ] Fish emotes: !dance !spin !jump (polished animations)
+- [x] Fish emotes: !dance (notes circle it) !spin (really turns round) !jump (swims up, leaps out, splash)
 
 ## 2. Cat Ocean content
 - [ ] Stream text and panels SMALLER, more ocean (English stays)
@@ -58,9 +59,11 @@ then copy changed files to the PC (D:\Projekty\vst_plugin) and run build_and_ins
 ## 9. Look and sharing
 - [ ] Theme switch in every Cat: Dark / Frutiger Aero / Light
 - [ ] Animated cat mascot in every plug-in that reacts to the music
-- [ ] One-click installer .exe where you tick what you want
+- [ ] One-click installer .exe where you tick what you want - MODERN and nice to use (user asked): a real window
+      with the Cat look, cards with icons for each Cat / app, a progress bar, "Open Cubase" / "Start Cat Hub" at the end, also uninstall
 - [ ] Auto update: the apps tell you a new version is out, you click Update
 - [ ] Mac version: later
+- [ ] Linux: publish Linux builds too (VST3 + apps) on GitHub (user asked 21 Oct; everything already builds and is tested on Linux)
 
 ## Answers that mean "no"
 - Vertical Shorts picture: no, YouTube Auto is fine

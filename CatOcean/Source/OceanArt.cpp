@@ -1086,6 +1086,7 @@ void Painter::drawFish (Canvas& c, const Fish& f, float time)
 
     // to the canvas (flipped when swimming left)
     float alpha = f.fade * (g.rare == RareGhost ? 0.5f + 0.15f * std::sin (time * 2.0f) : 1.0f);
+    const float spin = f.emote == EmoteSpin ? std::cos (f.emoteTime * juce::MathConstants<float>::twoPi) : 1.0f;   // two full turns in 2 s
     // a little hop while it sings
     const float hopUp = f.singFlash > 0.0f ? std::sin (f.singFlash * 3.14159265f) * 1.5f : 0.0f;
     const int px = (int) std::lround (f.x), py = (int) std::lround (f.y + std::sin (time * 1.5f + f.id) * 0.6f - hopUp);
@@ -1094,9 +1095,34 @@ void Painter::drawFish (Canvas& c, const Fish& f, float time)
         {
             const Colour col = spr[(size_t) (y * SW + x)];
             if (col == 0) continue;
-            const int sx = x - CX, sy = y - CY;
+            int sx = x - CX;
+            const int sy = y - CY;
+            if (spin != 1.0f) sx = (int) std::lround ((float) sx * spin);   // turning round: the fish gets thin, then faces the other way
             c.blend (px + (f.facing >= 0 ? sx : -sx), py + sy, col, alpha);
         }
+    // dance: little notes and sparkles circle it
+    if (f.emote == EmoteDance)
+    {
+        for (int k = 0; k < 4; ++k)
+        {
+            const float a = f.emoteTime * 4.0f + (float) k * 1.5708f;
+            const int nx = px + (int) std::lround (std::cos (a) * (L * 0.6f + 5.0f)), ny = py - 3 + (int) std::lround (std::sin (a) * (Hmax + 5.0f));
+            const Colour nc = k % 2 == 0 ? 0xffffe066 : 0xffff8fd0;
+            const float na = juce::jmin (1.0f, (3.0f - f.emoteTime) * 2.0f) * f.fade;
+            c.blend (nx, ny, nc, na); c.blend (nx + 1, ny, nc, na); c.blend (nx + 1, ny - 1, nc, na); c.blend (nx + 1, ny - 2, nc, na);
+        }
+    }
+    // jump: a splash where it breaks the surface
+    if (f.emote == EmoteJump && f.emoteLeaped && std::abs (f.y - surfaceY) < 10.0f)
+    {
+        const float st = std::fmod (f.emoteTime, 10.0f) * 6.0f;
+        for (int k = -4; k <= 4; ++k)
+        {
+            const int dx = k * 3, dy = (int) std::lround (-std::abs ((float) k) * 0.6f - 3.0f + st * 0.5f);
+            c.blend (px + dx, (int) surfaceY + dy - 2, 0xffffffff, 0.8f * f.fade);
+            c.blend (px + dx, (int) surfaceY + 1, 0xffd8f4ff, 0.6f * f.fade);
+        }
+    }
 
     // glows and sparkles
     if (g.rare == RareGlow || g.accessory == AccLamp)

@@ -64,6 +64,7 @@ struct Fish
     // emotes (!dance !spin !jump)
     int emote = EmoteNone;
     float emoteTime = 0;
+    bool emoteLeaped = false;   // jump: swims up first, then leaps out once
 };
 
 /** XP needed for a level (level 1 = 0 XP). */

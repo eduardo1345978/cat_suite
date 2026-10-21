@@ -389,11 +389,20 @@ void Sim::stepFish (Fish& f, float dt)
         switch (f.emote)
         {
             case EmoteDance: f.vy = std::sin (t * 12.0f) * 22.0f; f.vx = std::sin (t * 6.0f) * 14.0f; if (t > 3.0f) f.emote = EmoteNone; break;
-            case EmoteSpin:  if (((int) (t * 10.0f)) % 2 == 0) f.facing = 1; else f.facing = -1; f.vy *= 0.9f; if (t > 2.0f) f.emote = EmoteNone; break;
+            case EmoteSpin:  f.vy *= 0.9f; if (t > 2.0f) f.emote = EmoteNone; break;   // the turn is drawn (the fish squeezes round)
             case EmoteJump:
-                if (t < 0.05f) f.vy = -95.0f;
-                f.vy += 140.0f * dt;                                  // gravity (out of the water too)
-                if (t > 2.5f || (t > 0.3f && f.y > surfaceY + 20.0f && f.vy > 0.0f)) f.emote = EmoteNone;
+                if (t < 0.05f) f.emoteLeaped = false;
+                if (! f.emoteLeaped)
+                {
+                    // swim up to just under the surface, then leap out
+                    f.vy = juce::jlimit (-120.0f, 0.0f, (surfaceY + 8.0f - f.y) * 4.0f);
+                    if (f.y < surfaceY + 12.0f || t > 2.5f) { f.emoteLeaped = true; f.vy = -85.0f; f.emoteTime = 10.0f; }
+                }
+                else
+                {
+                    f.vy += 150.0f * dt;                              // gravity (out of the water too)
+                    if (t > 13.0f || (t > 10.3f && f.y > surfaceY + 16.0f && f.vy > 0.0f)) f.emote = EmoteNone;
+                }
                 break;
             default: f.emote = EmoteNone; break;
         }

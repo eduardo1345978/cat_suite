@@ -327,7 +327,7 @@ public:
         stopButton.setBounds (row.removeFromLeft (80)); row.removeFromLeft (8);
         chatButton.setBounds (row);
         side.removeFromTop (6);
-        streamStatus.setBounds (side.removeFromTop (34));
+        streamStatus.setBounds (side.removeFromTop (64));
         chatStatus.setBounds (side.removeFromTop (34));
         side.removeFromTop (4);
         testButton.setBounds (side.removeFromTop (30));
@@ -390,7 +390,15 @@ private:
                 std::_Exit (3);
         }
         if (++ticks % 10 != 0) return;
-        streamStatus.setText ("Stream: " + engine.streamer.getStatus(), juce::dontSendNotification);
+        {
+            juce::String st = "Stream: " + engine.streamer.getStatus();
+            // sending for 2 minutes, but YouTube still shows no live video on the channel: the usual YouTube-side reasons
+            const bool sending = engine.streamer.getStatus().startsWith ("LIVE");
+            if (sending && engine.streamer.sentFrames() > 30 * 120 && engine.chat.getStatus().contains ("not live yet"))
+                st << "\nYouTube gets the video but isn't showing it: in YouTube Studio > Go live > Stream, set Dual stream to Off or Auto,"
+                      " and paste the stream key shown on THAT page (a key from another stream goes nowhere).";
+            streamStatus.setText (st, juce::dontSendNotification);
+        }
         chatStatus.setText ("Chat: " + engine.chat.getStatus() + (engine.chat.getMessageCount() > 0 ? "  (" + juce::String (engine.chat.getMessageCount()) + " messages)" : juce::String()),
                             juce::dontSendNotification);
         const auto ff = Streamer::findFFmpeg (props.getValue ("ffmpeg"));
@@ -438,8 +446,14 @@ private:
     void goLive()
     {
         save();
-        const auto key = keyEditor.getText().trim();
+        const auto key = keyEditor.getText().removeCharacters (" \t\r\n");
         if (key.isEmpty()) { streamStatus.setText ("Stream: paste your stream key first (step 1)", juce::dontSendNotification); return; }
+        if (key.startsWithIgnoreCase ("rtmp") || key.containsChar ('/'))
+        {
+            streamStatus.setText ("Stream: paste only the Stream key (like abcd-efgh-ijkl-mnop-qrst), not the Stream URL", juce::dontSendNotification);
+            return;
+        }
+        keyEditor.setText (key, false);
         const auto ff = Streamer::findFFmpeg (props.getValue ("ffmpeg"));
         if (! ff.existsAsFile()) { streamStatus.setText ("Stream: ffmpeg is missing - press \"Get ffmpeg\" first", juce::dontSendNotification); return; }
         engine.goLive (ff, "rtmp://a.rtmp.youtube.com/live2/" + key);

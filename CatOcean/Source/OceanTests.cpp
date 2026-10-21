@@ -244,6 +244,13 @@ void testCommandsAndLife (const juce::File& outDir)
     const float yBefore = M() != nullptr ? M()->y : 0.0f;
     engine.runFrames (12);
     check (M() != nullptr && M()->y < yBefore - 10.0f, "emotes: !jump jumps");
+    {
+        bool outOfWater = false;
+        for (int k = 0; k < 30 * 4 && ! outOfWater; ++k) { engine.runFrames (1); outOfWater = M() != nullptr && M()->y < surfaceY - 2.0f; }
+        check (outOfWater, "emotes: !jump swims up and leaps out of the water");
+        engine.runFrames (30 * 3);
+        check (M() != nullptr && M()->emote == EmoteNone && M()->y > surfaceY, "emotes: after the jump it is back in the water");
+    }
     engine.say ("UC1", "Miro", "!dance");
     engine.runFrames (2);
     check (M() != nullptr && M()->emote != EmoteDance, "spam: emotes need a pause (20 s)");
