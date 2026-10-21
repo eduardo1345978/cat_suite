@@ -14,3 +14,6 @@ What is inside (folder VST3):
     Sing-Cat   - choir of cats and people
     Glide-Cat  - gliding poly synth
     Talk-Cat   - singer with lyrics (English, Slovak, Japanese, Cat)
+    Muse-Cat   - writes whole songs (your own words and chords too)
+    Life-Cat   - a living ecosystem that makes music
+    Echo-Cat   - echo and shimmer space for vocals and instruments (an audio effect)
