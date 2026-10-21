@@ -114,7 +114,7 @@ public:
         {
             l.setText (text, juce::dontSendNotification);
             l.setFont (cat::catFont (size, bold));
-            l.setColour (juce::Label::textColourId, aero::ink);
+            l.setColour (juce::Label::textColourId, juce::Colours::black);
             addAndMakeVisible (l);
         };
         label (title, "Cat Ocean", 24.0f, true);
@@ -138,7 +138,13 @@ public:
         hostEditor.setTextToShowWhenEmpty ("!fish Miro blue stripes", aero::inkDim);
         for (auto* ed : { &keyEditor, &channelEditor, &hostEditor })
         {
+            // black text on the white box (set here: text put in before the box joins the window would take the default white)
+            ed->setColour (juce::TextEditor::textColourId, juce::Colours::black);
+            ed->setColour (juce::TextEditor::backgroundColourId, juce::Colours::white);
+            ed->setColour (juce::CaretComponent::caretColourId, juce::Colours::black);
             ed->setFont (cat::catFont (14.0f));
+            ed->applyFontToAllText (cat::catFont (14.0f));
+            ed->applyColourToAllText (juce::Colours::black);
             addAndMakeVisible (ed);
         }
         // the admin console
@@ -149,6 +155,9 @@ public:
         consoleLog.setColour (juce::TextEditor::backgroundColourId, juce::Colour (0xdd0b2f55));
         consoleLog.setColour (juce::TextEditor::textColourId, juce::Colour (0xffd8f6ff));
         consoleInput.setFont (juce::Font (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 14.0f, juce::Font::plain)));
+        consoleInput.setColour (juce::TextEditor::textColourId, juce::Colours::black);
+        consoleInput.setColour (juce::TextEditor::backgroundColourId, juce::Colours::white);
+        consoleInput.setColour (juce::CaretComponent::caretColourId, juce::Colours::black);
         consoleInput.setTextToShowWhenEmpty ("/help   /stats   /time night   /place lagoon   /give @name 50   !fish Miro", aero::inkDim);
         consoleInput.onReturnKey = [this]
         {
