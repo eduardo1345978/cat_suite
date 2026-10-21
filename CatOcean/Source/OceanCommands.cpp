@@ -526,7 +526,7 @@ void Sim::command (Viewer& v, const juce::String& ownerId, const juce::String& t
                 locked << (locked.isEmpty() ? "" : ", ") << what << " at LV" << need;
                 return false;
             };
-            int i;
+            int i = -1;
             if (cmd == "tail" && (i = indexIn (tailNames(), w)) >= 0)                      { if (ok (KindTail, i, w + " tail")) { g.tail = i; note (w + " tail"); } continue; }
             if ((cmd == "fin" || cmd == "fins") && (w == "none" || w == "no"))             { g.fin = FinNone; note ("no fin"); continue; }
             if ((cmd == "fin" || cmd == "fins") && (i = indexIn (finNames(), w)) >= 0)     { if (ok (KindFin, i, w + " fin")) { g.fin = i; note (w + " fin"); } continue; }
