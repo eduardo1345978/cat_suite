@@ -55,7 +55,7 @@ jobs:
           Copy-Item packaging\README-install.txt $pkg
           Compress-Archive -Path "$pkg\*" -DestinationPath Cat-Suite-Windows.zip -Force
           $count = (Get-ChildItem "$pkg\VST3" -Directory).Count
-          if ($count -lt 13) { throw "Only $count plug-ins were packed" }
+          if ($count -lt 12) { throw "Only $count plug-ins were packed" }
 
           # Only the instruments that make sound: standalone apps + their VST3s
           $snd = "pkg\Cat-Sound-Apps"
@@ -126,4 +126,4 @@ jobs:
           gh release create latest Cat-Suite-Windows.zip Cat-Sound-Apps-Windows.zip Get-Cat-Sound-Apps.bat `
             --target "${{ github.sha }}" `
             --title "Cat Suite - latest build ($date UTC)" `
-            --notes "**Everything (VST3 for Cubase):** download **Cat-Suite-Windows.zip** (all 13 Cats incl. the new **Echo-Cat** audio effect), unzip it, close Cubase and double-click **Install-Cat-Suite.bat**. Then rescan in Cubase (Studio > VST Plug-in Manager).<br><br>**Only the instruments that make sound, as apps you can play with your computer keyboard** (Sing-Cat, Talk-Cat, Glide-Cat, Life-Cat, Muse-Cat the song writer, Cat Ocean the endless YouTube ocean) **plus the Cat Hub** (every Cat jamming together in one window: Dice and Compose write whole songs or endless music, effects, Patt/Bend/Orbit-Cat as effects, Glide/Sing/Talk-Cat as sounds - press Play): download **Get-Cat-Sound-Apps.bat** and double-click it. It downloads and installs them (Start menu + Desktop shortcuts, plus the VST3 versions). If Windows warns about the file, click *More info* > *Run anyway*.<br><br>Built from commit ${{ github.sha }}."
+            --notes "**Everything (VST3 for Cubase):** download **Cat-Suite-Windows.zip** (all 12 Cats incl. the new **Echo-Cat** audio effect), unzip it, close Cubase and double-click **Install-Cat-Suite.bat**. Then rescan in Cubase (Studio > VST Plug-in Manager).<br><br>**Only the instruments that make sound, as apps you can play with your computer keyboard** (Sing-Cat, Talk-Cat, Glide-Cat, Life-Cat, Muse-Cat the song writer, Cat Ocean the endless YouTube ocean) **plus the Cat Hub** (every Cat jamming together in one window: Dice and Compose write whole songs or endless music, effects, Patt/Bend/Orbit-Cat as effects, Glide/Sing/Talk-Cat as sounds - press Play): download **Get-Cat-Sound-Apps.bat** and double-click it. It downloads and installs them (Start menu + Desktop shortcuts, plus the VST3 versions). If Windows warns about the file, click *More info* > *Run anyway*.<br><br>Built from commit ${{ github.sha }}."
