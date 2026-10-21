@@ -62,6 +62,11 @@ public:
     bool arrange (std::vector<cat::muse::Section> sections);
     /** One part as a MIDI file (for dragging into Cubase); -1 = every part. */
     juce::File writeMidiForDrag (int part) const;
+    /** Your own words and chords (Words & chords window). chords: verse, chorus, pre-chorus, bridge ("" = Muse-Cat's own);
+        lyrics: one text line per sung line ({} = Muse-Cat's words). false + error if a chord can't be read (nothing changes). */
+    bool setOwnWords (const std::array<juce::String, 4>& chords, const juce::StringArray& lyrics, juce::String& error);
+    std::array<juce::String, 4> getOwnChords() const { return ownChords; }
+    juce::StringArray getOwnLyrics() const { return ownLyrics; }
     void newSeed();
     void setSeed (juce::uint32);
     cat::muse::Settings currentSettings() const;
@@ -87,6 +92,9 @@ private:
     void timerCallback() override;
     float p (const char* id) const;
     void setSongNow (std::shared_ptr<const cat::muse::Song>);
+    /** Puts your own chords and words into a song Muse-Cat just wrote. */
+    void applyOwn (cat::muse::Song&) const;
+    void clearOwnIfNewSong (const cat::muse::Settings&);
 
     std::map<juce::String, std::atomic<float>*> refs;
     cat::HostSync hostSync;
@@ -105,6 +113,8 @@ private:
     cat::muse::Settings composedFor;
     std::vector<cat::muse::Section> arrangedForm, pendingForm;   // the arranger's sections (saved with the song)
     bool composedOnce = false;
+    std::array<juce::String, 4> ownChords;
+    juce::StringArray ownLyrics;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MuseCatProcessor)
 };

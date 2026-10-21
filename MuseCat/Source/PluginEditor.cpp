@@ -182,6 +182,137 @@ void SongMap::paint (juce::Graphics& g)
 }
 
 //==============================================================================
+WordsPanel::WordsPanel (MuseCatProcessor& p) : processor (p)
+{
+    const auto names = progressionNames();
+    for (int i = 0; i < 4; ++i)
+    {
+        auto& b = chordBoxes[(size_t) i];
+        b.setFont (cat::catFont (16.0f, true));
+        b.setTooltip ("The " + names[i].toLowerCase() + "'s chords, played in a loop: chord names (C Am7 F G, F#m Bsus4, Bbmaj7)"
+                      " or numbers in the song's key (I vi IV V, ii7 V7 I, i bVI bIII bVII). Empty = Muse-Cat's own.");
+        b.onReturnKey = [this] { apply(); };
+        addAndMakeVisible (b);
+    }
+    wordsBox.setMultiLine (true, false);
+    wordsBox.setReturnKeyStartsNewLine (true);
+    wordsBox.setScrollbarsShown (true);
+    wordsBox.setFont (cat::catFont (15.0f));
+    wordsBox.setTooltip ("Your words: one line per sung line. Each word is split into syllables, one per melody note"
+                         " (write mor-ning to choose where a word splits). An empty line keeps Muse-Cat's line.");
+    addAndMakeVisible (wordsBox);
+    applyButton.setTooltip ("Play the song with these chords and words (the melody, bass and counter-melody follow the chords)");
+    applyButton.onClick = [this] { apply(); };
+    resetButton.setTooltip ("Forget your chords and words: back to the ones Muse-Cat wrote");
+    resetButton.onClick = [this]
+    {
+        juce::String err;
+        processor.setOwnWords ({}, {}, err);
+        load();
+        message = "Back to Muse-Cat's own chords and words";
+        messageIsError = false;
+        if (onApplied) onApplied();
+        repaint();
+    };
+    for (auto* b : { &applyButton, &resetButton, &closeButton }) addAndMakeVisible (b);
+}
+
+void WordsPanel::load()
+{
+    auto song = processor.getSong();
+    if (song == nullptr) return;
+    const auto own = processor.getOwnChords();
+    for (int i = 0; i < 4; ++i)
+    {
+        shownChords[(size_t) i] = own[(size_t) i].isNotEmpty() ? own[(size_t) i] : progressionText (*song, i);
+        chordBoxes[(size_t) i].setText (shownChords[(size_t) i], false);
+    }
+    shownWords = song->lyricLines.joinIntoString ("\n");
+    wordsBox.setText (shownWords, false);
+    message = song->settings.endless ? "Endless music: your chords carry on into every new part"
+                                     : juce::String (song->lyricLines.size()) + " sung lines - change any line, keep the line count";
+    messageIsError = false;
+    repaint();
+}
+
+bool WordsPanel::apply()
+{
+    auto own = processor.getOwnChords();
+    std::array<juce::String, 4> chords;
+    for (int i = 0; i < 4; ++i)
+    {
+        const auto t = chordBoxes[(size_t) i].getText().trim();
+        // unchanged and not yours before: leave it to Muse-Cat
+        chords[(size_t) i] = (t == shownChords[(size_t) i].trim() && own[(size_t) i].isEmpty()) ? juce::String() : t;
+    }
+    juce::StringArray words;
+    const auto wt = wordsBox.getText().replace ("\r", "");
+    if (wt.trim() != shownWords.trim() || ! processor.getOwnLyrics().isEmpty())
+        words = juce::StringArray::fromLines (wt);
+    juce::String err;
+    if (! processor.setOwnWords (chords, words, err))
+    {
+        message = err;
+        messageIsError = true;
+        repaint();
+        return false;
+    }
+    load();
+    message = "Playing your chords and words";
+    messageIsError = false;
+    if (onApplied) onApplied();
+    repaint();
+    return true;
+}
+
+void WordsPanel::paint (juce::Graphics& g)
+{
+    cat::CatLookAndFeel::drawGlassPanel (g, getLocalBounds().toFloat(), 10.0f);
+    g.setColour (cat::Colours::text);
+    g.setFont (cat::catFont (13.0f, true));
+    const auto names = progressionNames();
+    for (int i = 0; i < 4; ++i) g.drawText (names[i].toUpperCase(), chordLabels[(size_t) i], juce::Justification::centredLeft);
+    g.drawText ("WORDS (one line per sung line)", wordsLabel, juce::Justification::centredLeft);
+    g.setColour (cat::Colours::textDim);
+    g.setFont (cat::catFont (12.5f));
+    g.drawFittedText ("Chords by name:  C  Am7  F#m  Bbmaj7  G7  Dsus4  Edim  Caug  Fadd9\n"
+                      "Or by number in the song's key:  I  vi  IV  V7  ii7  bVII  (small = minor)\n"
+                      "Each box loops through its sections. Up to 16 chords.\n"
+                      "Words: one syllable per note - write mor-ning to split a word your way.",
+                      exampleArea, juce::Justification::topLeft, 6);
+    g.setFont (cat::catFont (12.5f));
+    g.setColour (messageIsError ? juce::Colour (0xffff7a7a) : cat::Colours::textDim);
+    g.drawFittedText (message.isNotEmpty() ? message
+                                           : juce::String ("Chords: C Am7 F G  or  I vi IV V. Words: mor-ning splits a word your way."),
+                      helpArea, juce::Justification::centredLeft, 2);
+}
+
+void WordsPanel::resized()
+{
+    auto r = getLocalBounds().reduced (16, 12);
+    auto bottom = r.removeFromBottom (32);
+    closeButton.setBounds (bottom.removeFromRight (90));
+    bottom.removeFromRight (8);
+    resetButton.setBounds (bottom.removeFromRight (140));
+    bottom.removeFromRight (8);
+    applyButton.setBounds (bottom.removeFromRight (100));
+    bottom.removeFromRight (12);
+    helpArea = bottom;
+    r.removeFromBottom (10);
+    auto left = r.removeFromLeft (juce::jmin (420, r.getWidth() / 2));
+    r.removeFromLeft (16);
+    for (int i = 0; i < 4; ++i)
+    {
+        chordLabels[(size_t) i] = left.removeFromTop (20);
+        chordBoxes[(size_t) i].setBounds (left.removeFromTop (32));
+        left.removeFromTop (8);
+    }
+    exampleArea = left.reduced (0, 4);
+    wordsLabel = r.removeFromTop (20);
+    wordsBox.setBounds (r);
+}
+
+//==============================================================================
 MuseCatEditor::MuseCatEditor (MuseCatProcessor& p) : processor (p)
 {
     setSize (designW, designH);
@@ -200,6 +331,11 @@ MuseCatEditor::MuseCatEditor (MuseCatProcessor& p) : processor (p)
     };
     dragButton.onClick = [this] { status = "Drag this button onto a Cubase track to get the song as MIDI (drag a part's name for just that part)"; repaint(); };
     map.onDragPart = [this] (int part) { dragPartOut (part); };
+    wordsButton.setTooltip ("Write your own words and chords for this song");
+    wordsButton.onClick = [this] { showWords (! wordsPanel.isVisible()); };
+    wordsPanel.closeButton.onClick = [this] { showWords (false); };
+    wordsPanel.onApplied = [this] { refreshSong(); };
+    addChildComponent (wordsPanel);
     map.onSectionClick = [this] (int section, juce::Point<int> screen)
     {
         auto song = processor.getSong();
@@ -273,7 +409,7 @@ MuseCatEditor::MuseCatEditor (MuseCatProcessor& p) : processor (p)
                                 (juce::Component*) &exportButton, (juce::Component*) &genreBox, (juce::Component*) &moodBox,
                                 (juce::Component*) &seedBox, (juce::Component*) &newSeedButton, (juce::Component*) &songButton,
                                 (juce::Component*) &endlessButton, (juce::Component*) &map, (juce::Component*) &masterKnob,
-                                (juce::Component*) &soundToggle, (juce::Component*) &midiToggle })
+                                (juce::Component*) &soundToggle, (juce::Component*) &midiToggle, (juce::Component*) &wordsButton })
         addAndMakeVisible (c);
     resized();
     refreshSong();
@@ -349,6 +485,14 @@ void MuseCatEditor::arrangeSection (int section, int result)
         status = "Arranged: " + juce::String ((int) form.size()) + " sections";
         refreshSong();
     }
+}
+
+void MuseCatEditor::showWords (bool show)
+{
+    if (show) wordsPanel.load();
+    wordsPanel.setVisible (show);
+    wordsButton.setToggleState (show, juce::dontSendNotification);
+    if (show) { wordsPanel.toFront (true); wordsPanel.chordBoxes[0].grabKeyboardFocus(); }
 }
 
 void MuseCatEditor::dragPartOut (int part)
@@ -499,12 +643,14 @@ void MuseCatEditor::resized()
     auto top = r.removeFromTop (40);
     logoArea = top.removeFromLeft (160);
     top.removeFromLeft (10);
-    presetBar.setBounds (top.removeFromLeft (420));
+    presetBar.setBounds (top.removeFromLeft (390));
     top.removeFromLeft (12);
     playButton.setBounds (top.removeFromLeft (90));
     exportButton.setBounds (top.removeFromRight (100));
     top.removeFromRight (8);
     dragButton.setBounds (top.removeFromRight (110));
+    top.removeFromRight (8);
+    wordsButton.setBounds (top.removeFromRight (130));
 
     r.removeFromTop (8);
     headerArea = r.removeFromTop (32);
@@ -530,6 +676,7 @@ void MuseCatEditor::resized()
     r.removeFromBottom (8);
     r.removeFromTop (8);
     map.setBounds (r);
+    wordsPanel.setBounds (map.getBounds().getUnion (lyricsArea));
 
     auto pa = partsArea.reduced (10, 8);
     auto right = pa.removeFromRight (190);

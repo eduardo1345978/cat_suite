@@ -55,11 +55,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout MuseCatProcessor::createLayo
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "endless", 1 }, "Endless", false));
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "sound", 1 }, "Own Sound", true));
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "midiOut", 1 }, "MIDI Out", true));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "master", 1 }, "Volume", NormalisableRange<float> (0.0f, 1.0f), 0.8f));
+    const auto percent = AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v * 100.0f)) + "%"; })
+                                                       .withValueFromStringFunction ([] (const String& t) { return t.getFloatValue() / 100.0f; });
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "master", 1 }, "Volume", NormalisableRange<float> (0.0f, 1.0f), 0.8f, percent));
     const auto parts = partNames();
     for (int p = 0; p < NumParts; ++p)
     {
-        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { volIds[p], 1 }, parts[p] + " Volume", NormalisableRange<float> (0.0f, 1.0f), 0.8f));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { volIds[p], 1 }, parts[p] + " Volume", NormalisableRange<float> (0.0f, 1.0f), 0.8f, percent));
         layout.add (std::make_unique<AudioParameterChoice> (ParameterID { soundIds[p], 1 }, parts[p] + " Sound", soundChoices (p), 0));
     }
     return layout;
@@ -109,6 +111,8 @@ void MuseCatProcessor::applyPreset (int index)
     set ("seed", (float) pr.seed);
     set ("endless", pr.endless ? 1.0f : 0.0f);
     partSeeds = {};
+    ownChords = {};
+    ownLyrics.clear();
     currentPreset = index;
     updateSong (true);
 }
@@ -129,11 +133,50 @@ void MuseCatProcessor::setSongNow (std::shared_ptr<const Song> s)
     player.setSong (std::move (s));
 }
 
+void MuseCatProcessor::applyOwn (Song& song) const
+{
+    for (int i = 0; i < 4; ++i)
+        if (ownChords[(size_t) i].trim().isNotEmpty()) setChords (song, i, ownChords[(size_t) i]);
+    if (! ownLyrics.isEmpty()) setLyrics (song, ownLyrics);
+}
+
+void MuseCatProcessor::clearOwnIfNewSong (const Settings& st)
+{
+    // another song number, genre or mood: a new song, so your words and chords for the old one go
+    if (composedOnce && (st.seed != composedFor.seed || st.genre != composedFor.genre || st.mood != composedFor.mood))
+    {
+        ownChords = {};
+        ownLyrics.clear();
+    }
+}
+
+bool MuseCatProcessor::setOwnWords (const std::array<juce::String, 4>& chords, const juce::StringArray& lyrics, juce::String& error)
+{
+    auto now = player.getSong();
+    if (now == nullptr) return false;
+    Song test = *now;
+    for (int i = 0; i < 4; ++i)
+        if (chords[(size_t) i].trim().isNotEmpty() && ! setChords (test, i, chords[(size_t) i], &error))
+        {
+            error = progressionNames()[i] + ": " + error;
+            return false;
+        }
+    ownChords = chords;
+    ownLyrics = lyrics;
+    // write the song again from Muse-Cat's own (so a cleared box gets Muse-Cat's chords back), then yours on top
+    auto s = std::make_shared<Song> (compose (currentSettings()));
+    if (! arrangedForm.empty() && ! s->settings.endless) cat::muse::arrange (*s, arrangedForm);
+    applyOwn (*s);
+    setSongNow (s);
+    return true;
+}
+
 void MuseCatProcessor::updateSong (bool force)
 {
     const auto st = currentSettings();
     if (force || ! composedOnce || ! sameSong (st, composedFor))
     {
+        clearOwnIfNewSong (st);
         composedFor = st;
         composedOnce = true;
         auto song = std::make_shared<Song> (compose (st));
@@ -144,12 +187,17 @@ void MuseCatProcessor::updateSong (bool force)
             arrangedForm = song->sections;
         }
         pendingForm.clear();
+        applyOwn (*song);
         setSongNow (song);
     }
     // endless: write the next piece while this one plays
     if (player.needNext())
         if (auto now = player.getSong())
-            player.queueNext (std::make_shared<Song> (composeNext (*now)));
+        {
+            auto next = std::make_shared<Song> (composeNext (*now));
+            if (! ownLyrics.isEmpty()) setLyrics (*next, ownLyrics);   // the chords carry on by themselves
+            player.queueNext (next);
+        }
 }
 
 void MuseCatProcessor::regenerate (int target)
@@ -157,7 +205,12 @@ void MuseCatProcessor::regenerate (int target)
     auto now = player.getSong();
     if (now == nullptr) return;
     auto s = std::make_shared<Song> (*now);
+    if (target == NewChords) ownChords = {};          // you asked Muse-Cat for new chords
+    if (target == NewLyrics) ownLyrics.clear();       // ... or new words
     cat::muse::regenerate (*s, target, (juce::uint32) (1 + juce::Random().nextInt (0x7ffffff)));
+    if (target != NewChords && target != NewLyrics) applyOwn (*s);
+    else if (target == NewChords && ! ownLyrics.isEmpty()) setLyrics (*s, ownLyrics);
+    else if (target == NewLyrics) applyOwn (*s);
     partSeeds = s->settings.partSeeds;
     composedFor = currentSettings();
     if (target == NewArrangement) arrangedForm.clear();
@@ -171,6 +224,7 @@ bool MuseCatProcessor::arrange (std::vector<Section> sections)
     if (now == nullptr || now->settings.endless || sections.empty()) return false;
     auto s = std::make_shared<Song> (*now);
     cat::muse::arrange (*s, std::move (sections));
+    if (! ownLyrics.isEmpty()) setLyrics (*s, ownLyrics);
     arrangedForm = s->sections;
     setSongNow (s);
     return true;
@@ -334,6 +388,9 @@ void MuseCatProcessor::getStateInformation (juce::MemoryBlock& dest)
         }
         state.setProperty ("form", form.joinIntoString (";"), nullptr);
     }
+    for (int i = 0; i < 4; ++i)
+        if (ownChords[(size_t) i].isNotEmpty()) state.setProperty ("chords" + juce::String (i), ownChords[(size_t) i], nullptr);
+    if (! ownLyrics.isEmpty()) state.setProperty ("words", ownLyrics.joinIntoString ("\n"), nullptr);
     if (auto xml = state.createXml()) copyXmlToBinary (*xml, dest);
 }
 
@@ -357,6 +414,15 @@ void MuseCatProcessor::setStateInformation (const void* data, int size)
         for (int part = 0; part < NumParts; ++part) sec.on[(size_t) part] = (f[4].getIntValue() >> part) & 1;
         pendingForm.push_back (sec);
     }
+    for (int i = 0; i < 4; ++i)
+    {
+        ownChords[(size_t) i] = state.getProperty ("chords" + juce::String (i), "").toString();
+        state.removeProperty ("chords" + juce::String (i), nullptr);
+    }
+    ownLyrics.clear();
+    if (state.hasProperty ("words")) ownLyrics = juce::StringArray::fromLines (state.getProperty ("words").toString());
+    state.removeProperty ("words", nullptr);
+    composedOnce = false;              // a loaded song: keep its words and chords
     state.removeProperty ("form", nullptr);
     state.removeProperty ("partSeeds", nullptr);
     state.removeProperty ("preset", nullptr);

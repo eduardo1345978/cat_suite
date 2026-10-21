@@ -372,6 +372,52 @@ int main (int argc, char** argv)
         CHECK (one.getNumTracks() == 2, "one part as MIDI should be 2 tracks (tempo + part), got %d", one.getNumTracks());
     }
 
+    // your own chords and words
+    {
+        Settings set; set.seed = 5151; set.genre = Pop; set.mood = Happy;
+        auto s = compose (set);
+        auto c = s;
+        juce::String err;
+        CHECK (setChords (c, 0, "C Am7 F#m/A Bbmaj7 G7 Dsus4 Ebdim Gadd9", &err), "setChords names: %s", err.toRawUTF8());
+        CHECK (progressionText (c, 0) == "C Am7 F#m Bbmaj7 G7 Dsus4 Ebdim Gadd9", "progressionText gave '%s'", progressionText (c, 0).toRawUTF8());
+        bool sawBb = false;
+        for (auto& ch : c.chords) sawBb = sawBb || ch.name == "Bbmaj7";
+        CHECK (sawBb, "the verse doesn't play the chords that were typed");
+        Stats st2; checkSong (c, "own chords", st2);
+        CHECK (st2.strongChordTone > st2.strong * 0.8, "own chords: the melody doesn't follow them (%d / %d)", st2.strongChordTone, st2.strong);
+        auto r = s;
+        CHECK (setChords (r, 1, "I vi IV V7", &err), "setChords numbers: %s", err.toRawUTF8());
+        const auto k = keyName (s.key);
+        CHECK (progressionText (r, 1).startsWith (k + " "), "roman I should be %s, got '%s'", k.toRawUTF8(), progressionText (r, 1).toRawUTF8());
+        auto bad = s;
+        CHECK (! setChords (bad, 0, "C Hm7 F", &err) && err.contains ("Hm7"), "a bad chord should be refused");
+        CHECK (sameSong (bad, s), "a refused chord changed the song");
+        // every composer progression reads back the same
+        for (int g = 0; g < NumGenres; ++g)
+        {
+            Settings gs; gs.seed = 600 + (juce::uint32) g; gs.genre = g; gs.mood = g % NumMoods;
+            auto song = compose (gs);
+            for (int pi = 0; pi < (int) song.progressions.size(); ++pi)
+            {
+                const auto text = progressionText (song, pi);
+                auto again = song;
+                CHECK (setChords (again, pi, text, &err) && progressionText (again, pi) == text,
+                       "%s progression %d '%s' doesn't read back (%s)", genreNames()[g].toRawUTF8(), pi, text.toRawUTF8(), err.toRawUTF8());
+            }
+        }
+        // words: one syllable per note, split your way
+        CHECK (splitSyllables ("morning") == juce::StringArray ({ "mor", "ning" }), "splitSyllables morning");
+        CHECK (splitSyllables ("to-geth-er").size() == 3, "splitSyllables hyphens");
+        auto w = s;
+        juce::StringArray lines;
+        lines.add ("hello my little cat");
+        lines.add ("");
+        lines.add ("we sing to-geth-er in the morning light");
+        setLyrics (w, lines);
+        CHECK (w.lyricLines[0] == "hello my little cat" && w.lyricLines[1] == s.lyricLines[1], "setLyrics lines");
+        CHECK (w.lyricsText.contains ("hel") && w.lyricsText.contains ("cat") && w.parts[Melody].size() == s.parts[Melody].size(), "setLyrics text");
+    }
+
     CHECK (st.strongChordTone > st.strong * 0.85, "too few chord tones on strong beats");
     CHECK (st.bigLeaps * 10 < st.steps, "too many big leaps");
     std::printf (failures == 0 ? "COMPOSE CHECK PASSED\n" : "COMPOSE CHECK FAILED (%d)\n", failures);

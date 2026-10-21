@@ -127,6 +127,14 @@ void arrange (Song&, std::vector<Section> sections);
     keeps the song's own). Words are split into syllables, one per melody note; extra notes hold the last
     syllable, extra syllables are squeezed onto the last note. */
 void setLyrics (Song&, const juce::StringArray& lines);
+/** Your own chords for one of the song's progressions (0 verse, 1 chorus, 2 pre-chorus / build, 3 bridge): chord names
+    ("C Am7 F G", "Dm7 G7 Cmaj7", "F#m Bsus4") or numbers in the song's key ("I vi IV V", "ii7 V7 I", "i bVI bIII bVII").
+    Up to 16 chords, played in a loop through every section that uses the progression. The bass, melody, counter-melody and
+    words are re-fitted. Empty text keeps the progression. false (and why in error) if a chord can't be read. */
+bool setChords (Song&, int progression, const juce::String& text, juce::String* error = nullptr);
+/** One progression's chords as text (the way setChords reads them). */
+juce::String progressionText (const Song&, int progression);
+juce::StringArray progressionNames();
 /** Splits a word into sung syllables ("morning" -> "mor", "ning"); words already written with hyphens keep them. */
 juce::StringArray splitSyllables (const juce::String& word);
 /** A section of this type as the composer would write it (energy, progression, which parts play). */

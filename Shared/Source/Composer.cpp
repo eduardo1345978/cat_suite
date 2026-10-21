@@ -114,6 +114,18 @@ int code (int degree, int variant = 0, int ext = 0) { return degree | (variant <
 int degreeOf (int c) { return c & 7; }
 int variantOf (int c) { return (c >> 3) & 7; }
 int extOf (int c) { return (c >> 6) & 3; }
+// your own chords (setChords): any root and quality, not tied to the scale
+constexpr int absFlag = 1 << 12;
+int absCode (int root, int quality) { return absFlag | (((root % 12) + 12) % 12) | (quality << 4); }
+bool isAbs (int c) { return (c & absFlag) != 0; }
+struct Quality { const char* suffix; std::vector<int> intervals; };
+const std::vector<Quality> qualities = {
+    { "", { 0, 4, 7 } }, { "m", { 0, 3, 7 } }, { "7", { 0, 4, 7, 10 } }, { "maj7", { 0, 4, 7, 11 } }, { "m7", { 0, 3, 7, 10 } },
+    { "sus4", { 0, 5, 7 } }, { "sus2", { 0, 2, 7 } }, { "dim", { 0, 3, 6 } }, { "aug", { 0, 4, 8 } }, { "6", { 0, 4, 7, 9 } },
+    { "m6", { 0, 3, 7, 9 } }, { "add9", { 0, 4, 7, 14 } }, { "9", { 0, 4, 7, 10, 14 } }, { "m9", { 0, 3, 7, 10, 14 } },
+    { "maj9", { 0, 4, 7, 11, 14 } }, { "m7b5", { 0, 3, 6, 10 } }, { "dim7", { 0, 3, 6, 9 } }, { "7sus4", { 0, 5, 7, 10 } },
+    { "m(add9)", { 0, 3, 7, 14 } }, { "m(maj7)", { 0, 3, 7, 11 } },
+};
 
 // templates: value = degree + 10 * variant
 const std::vector<std::vector<int>> majorTemplates = {
@@ -400,6 +412,16 @@ public:
 
     Chord buildChord (int c, double start, double length) const
     {
+        if (isAbs (c))
+        {
+            Chord ch;
+            ch.start = start; ch.length = length;
+            ch.root = c & 15;
+            const auto& q = qualities[(size_t) juce::jlimit (0, (int) qualities.size() - 1, (c >> 4) & 31)];
+            ch.intervals = q.intervals;
+            ch.name = juce::String (keyNameList[ch.root]) + q.suffix;
+            return ch;
+        }
         const int d = degreeOf (c), v = variantOf (c), e = extOf (c);
         const int sc = v == VarBorrowed ? Minor : s.scale;
         Chord ch;
@@ -475,8 +497,8 @@ public:
                 int c = prog[(size_t) i % prog.size()];
                 const double len = juce::jmin (hb, sec.end() - t);
                 const bool last = t + hb >= sec.end() - 1e-6;
-                if (last && sec.type == Outro && si + 1 == s.sections.size()) c = code (0, 0, extOf (c));   // end home
-                if (last && si + 1 < s.sections.size())
+                if (last && sec.type == Outro && si + 1 == s.sections.size() && ! isAbs (c)) c = code (0, 0, extOf (c));   // end home
+                if (last && si + 1 < s.sections.size() && ! isAbs (c))
                 {
                     const int nextType = s.sections[si + 1].type;
                     // lead into the chorus / drop with a dominant if it would otherwise sit on the tonic
@@ -1772,6 +1794,115 @@ void setLyrics (Song& s, const juce::StringArray& lines)
         textLines.add (parts.joinIntoString (" "));
     }
     s.lyricsText = textLines.joinIntoString ("\n");
+}
+
+juce::StringArray progressionNames() { return { "Verse", "Chorus", "Pre-chorus", "Bridge" }; }
+
+namespace
+{
+/** "Am7", "F#", "Bbmaj7", "C/E" (the bass note after / is not used) or "vi", "IV7", "bVII", "ii7": the chord's code, or -1. */
+int parseChordToken (juce::String t, int key)
+{
+    t = t.trim();
+    if (t.containsChar ('/')) t = t.upToFirstOccurrenceOf ("/", false, false);
+    if (t.isEmpty()) return -1;
+    int root = -1;
+    bool minorBase = false;
+    juce::String rest;
+    // a number in the key: I II III IV V VI VII (upper case = major, lower case = minor), b / # in front
+    {
+        int acc = 0, i = 0;
+        if (t[0] == 'b' && t.length() > 1 && juce::String ("IViv").containsChar (t[1])) { acc = -1; i = 1; }
+        else if (t[0] == '#' && t.length() > 1) { acc = 1; i = 1; }
+        static const char* romans[] = { "VII", "III", "IV", "VI", "II", "V", "I" };   // longest first
+        static const int degrees[] = { 6, 2, 3, 5, 1, 4, 0 };
+        for (int k = 0; k < 7 && root < 0; ++k)
+        {
+            const juce::String up (romans[k]);
+            const auto part = t.substring (i, i + up.length());
+            if (part == up || part == up.toLowerCase())
+            {
+                static const int major[7] = { 0, 2, 4, 5, 7, 9, 11 };
+                root = ((key + major[degrees[k]] + acc) % 12 + 12) % 12;
+                minorBase = part == up.toLowerCase();
+                rest = t.substring (i + up.length());
+            }
+        }
+    }
+    if (root < 0)
+    {
+        static const int letters[7] = { 9, 11, 0, 2, 4, 5, 7 };   // A B C D E F G
+        const auto first = juce::CharacterFunctions::toUpperCase (t[0]);
+        if (first < 'A' || first > 'G') return -1;
+        root = letters[first - 'A'];
+        int i = 1;
+        while (i < t.length() && (t[i] == '#' || t[i] == 'b' || t[i] == 0x266f || t[i] == 0x266d))
+        {
+            root += (t[i] == '#' || t[i] == 0x266f) ? 1 : -1;
+            ++i;
+        }
+        root = (root % 12 + 12) % 12;
+        rest = t.substring (i);
+    }
+    // the quality
+    auto q = rest.replace ("\xc3\xb8", "m7b5").replace ("\xc2\xb0", "dim").replace ("\xce\x94", "maj");   // ø ° Δ
+    q = q.removeCharacters ("()");
+    if (q == "o") q = "dim";
+    if (q == "o7") q = "dim7";
+    if (q == "+") q = "aug";
+    if (q == "M7" || q == "ma7" || q == "Maj7" || q == "maj") q = q == "maj" ? "maj7" : "maj7";
+    if (q == "M9" || q == "Maj9") q = "maj9";
+    if (q == "M") q = "";
+    if (q.startsWith ("min")) q = "m" + q.substring (3);
+    if (q.startsWith ("-")) q = "m" + q.substring (1);
+    q = q.toLowerCase();
+    if (q == "sus") q = "sus4";
+    if (q == "7sus") q = "7sus4";
+    if (q == "add2") q = "add9";
+    if (q == "2") q = "sus2";
+    if (minorBase && ! q.startsWith ("m") && ! q.startsWith ("dim") && ! q.startsWith ("sus") && ! q.startsWith ("aug") && ! q.startsWith ("7sus"))
+        q = "m" + q;
+    for (size_t k = 0; k < qualities.size(); ++k)
+        if (q == juce::String (qualities[k].suffix).removeCharacters ("()")) return absCode (root, (int) k);
+    return -1;
+}
+}
+
+bool setChords (Song& s, int prog, const juce::String& text, juce::String* error)
+{
+    if (! juce::isPositiveAndBelow (prog, (int) s.progressions.size())) return false;
+    const auto t = text.replace ("|", " ").replace (",", " ").trim();
+    if (t.isEmpty()) return true;
+    std::vector<int> codes;
+    for (auto& tok : juce::StringArray::fromTokens (t, " \t\n", ""))
+    {
+        if (tok.trim().isEmpty()) continue;
+        const int c = parseChordToken (tok, s.key);
+        if (c < 0)
+        {
+            if (error != nullptr) *error = "can't read the chord \"" + tok + "\" (try C, Am7, F#m, Bbmaj7, G7, Dsus4 or I, vi, IV, V7)";
+            return false;
+        }
+        codes.push_back (c);
+    }
+    if (codes.empty()) return true;
+    if (codes.size() > 16) codes.resize (16);
+    s.progressions[(size_t) prog] = codes;
+    Writer w (s);
+    w.layChords();
+    w.writeChordsPart(); w.writeBass(); w.writeCounter(); w.writeMelody(); w.writeLyrics();
+    return true;
+}
+
+juce::String progressionText (const Song& song, int prog)
+{
+    if (! juce::isPositiveAndBelow (prog, (int) song.progressions.size())) return {};
+    Song tmp;
+    tmp.settings = song.settings; tmp.key = song.key; tmp.scale = song.scale;
+    Writer w (tmp);
+    juce::StringArray names;
+    for (int c : song.progressions[(size_t) prog]) names.add (w.buildChord (c, 0.0, 4.0).name);
+    return names.joinIntoString (" ");
 }
 
 void arrange (Song& s, std::vector<Section> sections)

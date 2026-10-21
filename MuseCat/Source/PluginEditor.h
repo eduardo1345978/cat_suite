@@ -35,6 +35,32 @@ private:
     bool dragged = false;
 };
 
+/** Write your own words and chords: one box of chords per progression (verse, chorus, pre-chorus, bridge) and the words,
+    one line per sung line. Apply re-fits the melody, bass and counter-melody. */
+class WordsPanel : public juce::Component
+{
+public:
+    explicit WordsPanel (MuseCatProcessor&);
+    void paint (juce::Graphics&) override;
+    void resized() override;
+    void load();                                  // fill the boxes from the song playing now
+    bool apply();                                 // false: a chord couldn't be read (shown)
+    std::function<void()> onApplied;
+
+    std::array<juce::TextEditor, 4> chordBoxes;
+    juce::TextEditor wordsBox;
+    juce::TextButton applyButton { "Apply" }, resetButton { "Muse-Cat's own" }, closeButton { "Close" };
+    juce::String message;
+    bool messageIsError = false;
+
+private:
+    MuseCatProcessor& processor;
+    std::array<juce::String, 4> shownChords;      // what the boxes showed when filled (unchanged = not yours)
+    juce::String shownWords;
+    std::array<juce::Rectangle<int>, 4> chordLabels;
+    juce::Rectangle<int> wordsLabel, helpArea, exampleArea;
+};
+
 /** Muse-Cat's window. */
 class MuseCatEditor : public juce::Component, private juce::Timer
 {
@@ -52,12 +78,15 @@ private:
     void mouseDown (const juce::MouseEvent&) override;
     void arrangeSection (int section, int menuResult);
     void dragPartOut (int part);
+    void showWords (bool show);
 
     MuseCatProcessor& processor;
     cat::PresetBar presetBar { processor.presetManager, "Song" };
     juce::TextButton playButton { "Play" }, newSeedButton { "New number" }, songButton { "Song" }, endlessButton { "Endless" },
                      exportButton { "Export..." };
     cat::DragButton dragButton { "Drag MIDI" };
+    juce::TextButton wordsButton { "Words & chords" };
+    WordsPanel wordsPanel { processor };
     cat::ParamCombo genreBox { processor.apvts, "genre", "Genre", nullptr, 52 }, moodBox { processor.apvts, "mood", "Mood", nullptr, 46 };
     juce::TextEditor seedBox;
     juce::OwnedArray<juce::TextButton> renewButtons;

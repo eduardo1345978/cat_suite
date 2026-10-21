@@ -195,7 +195,20 @@ int main (int argc, char** argv)
     {
         const auto preset = SystemStats::getEnvironmentVariable ("CAT_PRESET", "-1").getIntValue();
         if (preset >= 0) p->setCurrentProgram (preset);
-        pump (4000);
+        pump (2000);
+        // CAT_CLICK=<button text>: click that button first (to show a panel)
+        if (auto click = SystemStats::getEnvironmentVariable ("CAT_CLICK", {}); click.isNotEmpty())
+        {
+            std::function<Button* (Component&)> find = [&] (Component& c) -> Button*
+            {
+                if (auto* b = dynamic_cast<Button*> (&c); b != nullptr && b->getButtonText() == click) return b;
+                for (auto* child : c.getChildren()) if (auto* f = find (*child)) return f;
+                return nullptr;
+            };
+            if (auto* b = find (*ed)) { b->triggerClick(); std::cout << "clicked " << click << std::endl; }
+            else std::cout << "no button " << click << std::endl;
+        }
+        pump (2000);
         auto img = ed->createComponentSnapshot (ed->getLocalBounds());
         File f (shot);
         f.deleteFile();
