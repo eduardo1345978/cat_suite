@@ -231,6 +231,11 @@ void Music::prepare (double sampleRate)
     fishVerb.setParameters (p);
     limiter.prepare (sr);
     fishBuf.setSize (2, 4096);
+    spaceVerb.setSampleRate (sr);
+    juce::Reverb::Parameters sp;
+    sp.roomSize = 0.93f; sp.damping = 0.6f; sp.wetLevel = 1.0f; sp.dryLevel = 0.0f; sp.width = 1.0f;
+    spaceVerb.setParameters (sp);
+    spaceBuf.setSize (2, 4096);
 }
 
 void Music::startStyle (int st, int key, double bpm, bool crossfade, const Favourite* replay)
@@ -435,9 +440,27 @@ void Music::render (float* l, float* r, int n, Sim& sim)
     auto* fl = fishBuf.getWritePointer (0);
     auto* fr = fishBuf.getWritePointer (1);
     fishVerb.processStereo (fl, fr, n);
+    for (int i = 0; i < n; ++i) { l[i] += fl[i] * 0.4f; r[i] += fr[i] * 0.4f; }
+    // the underwater space: everything sent into one big soft reverb (the amount glides, no jumps)
+    if (spaceBuf.getNumSamples() < n) spaceBuf.setSize (2, n, false, false, true);
+    const float target = juce::jlimit (0.0f, 1.0f, space.load());
+    auto* sl = spaceBuf.getWritePointer (0);
+    auto* sr2 = spaceBuf.getWritePointer (1);
+    const float from = spaceNow, step = (target - from) / (float) juce::jmax (1, n);
     for (int i = 0; i < n; ++i)
     {
-        float a = l[i] + fl[i] * 0.4f, b = r[i] + fr[i] * 0.4f;
+        const float amt = from + step * (float) i;
+        sl[i] = l[i] * amt * 0.5f;
+        sr2[i] = r[i] * amt * 0.5f;
+    }
+    spaceNow = target;
+    if (target > 0.001f || from > 0.001f) spaceVerb.processStereo (sl, sr2, n);
+    else spaceBuf.clear();
+    for (int i = 0; i < n; ++i)
+    {
+        // a little less dry sound when the space is big, so the level stays about the same
+        const float dry = 1.0f - 0.25f * (from + step * (float) i);
+        float a = l[i] * dry + sl[i], b = r[i] * dry + sr2[i];
         limiter.processSample (a, b);
         l[i] = a; r[i] = b;
     }

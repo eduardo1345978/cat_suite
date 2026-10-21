@@ -46,7 +46,7 @@ juce::String Sim::admin (const juce::String& line)
         return "/stats  /fish @name  /viewers  /spawn 5  /feed 10  /give @name 50  /level @name 8  /rare @name gold|rainbow|ghost|glow|crystal|none\n"
                "/weather calm|rain|storm  /time day|night|sunset|sunrise|auto|0-24  /place reef|kelp|crystal|ship|cave|ice|lagoon|ruins\n"
                "/music aqua|lounge|crystal|bubble|...  /event storm|calm|feast|babyboom|rarehunt|plankton|migration|meteors  /vote start|end  /announce text  /party\n"
-               "/today  /recap (show today's recap)  /testalert member|superchat|milestone  /cat (how the boat cat is)  /catvisit\n"
+               "/reverb 0-100 (the underwater space)  /today  /recap (show today's recap)  /testalert member|superchat|milestone  /cat (how the boat cat is)  /catvisit\n"
                "/species  /newspecies  /kick @name  /ban @name  /unban @name  /bans  /favourites  /requests  /clearrequests  /rename @name New Name  /resetname @name\n"
                "/sleepall  /wakeall  /clear food|bubbles|speech  /save   (chat commands like !fish also work here, as the host)";
 

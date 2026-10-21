@@ -242,6 +242,15 @@ public:
         volume.onValueChange = [this] { engine.monitorGain = (float) volume.getValue(); props.setValue ("volume", volume.getValue()); };
         engine.monitorGain = (float) volume.getValue();
         addAndMakeVisible (volume);
+        reverb.setSliderStyle (juce::Slider::LinearHorizontal);
+        reverb.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+        reverb.setRange (0.0, 1.0);
+        reverb.setValue (props.getDoubleValue ("reverb", 0.35));
+        reverb.setTooltip ("The underwater space: a big soft reverb over the music and the fish (on the stream too). Console: /reverb 0-100");
+        reverb.onValueChange = [this] { engine.setReverb ((float) reverb.getValue()); props.setValue ("reverb", reverb.getValue()); };
+        engine.setReverb ((float) reverb.getValue());
+        addAndMakeVisible (reverb);
+        label (reverbLabel, "Reverb", 13.0f);
 
         if (devices.initialiseWithDefaultDevices (0, 2).isEmpty())
         {
@@ -348,6 +357,10 @@ public:
         row = side.removeFromTop (24);
         volumeLabel.setBounds (row.removeFromLeft (70));
         volume.setBounds (row);
+        side.removeFromTop (4);
+        row = side.removeFromTop (24);
+        reverbLabel.setBounds (row.removeFromLeft (70));
+        reverb.setBounds (row);
         side.removeFromTop (6);
         statsLabel.setBounds (side);
     }
@@ -523,7 +536,7 @@ private:
     juce::TextButton liveButton { "Go live" }, stopButton { "Stop" }, chatButton { "Connect chat only" },
                      testButton { "Record a 30 s test video (to check it works)" },
                      descriptionButton { "Copy the YouTube description (all commands)" }, getFFmpegButton { "Get ffmpeg" }, findFFmpegButton { "Find ffmpeg..." };
-    juce::Slider volume;
+    juce::Slider volume, reverb;
     juce::AudioDeviceManager devices;
     juce::AudioSourcePlayer player;
     MonitorSource monitor;
@@ -533,7 +546,7 @@ private:
     juce::String downloading;
     int ticks = 0, shownConsole = -1, historyPos = 0;
     bool restarting = false;
-    juce::Label consoleLabel, musicLabel, placeLabel, timeLabel, lookLabel;
+    juce::Label consoleLabel, musicLabel, placeLabel, timeLabel, lookLabel, reverbLabel;
     juce::ComboBox musicBox, placeBox, timeBox, lookBox;
     bool updatingPickers = false;
     juce::TextEditor consoleLog, consoleInput;

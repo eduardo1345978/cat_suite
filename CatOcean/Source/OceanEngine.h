@@ -48,6 +48,9 @@ public:
     /** The speakers: reads what the engine made (48 kHz stereo). */
     void readMonitor (float* l, float* r, int n);
     std::atomic<float> monitorGain { 0.8f };
+    /** The underwater reverb over the whole mix (stream and speakers), 0 .. 1. */
+    void setReverb (float amount) { music.space = juce::jlimit (0.0f, 1.0f, amount); }
+    float getReverb() const { return music.space.load(); }
 
     Streamer streamer;
     YouTubeChat chat;

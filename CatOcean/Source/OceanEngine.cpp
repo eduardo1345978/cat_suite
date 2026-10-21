@@ -95,6 +95,13 @@ void Engine::console (const juce::String& line)
     if (t.isEmpty()) return;
     log ("> " + t);
     if (t.startsWithChar ('!')) { say ("host", "Host", t, true); return; }
+    if (t.startsWithIgnoreCase ("/reverb"))
+    {
+        const auto arg = t.fromFirstOccurrenceOf (" ", false, false).trim();
+        if (arg.isNotEmpty()) music.space = juce::jlimit (0, 100, arg.getIntValue()) / 100.0f;
+        log ("reverb: " + juce::String (juce::roundToInt (music.space.load() * 100.0f)) + " % (/reverb 0-100)");
+        return;
+    }
     const juce::ScopedLock sl (chatLock);
     consoleQueue.push_back (t);
 }

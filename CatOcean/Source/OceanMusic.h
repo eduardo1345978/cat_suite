@@ -99,10 +99,14 @@ private:
     const cat::muse::Song* shownNow = nullptr;
 public:
     int requestsPlayed = 0, favouritesPlayed = 0;   // test counters
+    /** The underwater space: a big, soft reverb over the whole mix (0 = dry ... 1 = a huge sea cave). */
+    std::atomic<float> space { 0.35f };
 private:
     FishSynth fish;
     Ambience ambience;
-    juce::Reverb fishVerb;
+    juce::Reverb fishVerb, spaceVerb;
+    juce::AudioBuffer<float> spaceBuf;
+    float spaceNow = 0.35f;
     cat::SafetyLimiter limiter;
     std::shared_ptr<const cat::muse::Song> song;
     juce::AudioBuffer<float> fishBuf;

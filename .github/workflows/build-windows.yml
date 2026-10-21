@@ -15,7 +15,7 @@ permissions:
 
 concurrency:
   group: windows-build-${{ github.ref }}
-  cancel-in-progress: true  # a newer push replaces a build that is still running
+  cancel-in-progress: false  # a running build always finishes (and publishes); newer pushes wait their turn
 
 jobs:
   windows:
