@@ -1209,16 +1209,14 @@ void Painter::overlay (Canvas& c, const Sim& sim, const MusicInfo& m, float dt)
 
     // now playing
     {
-        juce::String l1 = m.title.isNotEmpty() ? "NOW PLAYING: " + m.title.toUpperCase() : juce::String ("NOW PLAYING"), l2 = m.style + "  " + m.key + " " + m.scale + "  " + juce::String (m.bpm) + " BPM",
-                           l3 = "PART " + juce::String (m.piece + 1) + "  " + m.section + "   " + m.place,
-                           l4 = "FISH PULL IT TO " + juce::String ((int) std::lround (m.targetBpm)) + " BPM " + m.targetKey;
-        const int w = juce::jmax (Canvas::textWidth (l2), Canvas::textWidth (l4)) + 10;
-        while (l1.length() > 12 && Canvas::textWidth (l1) > w - 10) l1 = l1.dropLastCharacters (1);
-        panel (4, 4, w, 31);
-        c.text (l1, 9, 8, 0xff2ce8f5, 1, 0xff06264a, true);
-        c.text (l2.toUpperCase(), 9, 15, 0xffffffff, 1, 0xff06264a, true);
-        c.text (l3.toUpperCase(), 9, 22, 0xffc0a7f0, 1, 0xff06264a, true);
-        c.text (l4.toUpperCase(), 9, 29 - 1, 0xff9ef0c2, 1, 0xff06264a, true);
+        // small: the song and its style (more ocean, less panel)
+        juce::String l1 = m.title.isNotEmpty() ? "NOW PLAYING: " + m.title.toUpperCase() : juce::String ("NOW PLAYING"),
+                     l2 = (m.style + "  " + m.key + " " + m.scale + "  " + juce::String (m.bpm) + " BPM").toUpperCase();
+        const int w = juce::jmax (Canvas::textWidth (l2), juce::jmin (Canvas::textWidth (l1), 150)) + 8;
+        while (l1.length() > 12 && Canvas::textWidth (l1) > w - 8) l1 = l1.dropLastCharacters (1);
+        panel (3, 3, w, 17);
+        c.text (l1, 7, 6, 0xff2ce8f5, 1, 0xff06264a, true);
+        c.text (l2, 7, 13, 0xffffffff, 1, 0xff06264a, true);
     }
 
     // leaderboard (changes every 10 s)
@@ -1226,20 +1224,16 @@ void Painter::overlay (Canvas& c, const Sim& sim, const MusicInfo& m, float dt)
     if (boardTimer > 10.0f) { boardTimer = 0; boardIndex = (boardIndex + 1) % Sim::numBoards; }
     {
         const auto b = sim.board (boardIndex);
-        int w = Canvas::textWidth (b.title) + 10;
-        for (auto& l : b.lines) w = juce::jmax (w, Canvas::textWidth (l.toUpperCase()) + 10);
-        juce::String stats = "FISH " + juce::String ((int) std::count_if (sim.fish.begin(), sim.fish.end(), [] (auto& f) { return f.present && ! f.dying; }))
-                           + "  BIRTHS " + juce::String (sim.births);
-        static const char* wn[] = { "CALM", "RAIN", "STORM" };
-        stats << "  " << wn[juce::jlimit (0, 2, sim.weather)];
-        w = juce::jmax (w, Canvas::textWidth (stats) + 10);
-        const int x = W - 4 - w, h = 12 + 7 * b.lines.size() + 8;
-        boardLeft = x; boardBottom = 4 + h;
-        panel (x, 4, w, h);
-        c.text (b.title, x + 5, 8, 0xfffee761, 1, 0xff06264a, true);
-        for (int i = 0; i < b.lines.size(); ++i)
-            c.text ((b.empty ? juce::String() : juce::String (i + 1) + ".") + b.lines[i].toUpperCase().substring (0, 30), x + 5, 15 + 7 * i, 0xffffffff, 1, 0xff06264a, true);
-        c.text (stats, x + 5, 4 + h - 8, 0xff8b9bb4, 1, 0xff06264a, true);
+        // small: the title and the top three
+        const int lines = juce::jmin (3, b.lines.size());
+        int w = Canvas::textWidth (b.title) + 8;
+        for (int i = 0; i < lines; ++i) w = juce::jmax (w, Canvas::textWidth (b.lines[i].toUpperCase().substring (0, 24)) + 16);
+        const int x = W - 3 - w, h = 10 + 7 * lines;
+        boardLeft = x; boardBottom = 3 + h;
+        panel (x, 3, w, h);
+        c.text (b.title, x + 4, 6, 0xfffee761, 1, 0xff06264a, true);
+        for (int i = 0; i < lines; ++i)
+            c.text ((b.empty ? juce::String() : juce::String (i + 1) + ".") + b.lines[i].toUpperCase().substring (0, 24), x + 4, 13 + 7 * i, 0xffffffff, 1, 0xff06264a, true);
     }
 
     // the vote
@@ -1283,21 +1277,21 @@ void Painter::overlay (Canvas& c, const Sim& sim, const MusicInfo& m, float dt)
     };
     tipTimer += 1.0f / 30.0f;
     if (tipTimer > 9.0f) { tipTimer = 0; tip = (tip + 1) % (int) (sizeof (tips) / sizeof (tips[0])); }
-    for (int y = H - 11; y < H; ++y)
+    // a thin see-through strip, so the sea floor shows through
+    for (int y = H - 9; y < H; ++y)
     {
-        const float v = (float) (y - (H - 11)) / 10.0f;
+        const float v = (float) (y - (H - 9)) / 8.0f;
         for (int x = 0; x < W; ++x)
         {
-            c.blend (x, y, mixc (0xff4fc4ee, 0xff0a3f7c, v), 0.7f);
-            if (v < 0.5f) c.blend (x, y, 0xffffffff, 0.2f * (1.0f - v * 2.0f));
-            if (y == H - 11) c.blend (x, y, 0xffffffff, 0.7f);
+            c.blend (x, y, mixc (0xff4fc4ee, 0xff0a3f7c, v), 0.45f);
+            if (y == H - 9) c.blend (x, y, 0xffffffff, 0.45f);
         }
     }
     juce::String line = tips[tip];
     Colour col = 0xffffffff;
     if (! sim.news.empty()) { line = sim.news.back().text.toUpperCase(); col = sim.news.back().colour; }
     line = line.substring (0, 118);
-    c.text (line, W / 2 - Canvas::textWidth (line) / 2, H - 8, col, 1, 0xff06264a, true);
+    c.text (line, W / 2 - Canvas::textWidth (line) / 2, H - 7, col, 1, 0xff06264a, true);
 
     // a big alert in the middle: new members, Super Chats, subscriber milestones
     if (! sim.alerts.empty())
