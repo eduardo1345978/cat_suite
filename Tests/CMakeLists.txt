@@ -19,14 +19,15 @@ target_compile_definitions(CatSuiteHostTest PRIVATE
     LIFECAT_VST3="$<TARGET_FILE_DIR:LifeCat_VST3>/../../../Life-Cat.vst3"
     BASSCAT_VST3="$<TARGET_FILE_DIR:BassCat_VST3>/../../../Bass-Cat.vst3"
     GLIDECAT_VST3="$<TARGET_FILE_DIR:GlideCat_VST3>/../../../Glide-Cat.vst3"
-    TALKCAT_VST3="$<TARGET_FILE_DIR:TalkCat_VST3>/../../../Talk-Cat.vst3")
+    TALKCAT_VST3="$<TARGET_FILE_DIR:TalkCat_VST3>/../../../Talk-Cat.vst3"
+    ECHOCAT_VST3="$<TARGET_FILE_DIR:EchoCat_VST3>/../../../Echo-Cat.vst3")
 
 target_link_libraries(CatSuiteHostTest PRIVATE
     juce::juce_audio_processors
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 
-add_dependencies(CatSuiteHostTest ChordCat_VST3 PattCat_VST3 BendCat_VST3 DrumCat_VST3 OrbitCat_VST3 SingCat_VST3 BassCat_VST3 GlideCat_VST3 TalkCat_VST3 LifeCat_VST3)
+add_dependencies(CatSuiteHostTest ChordCat_VST3 PattCat_VST3 BendCat_VST3 DrumCat_VST3 OrbitCat_VST3 SingCat_VST3 BassCat_VST3 GlideCat_VST3 TalkCat_VST3 LifeCat_VST3 EchoCat_VST3)
 
 if(MSVC)
     target_compile_options(CatSuiteHostTest PRIVATE /utf-8)

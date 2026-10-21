@@ -106,7 +106,7 @@ void Track::copySettingsFrom (const Track& o)
 {
     source = o.source.load(); midiFx = o.midiFx.load(); sound = o.sound.load();
     volume = o.volume.load(); pan = o.pan.load(); reverb = o.reverb.load();
-    filter = o.filter.load(); drive = o.drive.load(); chorus = o.chorus.load(); delay = o.delay.load(); crush = o.crush.load();
+    filter = o.filter.load(); drive = o.drive.load(); chorus = o.chorus.load(); delay = o.delay.load(); crush = o.crush.load(); phaser = o.phaser.load(); tremolo = o.tremolo.load();
     mute = o.mute.load(); solo = o.solo.load();
 }
 
@@ -326,6 +326,7 @@ HubEngine::HubEngine()
 {
     formats.addFormat (new juce::VST3PluginFormat());
     for (auto& t : tracks) t = std::make_unique<Track>();
+    loopEvents.reserve (8192);
     writerThread.startThread();
 }
 
@@ -982,6 +983,7 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
         TrackFxSettings fs;
         fs.filter = t.filter.load(); fs.drive = t.drive.load(); fs.chorus = t.chorus.load();
         fs.delay = t.delay.load(); fs.crush = t.crush.load(); fs.bpm = bpmNow;
+        fs.phaser = t.phaser.load(); fs.tremolo = t.tremolo.load();
         t.fx.process (l, r, n, fs);
 
         // energy for the self test (before the fader)
@@ -1014,6 +1016,8 @@ void HubEngine::renderBlock (float* outL, float* outR, int n)
     masterFx.process (l, r, n, juce::jlimit (-1.0f, 1.0f, masterTone.load()), juce::jlimit (0.0f, 1.0f, masterGlue.load()),
                       juce::jlimit (0.0f, 1.0f, masterWarmth.load()), juce::jlimit (0.0f, 2.0f, masterWidth.load()));
     masterReduction = masterFx.gainReduction();
+    masterFx.processPumpAndVinyl (l, r, n, juce::jlimit (0.0f, 1.0f, masterPump.load()), juce::jlimit (0.0f, 1.0f, masterVinyl.load()),
+                                  clockPpq, 1.0 / samplesPerBeat, playing.load());
     const float master = masterVolume.load();
     mixAudio.applyGain (master * master);
     limiter.process (l, r, n);
@@ -1048,6 +1052,49 @@ void MasterFx::prepare (double sampleRate)
     lpL = lpR = env = 0.0f;
     gain = 1.0f;
     lastReduction = 0.0f;
+}
+
+void MasterFx::processPumpAndVinyl (float* l, float* r, int n, float pump, float vinyl, double beat, double beatsPerSample, bool playingNow)
+{
+    // pump: on every beat the mix dips and swells back (like a kick side-chaining everything)
+    if (pump > 0.001f || pumpGain < 0.999f)
+    {
+        const float smooth = 1.0f - std::exp (-1.0f / (0.002f * (float) sr));
+        for (int i = 0; i < n; ++i)
+        {
+            float target = 1.0f;
+            if (playingNow && pump > 0.001f)
+            {
+                double ph = std::fmod (beat + i * beatsPerSample, 1.0);
+                if (ph < 0.0) ph += 1.0;
+                const float x = juce::jmin (1.0f, (float) ph / 0.55f);          // back up by a bit past half a beat
+                target = 1.0f - pump * 0.75f * (1.0f - x) * (1.0f - x);
+            }
+            pumpGain += (target - pumpGain) * smooth;
+            l[i] *= pumpGain; r[i] *= pumpGain;
+        }
+    }
+    // vinyl: a softer top, quiet hiss, and crackle now and then
+    if (vinyl > 0.001f)
+    {
+        const float cut = 18000.0f - 11000.0f * vinyl;
+        const float a = 1.0f - std::exp (-juce::MathConstants<float>::twoPi * cut / (float) sr);
+        const float hiss = 0.004f * vinyl, popChance = 0.00025f * vinyl * (float) (48000.0 / sr);
+        const float decay = std::exp (-1.0f / (0.0006f * (float) sr));
+        for (int i = 0; i < n; ++i)
+        {
+            noise = noise * 1664525u + 1013904223u;
+            const float rnd = (float) (noise >> 8) / 16777216.0f;         // 0 .. 1
+            if (rnd < popChance) crackle = (rnd / popChance - 0.5f) * 0.35f * vinyl;
+            crackle *= decay;
+            const float h = (rnd - 0.5f) * hiss;
+            vinLpL += a * (l[i] - vinLpL);
+            vinLpR += a * (r[i] - vinLpR);
+            l[i] = vinLpL + h + crackle;
+            r[i] = vinLpR + h * 0.8f + crackle;
+        }
+        if (! std::isfinite (vinLpL) || ! std::isfinite (vinLpR)) vinLpL = vinLpR = 0.0f;
+    }
 }
 
 void MasterFx::process (float* l, float* r, int n, float tone, float glue, float warmth, float width)
@@ -1111,8 +1158,14 @@ void MasterFx::process (float* l, float* r, int n, float tone, float glue, float
 void HubEngine::runLoop (int n, double samplesPerBeat, juce::MidiBuffer& out, bool playingNow)
 {
     // requests from the message thread
+    const juce::SpinLock::ScopedLockType loopScope (loopLock);
     const double loopLen = 4.0 * juce::jlimit (1, 16, loopBars.load());
     const double pos0 = std::fmod (juce::jmax (0.0, clockPpq), loopLen);
+    if (loopPanicRequest.exchange (false))
+    {
+        for (int k = 0; k < 128; ++k) if (loopHeld[(size_t) k]) out.addEvent (juce::MidiMessage::noteOff (1, k), 0);
+        loopHeld.fill (false);
+    }
     if (loopClearRequest.exchange (false))
     {
         loopEvents.clear();
@@ -1174,6 +1227,74 @@ void HubEngine::runLoop (int n, double samplesPerBeat, juce::MidiBuffer& out, bo
     for (auto& e : loopEvents) if (e.msg.isNoteOn()) ++notes;
     loopNotesShown = notes;
     loopPosShown = pos0 / loopLen;
+}
+
+std::vector<HubEngine::LoopNote> HubEngine::getLoopNoteList() const
+{
+    std::vector<LoopEvent> ev;
+    {
+        const juce::SpinLock::ScopedLockType sl (loopLock);
+        ev = loopEvents;
+    }
+    const double loopLen = 4.0 * juce::jlimit (1, 16, loopBars.load());
+    std::vector<LoopNote> notes;
+    std::vector<bool> used (ev.size(), false);
+    for (size_t i = 0; i < ev.size(); ++i)
+    {
+        if (! ev[i].msg.isNoteOn()) continue;
+        LoopNote nt;
+        nt.start = std::fmod (juce::jmax (0.0, ev[i].beat), loopLen);
+        nt.pitch = ev[i].msg.getNoteNumber();
+        nt.velocity = ev[i].msg.getFloatVelocity();
+        nt.take = ev[i].take;
+        // its note-off: the nearest one after it (round the loop) with the same pitch and take
+        double best = 1.0e9;
+        size_t bestIdx = ev.size();
+        for (size_t j = 0; j < ev.size(); ++j)
+        {
+            if (used[j] || ! ev[j].msg.isNoteOff() || ev[j].msg.getNoteNumber() != nt.pitch || ev[j].take != ev[i].take) continue;
+            double d = ev[j].beat - nt.start;
+            while (d <= 1.0e-6) d += loopLen;
+            if (d < best) { best = d; bestIdx = j; }
+        }
+        if (bestIdx < ev.size()) used[bestIdx] = true;
+        nt.length = best < 1.0e8 ? juce::jlimit (0.0625, loopLen, best) : 0.5;
+        notes.push_back (nt);
+    }
+    std::sort (notes.begin(), notes.end(), [] (const LoopNote& a, const LoopNote& b) { return a.start < b.start || (a.start == b.start && a.pitch < b.pitch); });
+    return notes;
+}
+
+void HubEngine::setLoopNoteList (const std::vector<LoopNote>& notes)
+{
+    const double loopLen = 4.0 * juce::jlimit (1, 16, loopBars.load());
+    std::vector<LoopEvent> ev;
+    ev.reserve (notes.size() * 2);
+    for (const auto& nt : notes)
+    {
+        if (! juce::isPositiveAndBelow (nt.pitch, 128)) continue;
+        const double start = std::fmod (juce::jmax (0.0, nt.start), loopLen);
+        const double len = juce::jlimit (0.0625, loopLen - 0.01, nt.length);
+        ev.push_back ({ start, juce::MidiMessage::noteOn (1, nt.pitch, juce::jlimit (0.05f, 1.0f, nt.velocity)), nt.take });
+        ev.push_back ({ std::fmod (start + len, loopLen), juce::MidiMessage::noteOff (1, nt.pitch), nt.take });
+    }
+    {
+        const juce::SpinLock::ScopedLockType sl (loopLock);
+        const auto cap = loopEvents.capacity();
+        loopEvents.clear();
+        for (auto& e : ev)
+            if (loopEvents.size() + 1 < cap) loopEvents.push_back (e);   // never grows (the audio thread uses it)
+        int notesNow = 0;
+        for (auto& e : loopEvents) if (e.msg.isNoteOn()) ++notesNow;
+        loopNotesShown = notesNow;
+    }
+    loopPanicRequest = true;
+}
+
+int HubEngine::newLoopTake()
+{
+    const juce::SpinLock::ScopedLockType sl (loopLock);
+    return ++loopTake;
 }
 
 int HubEngine::pickKeyboardTrack() const
@@ -1262,6 +1383,15 @@ juce::ValueTree HubEngine::saveState() const
     t.setProperty ("glue", masterGlue.load(), nullptr);
     t.setProperty ("warmth", masterWarmth.load(), nullptr);
     t.setProperty ("width", masterWidth.load(), nullptr);
+    t.setProperty ("pump", masterPump.load(), nullptr);
+    {
+        juce::StringArray loop;
+        for (const auto& nt : getLoopNoteList())
+            loop.add (juce::String (nt.start, 4) + ":" + juce::String (nt.length, 4) + ":" + juce::String (nt.pitch) + ":" + juce::String (nt.velocity, 3));
+        if (! loop.isEmpty()) t.setProperty ("loop", loop.joinIntoString (";"), nullptr);
+        t.setProperty ("loopBars", loopBars.load(), nullptr);
+    }
+    t.setProperty ("vinyl", masterVinyl.load(), nullptr);
     t.setProperty ("keyboardTrack", keyboardTrack.load(), nullptr);
     auto stateOf = [] (juce::AudioPluginInstance* p)
     {
@@ -1284,6 +1414,8 @@ juce::ValueTree HubEngine::saveState() const
         p.setProperty ("chorus", s.chorus.load(), nullptr);
         p.setProperty ("delay", s.delay.load(), nullptr);
         p.setProperty ("crush", s.crush.load(), nullptr);
+        p.setProperty ("phaser", s.phaser.load(), nullptr);
+        p.setProperty ("tremolo", s.tremolo.load(), nullptr);
         p.setProperty ("mute", s.mute.load(), nullptr);
         p.setProperty ("solo", s.solo.load(), nullptr);
         if (s.fxCat != nullptr) p.setProperty ("fxState", stateOf (s.fxCat.get()), nullptr);
@@ -1339,6 +1471,20 @@ void HubEngine::restoreState (const juce::ValueTree& t)
     masterGlue = juce::jlimit (0.0f, 1.0f, (float) t.getProperty ("glue", 0.0f));
     masterWarmth = juce::jlimit (0.0f, 1.0f, (float) t.getProperty ("warmth", 0.0f));
     masterWidth = juce::jlimit (0.0f, 2.0f, (float) t.getProperty ("width", 1.0f));
+    masterPump = juce::jlimit (0.0f, 1.0f, (float) t.getProperty ("pump", 0.0f));
+    {
+        loopBars = juce::jlimit (1, 16, (int) t.getProperty ("loopBars", loopBars.load()));
+        std::vector<LoopNote> loop;
+        const int take = newLoopTake();
+        for (auto& item : juce::StringArray::fromTokens (t.getProperty ("loop", "").toString(), ";", ""))
+        {
+            const auto f = juce::StringArray::fromTokens (item, ":", "");
+            if (f.size() < 4) continue;
+            loop.push_back ({ f[0].getDoubleValue(), f[1].getDoubleValue(), f[2].getIntValue(), f[3].getFloatValue(), take });
+        }
+        setLoopNoteList (loop);
+    }
+    masterVinyl = juce::jlimit (0.0f, 1.0f, (float) t.getProperty ("vinyl", 0.0f));
     keyboardTrack = juce::jlimit (-1, maxTracks - 1, (int) t.getProperty ("keyboardTrack", -1));
 
     auto load = [] (juce::AudioPluginInstance* p, const juce::var& v)
@@ -1373,6 +1519,8 @@ void HubEngine::restoreState (const juce::ValueTree& t)
             s.chorus = juce::jlimit (0.0f, 1.0f, (float) p.getProperty ("chorus", 0.0f));
             s.delay = juce::jlimit (0.0f, 1.0f, (float) p.getProperty ("delay", 0.0f));
             s.crush = juce::jlimit (0.0f, 1.0f, (float) p.getProperty ("crush", 0.0f));
+            s.phaser = juce::jlimit (0.0f, 1.0f, (float) p.getProperty ("phaser", 0.0f));
+            s.tremolo = juce::jlimit (0.0f, 1.0f, (float) p.getProperty ("tremolo", 0.0f));
             s.mute = (bool) p.getProperty ("mute", false);
             s.solo = (bool) p.getProperty ("solo", false);
             load (s.fxCat.get(), p.getProperty ("fxState"));

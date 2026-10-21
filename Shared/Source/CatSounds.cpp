@@ -575,6 +575,8 @@ void TrackFx::reset()
     chPh = dlLp = dlLpR = dlSmooth = 0.0f;
     holdL = holdR = 0.0f;
     holdCount = 0;
+    apL.fill (0.0f); apR.fill (0.0f);
+    phPh = phFbL = phFbR = trPh = 0.0f;
 }
 
 void TrackFx::process (float* l, float* r, int n, const TrackFxSettings& s)
@@ -657,6 +659,61 @@ void TrackFx::process (float* l, float* r, int n, const TrackFxSettings& s)
             dlW = (dlW + 1) % size;
             l[i] += dl * s.delay * 0.7f;
             r[i] += dr * s.delay * 0.7f;
+        }
+    }
+
+    // ---- phaser: six all-pass stages swept by a slow LFO, a little feedback, mixed with the dry sound
+    if (s.phaser > 0.002f)
+    {
+        const float depth = juce::jlimit (0.0f, 1.0f, s.phaser);
+        const float rate = 0.15f + 0.35f * depth;               // Hz
+        const float fb = 0.2f + 0.45f * depth;
+        for (int i = 0; i < n; ++i)
+        {
+            phPh += rate / srf;
+            if (phPh >= 1.0f) phPh -= 1.0f;
+            auto coefAt = [&] (float ph)
+            {
+                const float lfo = 0.5f + 0.5f * std::sin (twoPi * ph);
+                const float fc = 250.0f * std::pow (12.0f, lfo);  // 250 Hz .. 3 kHz
+                const float t = std::tan (juce::MathConstants<float>::pi * juce::jmin (fc, srf * 0.45f) / srf);
+                return (t - 1.0f) / (t + 1.0f);
+            };
+            const float cl = coefAt (phPh), cr = coefAt (phPh + 0.2f);
+            auto run = [] (std::array<float, 6>& z, float c, float x)
+            {
+                for (auto& st : z)
+                {
+                    const float y = c * x + st;
+                    st = x - c * y;
+                    x = y;
+                }
+                return x;
+            };
+            const float wl = run (apL, cl, l[i] + phFbL * fb);
+            const float wr = run (apR, cr, r[i] + phFbR * fb);
+            phFbL = std::isfinite (wl) ? wl : 0.0f;
+            phFbR = std::isfinite (wr) ? wr : 0.0f;
+            if (! std::isfinite (wl) || ! std::isfinite (wr)) { apL.fill (0.0f); apR.fill (0.0f); continue; }
+            const float mix = 0.5f * depth;
+            l[i] = l[i] * (1.0f - mix) + wl * mix;
+            r[i] = r[i] * (1.0f - mix) + wr * mix;
+        }
+    }
+
+    // ---- tremolo: the volume pulses in 1/8 notes (smooth, the right side a little behind: it moves in the stereo field)
+    if (s.tremolo > 0.002f)
+    {
+        const float depth = juce::jlimit (0.0f, 1.0f, s.tremolo) * 0.85f;
+        const float rate = (float) (juce::jmax (40.0, s.bpm) / 60.0 * 2.0);   // 1/8 notes
+        for (int i = 0; i < n; ++i)
+        {
+            trPh += rate / srf;
+            if (trPh >= 1.0f) trPh -= 1.0f;
+            const float gl = 1.0f - depth * (0.5f - 0.5f * std::cos (twoPi * trPh));
+            const float gr = 1.0f - depth * (0.5f - 0.5f * std::cos (twoPi * (trPh + 0.18f)));
+            l[i] *= gl;
+            r[i] *= gr;
         }
     }
 

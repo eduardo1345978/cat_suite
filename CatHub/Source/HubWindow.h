@@ -35,7 +35,9 @@ public:
     juce::TextButton fxEdit { "Edit" }, soundEdit { "Edit" }, mute { "M" }, solo { "S" }, remove { "x" };
     CaptionKnob filter { "FILTER", "Darker sound (low-pass filter)" }, drive { "DRIVE", "Warm distortion" },
                 chorus { "CHORUS", "Wide, shimmering doubling" }, echo { "ECHO", "Tempo echo (dotted 1/8, ping-pong)" },
-                crush { "CRUSH", "Lo-fi bit crusher" }, room { "ROOM", "How much goes into the reverb" },
+                crush { "CRUSH", "Lo-fi bit crusher" }, phaser { "PHASER", "A slow, swirling sweep" },
+                tremolo { "TREMOLO", "The volume pulses in 1/8 notes and moves between left and right" },
+                room { "ROOM", "How much goes into the reverb" },
                 pan { "PAN", "Left / right", true };
     juce::Slider volume;
 
@@ -175,9 +177,55 @@ private:
                 tone { "TONE", "Tilt: left = warmer and darker, right = brighter", true },
                 glue { "GLUE", "A gentle compressor that holds the mix together" },
                 warmth { "WARMTH", "Soft tape saturation: rounder and fuller" },
-                width { "WIDTH", "Left = mono, middle = as it is, right = extra wide", true };
+                width { "WIDTH", "Left = mono, middle = as it is, right = extra wide", true },
+                pump { "PUMP", "The whole mix ducks on every beat and swells back (house / EDM side-chain)" },
+                vinyl { "VINYL", "Old record: crackle, quiet hiss and a softer top" };
     juce::TextButton resetButton { "Reset" };
     float shownReduction = 0.0f;
+};
+
+/** The loop recorder's piano roll: see the loop's notes, draw new ones, move, stretch and delete them. */
+class LoopEditor : public juce::Component, private juce::Timer
+{
+public:
+    explicit LoopEditor (HubEngine&);
+    void paint (juce::Graphics&) override;
+    void resized() override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
+    void mouseMove (const juce::MouseEvent&) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override;
+    void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    /** For the tests: what the roll shows, and drawing a note as a click would. */
+    const std::vector<HubEngine::LoopNote>& getNotes() const noexcept { return notes; }
+    void addNoteAt (double beat, int pitch);
+    void quantize();
+
+    juce::TextButton clearButton { "Clear" }, quantizeButton { "Quantize" }, lengthButton { "Note: 1/8" };
+
+private:
+    void timerCallback() override;
+    void commit();
+    void reload();
+    juce::Rectangle<float> rollArea() const;
+    juce::Rectangle<float> noteRect (const HubEngine::LoopNote&) const;
+    int noteAt (juce::Point<float>, bool& onEdge) const;
+    double beatAt (float x) const;
+    int pitchAt (float y) const;
+    double loopBeats() const;
+
+    HubEngine& engine;
+    std::vector<HubEngine::LoopNote> notes;
+    int lowPitch = 48, numRows = 36;
+    double drawLength = 0.5;
+    int dragging = -1, drawTake = -1;
+    bool resizing = false, changed = false;
+    double dragBeat0 = 0.0, noteStart0 = 0.0, noteLen0 = 0.0;
+    int dragPitch0 = 0, notePitch0 = 0;
+    double shownPos = -1.0;
+    int shownCount = -1, shownBars = -1;
+    juce::Rectangle<int> header;
 };
 
 /** First-launch tutorial: bubbles that point at the real controls. */
@@ -228,6 +276,7 @@ public:
     bool openJamFrom (const juce::File&);
     void toggleFullScreen();
     void showMasterFx();
+    void showLoopEditor();
     // undo: a snapshot of the jam before every big change (styles, dice, songs, renewing parts, opening jams)
     void pushUndo();
     bool undo();

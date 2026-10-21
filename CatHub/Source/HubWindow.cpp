@@ -247,12 +247,13 @@ RackRow::RackRow (HubMain& o, HubEngine& e, int i) : owner (o), engine (e), inde
     };
     bind (filter, &Track::filter); bind (drive, &Track::drive); bind (chorus, &Track::chorus);
     bind (echo, &Track::delay); bind (crush, &Track::crush); bind (room, &Track::reverb); bind (pan, &Track::pan);
+    bind (phaser, &Track::phaser); bind (tremolo, &Track::tremolo);
 
     for (juce::Component* c : { (juce::Component*) &sourceBox, (juce::Component*) &fxBox, (juce::Component*) &fxPreset, (juce::Component*) &soundBox,
                                 (juce::Component*) &soundPreset, (juce::Component*) &fxEdit, (juce::Component*) &soundEdit, (juce::Component*) &mute,
                                 (juce::Component*) &solo, (juce::Component*) &remove, (juce::Component*) &volume, (juce::Component*) &filter,
                                 (juce::Component*) &drive, (juce::Component*) &chorus, (juce::Component*) &echo, (juce::Component*) &crush,
-                                (juce::Component*) &room, (juce::Component*) &pan })
+                                (juce::Component*) &phaser, (juce::Component*) &tremolo, (juce::Component*) &room, (juce::Component*) &pan })
         addChildComponent (c);
     refresh();
 }
@@ -307,13 +308,16 @@ void RackRow::refresh()
     chorus.knob.setValue (t.chorus.load(), juce::dontSendNotification);
     echo.knob.setValue (t.delay.load(), juce::dontSendNotification);
     crush.knob.setValue (t.crush.load(), juce::dontSendNotification);
+    phaser.knob.setValue (t.phaser.load(), juce::dontSendNotification);
+    tremolo.knob.setValue (t.tremolo.load(), juce::dontSendNotification);
     room.knob.setValue (t.reverb.load(), juce::dontSendNotification);
     pan.knob.setValue (t.pan.load(), juce::dontSendNotification);
 
     const bool adv = owner.isAdvanced();
     for (juce::Component* c : { (juce::Component*) &sourceBox, (juce::Component*) &fxBox, (juce::Component*) &fxPreset, (juce::Component*) &fxEdit,
                                 (juce::Component*) &filter, (juce::Component*) &drive, (juce::Component*) &chorus, (juce::Component*) &echo,
-                                (juce::Component*) &crush, (juce::Component*) &room, (juce::Component*) &pan, (juce::Component*) &remove })
+                                (juce::Component*) &crush, (juce::Component*) &phaser, (juce::Component*) &tremolo, (juce::Component*) &room,
+                                (juce::Component*) &pan, (juce::Component*) &remove })
         c->setVisible (adv);
     for (juce::Component* c : { (juce::Component*) &soundBox, (juce::Component*) &soundPreset, (juce::Component*) &soundEdit,
                                 (juce::Component*) &mute, (juce::Component*) &solo, (juce::Component*) &volume })
@@ -502,13 +506,14 @@ void RackRow::resized()
         r.removeFromRight (8);
         meterArea = r.removeFromRight (8).reduced (0, 6);
         r.removeFromRight (6);
-        volume.setBounds (r.removeFromRight (juce::jlimit (90, 160, r.getWidth() - 7 * 50)).withTrimmedTop (16).withSizeKeepingCentre (juce::jlimit (90, 160, r.getWidth()), 30));
+        const int vw = juce::jlimit (80, 160, r.getWidth() - 9 * 48);
+        volume.setBounds (r.removeFromRight (vw).withTrimmedTop (16).withSizeKeepingCentre (vw, 30));
         r.removeFromRight (8);
-        const int kw = juce::jlimit (36, 52, r.getWidth() / 7);
-        for (auto* k : { &filter, &drive, &chorus, &echo, &crush, &room, &pan })
+        const int kw = juce::jlimit (34, 52, (r.getWidth() - 8) / 9);
+        for (auto* k : { &filter, &drive, &chorus, &echo, &crush, &phaser, &tremolo, &room, &pan })
         {
             k->setBounds (r.removeFromLeft (kw).withSizeKeepingCentre (kw, juce::jmin (r.getHeight(), kw + 14)));
-            if (k == &crush) r.removeFromLeft (8);
+            if (k == &tremolo) r.removeFromLeft (8);
         }
     }
     else
@@ -1346,6 +1351,7 @@ HubMain::HubMain (HubEngine& e, juce::AudioDeviceManager& dm, juce::PropertiesFi
         loop.addItem (10, engine.isLoopRecording() ? "Stop recording the loop  (L)" : "Record a loop from the MIDI keyboard  (L)");
         loop.addItem (11, "Undo the last take", engine.getLoopNotes() > 0);
         loop.addItem (12, "Clear the loop", engine.getLoopNotes() > 0);
+        loop.addItem (13, "Piano roll: see and edit the loop  (P)");
         for (int b : { 1, 2, 4, 8 }) bars.addItem (20 + b, juce::String (b) + (b == 1 ? " bar" : " bars"), true, engine.loopBars.load() == b);
         loop.addSubMenu ("Loop length", bars);
         m.addSubMenu ("Loop recorder", loop);
@@ -1364,10 +1370,11 @@ HubMain::HubMain (HubEngine& e, juce::AudioDeviceManager& dm, juce::PropertiesFi
             else if (r == 10) sp->toggleLoopRecord();
             else if (r == 11) sp->engine.undoLoopTake();
             else if (r == 12) sp->engine.clearLoop();
+            else if (r == 13) sp->showLoopEditor();
             else if (r > 20 && r <= 28) sp->engine.loopBars = r - 20;
         });
     };
-    fxButton.setTooltip ("Master effects: room, tone, glue, warmth, width");
+    fxButton.setTooltip ("Master effects: room, tone, glue, warmth, width, pump, vinyl");
     fxButton.onClick = [this] { showMasterFx(); };
     for (auto* b : { &simpleButton, &advancedButton })
     {
@@ -1734,14 +1741,315 @@ void HubMain::toggleFullScreen()
 void HubMain::showMasterFx()
 {
     auto panel = std::make_unique<MasterFxPanel> (engine);
-    panel->setSize (400, 130);
+    panel->setSize (540, 130);
     juce::CallOutBox::launchAsynchronously (std::move (panel), fxButton.getScreenBounds(), nullptr);
+}
+
+void HubMain::showLoopEditor()
+{
+    auto ed = std::make_unique<LoopEditor> (engine);
+    ed->setSize (juce::jmin (980, getWidth() - 60), juce::jmin (480, getHeight() - 120));
+    juce::CallOutBox::launchAsynchronously (std::move (ed), jamMenuButton.getScreenBounds(), nullptr);
+}
+
+//==============================================================================
+LoopEditor::LoopEditor (HubEngine& e) : engine (e)
+{
+    clearButton.setTooltip ("Remove every note from the loop");
+    clearButton.onClick = [this] { notes.clear(); commit(); repaint(); };
+    quantizeButton.setTooltip ("Snap every note to the 1/16 grid");
+    quantizeButton.onClick = [this] { quantize(); };
+    lengthButton.setTooltip ("How long a new note is when you click to draw one");
+    lengthButton.onClick = [this]
+    {
+        static const double lengths[] = { 0.25, 0.5, 1.0, 2.0, 4.0 };
+        static const char* names[] = { "1/16", "1/8", "1/4", "1/2", "1 bar" };
+        int i = 0;
+        while (i < 4 && std::abs (lengths[i] - drawLength) > 1e-6) ++i;
+        i = (i + 1) % 5;
+        drawLength = lengths[i];
+        lengthButton.setButtonText (juce::String ("Note: ") + names[i]);
+    };
+    for (auto* b : { &clearButton, &quantizeButton, &lengthButton }) addAndMakeVisible (b);
+    reload();
+    // show the part of the keyboard the loop uses
+    if (! notes.empty())
+    {
+        int lo = 127, hi = 0;
+        for (auto& n : notes) { lo = juce::jmin (lo, n.pitch); hi = juce::jmax (hi, n.pitch); }
+        const int mid = (lo + hi) / 2;
+        numRows = juce::jmax (36, hi - lo + 8);
+        lowPitch = juce::jlimit (0, 127 - numRows, mid - numRows / 2);
+    }
+    startTimerHz (30);
+}
+
+double LoopEditor::loopBeats() const { return 4.0 * juce::jlimit (1, 16, engine.loopBars.load()); }
+
+void LoopEditor::reload()
+{
+    notes = engine.getLoopNoteList();
+    shownCount = engine.getLoopNotes();
+    shownBars = engine.loopBars.load();
+}
+
+void LoopEditor::commit()
+{
+    engine.setLoopNoteList (notes);
+    shownCount = (int) notes.size();
+    changed = false;
+}
+
+void LoopEditor::timerCallback()
+{
+    const double pos = engine.isPlaying() ? engine.getLoopPosition() : -1.0;
+    if (std::abs (pos - shownPos) > 1e-4) { shownPos = pos; repaint(); }
+    // recorded notes (or another loop length) show up while the window is open
+    if (dragging < 0 && (engine.getLoopNotes() != shownCount || engine.loopBars.load() != shownBars)) { reload(); repaint(); }
+}
+
+juce::Rectangle<float> LoopEditor::rollArea() const
+{
+    return getLocalBounds().reduced (10).withTrimmedTop (38).withTrimmedLeft (38).toFloat();
+}
+
+double LoopEditor::beatAt (float x) const
+{
+    const auto a = rollArea();
+    return juce::jlimit (0.0, loopBeats() - 1e-6, (double) ((x - a.getX()) / a.getWidth()) * loopBeats());
+}
+
+int LoopEditor::pitchAt (float y) const
+{
+    const auto a = rollArea();
+    const float rowH = a.getHeight() / (float) numRows;
+    return juce::jlimit (0, 127, lowPitch + numRows - 1 - (int) std::floor ((y - a.getY()) / rowH));
+}
+
+juce::Rectangle<float> LoopEditor::noteRect (const HubEngine::LoopNote& n) const
+{
+    const auto a = rollArea();
+    const float rowH = a.getHeight() / (float) numRows;
+    const float bw = a.getWidth() / (float) loopBeats();
+    const int row = lowPitch + numRows - 1 - n.pitch;
+    return { a.getX() + (float) n.start * bw, a.getY() + row * rowH, juce::jmax (4.0f, (float) n.length * bw), rowH };
+}
+
+int LoopEditor::noteAt (juce::Point<float> p, bool& onEdge) const
+{
+    onEdge = false;
+    for (int i = (int) notes.size() - 1; i >= 0; --i)
+    {
+        const auto r = noteRect (notes[(size_t) i]);
+        if (r.expanded (0.0f, 0.5f).contains (p))
+        {
+            onEdge = p.x > r.getRight() - juce::jmin (8.0f, r.getWidth() * 0.4f);
+            return i;
+        }
+    }
+    return -1;
+}
+
+void LoopEditor::addNoteAt (double beat, int pitch)
+{
+    if (drawTake < 0) drawTake = engine.newLoopTake();
+    HubEngine::LoopNote n;
+    n.start = std::floor (beat * 4.0) / 4.0;
+    n.length = juce::jmin (drawLength, loopBeats() - n.start);
+    n.pitch = juce::jlimit (0, 127, pitch);
+    n.velocity = 0.8f;
+    n.take = drawTake;
+    notes.push_back (n);
+    commit();
+    repaint();
+}
+
+void LoopEditor::quantize()
+{
+    for (auto& n : notes)
+    {
+        n.start = std::fmod (std::round (n.start * 4.0) / 4.0, loopBeats());
+        n.length = juce::jmax (0.25, std::round (n.length * 4.0) / 4.0);
+    }
+    commit();
+    repaint();
+}
+
+void LoopEditor::mouseDown (const juce::MouseEvent& e)
+{
+    if (! rollArea().contains (e.position)) return;
+    bool edge = false;
+    const int i = noteAt (e.position, edge);
+    if (e.mods.isPopupMenu())
+    {
+        if (i >= 0) { notes.erase (notes.begin() + i); commit(); repaint(); }
+        return;
+    }
+    if (i < 0)
+    {
+        addNoteAt (beatAt (e.position.x), pitchAt (e.position.y));
+        dragging = (int) notes.size() - 1;
+        resizing = true;                         // keep dragging to make it longer
+    }
+    else
+    {
+        dragging = i;
+        resizing = edge;
+        // preview the note on the keyboard's part
+        engine.playKeyboardNote (juce::MidiMessage::noteOn (1, notes[(size_t) i].pitch, 0.7f));
+        engine.playKeyboardNote (juce::MidiMessage::noteOff (1, notes[(size_t) i].pitch));
+    }
+    const auto& n = notes[(size_t) dragging];
+    dragBeat0 = beatAt (e.position.x);
+    dragPitch0 = pitchAt (e.position.y);
+    noteStart0 = n.start; noteLen0 = n.length; notePitch0 = n.pitch;
+}
+
+void LoopEditor::mouseDrag (const juce::MouseEvent& e)
+{
+    if (! juce::isPositiveAndBelow (dragging, (int) notes.size())) return;
+    auto& n = notes[(size_t) dragging];
+    const double db = beatAt (e.position.x) - dragBeat0;
+    if (resizing)
+        n.length = juce::jlimit (0.25, loopBeats() - n.start, std::round ((noteLen0 + db) * 4.0) / 4.0);
+    else
+    {
+        n.start = juce::jlimit (0.0, loopBeats() - 0.25, std::round ((noteStart0 + db) * 4.0) / 4.0);
+        n.pitch = juce::jlimit (0, 127, notePitch0 + pitchAt (e.position.y) - dragPitch0);
+    }
+    changed = true;
+    repaint();
+}
+
+void LoopEditor::mouseUp (const juce::MouseEvent&)
+{
+    if (changed) commit();
+    dragging = -1;
+    resizing = false;
+}
+
+void LoopEditor::mouseMove (const juce::MouseEvent& e)
+{
+    bool edge = false;
+    const int i = noteAt (e.position, edge);
+    setMouseCursor (i >= 0 ? (edge ? juce::MouseCursor::LeftRightResizeCursor : juce::MouseCursor::DraggingHandCursor)
+                           : juce::MouseCursor::NormalCursor);
+}
+
+void LoopEditor::mouseDoubleClick (const juce::MouseEvent& e)
+{
+    bool edge = false;
+    const int i = noteAt (e.position, edge);
+    if (i >= 0) { notes.erase (notes.begin() + i); commit(); repaint(); }
+}
+
+void LoopEditor::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w)
+{
+    lowPitch = juce::jlimit (0, 127 - numRows, lowPitch + (w.deltaY > 0 ? 2 : -2));
+    repaint();
+}
+
+void LoopEditor::resized()
+{
+    auto top = getLocalBounds().reduced (10).removeFromTop (30);
+    top.removeFromLeft (330);
+    lengthButton.setBounds (top.removeFromRight (110).reduced (2, 0));
+    top.removeFromRight (6);
+    quantizeButton.setBounds (top.removeFromRight (100).reduced (2, 0));
+    top.removeFromRight (6);
+    clearButton.setBounds (top.removeFromRight (80).reduced (2, 0));
+}
+
+void LoopEditor::paint (juce::Graphics& g)
+{
+    const auto& th = theme();
+    g.fillAll (th.panel);
+    auto head = getLocalBounds().reduced (10).removeFromTop (30);
+    g.setColour (th.text);
+    g.setFont (hubFont (15.0f, true));
+    g.drawText ("Loop  -  " + juce::String (engine.loopBars.load()) + (engine.loopBars.load() == 1 ? " bar" : " bars"), head.removeFromLeft (160), juce::Justification::centredLeft);
+    g.setColour (th.textDim);
+    g.setFont (hubFont (11.5f));
+    g.drawFittedText ("Click: draw. Drag: move / stretch the end.\nDouble- or right-click: delete. Wheel: scroll.", head.removeFromLeft (170), juce::Justification::centredLeft, 2);
+
+    const auto a = rollArea();
+    const float rowH = a.getHeight() / (float) numRows;
+    const double beats = loopBeats();
+    const float bw = a.getWidth() / (float) beats;
+    // the keys down the side and the rows
+    for (int row = 0; row < numRows; ++row)
+    {
+        const int pitch = lowPitch + numRows - 1 - row;
+        const int pc = pitch % 12;
+        const bool black = pc == 1 || pc == 3 || pc == 6 || pc == 8 || pc == 10;
+        const juce::Rectangle<float> lane (a.getX(), a.getY() + row * rowH, a.getWidth(), rowH);
+        g.setColour (black ? th.bg.withAlpha (0.55f) : th.raised.withAlpha (0.35f));
+        g.fillRect (lane);
+        const juce::Rectangle<float> key (a.getX() - 34.0f, lane.getY(), 32.0f, rowH);
+        g.setColour (black ? juce::Colour (0xff22252c) : juce::Colour (0xffe9ecf2));
+        g.fillRect (key.reduced (0.0f, 0.5f));
+        if (pc == 0)
+        {
+            g.setColour (juce::Colour (0xff3a3f4a));
+            g.setFont (hubFont (juce::jmin (11.0f, rowH * 0.9f), true));
+            g.drawText ("C" + juce::String (pitch / 12 - 1), key.reduced (2.0f, 0.0f), juce::Justification::centredRight);
+            g.setColour (th.outline.withAlpha (0.6f));
+            g.drawHorizontalLine ((int) lane.getBottom(), a.getX(), a.getRight());
+        }
+    }
+    // beats and bars
+    for (int k = 0; k <= (int) (beats * 4.0); ++k)
+    {
+        const float x = a.getX() + k * bw * 0.25f;
+        g.setColour (k % 16 == 0 ? th.text.withAlpha (0.45f) : k % 4 == 0 ? th.outline.withAlpha (0.8f) : th.outline.withAlpha (0.25f));
+        g.drawVerticalLine ((int) x, a.getY(), a.getBottom());
+        if (k % 16 == 0 && k < (int) (beats * 4.0))
+        {
+            g.setColour (th.textDim);
+            g.setFont (hubFont (11.0f, true));
+            g.drawText (juce::String (k / 16 + 1), juce::Rectangle<float> (x + 3.0f, a.getY() - 16.0f, 30.0f, 14.0f), juce::Justification::centredLeft);
+        }
+    }
+    // the notes (the newest take a little brighter)
+    int newest = 0;
+    for (auto& n : notes) newest = juce::jmax (newest, n.take);
+    for (size_t i = 0; i < notes.size(); ++i)
+    {
+        const auto& n = notes[i];
+        auto r = noteRect (n).reduced (0.5f, 1.0f);
+        const auto c = th.accent.withMultipliedBrightness (n.take == newest ? 1.1f : 0.85f).withAlpha (0.55f + 0.45f * n.velocity);
+        g.setColour (c);
+        g.fillRoundedRectangle (r, 2.5f);
+        g.setColour (c.brighter (0.5f));
+        g.drawRoundedRectangle (r, 2.5f, (int) i == dragging ? 2.0f : 1.0f);
+        // a wrap round the end of the loop shows as a second piece at the start
+        if (n.start + n.length > beats + 1e-6)
+        {
+            auto w = juce::Rectangle<float> (a.getX(), r.getY(), (float) (n.start + n.length - beats) * bw, r.getHeight());
+            g.setColour (c.withAlpha (0.4f));
+            g.fillRoundedRectangle (w, 2.5f);
+        }
+    }
+    if (notes.empty())
+    {
+        g.setColour (th.textDim);
+        g.setFont (hubFont (15.0f));
+        g.drawText ("The loop is empty: click to draw notes, or record from a MIDI keyboard (L)", a, juce::Justification::centred);
+    }
+    // the playhead
+    if (shownPos >= 0.0)
+    {
+        g.setColour (th.text);
+        g.fillRect (a.getX() + (float) shownPos * a.getWidth() - 1.0f, a.getY(), 2.0f, a.getHeight());
+    }
+    g.setColour (th.outline);
+    g.drawRect (a, 1.0f);
 }
 
 //==============================================================================
 MasterFxPanel::MasterFxPanel (HubEngine& e) : engine (e)
 {
-    for (auto* k : { &room, &tone, &glue, &warmth, &width }) addAndMakeVisible (k);
+    for (auto* k : { &room, &tone, &glue, &warmth, &width, &pump, &vinyl }) addAndMakeVisible (k);
     load();
     room.knob.setDoubleClickReturnValue (true, 0.5);
     room.knob.onValueChange = [this] { engine.masterRoom = (float) room.knob.getValue(); };
@@ -1749,10 +2057,13 @@ MasterFxPanel::MasterFxPanel (HubEngine& e) : engine (e)
     glue.knob.onValueChange = [this] { engine.masterGlue = (float) glue.knob.getValue(); };
     warmth.knob.onValueChange = [this] { engine.masterWarmth = (float) warmth.knob.getValue(); };
     width.knob.onValueChange = [this] { engine.masterWidth = (float) (width.knob.getValue() * 2.0); };
+    pump.knob.onValueChange = [this] { engine.masterPump = (float) pump.knob.getValue(); };
+    vinyl.knob.onValueChange = [this] { engine.masterVinyl = (float) vinyl.knob.getValue(); };
     resetButton.setTooltip ("Back to a clean master");
     resetButton.onClick = [this]
     {
         engine.masterRoom = 0.5f; engine.masterTone = 0.0f; engine.masterGlue = 0.0f; engine.masterWarmth = 0.0f; engine.masterWidth = 1.0f;
+        engine.masterPump = 0.0f; engine.masterVinyl = 0.0f;
         load();
     };
     addAndMakeVisible (resetButton);
@@ -1766,6 +2077,8 @@ void MasterFxPanel::load()
     glue.knob.setValue (engine.masterGlue.load(), juce::dontSendNotification);
     warmth.knob.setValue (engine.masterWarmth.load(), juce::dontSendNotification);
     width.knob.setValue (engine.masterWidth.load() * 0.5, juce::dontSendNotification);
+    pump.knob.setValue (engine.masterPump.load(), juce::dontSendNotification);
+    vinyl.knob.setValue (engine.masterVinyl.load(), juce::dontSendNotification);
 }
 
 void MasterFxPanel::timerCallback()
@@ -1799,8 +2112,8 @@ void MasterFxPanel::resized()
     auto head = r.removeFromTop (22);
     resetButton.setBounds (head.removeFromRight (60).reduced (0, 1));
     r.removeFromTop (4);
-    const int w = r.getWidth() / 5;
-    for (auto* k : { &room, &tone, &glue, &warmth, &width }) k->setBounds (r.removeFromLeft (w).reduced (4, 0));
+    const int w = r.getWidth() / 7;
+    for (auto* k : { &room, &tone, &glue, &warmth, &width, &pump, &vinyl }) k->setBounds (r.removeFromLeft (w).reduced (4, 0));
 }
 
 //==============================================================================
@@ -1894,7 +2207,7 @@ std::vector<Tutorial::Step> HubMain::tutorialSteps()
                    "The cat bounces when it plays and NOW PLAYING shows the chord or notes.",
                    [this] { if (auto* r = rack->getRow (0)) return r->isShowing() ? boundsOf (*r) : juce::Rectangle<int>(); return juce::Rectangle<int>(); } });
     s.push_back ({ "Play the pads", "These are Chord-Cat's chords. The song steps through them; hold one with the mouse or the keys 1-8 to play it yourself.", at (pads) });
-    s.push_back ({ "Advanced mode", "Shows effects (filter, drive, chorus, echo, crush), lets you put Patt-, Bend- or Orbit-Cat on a part as an effect, "
+    s.push_back ({ "Advanced mode", "Shows effects (filter, drive, chorus, echo, crush, phaser, tremolo), lets you put Patt-, Bend- or Orbit-Cat on a part as an effect, "
                    "use Glide-, Sing- or Talk-Cat as the sound, and add more parts.", at (advancedButton) });
     s.push_back ({ "Every Cat's window", "Each Cat has its own tab up here with all of its settings. Settings has themes, your sound card and this tour.",
                    [this] { return boundsOf (tabs.getTabbedButtonBar()); } });
@@ -2102,6 +2415,7 @@ bool HubMain::keyPressed (const juce::KeyPress& key)
     if (key == juce::KeyPress (juce::KeyPress::F11Key)) { toggleFullScreen(); return true; }
     if (key.getModifiers().isCommandDown() && (key.getKeyCode() == 'Z' || key.getKeyCode() == 'z')) { undo(); return true; }
     if (! key.getModifiers().isAnyModifierKeyDown() && (key.getKeyCode() == 'L' || key.getKeyCode() == 'l')) { toggleLoopRecord(); return true; }
+    if (! key.getModifiers().isAnyModifierKeyDown() && (key.getKeyCode() == 'P' || key.getKeyCode() == 'p')) { showLoopEditor(); return true; }
     if (key.getModifiers().isCommandDown() && (key.getKeyCode() == 'S' || key.getKeyCode() == 's')) { saveJam(); return true; }
     if (key.getModifiers().isCommandDown() && (key.getKeyCode() == 'O' || key.getKeyCode() == 'o')) { openJam(); return true; }
     if (key == juce::KeyPress::escapeKey)

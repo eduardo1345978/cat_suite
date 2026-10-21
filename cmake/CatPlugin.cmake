@@ -125,3 +125,50 @@ function(cat_add_synth_plugin target)
             juce::juce_recommended_lto_flags
             juce::juce_recommended_warning_flags)
 endfunction()
+
+# An audio effect (Echo-Cat): audio in -> audio out, no MIDI.
+function(cat_add_fx_plugin target)
+    cmake_parse_arguments(ARG "" "PRODUCT_NAME;PLUGIN_CODE;DESCRIPTION;CATEGORIES" "SOURCES" ${ARGN})
+    _cat_formats(_formats FALSE)
+
+    juce_add_plugin(${target}
+        VERSION                    1.0.0
+        COMPANY_NAME               "Cat Suite"
+        BUNDLE_ID                  "com.catsuite.${target}"
+        PLUGIN_MANUFACTURER_CODE   CatS
+        PLUGIN_CODE                ${ARG_PLUGIN_CODE}
+        PRODUCT_NAME               "${ARG_PRODUCT_NAME}"
+        DESCRIPTION                "${ARG_DESCRIPTION}"
+        FORMATS                    ${_formats}
+        IS_SYNTH                   FALSE
+        IS_MIDI_EFFECT             FALSE
+        NEEDS_MIDI_INPUT           FALSE
+        NEEDS_MIDI_OUTPUT          FALSE
+        EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+        VST3_CATEGORIES            Fx Delay Reverb
+        COPY_PLUGIN_AFTER_BUILD    ${CAT_COPY_AFTER_BUILD})
+
+    target_sources(${target} PRIVATE ${ARG_SOURCES})
+    target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source)
+    target_compile_features(${target} PRIVATE cxx_std_20)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /utf-8)
+    endif()
+
+    target_compile_definitions(${target}
+        PUBLIC
+            JUCE_WEB_BROWSER=0
+            JUCE_USE_CURL=0
+            JUCE_VST3_CAN_REPLACE_VST2=0
+            JUCE_DISPLAY_SPLASH_SCREEN=0
+            CAT_INSTRUMENT_MODE=0)
+
+    target_link_libraries(${target}
+        PRIVATE
+            cat_shared
+            juce::juce_audio_utils
+        PUBLIC
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_lto_flags
+            juce::juce_recommended_warning_flags)
+endfunction()

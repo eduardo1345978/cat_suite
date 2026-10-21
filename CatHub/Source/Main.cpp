@@ -323,7 +323,81 @@ static int runSelfTest (const juce::StringArray& args)
         engine.undoLoopTake();
         renderBlocks (2);
         check (engine.getLoopNotes() == 0, "loop recorder: undo removes the last take");
+
+        // the piano roll: notes in, the same notes out, they play, a saved jam keeps them, and the roll can draw
+        {
+            std::vector<HubEngine::LoopNote> drawn = { { 0.0, 0.5, 64, 0.8f, 7 }, { 1.0, 1.0, 67, 0.6f, 7 }, { 3.75, 0.5, 71, 0.9f, 7 } };
+            engine.setLoopNoteList (drawn);
+            renderBlocks (2);
+            const auto back = engine.getLoopNoteList();
+            bool same = back.size() == drawn.size();
+            for (size_t i = 0; same && i < back.size(); ++i)
+                same = std::abs (back[i].start - drawn[i].start) < 1e-6 && std::abs (back[i].length - drawn[i].length) < 1e-6 && back[i].pitch == drawn[i].pitch;
+            check (same && engine.getLoopNotes() == 3, "piano roll: the loop gives back the notes drawn (incl. one round the loop's end)");
+            bool heard64 = false;
+            if (kt >= 0)
+            {
+                engine.track (kt).takeNotes();
+                for (int i = 0; i < 220 && ! heard64; ++i) { renderBlocks (1); for (int nn : engine.track (kt).takeNotes()) heard64 = heard64 || nn == 64; }
+            }
+            check (heard64, "piano roll: drawn notes play in the loop");
+            const auto saved = engine.saveState();
+            engine.setLoopNoteList ({});
+            engine.restoreState (saved);
+            check (engine.getLoopNoteList().size() == 3 && engine.loopBars.load() == 1, "a saved jam keeps the loop");
+            {
+                LoopEditor roll (engine);
+                roll.setSize (900, 420);
+                roll.addNoteAt (2.3, 60);
+                check (engine.getLoopNoteList().size() == 4 && std::abs (roll.getNotes().back().start - 2.25) < 1e-6,
+                       "piano roll: a click draws a note on the 1/16 grid");
+                roll.quantize();
+                bool onGrid = true;
+                for (auto& nt : engine.getLoopNoteList()) onGrid = onGrid && std::abs (nt.start * 4.0 - std::round (nt.start * 4.0)) < 1e-6;
+                check (onGrid, "piano roll: quantize");
+                roll.clearButton.onClick();
+                renderBlocks (2);
+                check (engine.getLoopNotes() == 0, "piano roll: clear");
+            }
+        }
         engine.loopBars = 4;
+    }
+
+    // the new effects: phaser and tremolo on every part, pump and vinyl on the master - loud, finite, saved
+    {
+        juce::AudioBuffer<float> b (2, block);
+        auto energyOf = [&] (int blocks)
+        {
+            double e = 0.0;
+            float pk = 0.0f;
+            bool fin = true;
+            for (int i = 0; i < blocks; ++i)
+            {
+                engine.render (b.getWritePointer (0), b.getWritePointer (1), block);
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int k = 0; k < block; ++k)
+                    {
+                        const float v = b.getSample (ch, k);
+                        fin = fin && std::isfinite (v);
+                        pk = juce::jmax (pk, std::abs (v));
+                        e += (double) v * v;
+                    }
+            }
+            return std::make_tuple (e, pk, fin);
+        };
+        for (int i = 0; i < engine.getNumTracks(); ++i) { engine.track (i).phaser = 1.0f; engine.track (i).tremolo = 1.0f; }
+        engine.masterPump = 1.0f;
+        engine.masterVinyl = 1.0f;
+        auto [e1, pk1, fin1] = energyOf (300);
+        check (fin1 && pk1 <= 1.0f && e1 > 1.0, "phaser + tremolo + pump + vinyl all on: peak " + juce::String (pk1, 2) + ", still playing");
+        const auto saved = engine.saveState();
+        for (int i = 0; i < engine.getNumTracks(); ++i) { engine.track (i).phaser = 0.0f; engine.track (i).tremolo = 0.0f; }
+        engine.masterPump = 0.0f; engine.masterVinyl = 0.0f;
+        engine.restoreState (saved);
+        check (engine.masterPump.load() > 0.99f && engine.masterVinyl.load() > 0.99f && engine.getNumTracks() > 0
+               && engine.track (0).phaser.load() > 0.99f && engine.track (0).tremolo.load() > 0.99f, "a saved jam keeps phaser, tremolo, pump and vinyl");
+        for (int i = 0; i < engine.getNumTracks(); ++i) { engine.track (i).phaser = 0.0f; engine.track (i).tremolo = 0.0f; }
+        engine.masterPump = 0.0f; engine.masterVinyl = 0.0f;
     }
 
     // stop: everything should fade out (no hanging notes in the built-in synths)
@@ -586,6 +660,33 @@ public:
                 snap ("compose");
                 m.selectTab (0);
                 snap ("song_rack");
+                {
+                    // the piano roll and the master effects
+                    e.loopBars = 2;
+                    std::vector<HubEngine::LoopNote> mel;
+                    const int line[] = { 60, 64, 67, 72, 71, 67, 64, 62, 60, 62, 64, 67, 69, 67, 65, 64 };
+                    for (int k = 0; k < 16; ++k) mel.push_back ({ k * 0.5, k % 4 == 3 ? 1.0 : 0.5, line[k], 0.5f + 0.03f * k, 1 });
+                    for (int k = 0; k < 4; ++k) mel.push_back ({ k * 2.0, 2.0, 48 + (k % 2) * 5, 0.6f, 2 });
+                    e.setLoopNoteList (mel);
+                    for (int i = 0; i < 40; ++i) e.render (l.data(), r.data(), 512);
+                    juce::PNGImageFormat png;
+                    auto save = [&] (juce::Component& c, const juce::String& name)
+                    {
+                        auto f = out.getSiblingFile (out.getFileNameWithoutExtension() + "_" + juce::String (shot++) + "_" + name + ".png");
+                        f.deleteFile();
+                        if (auto os = f.createOutputStream()) png.writeImageToStream (c.createComponentSnapshot (c.getLocalBounds()), *os);
+                    };
+                    LoopEditor roll (e);
+                    roll.setSize (980, 480);
+                    roll.setLookAndFeel (&m.getLookAndFeel());
+                    save (roll, "pianoroll");
+                    roll.setLookAndFeel (nullptr);
+                    MasterFxPanel fx (e);
+                    fx.setSize (540, 130);
+                    fx.setLookAndFeel (&m.getLookAndFeel());
+                    save (fx, "masterfx");
+                    fx.setLookAndFeel (nullptr);
+                }
                 for (int th = 1; th < (int) themes().size(); ++th) { m.applyTheme (th); snap ("theme" + juce::String (th)); }
                 m.applyTheme (0);
             }

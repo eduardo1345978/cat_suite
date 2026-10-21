@@ -154,6 +154,8 @@ struct TrackFxSettings
 {
     float filter = 0.0f;   // 0 = open .. 1 = dark low-pass
     float drive = 0.0f, chorus = 0.0f, delay = 0.0f, crush = 0.0f;
+    float phaser = 0.0f;     // a slow sweeping phaser
+    float tremolo = 0.0f;    // volume pulsing in 1/8 notes, the two sides a little apart
     double bpm = 100.0;
 };
 
@@ -172,6 +174,8 @@ private:
     float chPh = 0, dlLp = 0, dlLpR = 0, dlSmooth = 0;
     float holdL = 0, holdR = 0;
     int holdCount = 0;
+    std::array<float, 6> apL {}, apR {};
+    float phPh = 0, phFbL = 0, phFbR = 0, trPh = 0;
 };
 
 } // namespace hub

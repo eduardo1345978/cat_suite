@@ -54,7 +54,7 @@ struct Track
 {
     std::atomic<int> source { SrcChords }, midiFx { FxNone }, sound { SndPad };
     std::atomic<float> volume { 0.75f }, pan { 0.5f }, reverb { 0.15f };
-    std::atomic<float> filter { 0.0f }, drive { 0.0f }, chorus { 0.0f }, delay { 0.0f }, crush { 0.0f };
+    std::atomic<float> filter { 0.0f }, drive { 0.0f }, chorus { 0.0f }, delay { 0.0f }, crush { 0.0f }, phaser { 0.0f }, tremolo { 0.0f };
     std::atomic<bool> mute { false }, solo { false };
     std::atomic<float> meter { 0.0f };
     std::atomic<double> energy { 0.0 };                 // self test
@@ -84,15 +84,20 @@ struct Track
     run them through a MIDI-effect Cat (Patt / Bend / Orbit), plays them with a built-in sound or
     a sound Cat (Glide / Sing / Talk), then filter, drive, chorus, echo, crush, room, pan, volume.
 */
-/** The master bus: tone (tilt EQ), glue (a gentle compressor), warmth (tape-like saturation), width. */
+/** The master bus: tone (tilt EQ), glue (a gentle compressor), warmth (tape-like saturation), width,
+    pump (the mix ducks on every beat, like a side-chained kick) and vinyl (crackle, hiss, a softer top). */
 struct MasterFx
 {
     void prepare (double sampleRate);
     void process (float* l, float* r, int n, float tone, float glue, float warmth, float width);
+    /** beat = the song position (in beats) at the block start; beatsPerSample its speed; playing = false: no pump. */
+    void processPumpAndVinyl (float* l, float* r, int n, float pump, float vinyl, double beat, double beatsPerSample, bool playing);
     float gainReduction() const noexcept { return lastReduction; }
 private:
     double sr = 48000.0;
     float lpL = 0, lpR = 0, env = 0, gain = 1.0f, lastReduction = 0;
+    float pumpGain = 1.0f, vinLpL = 0, vinLpR = 0, crackle = 0;
+    juce::uint32 noise = 0x1234567u;
 };
 
 class HubEngine : public juce::AudioIODeviceCallback, public juce::MidiInputCallback
@@ -128,7 +133,8 @@ public:
     std::atomic<bool> autoChords { true };
     std::atomic<float> masterVolume { 0.8f };
     // the master effects (Master FX button)
-    std::atomic<float> masterRoom { 0.5f }, masterTone { 0.0f }, masterGlue { 0.0f }, masterWarmth { 0.0f }, masterWidth { 1.0f };
+    std::atomic<float> masterRoom { 0.5f }, masterTone { 0.0f }, masterGlue { 0.0f }, masterWarmth { 0.0f }, masterWidth { 1.0f },
+                       masterPump { 0.0f }, masterVinyl { 0.0f };
     float getMasterReduction() const noexcept { return masterReduction.load(); }
 
     //==== a MIDI keyboard: notes from every enabled MIDI input play one track (-1 = the Lead, or the first keys track)
@@ -143,6 +149,13 @@ public:
     void undoLoopTake() noexcept { loopUndoRequest = true; }
     int getLoopNotes() const noexcept { return loopNotesShown.load(); }
     double getLoopPosition() const noexcept { return loopPosShown.load(); }   // 0..1 through the loop
+    /** The loop as notes, for the piano roll (message thread). start / length in beats inside the loop. */
+    struct LoopNote { double start = 0.0, length = 0.5; int pitch = 60; float velocity = 0.8f; int take = 0; };
+    std::vector<LoopNote> getLoopNoteList() const;
+    /** Replaces the loop with these notes (the piano roll's edits). */
+    void setLoopNoteList (const std::vector<LoopNote>&);
+    /** A new take number for notes drawn in the piano roll ("Undo the last take" removes them together). */
+    int newLoopTake();
     /** Plays a note from the screen / tests as if it came from a keyboard. */
     void playKeyboardNote (const juce::MidiMessage& m) { if (prepared) liveMidiIn.addMessageToQueue (m); }
     void setLivePad (int pad) noexcept { livePad.store (pad); }
@@ -257,6 +270,8 @@ private:
     std::atomic<bool> loopRecording { false }, loopClearRequest { false }, loopUndoRequest { false };
     std::atomic<double> loopPosShown { 0.0 };
     int loopTake = 0;
+    mutable juce::SpinLock loopLock;                   // the piano roll reads / replaces loopEvents (briefly)
+    std::atomic<bool> loopPanicRequest { false };
     std::array<bool, 128> loopHeld {};
     void runLoop (int n, double samplesPerBeat, juce::MidiBuffer& out, bool playingNow);
     int pickKeyboardTrack() const;

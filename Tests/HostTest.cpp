@@ -1731,6 +1731,40 @@ void testCatLink2()
     check (reacting > plain, "Drum-Cat answers Life-Cat's births and deaths");
 }
 
+/** Echo-Cat: the audio effect loads as a VST3 effect, and a click comes back as an echo on time. */
+void testEchoCat()
+{
+    std::cout << "\n== Echo-Cat ==" << std::endl;
+    auto echo = loadPlugin (ECHOCAT_VST3);
+    if (echo == nullptr) { ++failures; return; }
+    check (! echo->acceptsMidi() && echo->getTotalNumInputChannels() >= 1 && echo->getTotalNumOutputChannels() == 2, "Echo-Cat is an audio effect (audio in and out)");
+    check (echo->getNumPrograms() >= 12, "Echo-Cat has its presets as programs");
+    echo->setCurrentProgram (0);                         // Dotted Eighth: 1/8 dotted = 375 ms at 120 BPM
+    echo->prepareToPlay (sampleRate, blockSize);
+    const int total = (int) (sampleRate * 1.2);
+    juce::AudioBuffer<float> all (2, total);
+    all.clear();
+    all.setSample (0, 64, 1.0f);
+    all.setSample (1, 64, 1.0f);
+    juce::MidiBuffer midi;
+    for (int pos = 0; pos < total; pos += blockSize)
+    {
+        const int n = juce::jmin (blockSize, total - pos);
+        juce::AudioBuffer<float> block (2, n);
+        for (int ch = 0; ch < 2; ++ch) block.copyFrom (ch, 0, all, ch, pos, n);
+        echo->processBlock (block, midi);
+        for (int ch = 0; ch < 2; ++ch) all.copyFrom (ch, pos, block, ch, 0, n);
+    }
+    int best = 2000;
+    float bestV = 0.0f;
+    for (int i = 2000; i < total; ++i)
+        if (std::abs (all.getSample (0, i)) + std::abs (all.getSample (1, i)) > bestV) { bestV = std::abs (all.getSample (0, i)) + std::abs (all.getSample (1, i)); best = i; }
+    const int expect = 64 + (int) std::round (0.375 * sampleRate);
+    std::cout << "  echo at sample " << best << " (expected " << expect << "), level " << bestV << std::endl;
+    check (std::abs (best - expect) < 8 && bestV > 0.2f, "Echo-Cat: a click comes back after 375 ms (1/8 dotted at 120 BPM)");
+    echo->releaseResources();
+}
+
 int main()
 {
     juce::ScopedJuceInitialiser_GUI juceInit;
@@ -1750,6 +1784,7 @@ int main()
     testTalkCatSinger();
     testLifeCat();
     testCatLink2();
+    testEchoCat();
 
     std::cout << "\n" << (failures == 0 ? "ALL TESTS PASSED" : juce::String (failures) + " TEST(S) FAILED") << std::endl;
     return failures == 0 ? 0 : 1;
