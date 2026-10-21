@@ -497,7 +497,7 @@ void testCommandsAndLife (const juce::File& outDir)
 
     // genes pull the music: make every fish like A at 120 bpm
     for (auto& f : sim.fish) { f.genes.key = 9; f.genes.tempo = 128.0f; }
-    for (int s = 0; s < 60 * 12 && music.currentKey() != 9; ++s) engine.runFrames (30);
+    for (int s = 0; s < 60 * 20 && music.currentKey() != 9; ++s) engine.runFrames (30);   // a fifth per new song: up to a few songs
     check (music.currentKey() == 9, "music: the key moves to the one the fish like (now " + cat::muse::keyName (music.currentKey()) + ")");
     const double bpmBefore = music.currentBpm();
     for (int s = 0; s < 60 * 6; ++s) engine.runFrames (30);
