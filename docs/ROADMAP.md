@@ -6,7 +6,7 @@ then copy changed files to the PC (D:\Projekty\vst_plugin) and run build_and_ins
 ## 0. In progress
 - [x] Cat Ocean: black text in the key / channel / host / console boxes (were white on white)
 - [x] Cat Ocean: underwater reverb over the whole mix, slider + `/reverb 0-100`
-- [ ] Reverb default changes with the place (cave / ice / trench = big, lagoon / sky = small); the slider is the amount on top
+- [x] Reverb default changes with the place (cave / ice / trench = big, lagoon / sky = small); the slider is the amount on top
 
 ## 1. FIRST: Cat Ocean chat + going live (user: "chat never connected", stream didn't show in Studio)
 - [ ] Check the chat reader end to end against a real live stream; clearer status lines (why it isn't connected)

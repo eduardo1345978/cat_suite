@@ -443,7 +443,10 @@ void Music::render (float* l, float* r, int n, Sim& sim)
     for (int i = 0; i < n; ++i) { l[i] += fl[i] * 0.4f; r[i] += fr[i] * 0.4f; }
     // the underwater space: everything sent into one big soft reverb (the amount glides, no jumps)
     if (spaceBuf.getNumSamples() < n) spaceBuf.setSize (2, n, false, false, true);
-    const float target = juce::jlimit (0.0f, 1.0f, space.load());
+    // the place shapes the space: caves and ice ring long, the lagoon and the open sea are drier
+    static const float placeSize[] = { 0.9f, 0.9f, 1.3f, 1.1f, 1.6f, 1.4f, 0.6f, 1.2f, 1.0f, 1.2f, 0.75f };
+    const int pl = juce::jlimit (0, (int) (sizeof (placeSize) / sizeof (placeSize[0])) - 1, sim.place);
+    const float target = juce::jlimit (0.0f, 1.0f, space.load() * placeSize[pl]);
     auto* sl = spaceBuf.getWritePointer (0);
     auto* sr2 = spaceBuf.getWritePointer (1);
     const float from = spaceNow, step = (target - from) / (float) juce::jmax (1, n);
