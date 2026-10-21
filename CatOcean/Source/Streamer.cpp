@@ -119,6 +119,16 @@ public:
                 for (auto& l : lines)
                 {
                     if (l.startsWith ("total_size=")) { owner.outBytes = l.fromFirstOccurrenceOf ("=", false, false).getLargeIntValue(); continue; }
+                    if (l.startsWith ("speed="))
+                    {
+                        const auto v = l.fromFirstOccurrenceOf ("=", false, false).trim().upToFirstOccurrenceOf ("x", false, false).getFloatValue();
+                        if (v > 0.0f)
+                        {
+                            owner.speed = v;
+                            owner.slowReports = v < 0.93f ? owner.slowReports.load() + 1 : 0;
+                        }
+                        continue;
+                    }
                     if (l.containsChar ('=') && ! l.containsChar (' ')) continue;   // other progress keys
                     if (l.trim().isEmpty()) continue;
                     owner.log << l << "\n";
@@ -155,7 +165,13 @@ public:
         const bool live = owner.target.startsWithIgnoreCase ("rtmp");
         const juce::String secs = juce::String (owner.sent.load() / 30) + " s";
         if (bytes > 0)
-            owner.setStatus ((live ? "LIVE - sending to YouTube (" : "recording (") + juce::String ((double) bytes / 1048576.0, 1) + " MB, " + secs + ")");
+        {
+            juce::String s ((live ? "LIVE - sending to YouTube (" : "recording (") + juce::String ((double) bytes / 1048576.0, 1) + " MB, " + secs + ")");
+            // ffmpeg can't keep up for a while: the smooth look costs the most, so suggest the sharp one
+            if (owner.slowReports.load() >= 3)
+                s << " - your PC is too slow" << (owner.smooth.load() ? ": pick Look: Pixel" : "") << " (speed " << juce::String (owner.speed.load(), 2) << "x)";
+            owner.setStatus (s);
+        }
         else if (owner.sent.load() > 0)
             owner.setStatus (live ? "ffmpeg is running, connecting to YouTube ..." : "recording ...");
     }
@@ -200,7 +216,7 @@ juce::File Streamer::findFFmpeg (const juce::String& savedPath)
     return {};
 }
 
-juce::StringArray Streamer::buildArgs (const juce::File& ffmpeg, const juce::String& target, int w, int h, int fps, int sr, int vp, int ap)
+juce::StringArray Streamer::buildArgs (const juce::File& ffmpeg, const juce::String& target, int w, int h, int fps, int sr, int vp, int ap, bool smoothLook)
 {
     juce::StringArray a;
     a.add (ffmpeg.getFullPathName());
@@ -213,7 +229,9 @@ juce::StringArray Streamer::buildArgs (const juce::File& ffmpeg, const juce::Str
     a.addArray ({ "-f", "s16le", "-ar", juce::String (sr), "-ac", "2",
                   "-i", "tcp://127.0.0.1:" + juce::String (ap) });
     a.addArray ({ "-map", "0:v", "-map", "1:a",
-                  "-vf", "scale=" + juce::String (w * 4) + ":" + juce::String (h * 4) + ":flags=neighbor,format=yuv420p",
+                  // smooth: xBR rounds the pixel edges (4x: 480 x 270 -> 1920 x 1080); else plain 4 x 4 blocks
+                  "-vf", smoothLook ? juce::String ("xbr=n=4,format=yuv420p")
+                                    : "scale=" + juce::String (w * 4) + ":" + juce::String (h * 4) + ":flags=neighbor,format=yuv420p",
                   "-c:v", "libx264", "-preset", "veryfast", "-b:v", "6000k", "-maxrate", "6000k", "-bufsize", "12000k",
                   "-g", juce::String (fps * 2), "-keyint_min", juce::String (fps * 2), "-sc_threshold", "0", "-r", juce::String (fps),
                   "-c:a", "aac", "-b:a", "160k", "-ar", juce::String (sr), "-ac", "2" });
@@ -231,6 +249,8 @@ bool Streamer::start (const juce::File& ffmpeg, const juce::String& target, int 
     dropped = 0;
     sent = 0;
     outBytes = -1;
+    speed = 0.0f;
+    slowReports = 0;
     this->target = target;
     { const juce::ScopedLock sl (lock); log.clear(); }
     if (! ffmpeg.existsAsFile()) { setStatus ("ffmpeg is missing - press \"Get ffmpeg\" first"); failed = true; return false; }
@@ -242,7 +262,7 @@ bool Streamer::start (const juce::File& ffmpeg, const juce::String& target, int 
     if (! video->listen (vp) || ! audio->listen (ap)) { setStatus ("couldn't open a local port for ffmpeg"); failed = true; return false; }
 
     process = std::make_unique<juce::ChildProcess>();
-    if (! process->start (buildArgs (ffmpeg, target, width, height, fps, sampleRate, vp, ap),
+    if (! process->start (buildArgs (ffmpeg, target, width, height, fps, sampleRate, vp, ap, smooth.load()),
                           juce::ChildProcess::wantStdOut | juce::ChildProcess::wantStdErr))
     {
         setStatus ("couldn't start ffmpeg");

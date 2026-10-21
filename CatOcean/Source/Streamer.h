@@ -34,7 +34,13 @@ public:
     /** Where ffmpeg is: the saved path, the app folder, or the PATH. */
     static juce::File findFFmpeg (const juce::String& savedPath);
     static juce::File defaultFFmpegFolder();
-    static juce::StringArray buildArgs (const juce::File& ffmpeg, const juce::String& target, int w, int h, int fps, int sr, int videoPort, int audioPort);
+    /** smooth: the pixels are scaled up with xBR (rounded, smooth edges); else as sharp pixel blocks. */
+    static juce::StringArray buildArgs (const juce::File& ffmpeg, const juce::String& target, int w, int h, int fps, int sr, int videoPort, int audioPort,
+                                        bool smooth = true);
+    /** The look of the stream (set before start): true = smooth (xBR), false = sharp pixels. */
+    std::atomic<bool> smooth { true };
+    /** ffmpeg's speed (1.0 = keeping up with real time), 0 = not known yet. */
+    float getSpeed() const noexcept { return speed.load(); }
 
 private:
     struct Sender;
@@ -50,7 +56,9 @@ private:
     std::atomic<bool> failed { false }, running { false };
     std::atomic<int> dropped { 0 };
     std::atomic<juce::int64> sent { 0 };
-    std::atomic<juce::int64> outBytes { -1 };   // what ffmpeg has written out (to YouTube / the file), from its progress report
+    std::atomic<juce::int64> outBytes { -1 };
+    std::atomic<float> speed { 0.0f };
+    std::atomic<int> slowReports { 0 };   // what ffmpeg has written out (to YouTube / the file), from its progress report
     juce::String target;
     int frameBytes = 0;
     friend class Watcher;

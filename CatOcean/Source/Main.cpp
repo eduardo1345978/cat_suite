@@ -168,6 +168,19 @@ public:
         for (int st = 0; st < NumStyles; ++st) musicBox.addItem (styleName (st), st + 1);
         for (int pl = 0; pl < NumPlaces; ++pl) placeBox.addItem (placeName (pl), pl + 1);
         timeBox.addItemList ({ "Real clock", "Day", "Sunset", "Night", "Sunrise" }, 1);
+        lookBox.addItemList ({ "Smooth (rounded edges)", "Pixel (sharp blocks)" }, 1);
+        lookBox.setSelectedId (props.getBoolValue ("smoothLook", true) ? 1 : 2, juce::dontSendNotification);
+        lookBox.setTooltip ("How the stream draws the pixels: smooth rounds the edges (needs a bit more CPU), pixel keeps sharp blocks."
+                            " A change shows here now and on YouTube the next time you go live.");
+        engine.streamer.smooth = lookBox.getSelectedId() == 1;
+        lookBox.onChange = [this]
+        {
+            const bool smooth = lookBox.getSelectedId() == 1;
+            engine.streamer.smooth = smooth;
+            props.setValue ("smoothLook", smooth);
+            props.saveIfNeeded();
+            repaint (previewArea);
+        };
         timeBox.setSelectedId (1, juce::dontSendNotification);
         musicBox.onChange = [this] { if (! updatingPickers) engine.console ("/music " + juce::String (styleInfo (musicBox.getSelectedId() - 1).word)); };
         placeBox.onChange = [this]
@@ -181,7 +194,8 @@ public:
             static const char* words[] = { "auto", "day", "sunset", "night", "sunrise" };
             engine.console (juce::String ("/time ") + words[juce::jlimit (0, 4, timeBox.getSelectedId() - 1)]);
         };
-        for (auto* b : { &musicBox, &placeBox, &timeBox }) addAndMakeVisible (b);
+        for (auto* b : { &musicBox, &placeBox, &timeBox, &lookBox }) addAndMakeVisible (b);
+        label (lookLabel, "Look", 13.0f, true);
         label (musicLabel, "Music", 13.0f, true);
         label (placeLabel, "Place", 13.0f, true);
         label (timeLabel, "Time", 13.0f, true);
@@ -249,8 +263,18 @@ public:
         g.setColour (juce::Colours::white.withAlpha (0.8f));
         g.drawRect (previewArea.expanded (2), 2);
         engine.copyFrame (frame);
-        g.setImageResamplingQuality (juce::Graphics::lowResamplingQuality);
-        g.drawImage (frame, previewArea.toFloat());
+        if (lookBox.getSelectedId() == 1 && frame.isValid())
+        {
+            // smooth: rounded pixel edges (Scale2x), then a soft scale to the preview
+            scale2x (frame, smoothFrame);
+            g.setImageResamplingQuality (juce::Graphics::mediumResamplingQuality);
+            g.drawImage (smoothFrame, previewArea.toFloat());
+        }
+        else
+        {
+            g.setImageResamplingQuality (juce::Graphics::lowResamplingQuality);
+            g.drawImage (frame, previewArea.toFloat());
+        }
         g.setColour (aero::inkDim);
         g.setFont (cat::catFont (12.0f));
         g.drawText ("This is what the stream shows (1920 x 1080 on YouTube)", previewArea.withY (previewArea.getBottom() + 4).withHeight (18),
@@ -307,6 +331,7 @@ public:
         pickRow (musicLabel, musicBox);
         pickRow (placeLabel, placeBox);
         pickRow (timeLabel, timeBox);
+        pickRow (lookLabel, lookBox);
         side.removeFromTop (4);
         hostLabel.setBounds (side.removeFromTop (20));
         hostEditor.setBounds (side.removeFromTop (28));
@@ -352,6 +377,33 @@ private:
                                   juce::dontSendNotification);
         else ffmpegStatus.setText (downloading, juce::dontSendNotification);
         statsLabel.setText (engine.stats(), juce::dontSendNotification);
+    }
+
+    /** Scale2x (EPX): doubles a pixel picture and rounds its diagonal edges - close to what the stream's xBR does. */
+    static void scale2x (const juce::Image& src, juce::Image& dst)
+    {
+        const int w = src.getWidth(), h = src.getHeight();
+        if (! dst.isValid() || dst.getWidth() != w * 2 || dst.getHeight() != h * 2) dst = juce::Image (juce::Image::ARGB, w * 2, h * 2, false);
+        const juce::Image::BitmapData in (src, juce::Image::BitmapData::readOnly);
+        juce::Image::BitmapData out (dst, juce::Image::BitmapData::writeOnly);
+        auto px = [&] (int x, int y) { x = juce::jlimit (0, w - 1, x); y = juce::jlimit (0, h - 1, y);
+                                       return *reinterpret_cast<const juce::uint32*> (in.getPixelPointer (x, y)); };
+        for (int y = 0; y < h; ++y)
+        {
+            auto* o0 = reinterpret_cast<juce::uint32*> (out.getLinePointer (y * 2));
+            auto* o1 = reinterpret_cast<juce::uint32*> (out.getLinePointer (y * 2 + 1));
+            for (int x = 0; x < w; ++x)
+            {
+                const auto p = px (x, y), a = px (x, y - 1), b = px (x + 1, y), c = px (x - 1, y), d = px (x, y + 1);
+                juce::uint32 e0 = p, e1 = p, e2 = p, e3 = p;
+                if (c == a && c != d && a != b) e0 = a;
+                if (a == b && a != c && b != d) e1 = b;
+                if (d == c && d != b && c != a) e2 = c;
+                if (b == d && b != a && d != c) e3 = d;
+                o0[x * 2] = e0; o0[x * 2 + 1] = e1;
+                o1[x * 2] = e2; o1[x * 2 + 1] = e3;
+            }
+        }
     }
 
     void save()
@@ -455,7 +507,7 @@ private:
     Engine& engine;
     juce::PropertiesFile& props;
     aero::LookAndFeel lnf;
-    juce::Image frame;
+    juce::Image frame, smoothFrame;
     juce::Rectangle<int> previewArea;
     juce::Label title, keyLabel, keyHint, channelLabel, streamStatus, chatStatus, ffmpegStatus, hostLabel, volumeLabel, statsLabel;
     juce::TextEditor keyEditor, channelEditor, hostEditor;
@@ -472,8 +524,8 @@ private:
     juce::String downloading;
     int ticks = 0, shownConsole = -1, historyPos = 0;
     bool restarting = false;
-    juce::Label consoleLabel, musicLabel, placeLabel, timeLabel;
-    juce::ComboBox musicBox, placeBox, timeBox;
+    juce::Label consoleLabel, musicLabel, placeLabel, timeLabel, lookLabel;
+    juce::ComboBox musicBox, placeBox, timeBox, lookBox;
     bool updatingPickers = false;
     juce::TextEditor consoleLog, consoleInput;
     juce::StringArray history;

@@ -66,6 +66,26 @@ void testFilter()
     check (filter::cleanName ("ThisNameIsWayTooLongForAFish", 1).length() <= 16, "names: at most 16 letters");
 }
 
+void testLook()
+{
+    // the stream's look: smooth = xBR 4x (480 x 270 -> 1920 x 1080), pixel = sharp 4 x 4 blocks
+    const auto smooth = Streamer::buildArgs (juce::File ("ffmpeg"), "out.mp4", 480, 270, 30, 48000, 1, 2, true).joinIntoString (" ");
+    const auto sharp = Streamer::buildArgs (juce::File ("ffmpeg"), "out.mp4", 480, 270, 30, 48000, 1, 2, false).joinIntoString (" ");
+    check (smooth.contains ("xbr=n=4") && ! smooth.contains ("neighbor") && sharp.contains ("scale=1920:1080:flags=neighbor"),
+           "look: smooth streams scale with xBR, pixel with sharp blocks");
+    // a real ffmpeg (if there is one) knows the xbr filter
+    const auto ff = Streamer::findFFmpeg ({});
+    if (ff.existsAsFile())
+    {
+        juce::ChildProcess p;
+        if (p.start (juce::StringArray { ff.getFullPathName(), "-hide_banner", "-filters" }))
+        {
+            const auto list = p.readAllProcessOutput();
+            check (list.contains (" xbr "), "look: this ffmpeg has the xbr filter (" + ff.getFullPathName() + ")");
+        }
+    }
+}
+
 void testChatReader()
 {
     check (YouTubeChat::videoIdFrom ("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=10") == "dQw4w9WgXcQ", "chat: video id from a watch link");
@@ -621,6 +641,7 @@ int runSelfTest (const juce::File& outDir)
 {
     outDir.createDirectory();
     testFilter();
+    testLook();
     testChatReader();
     testGenes();
     testAllLooks (outDir);
