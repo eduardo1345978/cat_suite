@@ -65,29 +65,43 @@ then copy changed files to the PC (D:\Projekty\vst_plugin) and run build_and_ins
 - [ ] Mac version: later
 - [ ] Linux: publish Linux builds too (VST3 + apps) on GitHub (user asked 21 Oct; everything already builds and is tested on Linux)
 
-## 10. Cat Box (hardware groovebox) - TOP PRIORITY this month (questionnaire 4, 22 Oct 2026)
-User's words: Cat Box must be FUN to play, not "click and it generates music for me". No generators in the box.
+## 10. Cat Box (hardware groovebox) - TOP PRIORITY (questionnaires 4 + 5, 22 Oct 2026)
+User's words: FUN, a "toy-engineering" instrument, not a soulless music-spitting machine. No generators.
+Loops are SECONDARY; the heart is SOUND DESIGN: turning knobs live, sampling with a mic, modifying, playing
+with sound, making chord progressions like the Telepathic Instruments Orchid. Plays it outside / at a friend's.
 Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC (CatBox/, build_catbox.bat).
-- [x] Step 1: engine on the PC + CI for Raspberry Pi (ARM64) and Windows, presets, memory, --kiosk, --selftest
-- [x] Cat Box 2: generators out; drum step sequencer (16 drums x 16/32/64 steps) + live Rec; 303-style bass
-      step sequencer (note / slide / accent) + live Rec; own Acid synth; English screen; light / dark screen; tempo 40-240
-- [ ] NEXT: get it running on the Pi 5 with sound (user has the Pi 5 8 GB; ask what else is at home)
-- [ ] Pico firmware: encoders WITH push, RGB pads, buttons -> USB MIDI ch 16 (map in CatBox/README.md)
-- [ ] Sounds: more instruments, up to 8 at once (Glide-Cat pad, Sing-Cat choir, Talk-Cat voice, piano, sampler, lead synth)
-      and Cat Box's own synth engine; Arp sounds: supersaw, acid 303, strings (pluck, chip, glass bell, e-piano exist)
-- [ ] Master FX: reverb, delay, sidechain pump, vinyl, tape, filter sweep, bitcrush
-- [ ] Performance FX on the pads (stutter, roll, sweep while held)
-- [ ] Scenes: one pad saves / recalls all instruments at once (song mode: NO, a loop is enough)
-- [ ] Bass follows the Arp's chord (with a switch); bass chord pads with all 80 Chord-Cat chord types
-- [ ] Key from Chord-Cat over Cat Link when at the PC; tempo sync with Cubase; presets PC <-> box; record the jam to WAV on a USB stick
-- [ ] Updates over WiFi
-- [ ] Cat Box as a VST3 in Cubase; bigger PC window with more on screen
-- [ ] Velocity pads (FSR) right away in the hardware
-- Hardware answers: flat groovebox (not a cube), 3D printed, black, no cat ears, 5" display, encoders with push,
-  RGB pads, mains power (battery: maybe later), small built-in speaker, 2x jack L/R + headphones + mic/line in + MIDI DIN in/out,
-  soldering together with someone, budget 200 EUR -> cheap first version (sound, display, knobs, pads), mic / MIDI DIN /
-  speaker in a second wave; cheap parts rather than ready modules; first playable version by Christmas
-- Screen: knob values, sound picture, pattern steps; English; dark + light; no dancing cat; no phone control; not a Cat Hub controller
+- [x] Step 1: engine on PC + CI for Raspberry Pi (ARM64) and Windows, presets, memory, --kiosk, --selftest
+- [x] Cat Box 2: step sequencers (drums 16 x 64, 303 bass), live Rec, Acid synth, English screen, light/dark
+- [x] Cat Box 3: FX page (reverb sends, room, echo, pump + target, DJ filter, tape, vinyl, crush, glue, width),
+      16 performance pads, Scene button (16 scenes, at the next bar), Arp Supersaw + Acid, Arp on/off (plain synth),
+      Bass follows Arp, Steps per page (fixed "arp doesn't work"), short arp taps sound at once, simpler screen
+      with spectrum, PC pads 8 x 2, buttons: Play(Shift=Tap) Steps(Shift=Clear) Shift Scene Instr Oct- Oct+ Rec
+- [ ] NEXT hardware: get it running on the Pi 5 (user HAS: Pi 5 8 GB, 27 W supply, micro SD, HDMI monitor,
+      keyboard + mouse, a USB sound card; wants HiFiBerry DAC later) - walk him through setup_pi.sh
+- [ ] SOUND DESIGN (most important next software):
+      - Lead synth (first new instrument), then Sampler (record with a mic in the box; play it in tones AND chop to pads)
+      - Cat Box synth engine "everything possible": oscillators, filters, envelopes, LFOs, mod matrix; designable Acid
+      - Chord pads like Orchid: one finger = a chord, all 80 Chord-Cat chord types, progressions
+      - Arp: melodic step sequencer, 32 steps, glide, Rec, cutoff + resonance; sounds: vocal/choir, kalimba, flute, guitar, pad
+      - Bass: Sub 808, Reese, Slap, Double bass, FM, Wobble + tempo-synced wobble LFO; live transpose with a pad; bass as a lead
+      - Up to 8 instruments (Glide-Cat pad, Sing-Cat choir, piano, sampler, lead synth, 2nd drums, percussion; NO Talk-Cat);
+        own button per instrument (and an encoder to switch)
+- [ ] Drums: some sounds are bad (ask which), 16+ kits, 808 with slide, snap, conga/bongo, tambourine, cat sounds,
+      own samples; per-drum pitch + decay; choke groups; roll/ratchet per step; per-drum loop length (polyrhythm);
+      step velocity by knob; Fill button (recorded fill); 16 drum patterns switched with pads at the end of the bar;
+      microtiming later
+- [ ] Playing: quantize knob (only when switched on), metronome click + 1-bar count-in when recording,
+      multi-step Undo, copy / paste pattern or bar, "mutate" button (small changes to MY pattern), sleep after 30 min
+- [ ] FX: knob automation recorded into the pattern; mixer page (volume, pan, mute)
+- [ ] Presets: banks A, B, C...; names typed on the PC, sent to the box (box <-> PC link); backups by hand
+- [ ] Screen: still simpler; big preset name, spectrum, mixer, gentle animations, modern clean font, no touch
+- [ ] PC: tempo follows Cubase; Cat Box as a VST3 used as a link between box and Cubase; preset library window
+- [ ] Hardware: pads 8 x 2 (big rubber, need advice which), 12 encoders with push (push action: decide later),
+      joystick (pitch / mod), slider (crossfader / DJ filter), NO knob LEDs, Mute button, fewer buttons (more via Shift),
+      flat 25 cm tilted case, 3D printed by the user (he has a printer, designs it in Tinkercad / Fusion), black;
+      needs advice where to buy parts; first playable version by Christmas; budget 200 EUR first wave
+- Name: user wants name ideas, does not have to be about cats
+- Not wanted now: WAV recording (records through the jack), MIDI export, phone control, Talk-Cat in the box
 
 ## 11. Other answers from questionnaire 4
 - Default theme in all Cats: Dark. No animated cat mascot in the plug-ins. Installer .exe with checkboxes: yes, now.

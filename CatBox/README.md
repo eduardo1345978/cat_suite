@@ -1,9 +1,9 @@
 # Cat Box
 
 A groovebox you play yourself: **Drums** (a step sequencer, 16 drums x 16 / 32 / 64 steps), **Arp**
-(an arpeggiator like the Behringer Poly D's, with a 16-step rhythm pattern) and **Bass** (a 303-style
-step sequencer with its own Acid synth). All three play together at one tempo, in one key.
-Nothing is generated: you draw the steps or play them in with Rec.
+(an arpeggiator like the Behringer Poly D's with a 16-step rhythm, or a plain synth), **Bass** (a
+303-style step sequencer with its own Acid synth) and **FX** (master effects and performance pads).
+Everything plays together at one tempo, in one key. Nothing is generated: you draw the steps or play them in.
 
 The same program runs in two places:
 
@@ -23,43 +23,46 @@ The same program runs in two places:
 
 | | What it does |
 |---|---|
-| **12 knobs** | the sound of the instrument on screen; with **Shift** held a second layer (key, scale, effects, master) |
-| **16 pads** | Drums: play the drums (the last one hit is the *selected drum*) · Arp: notes of the scale, the arp plays what you hold · Bass: notes of the scale |
-| **Play** | start / stop (the arp also runs while stopped when you hold notes) |
-| **Steps** | the pads become 16 steps. Drums: steps of the selected drum (tap: on > accent > off) · Arp: on > rest > tie > accent · Bass: tap an empty step = set it (last note you played), tap a set step = pick it, tap the picked step = clear; knobs 2 / 3 / 4 edit the picked step's note / slide / accent |
+| **12 knobs** | the sound of the page on screen; with **Shift** held a second layer (key, scale, effects, master) |
+| **16 pads** (2 rows of 8) | Drums: play the drums (the last one hit is the *selected drum*) · Arp: notes of the scale · Bass: notes of the scale · FX: performance effects while held |
+| **Play** | start / stop · **Shift + Play** = tap tempo |
+| **Steps** | the pads become 16 steps (per page). Drums: steps of the selected drum (tap: on > accent > off) · Arp: on > rest > tie > accent · Bass: tap an empty step = set it, tap a set step = pick it, tap again = clear; knobs 2 / 3 / 4 edit the picked step's note / slide / accent · **Shift + Steps** = clear (all drums or the selected one in Steps, the bass line, held arp notes, the FX page) |
 | **Shift** | second knob layer; **Shift + pad** = load preset, **Shift + Rec + pad** = save preset |
-| **Tap** | tap the tempo; **Shift + Tap** = clear (Drums: all, or the selected drum in Steps; Bass: the line; Arp: held notes) |
-| **Instr** | Drums > Arp > Bass; **Shift + Instr** = mute the instrument on screen |
-| **Oct - / Oct +** | Drums: select the previous / next drum (**Shift**: step pages 1-16, 17-32 ...) · Arp: pad octave · Bass: pad octave (in Steps: step pages) |
+| **Scene** | the pads become 16 scenes: pad = recall (all instruments, FX, tempo, key; at the next bar while playing), **Rec + pad** = save |
+| **Instr** | Drums > Arp > Bass > FX (or click the page names on the screen) · **Shift + Instr** = mute |
+| **Oct - / Oct +** | Drums: previous / next drum (**Shift**: step pages) · Arp: pad octave · Bass: pad octave (in Steps: step pages) |
 | **Rec** | Drums / Bass: record what you play into the steps while it runs (Bass: hold two pads = slide, hit hard = accent) · Arp: Hold |
 
-Computer keyboard: pads `1 2 3 4 / Q W E R / A S D F / Z X C V` (Y works as Z), Space = Play, B = Steps,
-Shift = Shift, T = Tap, Tab = Instr, `,` `.` = Oct - / Oct +, Enter = Rec, F11 = full screen.
+Performance pads (FX page, held = on): Repeat 1/4, 1/8, 1/16, 1/32 · Sweep down, Sweep up, Tape stop,
+Reverse · Kill drums, Kill arp, Kill bass, Crush · Wash, Riser, Repeat 1/2, Echo throw.
+
+Computer keyboard: pads `1 2 3 4 5 6 7 8 / Q W E R T Y U I` (Z works as Y), Space = Play, B = Steps,
+Shift = Shift, N = Scene, Tab = Instr, `,` `.` = Oct - / Oct +, Enter = Rec, F11 = full screen.
 Right-click = sound card and MIDI, light screen, presets folder.
 
 ### Knobs
 
-| Knob | Drums | Arp | Bass |
-|---|---|---|---|
-| 1 | Tempo (40-240) | Tempo | Tempo |
-| 2 | Kit | Division (1/4 ... 1/32, triplets, dotted) | Sound (Acid, Sub, Saw, Reese, Pluck) · in Steps: step note |
-| 3 | Swing | Mode (up, down, up-down, down-up, as played, random, converge, chord) | Cutoff · in Steps: slide |
-| 4 | Length (16 / 32 / 64 steps) | Octaves 1-4 | Resonance · in Steps: accent |
-| 5 | Human | Gate | Env mod |
-| 6 | Level of the selected drum | Swing | Decay |
-| 7 | Chance of the selected drum | Pattern length 1-16 | Length 1-64 steps |
-| 8 | Crush | Ratchet 1-4 | Accent |
-| 9 | Drive | Chance | Drive |
-| 10 | Filter | Accent | Slide time |
-| 11 | Echo | Filter | Octave |
-| 12 | Volume | Volume | Volume |
-| Shift + 1 / 2 | Key / Scale | Key / Scale | Key / Scale |
-| Shift + 3... | Chorus | Sound, Echo, Chorus, Drive | Echo, Chorus, Wave (saw / square), Swing |
-| Shift + 12 | Master | Master | Master |
+| Knob | Drums | Arp | Bass | FX |
+|---|---|---|---|---|
+| 1 | Tempo (40-240) | Tempo | Tempo | Tempo |
+| 2 | Kit | Division | Sound (Acid, Sub, Saw, Reese, Pluck) · Steps: note | Reverb |
+| 3 | Swing | Mode | Cutoff · Steps: slide | Room size |
+| 4 | Length (16 / 32 / 64) | Octaves 1-4 | Resonance · Steps: accent | Echo |
+| 5 | Human | Gate | Env mod | Pump |
+| 6 | Level of the selected drum | Swing | Decay | DJ filter (left LP, right HP) |
+| 7 | Chance of the selected drum | Pattern length | Length 1-64 | Tape |
+| 8 | Crush | Ratchet 1-4 | Accent | Vinyl |
+| 9 | Drive | Chance | Drive | Crush |
+| 10 | Filter | Accent | Slide time | Glue |
+| 11 | Echo | Filter | Octave | Width |
+| 12 | Volume | Volume | Volume | Pump on (Arp + Bass, Bass, Arp, Everything) |
+| Shift + 1 / 2 | Key / Scale | Key / Scale | Key / Scale | Key / Scale |
+| Shift + 3... | Chorus | Sound (8 + Supersaw, Acid), Echo, Chorus, Drive, Arp on / off | Echo, Chorus, Wave, Swing, Follow arp | Drums / Arp / Bass reverb send |
+| Shift + 12 | Master | Master | Master | Master |
 
 ## Presets and memory
 
-Each instrument has 16 presets (one per pad). A preset holds the instrument's knobs, its pattern
+Each instrument has 16 presets (one per pad). Each page has 16 presets (one per pad); the FX page's presets hold its knobs. A preset holds the instrument's knobs, its pattern
 (drum steps / arp steps / bass line) and the tempo (the tempo is only taken over while stopped).
 Everything is also remembered on its own: switch the box off and it starts where you left it.
 Files: `%APPDATA%\CatSuite\CatBox` on Windows, `~/.config/CatSuite/CatBox` on the Pi
@@ -74,7 +77,7 @@ The Pico shows up as a normal USB MIDI device and sends on **channel 16**:
 |---|---|
 | Knobs 1-12 | CC 20-31, relative: 1..63 = clicks right, 127..65 = clicks left (two's complement) |
 | Pads 1-16 | notes 36-51, velocity = how hard |
-| Buttons Play, Steps, Shift, Tap, Instr, Oct -, Oct +, Rec | CC 102-109, 127 = pressed, 0 = released |
+| Buttons Play, Steps, Shift, Scene, Instr, Oct -, Oct +, Rec | CC 102-109, 127 = pressed, 0 = released |
 
 Any other MIDI keyboard (any other channel) plays the instrument on screen.
 
