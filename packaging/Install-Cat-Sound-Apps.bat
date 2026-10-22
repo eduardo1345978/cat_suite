@@ -16,7 +16,7 @@ echo.
 
 :checkRunning
 set "RUNNING="
-for %%A in (Sing-Cat Talk-Cat Glide-Cat Life-Cat Muse-Cat Cat-Hub Cat-Ocean) do (
+for %%A in (Sing-Cat Talk-Cat Glide-Cat Life-Cat Muse-Cat Cat-Hub Cat-Ocean Cat-Box) do (
     tasklist /FI "IMAGENAME eq %%A.exe" 2>nul | find /I "%%A.exe" >nul && set "RUNNING=%%A"
 )
 tasklist /FI "IMAGENAME eq Cubase*" 2>nul | find /I "Cubase" >nul && set "RUNNING=Cubase"

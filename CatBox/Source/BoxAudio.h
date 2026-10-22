@@ -24,7 +24,7 @@ struct AudioSnapshot
     double bpm = 110.0;
     float master = 0.8f;
     std::array<bool, NumInstruments> muted {};
-    std::array<float, NumInstruments> volume { 0.85f, 0.6f, 0.8f };
+    std::array<float, NumInstruments> volume { 0.85f, 0.85f, 0.8f };
     std::array<hub::TrackFxSettings, NumInstruments> fx {};
 
     std::vector<SeqHit> drumHits;      // sorted by ppq

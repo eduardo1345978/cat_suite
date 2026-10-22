@@ -65,6 +65,16 @@ then copy changed files to the PC (D:\Projekty\vst_plugin) and run build_and_ins
 - [ ] Mac version: later
 - [ ] Linux: publish Linux builds too (VST3 + apps) on GitHub (user asked 21 Oct; everything already builds and is tested on Linux)
 
+## 10. Cat Box (hardware groovebox, 22 Oct 2026) - plan in the Claude Doc "Cat Box - modularny syntetizator"
+Raspberry Pi 5 (8 GB, user has it) + HiFiBerry + 5" display + 12 encoders + 16 pads (NeoTrellis 4x4) + 8 buttons,
+read by a Raspberry Pi Pico as USB MIDI. Same program on the PC (CatBox/, build_catbox.bat).
+- [x] Step 1: Cat Box Engine on the PC: Bubny (Drum-Cat) / Arp (Poly D style + 16-step pattern, ratchet, chance) /
+      Bass (Bass-Cat, pads pick the chord), presets (16 per instrument), memory, --kiosk, --selftest, CI for Pi + Windows
+- [ ] Step 2: Pi + HiFiBerry + display: run setup_pi.sh on the Pi, check latency / CPU, HiFiBerry overlay
+- [ ] Step 3: Pico firmware (encoders + NeoTrellis + buttons -> USB MIDI ch 16, map in CatBox/README.md), pad LEDs from the box
+- [ ] Step 4: the case (wood cube ~20 cm)
+- [ ] Ideas: velocity pads (FSR), key from Chord-Cat over Cat Link, more instruments (Glide-Cat pad, Sing-Cat choir), song mode
+
 ## Answers that mean "no"
 - Vertical Shorts picture: no, YouTube Auto is fine
 - Chat games, fish pets/houses/friends, seasons other than Halloween/Christmas: no preference / not now

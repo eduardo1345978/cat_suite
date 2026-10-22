@@ -36,7 +36,7 @@ jobs:
         run: cmake -B build -A x64 -DCAT_BUILD_TESTS=ON -DCAT_PLUGIN_FORMATS=VST3 -DCAT_SOUND_STANDALONE=ON
 
       - name: Build all plug-ins, the sound apps and the test host
-        run: cmake --build build --config Release --parallel --target CatSuiteHostTest SingCat_Standalone TalkCat_Standalone GlideCat_Standalone LifeCat_Standalone MuseCat_Standalone MuseCat_VST3 CatHub CatOcean
+        run: cmake --build build --config Release --parallel --target CatSuiteHostTest SingCat_Standalone TalkCat_Standalone GlideCat_Standalone LifeCat_Standalone MuseCat_Standalone MuseCat_VST3 CatHub CatOcean CatBox
 
       - name: Run the tests
         run: build\Tests\CatSuiteHostTest_artefacts\Release\CatSuiteHostTest.exe
@@ -95,11 +95,16 @@ jobs:
             Get-Content ocean-test\ocean-test.txt | Where-Object { $_ -notmatch '^ok ' } | Select-Object -First 30 | ForEach-Object { Write-Host "::error::ocean self test: $_" }
             throw "Cat Ocean self test failed (exit code $($o.ExitCode))"
           }
+          # Cat Box: the groovebox (Bubny / Arp / Bass), the same program that runs in the Raspberry Pi box
+          Copy-Item "build\CatBox\CatBox_artefacts\Release\Cat-Box.exe" "$snd\Apps\"
+          $b = Start-Process "$snd\Apps\Cat-Box.exe" -ArgumentList '--selftest', "`"$PWD\catbox-test.wav`"" -Wait -PassThru
+          if (Test-Path catbox-test.txt) { Get-Content catbox-test.txt }
+          if ($b.ExitCode -ne 0) { throw "Cat Box self test failed (exit code $($b.ExitCode))" }
           Copy-Item packaging\Install-Cat-Sound-Apps.bat $snd
           Copy-Item packaging\README-sound-apps.txt $snd
           Copy-Item packaging\Cat-Ocean-YouTube-Description.txt $snd
           Compress-Archive -Path "$snd\*" -DestinationPath Cat-Sound-Apps-Windows.zip -Force
-          if ((Get-ChildItem "$snd\Apps" -Filter *.exe).Count -ne 7) { throw "Sound apps missing" }
+          if ((Get-ChildItem "$snd\Apps" -Filter *.exe).Count -ne 8) { throw "Sound apps missing" }
           Copy-Item packaging\Get-Cat-Sound-Apps.bat .
 
       - name: Keep the zip on the Actions page
@@ -123,7 +128,7 @@ jobs:
           # never delete first: move the tag, then update the release in place (or create it), with retries
           $date = Get-Date -Format "yyyy-MM-dd HH:mm"
           $title = "Cat Suite - latest build ($date UTC)"
-          $notes = "**Everything (VST3 for Cubase):** download **Cat-Suite-Windows.zip** (all 12 Cats incl. the new **Echo-Cat** audio effect), unzip it, close Cubase and double-click **Install-Cat-Suite.bat**. Then rescan in Cubase (Studio > VST Plug-in Manager).<br><br>**Only the instruments that make sound, as apps you can play with your computer keyboard** (Sing-Cat, Talk-Cat, Glide-Cat, Life-Cat, Muse-Cat the song writer, Cat Ocean the endless YouTube ocean) **plus the Cat Hub** (every Cat jamming together in one window: Dice and Compose write whole songs or endless music, effects, Patt/Bend/Orbit-Cat as effects, Glide/Sing/Talk-Cat as sounds - press Play): download **Get-Cat-Sound-Apps.bat** and double-click it. It downloads and installs them (Start menu + Desktop shortcuts, plus the VST3 versions). If Windows warns about the file, click *More info* > *Run anyway*.<br><br>Built from commit ${{ github.sha }}."
+          $notes = "**Everything (VST3 for Cubase):** download **Cat-Suite-Windows.zip** (all 12 Cats incl. the new **Echo-Cat** audio effect), unzip it, close Cubase and double-click **Install-Cat-Suite.bat**. Then rescan in Cubase (Studio > VST Plug-in Manager).<br><br>**Only the instruments that make sound, as apps you can play with your computer keyboard** (Sing-Cat, Talk-Cat, Glide-Cat, Life-Cat, Muse-Cat the song writer, Cat Ocean the endless YouTube ocean, Cat Box the groovebox) **plus the Cat Hub** (every Cat jamming together in one window: Dice and Compose write whole songs or endless music, effects, Patt/Bend/Orbit-Cat as effects, Glide/Sing/Talk-Cat as sounds - press Play): download **Get-Cat-Sound-Apps.bat** and double-click it. It downloads and installs them (Start menu + Desktop shortcuts, plus the VST3 versions). If Windows warns about the file, click *More info* > *Run anyway*.<br><br>Built from commit ${{ github.sha }}."
           $files = @("Cat-Suite-Windows.zip", "Cat-Sound-Apps-Windows.zip", "Get-Cat-Sound-Apps.bat")
           git tag -f latest "${{ github.sha }}"
           git push -f origin refs/tags/latest

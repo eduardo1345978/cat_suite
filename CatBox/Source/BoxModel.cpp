@@ -72,7 +72,7 @@ Table buildTable()
     a[slot::AProbability] = percent ("Šanca", 1.0f);
     a[slot::AAccent]      = percent ("Akcent", 0.5f);
     a[slot::AFilter]      = percent ("Filter", 1.0f);
-    a[slot::AVolume]      = percent ("Hlasitosť", 0.6f);
+    a[slot::AVolume]      = percent ("Hlasitosť", 0.85f);
     a[slot::ASound]       = choice ("Zvuk", hub::KeysSynth::soundNames(), 2);
     a[slot::AEcho]        = percent ("Echo", 0.25f);
     a[slot::AChorus]      = percent ("Chorus", 0.0f);
