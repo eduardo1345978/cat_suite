@@ -72,8 +72,8 @@ void BoxAudio::setSnapshot (const AudioSnapshot& s, bool atBar)
 //==============================================================================
 void BoxAudio::arpNoteOn (int note, int velocity)
 {
-    if (live.arpSound == arpSupersaw) supersaw.noteOn (note, velocity);
-    else if (live.arpSound == arpAcid) arpAcid.noteOn (note, velocity >= 110, false);
+    if (live.arpSound == arpSoundSupersaw) supersaw.noteOn (note, velocity);
+    else if (live.arpSound == arpSoundAcid) arpAcid.noteOn (note, velocity >= 110, false);
     else keys.handle (juce::MidiMessage::noteOn (1, note, (juce::uint8) juce::jlimit (1, 127, velocity)));
 }
 
@@ -384,7 +384,7 @@ void BoxAudio::render (float* left, float* right, int numSamples)
                 snapshotAtBar = false;
                 sceneWaiting = false;
                 drums.setSound (live.drumKit);
-                if (live.arpSound < arpSupersaw) keys.setSound (live.arpSound);
+                if (live.arpSound < arpSoundSupersaw) keys.setSound (live.arpSound);
                 if (live.bassSound > 0) bassSynth.setSound (live.bassSound - 1);
                 acid.setParams (live.acid);
                 AcidSynth::Params ap = live.acid;   // the arp's acid: brighter, shorter

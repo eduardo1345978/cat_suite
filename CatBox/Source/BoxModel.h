@@ -100,7 +100,7 @@ juce::String drumPadName (int pad);
 juce::StringArray bassSoundNames();
 /** Arp sounds: the hub::KeysSynth sounds, then Supersaw and Acid (Cat Box's own). */
 juce::StringArray arpSoundNames();
-constexpr int arpSupersaw = 8, arpAcid = 9;
+constexpr int arpSoundSupersaw = 8, arpSoundAcid = 9;
 
 //==============================================================================
 /** Arp pattern step states. */

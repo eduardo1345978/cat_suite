@@ -73,7 +73,7 @@ public:
                 box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::noteOn (16, 36 + pad, (juce::uint8) 100));
                 box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::noteOff (16, 36 + pad));
             }
-            for (int snd : { arpSupersaw, arpAcid })
+            for (int snd : { arpSoundSupersaw, arpSoundAcid })
             {
                 box.buttonDown (BtnShift);
                 box.turnKnob (slot::ASound - numKnobs, (float) (snd - juce::roundToInt (box.getData().inst[Arp].values[slot::ASound])));
