@@ -65,15 +65,36 @@ then copy changed files to the PC (D:\Projekty\vst_plugin) and run build_and_ins
 - [ ] Mac version: later
 - [ ] Linux: publish Linux builds too (VST3 + apps) on GitHub (user asked 21 Oct; everything already builds and is tested on Linux)
 
-## 10. Cat Box (hardware groovebox, 22 Oct 2026) - plan in the Claude Doc "Cat Box - modularny syntetizator"
-Raspberry Pi 5 (8 GB, user has it) + HiFiBerry + 5" display + 12 encoders + 16 pads (NeoTrellis 4x4) + 8 buttons,
-read by a Raspberry Pi Pico as USB MIDI. Same program on the PC (CatBox/, build_catbox.bat).
-- [x] Step 1: Cat Box Engine on the PC: Bubny (Drum-Cat) / Arp (Poly D style + 16-step pattern, ratchet, chance) /
-      Bass (Bass-Cat, pads pick the chord), presets (16 per instrument), memory, --kiosk, --selftest, CI for Pi + Windows
-- [ ] Step 2: Pi + HiFiBerry + display: run setup_pi.sh on the Pi, check latency / CPU, HiFiBerry overlay
-- [ ] Step 3: Pico firmware (encoders + NeoTrellis + buttons -> USB MIDI ch 16, map in CatBox/README.md), pad LEDs from the box
-- [ ] Step 4: the case (wood cube ~20 cm)
-- [ ] Ideas: velocity pads (FSR), key from Chord-Cat over Cat Link, more instruments (Glide-Cat pad, Sing-Cat choir), song mode
+## 10. Cat Box (hardware groovebox) - TOP PRIORITY this month (questionnaire 4, 22 Oct 2026)
+User's words: Cat Box must be FUN to play, not "click and it generates music for me". No generators in the box.
+Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC (CatBox/, build_catbox.bat).
+- [x] Step 1: engine on the PC + CI for Raspberry Pi (ARM64) and Windows, presets, memory, --kiosk, --selftest
+- [x] Cat Box 2: generators out; drum step sequencer (16 drums x 16/32/64 steps) + live Rec; 303-style bass
+      step sequencer (note / slide / accent) + live Rec; own Acid synth; English screen; light / dark screen; tempo 40-240
+- [ ] NEXT: get it running on the Pi 5 with sound (user has the Pi 5 8 GB; ask what else is at home)
+- [ ] Pico firmware: encoders WITH push, RGB pads, buttons -> USB MIDI ch 16 (map in CatBox/README.md)
+- [ ] Sounds: more instruments, up to 8 at once (Glide-Cat pad, Sing-Cat choir, Talk-Cat voice, piano, sampler, lead synth)
+      and Cat Box's own synth engine; Arp sounds: supersaw, acid 303, strings (pluck, chip, glass bell, e-piano exist)
+- [ ] Master FX: reverb, delay, sidechain pump, vinyl, tape, filter sweep, bitcrush
+- [ ] Performance FX on the pads (stutter, roll, sweep while held)
+- [ ] Scenes: one pad saves / recalls all instruments at once (song mode: NO, a loop is enough)
+- [ ] Bass follows the Arp's chord (with a switch); bass chord pads with all 80 Chord-Cat chord types
+- [ ] Key from Chord-Cat over Cat Link when at the PC; tempo sync with Cubase; presets PC <-> box; record the jam to WAV on a USB stick
+- [ ] Updates over WiFi
+- [ ] Cat Box as a VST3 in Cubase; bigger PC window with more on screen
+- [ ] Velocity pads (FSR) right away in the hardware
+- Hardware answers: flat groovebox (not a cube), 3D printed, black, no cat ears, 5" display, encoders with push,
+  RGB pads, mains power (battery: maybe later), small built-in speaker, 2x jack L/R + headphones + mic/line in + MIDI DIN in/out,
+  soldering together with someone, budget 200 EUR -> cheap first version (sound, display, knobs, pads), mic / MIDI DIN /
+  speaker in a second wave; cheap parts rather than ready modules; first playable version by Christmas
+- Screen: knob values, sound picture, pattern steps; English; dark + light; no dancing cat; no phone control; not a Cat Hub controller
+
+## 11. Other answers from questionnaire 4
+- Default theme in all Cats: Dark. No animated cat mascot in the plug-ins. Installer .exe with checkboxes: yes, now.
+  Auto update: yes. Linux version: yes. Website, YouTube tutorials: later.
+- Working style: always test everything before saying done; medium-length reports; ask at big decisions.
+- Cat Hub must not become a soulless quick-music generator either.
+- Cat Ocean, Cat Hub, new Cats sections were left unanswered (no preference now).
 
 ## Answers that mean "no"
 - Vertical Shorts picture: no, YouTube Auto is fine
