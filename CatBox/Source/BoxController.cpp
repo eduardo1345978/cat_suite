@@ -189,7 +189,7 @@ void BoxController::publish (bool atBar)
     const auto& f = data.fx;
 
     s.bpm = data.globals[GTempo];
-    s.master = data.globals[GMaster];
+    s.masterGain = data.globals[GMaster];
     s.muted = data.muted;
     s.volume = { d[slot::DVolume], a[slot::AVolume], b[slot::BVolume] };
 

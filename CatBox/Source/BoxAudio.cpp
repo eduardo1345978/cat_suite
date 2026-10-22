@@ -445,7 +445,7 @@ void BoxAudio::render (float* left, float* right, int numSamples)
             auto settings = live.fx[(size_t) i];
             settings.bpm = live.bpm;
             fx[(size_t) i].process (il[i], ir[i], n, settings);
-            const float g = live.muted[(size_t) i] ? 0.0f : live.volume[(size_t) i] * live.master;
+            const float g = live.muted[(size_t) i] ? 0.0f : live.volume[(size_t) i] * live.masterGain;
             juce::FloatVectorOperations::multiply (il[i], g, n);
             juce::FloatVectorOperations::multiply (ir[i], g, n);
         }
