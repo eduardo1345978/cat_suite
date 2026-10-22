@@ -20,7 +20,10 @@ namespace catbox
 {
 enum Instrument { Drums = 0, Arp, Bass, NumInstruments };
 
-enum Button { BtnPlay = 0, BtnSteps, BtnShift, BtnTap, BtnInstrument, BtnOctDown, BtnOctUp, BtnRec, NumButtons };
+/** The FX page (master effects, performance pads, scenes) comes after the three instruments. */
+constexpr int PageFx = 3, NumPages = 4;
+
+enum Button { BtnPlay = 0, BtnSteps, BtnShift, BtnScene, BtnInstrument, BtnOctDown, BtnOctUp, BtnRec, NumButtons };
 
 constexpr int numKnobs = 12;
 constexpr int numPads = 16;
@@ -42,11 +45,15 @@ namespace slot
     // Arp
     constexpr int ADivision = 1, AMode = 2, AOctaves = 3, AGate = 4, ASwing = 5, ALength = 6, ARatchet = 7,
                   AProbability = 8, AAccent = 9, AFilter = 10, AVolume = 11,
-                  ASound = 14, AEcho = 15, AChorus = 16, ADrive = 17;
+                  ASound = 14, AEcho = 15, AChorus = 16, ADrive = 17, AArpOn = 18;
     // Bass
     constexpr int BSound = 1, BCutoff = 2, BResonance = 3, BEnvMod = 4, BDecay = 5, BLength = 6, BAccent = 7,
                   BDrive = 8, BSlide = 9, BOctave = 10, BVolume = 11,
-                  BEcho = 14, BChorus = 15, BWave = 16, BSwing = 17;
+                  BEcho = 14, BChorus = 15, BWave = 16, BSwing = 17, BFollow = 18;
+    // FX page
+    constexpr int FReverb = 1, FSize = 2, FDelay = 3, FPump = 4, FDjFilter = 5, FTape = 6, FVinyl = 7,
+                  FCrush = 8, FGlue = 9, FWidth = 10, FPumpTarget = 11,
+                  FSendDrums = 14, FSendArp = 15, FSendBass = 16;
 }
 
 enum class Kind { None, Percent, Choice, Integer, Bpm };
@@ -67,8 +74,8 @@ struct ParamDesc
 };
 
 const ParamDesc& paramDesc (int instrument, int slotIndex);
-juce::String instrumentName (int instrument);   // Drums, Arp, Bass
-juce::String instrumentFolder (int instrument); // file-system friendly
+juce::String instrumentName (int page);   // Drums, Arp, Bass, FX
+juce::String instrumentFolder (int page); // file-system friendly (FX presets live in "FX")
 
 //==============================================================================
 // Music helpers
@@ -91,6 +98,9 @@ juce::String drumPadName (int pad);
 
 /** Bass sounds: 0 = Acid (Cat Box's own 303-style synth), 1.. = hub::BassSynth sounds + 1. */
 juce::StringArray bassSoundNames();
+/** Arp sounds: the hub::KeysSynth sounds, then Supersaw and Acid (Cat Box's own). */
+juce::StringArray arpSoundNames();
+constexpr int arpSupersaw = 8, arpAcid = 9;
 
 //==============================================================================
 /** Arp pattern step states. */
@@ -121,9 +131,11 @@ struct BoxData
 {
     std::array<float, NumGlobals> globals {};
     std::array<InstrumentState, NumInstruments> inst;
+    std::array<float, numSlots> fx {};              // the FX page knobs
     std::array<bool, NumInstruments> muted {};
     std::array<int, NumInstruments> padOctave {};   // Arp / Bass: octave shift of the pads
-    std::array<int, NumInstruments> loadedPreset { -1, -1, -1 };
+    std::array<int, NumPages> loadedPreset { -1, -1, -1, -1 };
+    int loadedScene = -1;
     int page = Drums;
     int selectedDrum = 0;
     bool lightScreen = false;
@@ -142,6 +154,13 @@ struct BoxData
     static juce::var instrumentToVar (int instrument, const InstrumentState&);
     static bool instrumentFromVar (int instrument, const juce::var&, InstrumentState&);
     static InstrumentState defaults (int instrument);
+    static std::array<float, numSlots> fxDefaults();
+    static juce::var fxToVar (const std::array<float, numSlots>&);
+    static bool fxFromVar (const juce::var&, std::array<float, numSlots>&);
+
+    /** A scene: all three instruments, the FX page, tempo, key and scale. */
+    juce::var sceneToVar() const;
+    bool sceneFromVar (const juce::var&);
 };
 
 } // namespace catbox

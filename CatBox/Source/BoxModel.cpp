@@ -22,7 +22,7 @@ ParamDesc integer (const char* name, float min, float max, float def)
 ParamDesc global (ParamDesc d, int g) { d.global = g; return d; }
 ParamDesc perDrum (ParamDesc d) { d.perDrum = true; return d; }
 
-using Table = std::array<std::array<ParamDesc, numSlots>, NumInstruments>;
+using Table = std::array<std::array<ParamDesc, numSlots>, NumPages>;
 
 Table buildTable()
 {
@@ -67,7 +67,8 @@ Table buildTable()
     a[slot::AAccent]      = percent ("Accent", 0.5f);
     a[slot::AFilter]      = percent ("Filter", 1.0f);
     a[slot::AVolume]      = percent ("Volume", 0.85f);
-    a[slot::ASound]       = choice ("Sound", hub::KeysSynth::soundNames(), 2);
+    a[slot::ASound]       = choice ("Sound", arpSoundNames(), 2);
+    a[slot::AArpOn]       = choice ("Arp", { "On", "Off (plain synth)" }, 0);
     a[slot::AEcho]        = percent ("Echo", 0.25f);
     a[slot::AChorus]      = percent ("Chorus", 0.0f);
     a[slot::ADrive]       = percent ("Drive", 0.0f);
@@ -88,6 +89,23 @@ Table buildTable()
     b[slot::BChorus]    = percent ("Chorus", 0.0f);
     b[slot::BWave]      = choice ("Wave", { "Saw", "Square" }, 0);
     b[slot::BSwing]     = percent ("Swing", 0.0f);
+    b[slot::BFollow]    = choice ("Follow arp", { "Off", "On" }, 0);
+
+    auto& f = t[PageFx];
+    f[slot::FReverb]     = percent ("Reverb", 0.6f);
+    f[slot::FSize]       = percent ("Room size", 0.6f);
+    f[slot::FDelay]      = percent ("Echo", 0.0f);
+    f[slot::FPump]       = percent ("Pump", 0.0f);
+    f[slot::FDjFilter]   = percent ("DJ filter", 0.5f);
+    f[slot::FTape]       = percent ("Tape", 0.0f);
+    f[slot::FVinyl]      = percent ("Vinyl", 0.0f);
+    f[slot::FCrush]      = percent ("Crush", 0.0f);
+    f[slot::FGlue]       = percent ("Glue", 0.0f);
+    f[slot::FWidth]      = percent ("Width", 0.5f);
+    f[slot::FPumpTarget] = choice ("Pump on", { "Arp + Bass", "Bass", "Arp", "Everything" }, 0);
+    f[slot::FSendDrums]  = percent ("Drums reverb", 0.1f);
+    f[slot::FSendArp]    = percent ("Arp reverb", 0.3f);
+    f[slot::FSendBass]   = percent ("Bass reverb", 0.0f);
     return t;
 }
 
@@ -111,13 +129,13 @@ juce::String ParamDesc::format (float value) const
     return {};
 }
 
-const ParamDesc& paramDesc (int instrument, int slotIndex)
+const ParamDesc& paramDesc (int page, int slotIndex)
 {
-    return table()[(size_t) juce::jlimit (0, NumInstruments - 1, instrument)][(size_t) juce::jlimit (0, numSlots - 1, slotIndex)];
+    return table()[(size_t) juce::jlimit (0, NumPages - 1, page)][(size_t) juce::jlimit (0, numSlots - 1, slotIndex)];
 }
 
-juce::String instrumentName (int i)   { return i == Drums ? "Drums" : i == Arp ? "Arp" : "Bass"; }
-juce::String instrumentFolder (int i) { return i == Drums ? "Drums" : i == Arp ? "Arp" : "Bass"; }
+juce::String instrumentName (int i)   { return i == Drums ? "Drums" : i == Arp ? "Arp" : i == Bass ? "Bass" : "FX"; }
+juce::String instrumentFolder (int i) { return instrumentName (i); }
 
 //==============================================================================
 juce::StringArray keyNames() { return { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }; }
@@ -176,6 +194,14 @@ juce::String drumPadName (int pad)
     return names[juce::jlimit (0, numPads - 1, pad)];
 }
 
+juce::StringArray arpSoundNames()
+{
+    auto s = hub::KeysSynth::soundNames();   // 8 sounds
+    s.add ("Supersaw");
+    s.add ("Acid");
+    return s;
+}
+
 juce::StringArray bassSoundNames()
 {
     juce::StringArray s { "Acid" };
@@ -215,9 +241,71 @@ InstrumentState BoxData::defaults (int instrument)
     return s;
 }
 
+std::array<float, numSlots> BoxData::fxDefaults()
+{
+    std::array<float, numSlots> v {};
+    for (int i = 0; i < numSlots; ++i)
+        if (const auto& d = paramDesc (PageFx, i); d.used() && d.global < 0) v[(size_t) i] = d.def;
+    return v;
+}
+
+juce::var BoxData::fxToVar (const std::array<float, numSlots>& v)
+{
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("instrument", "FX");
+    o->setProperty ("v", 2);
+    juce::Array<juce::var> values;
+    for (auto x : v) values.add (x);
+    o->setProperty ("values", values);
+    return juce::var (o);
+}
+
+bool BoxData::fxFromVar (const juce::var& v, std::array<float, numSlots>& out)
+{
+    if (! v.isObject() || v["instrument"].toString() != "FX") return false;
+    auto fresh = fxDefaults();
+    if (auto* values = v["values"].getArray())
+        for (int i = 0; i < juce::jmin (numSlots, values->size()); ++i)
+            if (const auto& d = paramDesc (PageFx, i); d.used() && d.global < 0)
+                fresh[(size_t) i] = juce::jlimit (d.min, d.max, (float) (*values)[i]);
+    out = fresh;
+    return true;
+}
+
+juce::var BoxData::sceneToVar() const
+{
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("format", "catbox-scene-1");
+    o->setProperty ("tempo", globals[GTempo]);
+    o->setProperty ("key", globals[GKey]);
+    o->setProperty ("scale", globals[GScale]);
+    juce::Array<juce::var> insts;
+    for (int i = 0; i < NumInstruments; ++i) insts.add (instrumentToVar (i, inst[(size_t) i]));
+    o->setProperty ("instruments", insts);
+    o->setProperty ("fx", fxToVar (fx));
+    return juce::var (o);
+}
+
+bool BoxData::sceneFromVar (const juce::var& v)
+{
+    if (! v.isObject() || v["format"].toString() != "catbox-scene-1") return false;
+    auto* insts = v["instruments"].getArray();
+    if (insts == nullptr || insts->size() < NumInstruments) return false;
+    std::array<InstrumentState, NumInstruments> fresh;
+    for (int i = 0; i < NumInstruments; ++i)
+        if (! instrumentFromVar (i, (*insts)[i], fresh[(size_t) i])) return false;
+    inst = fresh;
+    fxFromVar (v["fx"], fx);
+    globals[GTempo] = juce::jlimit (40.0f, 240.0f, (float) v.getProperty ("tempo", globals[GTempo]));
+    globals[GKey]   = (float) juce::jlimit (0, 11, (int) v.getProperty ("key", (int) globals[GKey]));
+    globals[GScale] = (float) juce::jlimit (0, scaleNames().size() - 1, (int) v.getProperty ("scale", (int) globals[GScale]));
+    return true;
+}
+
 BoxData::BoxData()
 {
     for (int i = 0; i < NumInstruments; ++i) inst[(size_t) i] = defaults (i);
+    fx = fxDefaults();
     globals[GTempo] = 110.0f;
     globals[GKey] = 0.0f;
     globals[GScale] = 1.0f;
@@ -229,6 +317,7 @@ float BoxData::get (int instrument, int slotIndex) const
     const auto& d = paramDesc (instrument, slotIndex);
     if (! d.used()) return 0.0f;
     if (d.global >= 0) return globals[(size_t) d.global];
+    if (instrument == PageFx) return fx[(size_t) slotIndex];
     const auto& s = inst[(size_t) juce::jlimit (0, NumInstruments - 1, instrument)];
     if (d.perDrum)
         return slotIndex == slot::DLevel ? s.drumLevel[(size_t) selectedDrum] : s.drumChance[(size_t) selectedDrum];
@@ -242,6 +331,7 @@ void BoxData::set (int instrument, int slotIndex, float value)
     value = juce::jlimit (d.min, d.max, value);
     if (d.kind != Kind::Percent) value = std::round (value);
     if (d.global >= 0) { globals[(size_t) d.global] = value; return; }
+    if (instrument == PageFx) { fx[(size_t) slotIndex] = value; return; }
     auto& s = inst[(size_t) juce::jlimit (0, NumInstruments - 1, instrument)];
     if (d.perDrum)
         (slotIndex == slot::DLevel ? s.drumLevel : s.drumChance)[(size_t) selectedDrum] = value;
@@ -346,6 +436,9 @@ juce::var BoxData::toVar() const
     o->setProperty ("page", page);
     o->setProperty ("selectedDrum", selectedDrum);
     o->setProperty ("light", lightScreen);
+    o->setProperty ("fx", fxToVar (fx));
+    o->setProperty ("fxPreset", loadedPreset[PageFx]);
+    o->setProperty ("scene", loadedScene);
     juce::Array<juce::var> insts;
     for (int i = 0; i < NumInstruments; ++i)
     {
@@ -367,7 +460,10 @@ void BoxData::fromVar (const juce::var& v)
     globals[GKey]    = (float) juce::jlimit (0, 11, (int) v.getProperty ("key", 0));
     globals[GScale]  = (float) juce::jlimit (0, scaleNames().size() - 1, (int) v.getProperty ("scale", 1));
     globals[GMaster] = juce::jlimit (0.0f, 1.0f, (float) v.getProperty ("master", 0.8f));
-    page = juce::jlimit (0, NumInstruments - 1, (int) v.getProperty ("page", 0));
+    page = juce::jlimit (0, NumPages - 1, (int) v.getProperty ("page", 0));
+    fxFromVar (v["fx"], fx);
+    loadedPreset[PageFx] = juce::jlimit (-1, numPresetSlots - 1, (int) v.getProperty ("fxPreset", -1));
+    loadedScene = juce::jlimit (-1, numPresetSlots - 1, (int) v.getProperty ("scene", -1));
     selectedDrum = juce::jlimit (0, numPads - 1, (int) v.getProperty ("selectedDrum", 0));
     lightScreen = (bool) v.getProperty ("light", false);
     if (auto* insts = v["instruments"].getArray())

@@ -66,9 +66,9 @@ void BoxController::setLightScreen (bool light)
     markDirty();
 }
 
-void BoxController::setPage (int instrument)
+void BoxController::setPage (int p)
 {
-    data.page = juce::jlimit (0, NumInstruments - 1, instrument);
+    data.page = juce::jlimit (0, NumPages - 1, p);
     page = data.page;
     markDirty();
 }
@@ -118,8 +118,8 @@ void BoxController::turnKnob (int knob, float clicks)
     const int pg = page.load();
     const int s = knob + (shift.load() ? numKnobs : 0);
 
-    // Bass steps: knobs 2-4 edit the selected step (note, slide, accent)
-    const bool stepEdit = pg == Bass && stepView.load() && ! shift.load() && knob >= 1 && knob <= 3 && bassSel >= 0;
+    // Bass steps: knobs 2-4 edit the picked step (note, slide, accent)
+    const bool stepEdit = pg == Bass && isStepView() && ! shift.load() && knob >= 1 && knob <= 3 && bassSel >= 0;
     const auto& d = paramDesc (pg, s);
     if (! stepEdit && ! d.used()) return;
 
@@ -157,7 +157,7 @@ BoxController::KnobView BoxController::knobView (int knob) const
     KnobView v;
     const int pg = page.load();
     const int s = knob + (shift.load() ? numKnobs : 0);
-    if (pg == Bass && stepView.load() && ! shift.load() && knob >= 1 && knob <= 3)
+    if (pg == Bass && isStepView() && ! shift.load() && knob >= 1 && knob <= 3)
     {
         v.used = v.stepEdit = true;
         const auto st = bassSel >= 0 ? data.inst[Bass].bassSteps[(size_t) bassSel] : BassStep {};
@@ -178,7 +178,7 @@ BoxController::KnobView BoxController::knobView (int knob) const
     return v;
 }
 
-void BoxController::publish()
+void BoxController::publish (bool atBar)
 {
     AudioSnapshot s;
     const auto& di = data.inst[Drums];
@@ -186,6 +186,7 @@ void BoxController::publish()
     const auto& a = data.inst[Arp].values;
     const auto& bi = data.inst[Bass];
     const auto& b = bi.values;
+    const auto& f = data.fx;
 
     s.bpm = data.globals[GTempo];
     s.master = data.globals[GMaster];
@@ -218,6 +219,7 @@ void BoxController::publish()
     s.bassOctave = juce::roundToInt (b[slot::BOctave]);
     s.bassSound = juce::roundToInt (b[slot::BSound]);
     s.bassSwing = b[slot::BSwing];
+    s.bassFollow = juce::roundToInt (b[slot::BFollow]) == 1;
     s.acid.cutoff = b[slot::BCutoff];
     s.acid.resonance = b[slot::BResonance];
     s.acid.envMod = b[slot::BEnvMod];
@@ -238,8 +240,23 @@ void BoxController::publish()
     s.arp.accent = a[slot::AAccent];
     s.arp.steps = data.inst[Arp].arpSteps;
     s.arpSound = juce::roundToInt (a[slot::ASound]);
+    s.arpOn = juce::roundToInt (a[slot::AArpOn]) == 0;
+    s.key = key.load();
 
-    audio.setSnapshot (s);
+    s.master.reverb = f[slot::FReverb];
+    s.master.size = f[slot::FSize];
+    s.master.delay = f[slot::FDelay];
+    s.master.pump = f[slot::FPump];
+    s.master.djFilter = f[slot::FDjFilter];
+    s.master.tape = f[slot::FTape];
+    s.master.vinyl = f[slot::FVinyl];
+    s.master.crush = f[slot::FCrush];
+    s.master.glue = f[slot::FGlue];
+    s.master.width = f[slot::FWidth];
+    s.master.pumpTarget = juce::roundToInt (f[slot::FPumpTarget]);
+    s.master.sends = { f[slot::FSendDrums], f[slot::FSendArp], f[slot::FSendBass] };
+
+    audio.setSnapshot (s, atBar);
 }
 
 int BoxController::arpPadNote (int pad) const
@@ -291,17 +308,33 @@ void BoxController::padDown (int pad, int velocity)
     if (pad < 0 || pad >= numPads) return;
     velocity = juce::jlimit (1, 127, velocity);
     padHeldInst[(size_t) pad] = -1;
+    const int pg = page.load();
 
+    // scenes: Scene mode, pad = recall (at the next bar while playing), Rec then pad = save
+    if (sceneMode.load())
+    {
+        const bool save = rec.load() || saveArm.exchange (false);
+        runOnMessageThread ([this, save, pad] { save ? saveScene (pad) : loadScene (pad); });
+        return;
+    }
+    // presets of the page on screen: Shift + pad = load, Shift + Rec + pad = save
     if (shift.load())
     {
         const bool save = rec.load() || saveArm.exchange (false);
-        const int pg = page.load();
         runOnMessageThread ([this, save, pg, pad] { save ? savePreset (pg, pad) : loadPreset (pg, pad); });
         return;
     }
 
-    const int pg = page.load();
-    if (stepView.load())
+    if (pg == PageFx)   // performance pads: on while held
+    {
+        BoxEvent e; e.type = BoxEvent::PerfOn; e.a = pad;
+        padHeldInst[(size_t) pad] = PageFx;
+        padHeldNote[(size_t) pad] = pad;
+        audio.post (e);
+        return;
+    }
+
+    if (isStepView())
     {
         const int step = stepPages[(size_t) pg].load() * numPads + pad;
         runOnMessageThread ([this, pg, step, pad]
@@ -349,43 +382,78 @@ void BoxController::padUp (int pad)
     if (pad < 0 || pad >= numPads) return;
     const int inst = padHeldInst[(size_t) pad].exchange (-1);
     const int note = padHeldNote[(size_t) pad].exchange (-1);
-    if (note < 0 || (inst != Arp && inst != Bass)) return;
+    if (note < 0 || inst < 0) return;
     BoxEvent e;
-    e.type = inst == Arp ? BoxEvent::ArpOff : BoxEvent::BassOff;
+    e.type = inst == PageFx ? BoxEvent::PerfOff : inst == Arp ? BoxEvent::ArpOff : BoxEvent::BassOff;
     e.a = note;
-    audio.post (e);
+    if (inst == PageFx || inst == Arp || inst == Bass) audio.post (e);
 }
 
 //==============================================================================
 juce::String BoxController::buttonLabel (int b) const
 {
     const int pg = page.load();
+    const bool sh = shift.load();
     switch (b)
     {
-        case BtnPlay:       return "Play";
-        case BtnSteps:      return "Steps";
+        case BtnPlay:       return sh ? "Tap" : "Play";
+        case BtnSteps:      return sh ? "Clear" : "Steps";
         case BtnShift:      return "Shift";
-        case BtnTap:        return shift.load() ? "Clear" : "Tap";
-        case BtnInstrument: return shift.load() ? "Mute" : "Instr";
-        case BtnOctDown:    return pg == Drums ? (shift.load() ? "Page -" : "Drum -") : (stepView.load() && pg == Bass ? "Page -" : "Oct -");
-        case BtnOctUp:      return pg == Drums ? (shift.load() ? "Page +" : "Drum +") : (stepView.load() && pg == Bass ? "Page +" : "Oct +");
-        case BtnRec:        return shift.load() ? "Save" : pg == Arp ? "Hold" : "Rec";
+        case BtnScene:      return "Scene";
+        case BtnInstrument: return sh ? "Mute" : "Instr";
+        case BtnOctDown:    return pg == PageFx ? "-" : pg == Drums ? (sh ? "Page -" : "Drum -") : (isStepView() && pg == Bass ? "Page -" : "Oct -");
+        case BtnOctUp:      return pg == PageFx ? "-" : pg == Drums ? (sh ? "Page +" : "Drum +") : (isStepView() && pg == Bass ? "Page +" : "Oct +");
+        case BtnRec:        return sh || sceneMode.load() ? "Save" : pg == Arp ? "Hold" : pg == PageFx ? "-" : "Rec";
         default:            return {};
     }
+}
+
+void BoxController::clearPage()
+{
+    const int pg = page.load();
+    if (pg == Drums)
+    {
+        auto& steps = data.inst[Drums].drumSteps;
+        if (isStepView()) { steps[(size_t) data.selectedDrum].fill (0); setFlash ("Cleared " + drumPadName (data.selectedDrum)); }
+        else { for (auto& p : steps) p.fill (0); setFlash ("Cleared all drums"); }
+    }
+    else if (pg == Bass)
+    {
+        for (auto& s : data.inst[Bass].bassSteps) s = {};
+        bassSel = -1;
+        setFlash ("Cleared the bass line");
+    }
+    else if (pg == Arp)
+    {
+        BoxEvent e; e.type = BoxEvent::ArpClear;
+        audio.post (e);
+        setFlash ("Arp notes released");
+    }
+    else
+    {
+        data.fx = BoxData::fxDefaults();
+        setFlash ("FX back to the start");
+    }
+    publish();
+    markDirty();
 }
 
 void BoxController::buttonDown (int b)
 {
     const int pg = page.load();
+    const bool sh = shift.load();
     switch (b)
     {
         case BtnPlay:
-            audio.setPlaying (! audio.isPlaying());
+            if (sh) tapTempo();
+            else audio.setPlaying (! audio.isPlaying());
             break;
 
         case BtnSteps:
-            stepView = ! stepView.load();
-            if (stepView.load())
+            if (sh) { clearPage(); break; }
+            if (pg == PageFx) { setFlash ("FX: hold a pad for an effect"); break; }
+            stepViews[(size_t) pg] = ! stepViews[(size_t) pg].load();
+            if (stepViews[(size_t) pg].load())
                 setFlash (pg == Drums ? "Steps: pads = 16 steps of " + drumPadName (data.selectedDrum)
                         : pg == Arp   ? juce::String ("Steps: tap a pad: on > rest > tie > accent")
                                       : juce::String ("Steps: tap = set / pick, knobs 2-4 = note, slide, accent"));
@@ -397,55 +465,31 @@ void BoxController::buttonDown (int b)
             shift = true;
             break;
 
-        case BtnTap:
-            if (shift.load())
-            {
-                if (pg == Drums)
-                {
-                    auto& steps = data.inst[Drums].drumSteps;
-                    if (stepView.load()) { steps[(size_t) data.selectedDrum].fill (0); setFlash ("Cleared " + drumPadName (data.selectedDrum)); }
-                    else { for (auto& p : steps) p.fill (0); setFlash ("Cleared all drums"); }
-                }
-                else if (pg == Bass)
-                {
-                    for (auto& s : data.inst[Bass].bassSteps) s = {};
-                    bassSel = -1;
-                    setFlash ("Cleared the bass line");
-                }
-                else
-                {
-                    BoxEvent e; e.type = BoxEvent::ArpClear;
-                    audio.post (e);
-                    setFlash ("Arp notes released");
-                }
-                publish();
-                markDirty();
-            }
-            else tapTempo();
+        case BtnScene:
+            sceneMode = ! sceneMode.load();
+            saveArm = false;
+            setFlash (sceneMode.load() ? "Scenes: pad = recall, Rec + pad = save" : "Scenes off");
             break;
 
         case BtnInstrument:
-            if (shift.load())
+            if (sh)
             {
+                if (pg >= NumInstruments) { setFlash ("Mute works on Drums, Arp and Bass"); break; }
                 auto& m = data.muted[(size_t) pg];
                 m = ! m;
                 publish();
                 markDirty();
                 setFlash (instrumentName (pg) + (m ? " muted" : " on"));
             }
-            else
-            {
-                data.page = (pg + 1) % NumInstruments;
-                page = data.page;
-                markDirty();
-            }
+            else setPage ((pg + 1) % NumPages);
             break;
 
         case BtnOctDown:
         case BtnOctUp:
         {
+            if (pg == PageFx) break;
             const int dir = b == BtnOctUp ? 1 : -1;
-            const bool paging = (pg == Drums && shift.load()) || (pg == Bass && stepView.load());
+            const bool paging = (pg == Drums && sh) || (pg == Bass && isStepView());
             if (paging)
             {
                 auto& sp = stepPages[(size_t) pg];
@@ -470,10 +514,10 @@ void BoxController::buttonDown (int b)
 
         case BtnRec:
             rec = true;
-            if (shift.load())
+            if (sh || sceneMode.load())
             {
                 saveArm = true;   // the next pad saves (also when Rec is already let go, e.g. clicked with the mouse)
-                setFlash ("Save: press a pad (1-16)");
+                setFlash (sceneMode.load() ? "Save scene: press a pad" : "Save preset: press a pad (1-16)");
                 break;
             }
             if (pg == Arp)
@@ -482,6 +526,10 @@ void BoxController::buttonDown (int b)
                 BoxEvent e; e.type = BoxEvent::ArpLatch; e.a = latchOn ? 1 : 0;
                 audio.post (e);
                 setFlash (latchOn ? "Hold on: the arp keeps playing" : "Hold off");
+            }
+            else if (pg == PageFx)
+            {
+                setFlash ("FX: hold a pad for an effect");
             }
             else
             {
@@ -497,7 +545,7 @@ void BoxController::buttonDown (int b)
 
 void BoxController::buttonUp (int b)
 {
-    if (b == BtnShift) { shift = false; saveArm = false; }
+    if (b == BtnShift) { shift = false; if (! sceneMode.load()) saveArm = false; }
     if (b == BtnRec) rec = false;
 }
 
@@ -506,9 +554,10 @@ bool BoxController::isButtonLit (int b) const
     switch (b)
     {
         case BtnPlay:  return audio.isPlaying();
-        case BtnSteps: return stepView.load();
+        case BtnSteps: return isStepView();
         case BtnShift: return shift.load();
-        case BtnRec:   return page.load() == Arp ? latchOn : audio.isRecording();
+        case BtnScene: return sceneMode.load();
+        case BtnRec:   return page.load() == Arp ? latchOn : page.load() < NumInstruments && audio.isRecording();
         default:       return false;
     }
 }
@@ -551,7 +600,7 @@ void BoxController::handleIncomingMidiMessage (juce::MidiInput*, const juce::Mid
                 const int b = cc - firstButtonCC;
                 const bool down = v >= 64;
                 if (b == BtnShift) shift = down;            // right away: a pad may follow immediately
-                if (b == BtnRec && shift.load()) rec = down;
+                if (b == BtnRec && (shift.load() || sceneMode.load())) rec = down;
                 runOnMessageThread ([this, b, down] { down ? buttonDown (b) : buttonUp (b); });
             }
         }
@@ -567,23 +616,37 @@ void BoxController::handleIncomingMidiMessage (juce::MidiInput*, const juce::Mid
     switch (page.load())
     {
         case Drums: if (m.isNoteOff()) return; e.type = BoxEvent::DrumHit; break;
-        case Arp:   e.type = m.isNoteOn() ? BoxEvent::ArpOn : BoxEvent::ArpOff; break;
-        default:    e.type = m.isNoteOn() ? BoxEvent::BassOn : BoxEvent::BassOff; break;
+        case Bass:  e.type = m.isNoteOn() ? BoxEvent::BassOn : BoxEvent::BassOff; break;
+        default:    e.type = m.isNoteOn() ? BoxEvent::ArpOn : BoxEvent::ArpOff; break;   // Arp and the FX page
     }
     audio.post (e);
 }
 
 //==============================================================================
-juce::File BoxController::presetFile (int instrument, int presetSlot) const
+juce::File BoxController::presetFile (int pg, int presetSlot) const
 {
-    return dataDir.getChildFile ("Presets").getChildFile (instrumentFolder (instrument))
+    return dataDir.getChildFile ("Presets").getChildFile (instrumentFolder (pg))
                   .getChildFile (juce::String (presetSlot + 1).paddedLeft ('0', 2) + ".json");
 }
 
-bool BoxController::presetExists (int instrument, int presetSlot) const
+juce::File BoxController::sceneFile (int sceneSlot) const
 {
-    const auto f = presetFile (instrument, presetSlot);
-    return f.existsAsFile() && BoxData::instrumentFromVar (instrument, juce::JSON::parse (f), *std::make_unique<InstrumentState>());
+    return dataDir.getChildFile ("Scenes").getChildFile (juce::String (sceneSlot + 1).paddedLeft ('0', 2) + ".json");
+}
+
+bool BoxController::presetExists (int pg, int presetSlot) const
+{
+    const auto f = presetFile (pg, presetSlot);
+    if (! f.existsAsFile()) return false;
+    const auto v = juce::JSON::parse (f);
+    if (pg == PageFx) { std::array<float, numSlots> tmp {}; return BoxData::fxFromVar (v, tmp); }
+    auto tmp = std::make_unique<InstrumentState>();
+    return BoxData::instrumentFromVar (pg, v, *tmp);
+}
+
+bool BoxController::sceneExists (int sceneSlot) const
+{
+    return sceneFile (sceneSlot).existsAsFile();
 }
 
 namespace
@@ -597,34 +660,82 @@ bool writeSafely (const juce::File& f, const juce::String& text)
 }
 } // namespace
 
-bool BoxController::savePreset (int instrument, int presetSlot)
+bool BoxController::savePreset (int pg, int presetSlot)
 {
-    auto state = data.inst[(size_t) instrument];
-    state.tempo = data.globals[GTempo];
-    const bool ok = writeSafely (presetFile (instrument, presetSlot),
-                                 juce::JSON::toString (BoxData::instrumentToVar (instrument, state)));
-    if (ok) data.loadedPreset[(size_t) instrument] = presetSlot;
-    setFlash (ok ? "Saved: " + instrumentName (instrument) + " " + juce::String (presetSlot + 1) : juce::String ("Could not save the preset"));
+    pg = juce::jlimit (0, NumPages - 1, pg);
+    juce::var v;
+    if (pg == PageFx) v = BoxData::fxToVar (data.fx);
+    else
+    {
+        auto state = data.inst[(size_t) pg];
+        state.tempo = data.globals[GTempo];
+        v = BoxData::instrumentToVar (pg, state);
+    }
+    const bool ok = writeSafely (presetFile (pg, presetSlot), juce::JSON::toString (v));
+    if (ok) data.loadedPreset[(size_t) pg] = presetSlot;
+    setFlash (ok ? "Saved: " + instrumentName (pg) + " " + juce::String (presetSlot + 1) : juce::String ("Could not save the preset"));
     markDirty();
     return ok;
 }
 
-bool BoxController::loadPreset (int instrument, int presetSlot)
+bool BoxController::loadPreset (int pg, int presetSlot)
 {
-    const auto f = presetFile (instrument, presetSlot);
-    InstrumentState state;
-    if (! f.existsAsFile() || ! BoxData::instrumentFromVar (instrument, juce::JSON::parse (f), state))
+    pg = juce::jlimit (0, NumPages - 1, pg);
+    const auto f = presetFile (pg, presetSlot);
+    bool ok = f.existsAsFile();
+    if (ok)
+    {
+        const auto v = juce::JSON::parse (f);
+        if (pg == PageFx) ok = BoxData::fxFromVar (v, data.fx);
+        else
+        {
+            InstrumentState state;
+            ok = BoxData::instrumentFromVar (pg, v, state);
+            if (ok)
+            {
+                data.inst[(size_t) pg] = state;
+                if (! audio.isPlaying()) data.globals[GTempo] = state.tempo;   // the tempo jumps only while stopped
+                if (pg == Bass) bassSel = -1;
+            }
+        }
+    }
+    if (! ok)
     {
         setFlash ("Pad " + juce::String (presetSlot + 1) + " is empty (Shift + Rec + pad saves)");
         return false;
     }
-    data.inst[(size_t) instrument] = state;
-    if (! audio.isPlaying()) data.globals[GTempo] = state.tempo;   // the tempo jumps only while stopped
-    data.loadedPreset[(size_t) instrument] = presetSlot;
-    if (instrument == Bass) bassSel = -1;
+    data.loadedPreset[(size_t) pg] = presetSlot;
     publish();
     markDirty();
-    setFlash ("Loaded: " + instrumentName (instrument) + " " + juce::String (presetSlot + 1));
+    setFlash ("Loaded: " + instrumentName (pg) + " " + juce::String (presetSlot + 1));
+    return true;
+}
+
+bool BoxController::saveScene (int sceneSlot)
+{
+    const bool ok = writeSafely (sceneFile (sceneSlot), juce::JSON::toString (data.sceneToVar()));
+    if (ok) data.loadedScene = sceneSlot;
+    setFlash (ok ? "Saved scene " + juce::String (sceneSlot + 1) : juce::String ("Could not save the scene"));
+    markDirty();
+    return ok;
+}
+
+bool BoxController::loadScene (int sceneSlot)
+{
+    const auto f = sceneFile (sceneSlot);
+    if (! f.existsAsFile() || ! data.sceneFromVar (juce::JSON::parse (f)))
+    {
+        setFlash ("Scene " + juce::String (sceneSlot + 1) + " is empty (Rec + pad saves)");
+        return false;
+    }
+    data.loadedScene = sceneSlot;
+    for (auto& p : data.loadedPreset) p = -1;
+    key = juce::roundToInt (data.globals[GKey]);
+    scale = juce::roundToInt (data.globals[GScale]);
+    bassSel = -1;
+    publish (true);   // while playing it changes at the next bar
+    markDirty();
+    setFlash ("Scene " + juce::String (sceneSlot + 1) + (audio.isPlaying() ? " at the next bar" : ""));
     return true;
 }
 

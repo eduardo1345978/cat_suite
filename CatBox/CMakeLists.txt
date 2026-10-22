@@ -13,6 +13,7 @@ target_sources(CatBox PRIVATE
     Source/BoxAudio.cpp
     Source/BoxController.cpp
     Source/BoxView.cpp
+    Source/MasterFx.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatSounds.cpp)
 
 target_include_directories(CatBox PRIVATE
@@ -37,6 +38,7 @@ target_link_libraries(CatBox
         juce::juce_audio_devices
         juce::juce_audio_formats
         juce::juce_gui_extra
+        juce::juce_dsp
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)

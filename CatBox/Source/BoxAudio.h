@@ -4,6 +4,8 @@
 #include "BoxModel.h"
 #include "ArpEngine.h"
 #include "AcidSynth.h"
+#include "SuperSaw.h"
+#include "MasterFx.h"
 #include "CatSounds.h"
 #include "SafetyLimiter.h"
 #include <atomic>
@@ -31,12 +33,17 @@ struct AudioSnapshot
 
     ArpSettings arp;
     int arpSound = 2;
+    bool arpOn = true;          // false = the Arp page plays like a plain synth
+    bool bassFollow = false;    // the bass line moves to the root of the chord held on the Arp
+    int key = 0;
+
+    MasterSettings master;
 };
 
 /** Small events from the pads / keyboard to the audio thread. */
 struct BoxEvent
 {
-    enum Type : uint8_t { DrumHit, ArpOn, ArpOff, BassOn, BassOff, ArpLatch, ArpClear, AllOff } type = DrumHit;
+    enum Type : uint8_t { DrumHit, ArpOn, ArpOff, BassOn, BassOff, ArpLatch, ArpClear, AllOff, PerfOn, PerfOff } type = DrumHit;
     int a = 0, b = 0, c = 0;
 };
 
@@ -64,13 +71,15 @@ public:
     void render (float* left, float* right, int numSamples);   // the audio thread
 
     // any thread
-    void setSnapshot (const AudioSnapshot&);
+    /** atBar = wait for the next bar while playing (scenes), else right away. */
+    void setSnapshot (const AudioSnapshot&, bool atBar = false);
     void post (const BoxEvent&);
     void setPlaying (bool);
     bool isPlaying() const noexcept { return playing.load(); }
     void setRecording (bool r) noexcept { recording = r; }
     bool isRecording() const noexcept { return recording.load(); }
     bool popRecorded (RecordedNote&);
+    double getSampleRate() const noexcept { return sr; }
 
     // what the screen shows
     std::atomic<int> drumStep { -1 }, bassStep { -1 }, arpStep { -1 };
@@ -80,6 +89,12 @@ public:
     std::atomic<float> peak { 0.0f };
     std::atomic<bool> arpLatched { false };
     std::array<std::atomic<float>, 32> scope {};   // a few recent output values for the screen
+    static constexpr int spectrumSize = 1024;
+    std::array<std::atomic<float>, spectrumSize> spectrumRing {};   // the output at half rate, for the spectrum
+    std::atomic<int> spectrumWrite { 0 };
+    std::atomic<uint32_t> perfHeld { 0 };           // FX page pads held
+    std::atomic<float> pumpNow { 0.0f };
+    std::atomic<bool> sceneWaiting { false };
 
     // juce::AudioIODeviceCallback
     void audioDeviceIOCallbackWithContext (const float* const*, int, float* const* outputs, int numOutputs,
@@ -93,6 +108,10 @@ private:
     void playDrumStep (int64_t k, double from, double to);
     void playBassStep (int64_t k, double from, double to);
     void bassOn (int note, int velocity, bool accent, bool slide);
+    void arpNoteOn (int note, int velocity);
+    void arpNoteOff (int note);
+    void arpAllOff();
+    int followOffset() const noexcept;
     void bassOff (int note);
     void scheduleOff (int instrument, int note, double offPpq);
     void cancelOffs (int instrument, int note);
@@ -112,7 +131,11 @@ private:
     hub::DrumKit drums;
     hub::KeysSynth keys;
     hub::BassSynth bassSynth;
-    AcidSynth acid;
+    AcidSynth acid, arpAcid;
+    SuperSaw supersaw;
+    MasterFx master;
+    std::array<int, 64> kickOffsets {};
+    int numKicks = 0, subOffset = 0;
     std::array<hub::TrackFx, NumInstruments> fx;
     cat::SafetyLimiter limiter;
     ArpEngine arp;
@@ -125,7 +148,7 @@ private:
 
     AudioSnapshot live, pending;
     juce::SpinLock snapshotLock;
-    bool snapshotFresh = false;
+    bool snapshotFresh = false, snapshotAtBar = false;
 
     std::array<BoxEvent, 512> events;
     juce::AbstractFifo eventFifo { 512 };
@@ -135,6 +158,7 @@ private:
     juce::AbstractFifo recordFifo { 256 };
 
     std::vector<float> bufL, bufR;
-    int scopeWrite = 0, scopeCount = 0;
+    int scopeWrite = 0, scopeCount = 0, spectrumCount = 0;
+    std::vector<float> mixL, mixR;
 };
 } // namespace catbox

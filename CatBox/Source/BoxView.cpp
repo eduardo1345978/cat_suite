@@ -1,23 +1,24 @@
 #include "BoxView.h"
+#include "MasterFx.h"
 #include <cmath>
 
 namespace catbox
 {
 namespace
 {
-const BoxView::Palette darkScreen  { juce::Colour (0xff0b0d12), juce::Colour (0xff10131a), juce::Colour (0xff161a23), juce::Colour (0xffe8eaf0),
-                                     juce::Colour (0xff7d8494), juce::Colour (0xff2a2e38), juce::Colour (0xff242832) };
-const BoxView::Palette lightScreen { juce::Colour (0xff0b0d12), juce::Colour (0xfff4f5f8), juce::Colour (0xffffffff), juce::Colour (0xff1b1e26),
-                                     juce::Colour (0xff6a7184), juce::Colour (0xffd9dce4), juce::Colour (0xffcfd3dc) };
+const BoxView::Palette darkScreen  { juce::Colour (0xff0b0d12), juce::Colour (0xff10131a), juce::Colour (0xff171b24),
+                                     juce::Colour (0xffe8eaf0), juce::Colour (0xff858b9b), juce::Colour (0xff2a2e38) };
+const BoxView::Palette lightScreen { juce::Colour (0xff0b0d12), juce::Colour (0xfff4f5f8), juce::Colour (0xffffffff),
+                                     juce::Colour (0xff1b1e26), juce::Colour (0xff666d80), juce::Colour (0xffd9dce4) };
 
 namespace C
 {
     // the front panel is the black 3D-printed case: always dark
     const juce::Colour body     { 0xff17191f };
     const juce::Colour bodyEdge { 0xff2a2e38 };
-    const juce::Colour panelOff { 0xff262a33 };
+    const juce::Colour padOff   { 0xff262a33 };
     const juce::Colour text     { 0xffe8eaf0 };
-    const juce::Colour dim      { 0xff7d8494 };
+    const juce::Colour dim      { 0xff858b9b };
     const juce::Colour stepOn   { 0xff4fbf6a };
     const juce::Colour stepTie  { 0xff4f84d8 };
     const juce::Colour stepAcc  { 0xfff09a3e };
@@ -30,7 +31,8 @@ juce::Font font (float size, bool bold = false)
     return juce::Font (juce::FontOptions (size, bold ? juce::Font::bold : juce::Font::plain));
 }
 
-const char padKeys[numPads] = { '1', '2', '3', '4', 'Q', 'W', 'E', 'R', 'A', 'S', 'D', 'F', 'Z', 'X', 'C', 'V' };
+// pads in two rows of 8: top row 1-8, bottom row Q-I
+const char padKeys[numPads] = { '1', '2', '3', '4', '5', '6', '7', '8', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I' };
 
 bool keyDown (int c)
 {
@@ -41,7 +43,7 @@ bool keyDown (int c)
 bool padKeyDown (int pad)
 {
     const int c = padKeys[pad];
-    return keyDown (c) || (c == 'Z' && keyDown ('Y'));   // Slovak / German keyboards swap Z and Y
+    return keyDown (c) || (c == 'Y' && keyDown ('Z'));   // Slovak / German keyboards swap Z and Y
 }
 
 int buttonKey (int b)
@@ -50,13 +52,19 @@ int buttonKey (int b)
     {
         case BtnPlay:       return juce::KeyPress::spaceKey;
         case BtnSteps:      return 'B';
-        case BtnTap:        return 'T';
+        case BtnScene:      return 'N';
         case BtnInstrument: return juce::KeyPress::tabKey;
         case BtnOctDown:    return ',';
         case BtnOctUp:      return '.';
         case BtnRec:        return juce::KeyPress::returnKey;
         default:            return 0;   // Shift: modifierKeysChanged
     }
+}
+
+const char* buttonKeyHint (int b)
+{
+    static const char* hints[NumButtons] = { "Space", "B", "Shift", "N", "Tab", ",", ".", "Enter" };
+    return hints[juce::jlimit (0, NumButtons - 1, b)];
 }
 
 void drawArc (juce::Graphics& g, juce::Point<float> c, float r, float from, float to, float thickness, juce::Colour col)
@@ -68,9 +76,15 @@ void drawArc (juce::Graphics& g, juce::Point<float> c, float r, float from, floa
 }
 } // namespace
 
-juce::Colour BoxView::instrumentColour (int i)
+juce::Colour BoxView::pageColour (int i)
 {
-    return i == Drums ? juce::Colour (0xffe8894a) : i == Arp ? juce::Colour (0xff33c2a2) : juce::Colour (0xff9b7cec);
+    switch (i)
+    {
+        case Drums: return juce::Colour (0xffe8894a);
+        case Arp:   return juce::Colour (0xff33c2a2);
+        case Bass:  return juce::Colour (0xff9b7cec);
+        default:    return juce::Colour (0xff4fa3e8);
+    }
 }
 
 BoxView::BoxView (BoxController& b, bool kioskMode) : box (b), kiosk (kioskMode)
@@ -78,6 +92,7 @@ BoxView::BoxView (BoxController& b, bool kioskMode) : box (b), kiosk (kioskMode)
     setOpaque (true);
     setWantsKeyboardFocus (true);
     if (kiosk) setMouseCursor (juce::MouseCursor::NoCursor);
+    fftData.assign ((size_t) (2 << fftOrder), 0.0f);
     startTimerHz (30);
 }
 
@@ -97,6 +112,34 @@ juce::Point<float> BoxView::toLogical (juce::Point<float> p) const
     return (p - offset) / scale;
 }
 
+void BoxView::updateSpectrum()
+{
+    auto& audio = box.getAudio();
+    const int size = 1 << fftOrder;
+    const int w = audio.spectrumWrite.load (std::memory_order_relaxed);
+    for (int i = 0; i < size; ++i)
+    {
+        const float win = 0.5f - 0.5f * std::cos (2.0f * juce::MathConstants<float>::pi * (float) i / (float) (size - 1));
+        fftData[(size_t) i] = audio.spectrumRing[(size_t) ((w + i) % BoxAudio::spectrumSize)].load (std::memory_order_relaxed) * win;
+    }
+    std::fill (fftData.begin() + size, fftData.end(), 0.0f);
+    fft.performFrequencyOnlyForwardTransform (fftData.data(), true);
+
+    const double rate = audio.getSampleRate() * 0.5;   // the ring holds every second sample
+    const double binHz = rate / size;
+    for (int b = 0; b < numBands; ++b)
+    {
+        const double f0 = 40.0 * std::pow (11000.0 / 40.0, (double) b / numBands);
+        const double f1 = 40.0 * std::pow (11000.0 / 40.0, (double) (b + 1) / numBands);
+        const int i0 = juce::jlimit (1, size / 2 - 1, (int) (f0 / binHz)), i1 = juce::jlimit (i0 + 1, size / 2, (int) (f1 / binHz) + 1);
+        float m = 0.0f;
+        for (int i = i0; i < i1; ++i) m = juce::jmax (m, fftData[(size_t) i]);
+        const float db = juce::Decibels::gainToDecibels (m / (float) size * 4.0f, -80.0f);
+        const float v = juce::jlimit (0.0f, 1.0f, (db + 72.0f) / 66.0f);
+        bands[(size_t) b] = v > bands[(size_t) b] ? v : bands[(size_t) b] * 0.86f + v * 0.14f;
+    }
+}
+
 void BoxView::timerCallback()
 {
     const uint32_t f = box.getAudio().drumFlash.exchange (0);
@@ -105,6 +148,7 @@ void BoxView::timerCallback()
         if ((f >> p) & 1u) flashLevel[(size_t) p] = 1.0f;
         else flashLevel[(size_t) p] *= 0.78f;
     }
+    updateSpectrum();
     if (! hasKeyboardFocus (true) && isShowing() && getPeer() != nullptr && getPeer()->isFocused()) grabKeyboardFocus();
     repaint();
 }
@@ -114,17 +158,29 @@ juce::Colour BoxView::padColour (int pad, bool& lit, bool& outlined, bool& thick
 {
     lit = outlined = thick = false;
     const int page = box.getPage();
-    const auto col = instrumentColour (page);
+    const auto col = pageColour (page);
     const auto& data = box.getData();
-    const auto off = C::panelOff;
+    const auto off = C::padOff;
     const bool pressed = ((pressedPads >> pad) & 1u) != 0;
     auto& audio = box.getAudio();
 
+    if (box.isSceneMode())
+    {
+        const auto sc = juce::Colour (0xfff0c94a);
+        outlined = data.loadedScene == pad;
+        if (box.sceneExists (pad)) { lit = outlined; return outlined ? sc : sc.withMultipliedBrightness (0.5f); }
+        return off;
+    }
     if (box.isShiftHeld())
     {
         outlined = data.loadedPreset[(size_t) page] == pad;
         if (box.presetExists (page, pad)) { lit = outlined; return outlined ? col : col.withMultipliedBrightness (0.55f); }
         return off;
+    }
+    if (page == PageFx)
+    {
+        lit = pressed || ((audio.perfHeld.load() >> pad) & 1u) != 0;
+        return lit ? col : off.interpolatedWith (col, pad < 4 || pad == PerfRepeat2 ? 0.3f : 0.16f);
     }
 
     if (box.isStepView())
@@ -173,7 +229,6 @@ juce::Colour BoxView::padColour (int pad, bool& lit, bool& outlined, bool& thick
             const bool root = pad % (int) scaleIntervals (juce::roundToInt (data.globals[GScale])).size() == 0;
             return lit ? col : off.interpolatedWith (col, root ? 0.38f : 0.16f);
         }
-        case Bass:
         default:
         {
             const int note = box.bassPadNote (pad) + 12 * juce::roundToInt (data.inst[Bass].values[slot::BOctave]);
@@ -188,7 +243,9 @@ juce::String BoxView::padLabel (int pad) const
 {
     const int page = box.getPage();
     const auto& data = box.getData();
+    if (box.isSceneMode()) return "Scene " + juce::String (pad + 1);
     if (box.isShiftHeld()) return juce::String (pad + 1);
+    if (page == PageFx) return perfName (pad);
     if (box.isStepView())
     {
         if (page == Arp)
@@ -207,30 +264,38 @@ juce::String BoxView::padLabel (int pad) const
     return noteName (box.bassPadNote (pad));
 }
 
-void BoxView::paintPad (juce::Graphics& g, juce::Rectangle<float> r, int pad, bool big)
+juce::String BoxView::presetTitle() const
+{
+    const auto& data = box.getData();
+    const int page = box.getPage();
+    if (box.isSceneMode()) return data.loadedScene >= 0 ? "Scene " + juce::String (data.loadedScene + 1) : juce::String ("Scenes");
+    if (data.loadedPreset[(size_t) page] >= 0) return "Preset " + juce::String (data.loadedPreset[(size_t) page] + 1);
+    if (data.loadedScene >= 0) return "Scene " + juce::String (data.loadedScene + 1);
+    return {};
+}
+
+void BoxView::paintPad (juce::Graphics& g, juce::Rectangle<float> r, int pad)
 {
     bool lit = false, outlined = false, thick = false;
     const auto c = padColour (pad, lit, outlined, thick);
-    if (lit && big)
+    if (lit)
     {
-        g.setColour (c.withAlpha (0.3f));
-        g.fillRoundedRectangle (r.expanded (3.0f), 9.0f);
+        g.setColour (c.withAlpha (0.28f));
+        g.fillRoundedRectangle (r.expanded (3.0f), 10.0f);
     }
     g.setColour (c);
-    g.fillRoundedRectangle (r, big ? 7.0f : 4.0f);
+    g.fillRoundedRectangle (r, 8.0f);
     if (outlined)
     {
         g.setColour (juce::Colours::white.withAlpha (thick ? 1.0f : 0.8f));
-        g.drawRoundedRectangle (r.reduced (1.0f), big ? 7.0f : 4.0f, (big ? 2.0f : 1.4f) * (thick ? 1.8f : 1.0f));
+        g.drawRoundedRectangle (r.reduced (1.0f), 8.0f, thick ? 3.6f : 2.0f);
     }
-    if (! big) return;
-
     g.setColour (lit ? juce::Colours::black.withAlpha (0.75f) : C::text.withAlpha (0.75f));
     g.setFont (font (12.5f, true));
-    g.drawText (padLabel (pad), r.reduced (4.0f), juce::Justification::centredBottom);
+    g.drawFittedText (padLabel (pad), r.reduced (5.0f).toNearestInt(), juce::Justification::centredBottom, 2, 0.8f);
     g.setFont (font (10.0f));
     g.setColour (C::dim.withAlpha (lit ? 0.0f : 0.8f));
-    g.drawText (juce::String::charToString ((juce::juce_wchar) padKeys[pad]), r.reduced (5.0f, 3.0f), juce::Justification::topLeft);
+    g.drawText (juce::String::charToString ((juce::juce_wchar) padKeys[pad]), r.reduced (6.0f, 4.0f), juce::Justification::topLeft);
 }
 
 //==============================================================================
@@ -242,85 +307,83 @@ void BoxView::paint (juce::Graphics& g)
     if (! kiosk) paintPanel (g, { 0.0f, (float) screenH, (float) screenW, (float) panelH });
 }
 
+juce::Rectangle<float> BoxView::tabArea (int p) const
+{
+    return { 170.0f + p * 62.0f, 12.0f, 60.0f, 40.0f };
+}
+
 void BoxView::paintScreen (juce::Graphics& g, juce::Rectangle<float> area)
 {
     const auto& P = pal();
     const int page = box.getPage();
-    const auto col = instrumentColour (page);
+    const auto col = pageColour (page);
     const auto& data = box.getData();
     auto& audio = box.getAudio();
 
     g.setColour (P.screen);
     g.fillRect (area);
 
-    // header: instrument, the three pages, play state, tempo, key
-    auto header = area.removeFromTop (64.0f).reduced (22.0f, 0.0f);
+    // header: page name, the four pages, preset / scene, play + tempo
     g.setColour (col);
-    g.setFont (font (38.0f, true));
-    g.drawText (instrumentName (page).toUpperCase(), header.removeFromLeft (170.0f), juce::Justification::centredLeft);
-
-    auto tabs = header.removeFromLeft (230.0f);
-    for (int i = 0; i < NumInstruments; ++i)
+    g.setFont (font (34.0f, true));
+    g.drawText (instrumentName (page).toUpperCase(), juce::Rectangle<float> (20.0f, 0.0f, 150.0f, 64.0f), juce::Justification::centredLeft);
+    for (int i = 0; i < NumPages; ++i)
     {
-        auto t = tabs.removeFromLeft (76.0f);
+        const auto t = tabArea (i);
         const bool active = i == page;
-        g.setColour (data.muted[(size_t) i] ? C::rec : active ? instrumentColour (i) : P.dim);
+        const bool muted = i < NumInstruments && data.muted[(size_t) i];
+        if (active) { g.setColour (pageColour (i).withAlpha (0.16f)); g.fillRoundedRectangle (t, 8.0f); }
+        g.setColour (muted ? C::rec : active ? pageColour (i) : P.dim);
         g.setFont (font (15.0f, active));
-        g.drawText (instrumentName (i) + (data.muted[(size_t) i] ? " M" : ""), t, juce::Justification::centred);
-        if (active) { g.setColour (instrumentColour (i)); g.fillRect (t.getCentreX() - 18.0f, t.getBottom() - 16.0f, 36.0f, 3.0f); }
+        g.drawText (instrumentName (i), t, juce::Justification::centred);
     }
-
+    g.setColour (P.text);
+    g.setFont (font (22.0f, true));
+    g.drawFittedText (presetTitle(), juce::Rectangle<int> (430, 0, 190, 64), juce::Justification::centred, 1, 0.8f);
     {
-        auto right = header;
-        const float cy = right.getCentreY();
-        g.setFont (font (16.0f));
-        g.setColour (P.dim);
-        g.drawText (keyNames()[juce::roundToInt (data.globals[GKey])] + " " + scaleNames()[juce::roundToInt (data.globals[GScale])].toLowerCase(),
-                    right.removeFromRight (150.0f), juce::Justification::centredRight);
-        g.setFont (font (22.0f, true));
-        g.setColour (P.text);
-        g.drawText (juce::String (juce::roundToInt (data.globals[GTempo])) + " BPM", right.removeFromRight (110.0f),
-                    juce::Justification::centredRight);
-        const float x = right.getRight() - 30.0f;
+        const float cy = 32.0f, x = 640.0f;
         juce::Path p;
-        if (audio.isPlaying()) p.addTriangle (x, cy - 9.0f, x, cy + 9.0f, x + 15.0f, cy);
-        else p.addRectangle (x, cy - 7.0f, 14.0f, 14.0f);
+        if (audio.isPlaying()) p.addTriangle (x, cy - 10.0f, x, cy + 10.0f, x + 17.0f, cy);
+        else p.addRectangle (x, cy - 8.0f, 16.0f, 16.0f);
         g.setColour (audio.isPlaying() ? C::stepOn : P.dim);
         g.fillPath (p);
+        g.setColour (P.text);
+        g.setFont (font (26.0f, true));
+        g.drawText (juce::String (juce::roundToInt (data.globals[GTempo])), juce::Rectangle<float> (662.0f, 4.0f, 70.0f, 40.0f), juce::Justification::centredRight);
+        g.setFont (font (12.0f));
+        g.setColour (P.dim);
+        g.drawText ("BPM", juce::Rectangle<float> (736.0f, 12.0f, 44.0f, 28.0f), juce::Justification::centredLeft);
+        g.drawText (keyNames()[juce::roundToInt (data.globals[GKey])] + " " + scaleNames()[juce::roundToInt (data.globals[GScale])].toLowerCase(),
+                    juce::Rectangle<float> (640.0f, 42.0f, 140.0f, 18.0f), juce::Justification::centredLeft);
     }
 
-    // status chips
-    auto chips = area.removeFromTop (28.0f).reduced (22.0f, 3.0f);
+    // status: only what is switched on
+    auto chips = juce::Rectangle<float> (20.0f, 66.0f, 760.0f, 22.0f);
     auto chip = [&g, &chips] (const juce::String& s, juce::Colour c)
     {
-        const float w = 18.0f + s.length() * 8.5f;
+        const float w = 16.0f + s.length() * 8.0f;
         auto r = chips.removeFromLeft (w);
         chips.removeFromLeft (8.0f);
         g.setColour (c.withAlpha (0.2f));
         g.fillRoundedRectangle (r, 5.0f);
         g.setColour (c);
-        g.setFont (font (13.0f, true));
+        g.setFont (font (12.5f, true));
         g.drawText (s, r, juce::Justification::centred);
     };
     if (box.isShiftHeld()) chip ("SHIFT", P.dim);
+    if (box.isSceneMode()) chip ("SCENES", juce::Colour (0xfff0c94a));
+    if (audio.sceneWaiting.load()) chip ("NEXT BAR", juce::Colour (0xfff0c94a));
     if (box.isStepView()) chip ("STEPS", C::stepOn);
-    if (audio.isRecording() && page != Arp) chip ("REC", C::rec);
-    if (box.isLatched() && page == Arp) chip ("HOLD", instrumentColour (Arp));
-    if (data.muted[(size_t) page]) chip ("MUTED", C::rec);
-    if (data.loadedPreset[(size_t) page] >= 0) chip ("PRESET " + juce::String (data.loadedPreset[(size_t) page] + 1), col);
-    if (page == Drums) chip (drumPadName (data.selectedDrum).toUpperCase(), col);
+    if (audio.isRecording() && page < NumInstruments && page != Arp) chip ("REC", C::rec);
+    if (box.isLatched() && page == Arp) chip ("HOLD", pageColour (Arp));
+    if (page < NumInstruments && data.muted[(size_t) page]) chip ("MUTED", C::rec);
+    if (page == Drums) chip (drumPadName (data.selectedDrum).toUpperCase() + " v", col);
 
-    // the 12 knobs (the Shift layer while Shift is held)
-    auto knobs = area.removeFromTop (240.0f).reduced (10.0f, 0.0f);
-    for (int row = 0; row < 2; ++row)
-    {
-        auto r = knobs.removeFromTop (120.0f);
-        const float w = r.getWidth() / 6.0f;
-        for (int c = 0; c < 6; ++c)
-            paintKnobCell (g, r.removeFromLeft (w).reduced (4.0f), row * 6 + c);
-    }
+    // the 12 knobs
+    for (int k = 0; k < numKnobs; ++k)
+        paintKnobCell (g, juce::Rectangle<float> (14.0f + (k % 6) * 129.0f, 94.0f + (k / 6) * 118.0f, 129.0f, 118.0f).reduced (4.0f), k);
 
-    paintBottom (g, area.reduced (10.0f, 6.0f));
+    paintBottom (g, { 14.0f, 336.0f, 772.0f, 136.0f });
 }
 
 void BoxView::paintKnobCell (juce::Graphics& g, juce::Rectangle<float> r, int knob)
@@ -328,190 +391,191 @@ void BoxView::paintKnobCell (juce::Graphics& g, juce::Rectangle<float> r, int kn
     const auto& P = pal();
     const int page = box.getPage();
     const auto v = box.knobView (knob);
-    g.setColour (v.stepEdit ? P.cell.interpolatedWith (instrumentColour (page), 0.12f) : P.cell);
-    g.fillRoundedRectangle (r, 8.0f);
-    g.setColour (P.dim.withAlpha (0.6f));
-    g.setFont (font (11.0f));
-    g.drawText (juce::String (knob + 1), r.reduced (7.0f, 5.0f), juce::Justification::topLeft);
-    if (! v.used)
-    {
-        g.setColour (P.faint);
-        g.setFont (font (22.0f));
-        g.drawText ("-", r, juce::Justification::centred);
-        return;
-    }
+    g.setColour (v.stepEdit ? P.cell.interpolatedWith (pageColour (page), 0.14f) : P.cell);
+    g.fillRoundedRectangle (r, 10.0f);
+    if (! v.used) return;
 
-    const auto col = v.global ? P.dim : instrumentColour (page);
-    const juce::Point<float> c { r.getCentreX(), r.getY() + 38.0f };
+    const auto col = v.global ? P.dim : pageColour (page);
+    const juce::Point<float> c { r.getCentreX(), r.getY() + 40.0f };
     constexpr float a0 = -2.35f, a1 = 2.35f;
-    drawArc (g, c, 24.0f, a0, a1, 5.0f, P.faint);
+    drawArc (g, c, 25.0f, a0, a1, 6.0f, P.faint);
     const float frac = juce::jlimit (0.0f, 1.0f, v.fraction);
-    if (frac > 0.001f) drawArc (g, c, 24.0f, a0, a0 + (a1 - a0) * frac, 5.0f, col);
+    if (frac > 0.001f) drawArc (g, c, 25.0f, a0, a0 + (a1 - a0) * frac, 6.0f, col);
 
     g.setColour (P.dim);
-    g.setFont (font (14.0f));
-    g.drawFittedText (v.name, r.withTrimmedTop (66.0f).withHeight (18.0f).toNearestInt(), juce::Justification::centred, 1, 0.75f);
+    g.setFont (font (13.5f));
+    g.drawFittedText (v.name, r.withTrimmedTop (70.0f).withHeight (18.0f).toNearestInt(), juce::Justification::centred, 1, 0.75f);
     g.setColour (P.text);
-    g.setFont (font (17.0f, true));
-    g.drawFittedText (v.value, r.withTrimmedTop (84.0f).withHeight (24.0f).toNearestInt(), juce::Justification::centred, 1, 0.7f);
+    g.setFont (font (18.0f, true));
+    g.drawFittedText (v.value, r.withTrimmedTop (87.0f).withHeight (24.0f).toNearestInt(), juce::Justification::centred, 1, 0.7f);
 }
 
-void BoxView::paintStepRow (juce::Graphics& g, juce::Rectangle<float> bar, int instrument)
-{
-    const auto& P = pal();
-    const auto& data = box.getData();
-    auto& audio = box.getAudio();
-    const auto col = instrumentColour (instrument);
-    const int len = instrument == Drums ? data.drumLength() : data.bassLength();
-    const int shown = instrument == Drums ? len : juce::jmax (16, ((len + 15) / 16) * 16);
-    const int cur = audio.isPlaying() ? (instrument == Drums ? audio.drumStep.load() : audio.bassStep.load()) : -1;
-    const int page = juce::jmin (box.stepPage (instrument), box.numStepPages (instrument) - 1);
-    const float w = bar.getWidth() / shown;
-
-    if (box.isStepView() && box.getPage() == instrument)   // the 16 steps the pads show now
-    {
-        g.setColour (col.withAlpha (0.18f));
-        g.fillRoundedRectangle (bar.withX (bar.getX() + page * 16 * w).withWidth (16 * w).expanded (0.0f, 3.0f), 4.0f);
-    }
-    for (int s = 0; s < shown; ++s)
-    {
-        auto b = bar.withX (bar.getX() + s * w).withWidth (w - (shown > 32 ? 1.0f : 2.0f));
-        juce::Colour c = P.faint;
-        if (s >= len) c = P.faint.withAlpha (0.35f);
-        else if (instrument == Drums)
-        {
-            const int v = data.inst[Drums].drumSteps[(size_t) data.selectedDrum][(size_t) s];
-            if (v > 0) c = v >= 120 ? col.brighter (0.3f) : col;
-        }
-        else
-        {
-            const auto& st = data.inst[Bass].bassSteps[(size_t) s];
-            if (st.note >= 0)
-            {
-                c = st.accent ? C::stepAcc : col;
-                // note height inside the box: a tiny melody line
-                const float hgt = juce::jmap ((float) juce::jlimit (24, 72, st.note), 24.0f, 72.0f, 0.15f, 1.0f);
-                g.setColour (c.withAlpha (0.35f));
-                g.fillRoundedRectangle (b, 2.0f);
-                b = b.withTrimmedTop (b.getHeight() * (1.0f - hgt));
-            }
-        }
-        g.setColour (c);
-        g.fillRoundedRectangle (b, 2.0f);
-        if (instrument == Bass && s < len && data.inst[Bass].bassSteps[(size_t) s].slide)
-        {
-            g.setColour (C::stepTie);
-            g.fillRect (b.getRight() - 2.0f, bar.getY() - 4.0f, w, 3.0f);
-        }
-        if (s == cur)
-        {
-            g.setColour (P.text);
-            g.drawRoundedRectangle (bar.withX (bar.getX() + s * w).withWidth (w - 1.0f), 2.0f, 1.6f);
-        }
-    }
-}
-
-void BoxView::paintScope (juce::Graphics& g, juce::Rectangle<float> r)
-{
-    const auto& P = pal();
-    auto& audio = box.getAudio();
-    g.setColour (P.cell);
-    g.fillRoundedRectangle (r, 6.0f);
-    juce::Path p;
-    const int n = (int) audio.scope.size();
-    for (int i = 0; i < n; ++i)
-    {
-        const float v = juce::jlimit (-1.0f, 1.0f, audio.scope[(size_t) i].load (std::memory_order_relaxed) * 2.0f);
-        const float x = r.getX() + 4.0f + (r.getWidth() - 8.0f) * i / (n - 1);
-        const float y = r.getCentreY() - v * (r.getHeight() * 0.42f);
-        if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y);
-    }
-    g.setColour (instrumentColour (box.getPage()));
-    g.strokePath (p, juce::PathStrokeType (1.6f));
-    const float pk = juce::jlimit (0.0f, 1.0f, audio.peak.load());
-    g.setColour (pk > 0.85f ? C::rec : C::stepOn);
-    g.fillRect (r.getX() + 4.0f, r.getBottom() - 5.0f, (r.getWidth() - 8.0f) * pk, 2.5f);
-}
-
-void BoxView::paintBottom (juce::Graphics& g, juce::Rectangle<float> r)
+void BoxView::paintSteps (juce::Graphics& g, juce::Rectangle<float> r)
 {
     const auto& P = pal();
     const int page = box.getPage();
-    const auto col = instrumentColour (page);
+    const auto col = pageColour (page);
     const auto& data = box.getData();
     auto& audio = box.getAudio();
-
-    // mini pad map
-    auto mini = r.removeFromLeft (140.0f).reduced (8.0f, 2.0f);
-    const float cell = juce::jmin (mini.getWidth(), mini.getHeight()) / 4.0f;
-    for (int p = 0; p < numPads; ++p)
-        paintPad (g, { mini.getX() + (p % 4) * cell, mini.getY() + (p / 4) * cell, cell - 4.0f, cell - 4.0f }, p, false);
-
-    // sound picture
-    paintScope (g, r.removeFromRight (150.0f).reduced (4.0f, 8.0f));
-
-    auto info = r.reduced (10.0f, 4.0f);
-    auto line1 = info.removeFromTop (34.0f);
-    g.setFont (font (19.0f, true));
-    g.setColour (P.text);
     const auto& iv = data.inst[(size_t) page].values;
-    auto hint = [&g, &P] (juce::Rectangle<float> rr, const juce::String& s)
-    {
-        g.setFont (font (14.0f));
-        g.setColour (P.dim);
-        g.drawFittedText (s, rr.toNearestInt(), juce::Justification::centredLeft, 2, 0.8f);
-    };
 
+    // one line saying what plays
+    juce::String line;
     if (page == Drums)
-    {
-        g.drawText (drumPadName (data.selectedDrum) + " v  |  " + paramDesc (Drums, slot::DKit).format (iv[slot::DKit])
-                      + "  |  " + juce::String (data.drumLength()) + " steps",
-                    line1, juce::Justification::centredLeft);
-        paintStepRow (g, info.removeFromTop (36.0f).reduced (0.0f, 7.0f), Drums);
-        hint (info, box.isStepView() ? "Pads = steps of " + drumPadName (data.selectedDrum) + " (tap: on > accent > off). Click the drum name or Drum -/+ to pick another."
-                                     : juce::String ("Pads play. Steps = draw the beat, Rec = record what you play."));
-    }
+        line = paramDesc (Drums, slot::DKit).format (iv[slot::DKit]) + "  |  " + juce::String (data.drumLength()) + " steps";
     else if (page == Arp)
+        line = paramDesc (Arp, slot::ASound).format (iv[slot::ASound]) + "  |  "
+             + (juce::roundToInt (iv[slot::AArpOn]) == 0 ? paramDesc (Arp, slot::AMode).format (iv[slot::AMode]) + " " + paramDesc (Arp, slot::ADivision).format (iv[slot::ADivision])
+                                                           : juce::String ("synth (arp off)"));
+    else
     {
-        g.drawText (paramDesc (Arp, slot::AMode).format (iv[slot::AMode]) + "  |  " + paramDesc (Arp, slot::ADivision).format (iv[slot::ADivision])
-                      + "  |  " + juce::String (juce::roundToInt (iv[slot::AOctaves])) + " oct  |  "
-                      + paramDesc (Arp, slot::ASound).format (iv[slot::ASound]),
-                    line1, juce::Justification::centredLeft);
+        const int now = audio.bassNoteNow.load();
+        line = paramDesc (Bass, slot::BSound).format (iv[slot::BSound]) + "  |  " + juce::String (data.bassLength()) + " steps"
+             + (now >= 0 ? "  |  " + noteName (now) : juce::String());
+    }
+    g.setColour (P.text);
+    g.setFont (font (17.0f, true));
+    g.drawText (line, r.removeFromTop (28.0f), juce::Justification::centredLeft);
+
+    if (page == Arp)
+    {
         const int len = juce::roundToInt (iv[slot::ALength]);
         const int cur = audio.arpStep.load();
-        auto bar = info.removeFromTop (36.0f).reduced (0.0f, 5.0f);
+        auto bar = r.removeFromTop (44.0f).reduced (0.0f, 6.0f);
         const float w = bar.getWidth() / 16.0f;
         for (int s = 0; s < 16; ++s)
         {
             const auto st = data.inst[Arp].arpSteps[(size_t) s];
             auto c = st == StepOn ? C::stepOn : st == StepTie ? C::stepTie : st == StepAccent ? C::stepAcc : P.faint;
             if (s >= len) c = c.withAlpha (0.3f);
-            auto b = bar.withX (bar.getX() + s * w).withWidth (w - 3.0f);
+            auto b = bar.withX (bar.getX() + s * w).withWidth (w - 4.0f);
             g.setColour (c);
-            g.fillRoundedRectangle (b, 3.0f);
-            if (s == cur) { g.setColour (P.text); g.drawRoundedRectangle (b, 3.0f, 2.0f); }
+            g.fillRoundedRectangle (b, 4.0f);
+            if (s == cur) { g.setColour (P.text); g.drawRoundedRectangle (b, 4.0f, 2.0f); }
         }
-        hint (info, box.isStepView() ? "Pads = the 16 steps: green plays, blue ties, orange accents, dark rests."
-                                     : juce::String ("Hold notes on the pads, the arp plays them. Rec = Hold."));
+        // the notes the arp is playing
+        juce::String held;
+        const uint64_t lo = audio.arpNotesLo.load(), hi = audio.arpNotesHi.load();
+        for (int n = 0; n < 128; ++n)
+            if (((n < 64 ? lo >> n : hi >> (n - 64)) & 1u) != 0) held << noteName (n) << "  ";
+        g.setColour (held.isEmpty() ? P.dim : col);
+        g.setFont (font (15.0f, held.isNotEmpty()));
+        g.drawText (held.isEmpty() ? juce::String ("hold notes on the pads") : held.trim(), r.removeFromTop (30.0f), juce::Justification::centredLeft);
+        return;
     }
-    else
+
+    const int len = page == Drums ? data.drumLength() : data.bassLength();
+    const int shown = page == Drums ? len : juce::jmax (16, ((len + 15) / 16) * 16);
+    const int cur = audio.isPlaying() ? (page == Drums ? audio.drumStep.load() : audio.bassStep.load()) : -1;
+    const int sp = juce::jmin (box.stepPage (page), box.numStepPages (page) - 1);
+    auto bar = r.removeFromTop (page == Drums ? 34.0f : 58.0f).reduced (0.0f, 4.0f);
+    const float w = bar.getWidth() / shown;
+    if (box.isStepView())   // the 16 steps the pads show now
     {
-        const int now = audio.bassNoteNow.load();
-        g.drawText (paramDesc (Bass, slot::BSound).format (iv[slot::BSound]) + "  |  " + juce::String (data.bassLength()) + " steps"
-                      + (now >= 0 ? "  |  " + noteName (now) : juce::String()),
-                    line1, juce::Justification::centredLeft);
-        paintStepRow (g, info.removeFromTop (36.0f).reduced (0.0f, 7.0f), Bass);
-        hint (info, box.isStepView() ? juce::String ("Tap a step to set it, tap again to pick, once more to clear. Knobs 2-4: note, slide, accent.")
-                                     : juce::String ("Pads play the scale. Rec records your line, hold two pads for a slide."));
+        g.setColour (col.withAlpha (0.16f));
+        g.fillRoundedRectangle (bar.withX (bar.getX() + sp * 16 * w).withWidth (16 * w).expanded (0.0f, 3.0f), 4.0f);
     }
+    for (int s = 0; s < shown; ++s)
+    {
+        auto b = bar.withX (bar.getX() + s * w).withWidth (w - (shown > 32 ? 1.0f : 2.5f));
+        juce::Colour c = s >= len ? P.faint.withAlpha (0.35f) : P.faint;
+        if (s < len && page == Drums)
+        {
+            const int v = data.inst[Drums].drumSteps[(size_t) data.selectedDrum][(size_t) s];
+            if (v > 0) c = v >= 120 ? col.brighter (0.3f) : col;
+        }
+        else if (s < len)
+        {
+            const auto& st = data.inst[Bass].bassSteps[(size_t) s];
+            if (st.note >= 0)
+            {
+                c = st.accent ? C::stepAcc : col;
+                const float hgt = juce::jmap ((float) juce::jlimit (24, 72, st.note), 24.0f, 72.0f, 0.15f, 1.0f);
+                g.setColour (c.withAlpha (0.25f));
+                g.fillRoundedRectangle (b, 2.0f);
+                b = b.withTrimmedTop (b.getHeight() * (1.0f - hgt));
+                if (st.slide) { g.setColour (C::stepTie); g.fillRect (b.getRight() - 2.0f, b.getY(), w, 3.0f); }
+            }
+        }
+        g.setColour (c);
+        g.fillRoundedRectangle (b, 2.0f);
+        if (s == cur)
+        {
+            g.setColour (P.text);
+            g.drawRoundedRectangle (bar.withX (bar.getX() + s * w).withWidth (w - 1.0f), 2.0f, 1.6f);
+        }
+    }
+
+    if (page == Drums)   // every drum at a glance: one thin line each
+    {
+        auto grid = r.reduced (0.0f, 4.0f);
+        const float lh = grid.getHeight() / numPads;
+        for (int p = 0; p < numPads; ++p)
+            for (int s = 0; s < len; ++s)
+                if (data.inst[Drums].drumSteps[(size_t) p][(size_t) s] > 0)
+                {
+                    g.setColour (p == data.selectedDrum ? col : P.dim.withAlpha (0.7f));
+                    g.fillRect (grid.getX() + s * w, grid.getY() + p * lh, juce::jmax (1.0f, w - 1.0f), juce::jmax (1.0f, lh - 1.0f));
+                }
+    }
+}
+
+void BoxView::paintPerfGrid (juce::Graphics& g, juce::Rectangle<float> r)
+{
+    const auto& P = pal();
+    const auto col = pageColour (PageFx);
+    const uint32_t held = box.getAudio().perfHeld.load();
+    g.setColour (P.text);
+    g.setFont (font (17.0f, true));
+    g.drawText ("Hold a pad for an effect", r.removeFromTop (28.0f), juce::Justification::centredLeft);
+    const float w = r.getWidth() / 8.0f, h = (r.getHeight() - 4.0f) / 2.0f;
+    for (int p = 0; p < NumPerf; ++p)
+    {
+        auto b = juce::Rectangle<float> (r.getX() + (p % 8) * w, r.getY() + (p / 8) * h, w, h).reduced (2.5f);
+        const bool on = ((held >> p) & 1u) != 0;
+        g.setColour (on ? col : P.cell);
+        g.fillRoundedRectangle (b, 6.0f);
+        g.setColour (on ? juce::Colours::black : P.dim);
+        g.setFont (font (11.5f, on));
+        g.drawFittedText (perfName (p), b.reduced (3.0f).toNearestInt(), juce::Justification::centred, 2, 0.8f);
+    }
+}
+
+void BoxView::paintSpectrum (juce::Graphics& g, juce::Rectangle<float> r)
+{
+    const auto& P = pal();
+    g.setColour (P.cell);
+    g.fillRoundedRectangle (r, 10.0f);
+    auto inner = r.reduced (10.0f, 10.0f);
+    const float w = inner.getWidth() / numBands;
+    const auto col = pageColour (box.getPage());
+    for (int b = 0; b < numBands; ++b)
+    {
+        const float hgt = juce::jmax (2.0f, inner.getHeight() * bands[(size_t) b]);
+        g.setColour (col.withAlpha (0.35f + 0.65f * bands[(size_t) b]));
+        g.fillRoundedRectangle (inner.getX() + b * w, inner.getBottom() - hgt, w - 1.5f, hgt, 1.5f);
+    }
+    const float pk = juce::jlimit (0.0f, 1.0f, box.getAudio().peak.load());
+    if (pk > 0.9f) { g.setColour (C::rec); g.fillRoundedRectangle (r.getRight() - 14.0f, r.getY() + 6.0f, 8.0f, 8.0f, 4.0f); }
+}
+
+void BoxView::paintBottom (juce::Graphics& g, juce::Rectangle<float> r)
+{
+    const auto& P = pal();
+    auto left = r.removeFromLeft (510.0f);
+    r.removeFromLeft (12.0f);
+    paintSpectrum (g, r);
+
+    if (box.getPage() == PageFx) paintPerfGrid (g, left);
+    else paintSteps (g, left);
 
     const auto flash = box.getFlash();
     if (flash.isNotEmpty())
     {
-        auto f = r.reduced (16.0f, 30.0f);
-        g.setColour (P.screen.withAlpha (0.95f));
+        auto f = left.reduced (0.0f, 30.0f);
+        g.setColour (P.screen.withAlpha (0.96f));
         g.fillRoundedRectangle (f, 10.0f);
-        g.setColour (col);
+        g.setColour (pageColour (box.getPage()));
         g.drawRoundedRectangle (f, 10.0f, 2.0f);
         g.setColour (P.text);
         g.setFont (font (19.0f, true));
@@ -523,19 +587,19 @@ void BoxView::paintBottom (juce::Graphics& g, juce::Rectangle<float> r)
 juce::Rectangle<float> BoxView::knobArea (int knob) const
 {
     const float w = 760.0f / 6.0f;
-    return { 20.0f + (knob % 6) * w, (float) screenH + 14.0f + (knob / 6) * 82.0f, w, 80.0f };
+    return { 20.0f + (knob % 6) * w, (float) screenH + 12.0f + (knob / 6) * 80.0f, w, 78.0f };
 }
 
 juce::Rectangle<float> BoxView::padArea (int pad) const
 {
-    const float w = 330.0f / 4.0f, h = 58.0f;
-    return juce::Rectangle<float> { 20.0f + (pad % 4) * w, (float) screenH + 186.0f + (pad / 4) * h, w, h }.reduced (4.0f);
+    const float w = 760.0f / 8.0f, h = 74.0f;
+    return juce::Rectangle<float> { 20.0f + (pad % 8) * w, (float) screenH + 182.0f + (pad / 8) * h, w, h }.reduced (5.0f);
 }
 
 juce::Rectangle<float> BoxView::buttonArea (int b) const
 {
-    const float w = 420.0f / 4.0f;
-    return juce::Rectangle<float> { 365.0f + (b % 4) * w, (float) screenH + 210.0f + (b / 4) * 95.0f, w, 76.0f }.reduced (6.0f);
+    const float w = 760.0f / 8.0f;
+    return juce::Rectangle<float> { 20.0f + b * w, (float) screenH + 338.0f, w, 62.0f }.reduced (5.0f);
 }
 
 void BoxView::paintPanel (juce::Graphics& g, juce::Rectangle<float> area)
@@ -546,51 +610,51 @@ void BoxView::paintPanel (juce::Graphics& g, juce::Rectangle<float> area)
     g.drawLine (area.getX(), area.getY() + 1.0f, area.getRight(), area.getY() + 1.0f, 2.0f);
 
     const int page = box.getPage();
-    const auto col = instrumentColour (page);
+    const auto col = pageColour (page);
 
     for (int k = 0; k < numKnobs; ++k)
     {
         auto r = knobArea (k);
-        const juce::Point<float> c { r.getCentreX(), r.getY() + 28.0f };
+        const juce::Point<float> c { r.getCentreX(), r.getY() + 27.0f };
         g.setColour (juce::Colour (0xff0e1014));
-        g.fillEllipse (c.x - 25.0f, c.y - 25.0f, 50.0f, 50.0f);
+        g.fillEllipse (c.x - 24.0f, c.y - 24.0f, 48.0f, 48.0f);
         g.setColour (C::bodyEdge.brighter (0.4f));
-        g.drawEllipse (c.x - 25.0f, c.y - 25.0f, 50.0f, 50.0f, 1.5f);
+        g.drawEllipse (c.x - 24.0f, c.y - 24.0f, 48.0f, 48.0f, 1.5f);
         const auto v = box.knobView (k);
         if (v.used)
         {
             const float ang = -2.35f + 4.7f * juce::jlimit (0.0f, 1.0f, v.fraction);
             g.setColour (v.global ? C::global : col);
             g.drawLine (c.x + std::sin (ang) * 8.0f, c.y - std::cos (ang) * 8.0f,
-                        c.x + std::sin (ang) * 21.0f, c.y - std::cos (ang) * 21.0f, 3.0f);
+                        c.x + std::sin (ang) * 20.0f, c.y - std::cos (ang) * 20.0f, 3.0f);
         }
         g.setColour (C::dim);
-        g.setFont (font (12.5f));
-        g.drawFittedText (v.used ? v.name : juce::String ("-"), r.withTrimmedTop (56.0f).toNearestInt(), juce::Justification::centredTop, 1, 0.75f);
+        g.setFont (font (12.0f));
+        g.drawFittedText (v.used ? v.name : juce::String ("-"), r.withTrimmedTop (54.0f).toNearestInt(), juce::Justification::centredTop, 1, 0.75f);
     }
 
-    for (int p = 0; p < numPads; ++p) paintPad (g, padArea (p), p, true);
+    for (int p = 0; p < numPads; ++p) paintPad (g, padArea (p), p);
 
-    const char* keyHint[NumButtons] = { "Space", "B", "Shift", "T", "Tab", ",", ".", "Enter" };
     for (int b = 0; b < NumButtons; ++b)
     {
         auto r = buttonArea (b);
         const bool lit = box.isButtonLit (b) || (b == BtnShift && mouseShiftLatched);
-        const auto litCol = b == BtnRec ? (page == Arp ? col : C::rec) : b == BtnPlay ? C::stepOn : b == BtnSteps ? C::stepOn : C::global;
+        const auto litCol = b == BtnRec ? (page == Arp ? col : C::rec) : b == BtnPlay || b == BtnSteps ? C::stepOn
+                          : b == BtnScene ? juce::Colour (0xfff0c94a) : C::global;
         g.setColour (lit ? litCol : juce::Colour (0xff2b2f39));
         g.fillRoundedRectangle (r, 10.0f);
         g.setColour (lit ? juce::Colours::black : C::text);
-        g.setFont (font (16.0f, true));
-        g.drawText (box.buttonLabel (b), r.withTrimmedBottom (12.0f), juce::Justification::centred);
-        g.setFont (font (11.0f));
+        g.setFont (font (15.0f, true));
+        g.drawText (box.buttonLabel (b), r.withTrimmedBottom (14.0f), juce::Justification::centred);
+        g.setFont (font (10.5f));
         g.setColour (lit ? juce::Colours::black.withAlpha (0.6f) : C::dim);
-        g.drawText (keyHint[b], r.withTrimmedTop (34.0f), juce::Justification::centred);
+        g.drawText (buttonKeyHint (b), r.withTrimmedTop (30.0f), juce::Justification::centred);
     }
 
     g.setColour (C::dim.withAlpha (0.7f));
     g.setFont (font (12.0f));
-    g.drawText ("Knobs: drag or scroll  |  Shift + pad = load, Shift + Rec + pad = save  |  right-click = settings",
-                juce::Rectangle<float> (20.0f, area.getBottom() - 24.0f, 760.0f, 20.0f), juce::Justification::centred);
+    g.drawText ("Shift + pad = load preset, Shift + Rec + pad = save  |  Shift + Play = tap tempo  |  right-click = settings",
+                juce::Rectangle<float> (20.0f, area.getBottom() - 30.0f, 760.0f, 20.0f), juce::Justification::centred);
 }
 
 //==============================================================================
@@ -619,10 +683,10 @@ void BoxView::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    // the screen: the three page names switch the instrument, the drum line picks the drum
-    for (int i = 0; i < NumInstruments; ++i)
-        if (juce::Rectangle<float> (192.0f + i * 76.0f, 0.0f, 76.0f, 64.0f).contains (p)) { box.setPage (i); return; }
-    if (box.getPage() == Drums && juce::Rectangle<float> (150.0f, 336.0f, 490.0f, 44.0f).contains (p))
+    // the screen: the page names switch the page, the drum chip picks the drum
+    for (int i = 0; i < NumPages; ++i)
+        if (tabArea (i).contains (p)) { box.setPage (i); return; }
+    if (box.getPage() == Drums && juce::Rectangle<float> (14.0f, 64.0f, 772.0f, 26.0f).contains (p))
     {
         juce::PopupMenu m;
         for (int d = 0; d < numPads; ++d) m.addItem (d + 1, drumPadName (d), true, d == box.selectedDrum());

@@ -41,7 +41,10 @@ public:
     bool hasNotes() const noexcept { return numActive > 0; }
 
     /** The next step starts at this quarter-note position (call when the arp (re)starts). */
-    void restartAt (double ppq) noexcept { phase = ppq; nextStep = 0; seqPos = 0; lastStep = -1; }
+    void restartAt (double ppq, bool firstStepNow = false) noexcept
+    {
+        phase = ppq; nextStep = 0; seqPos = 0; lastStep = -1; firstNow = firstStepNow;
+    }
     bool isRunning() const noexcept { return running; }
     void setRunning (bool r) noexcept { running = r; }
 
@@ -56,6 +59,11 @@ public:
             lastDivision = s.division;
         }
         const double stepLen = arpDivisionPpq (s.division);
+        if (firstNow)   // a note pressed between two grid steps sounds at once, the next steps stay on the grid
+        {
+            firstNow = false;
+            if (stepStart (nextStep, stepLen, s.swing) < from) { playStep (nextStep, from, stepLen, s, emit); ++nextStep; }
+        }
         for (int guard = 0; guard < 64; ++guard)
         {
             const double start = stepStart (nextStep, stepLen, s.swing);
@@ -123,7 +131,7 @@ private:
     std::array<int, maxNotes> pressed {}, active {}, sortedNotes {};
     std::array<int, maxNotes * 2 * 4> sequence {};
     int numPressed = 0, numActive = 0;
-    bool latch = false, running = false;
+    bool latch = false, running = false, firstNow = false;
     double phase = 0.0;
     int64_t nextStep = 0, seqPos = 0;
     int lastStep = -1, lastDivision = -1;

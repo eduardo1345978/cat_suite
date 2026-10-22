@@ -14,6 +14,8 @@ BoxAudio::BoxAudio() : rnd (0xca7b0c5)
 {
     bufL.resize ((size_t) maxChunk * NumInstruments);
     bufR.resize ((size_t) maxChunk * NumInstruments);
+    mixL.resize ((size_t) maxChunk);
+    mixR.resize ((size_t) maxChunk);
 }
 
 void BoxAudio::prepare (double sampleRate, int)
@@ -23,6 +25,9 @@ void BoxAudio::prepare (double sampleRate, int)
     keys.prepare (sr);
     bassSynth.prepare (sr);
     acid.prepare (sr);
+    arpAcid.prepare (sr);
+    supersaw.prepare (sr);
+    master.prepare (sr, maxChunk);
     for (auto& f : fx) f.prepare (sr);
     limiter.prepare (sr);
     numOffs = 0;
@@ -55,11 +60,48 @@ void BoxAudio::audioDeviceIOCallbackWithContext (const float* const*, int, float
 }
 
 //==============================================================================
-void BoxAudio::setSnapshot (const AudioSnapshot& s)
+void BoxAudio::setSnapshot (const AudioSnapshot& s, bool atBar)
 {
     const juce::SpinLock::ScopedLockType lock (snapshotLock);
     pending = s;
+    snapshotAtBar = atBar || (snapshotFresh && snapshotAtBar);   // a waiting scene keeps waiting
     snapshotFresh = true;
+    if (snapshotAtBar) sceneWaiting = true;
+}
+
+//==============================================================================
+void BoxAudio::arpNoteOn (int note, int velocity)
+{
+    if (live.arpSound == arpSupersaw) supersaw.noteOn (note, velocity);
+    else if (live.arpSound == arpAcid) arpAcid.noteOn (note, velocity >= 110, false);
+    else keys.handle (juce::MidiMessage::noteOn (1, note, (juce::uint8) juce::jlimit (1, 127, velocity)));
+}
+
+void BoxAudio::arpNoteOff (int note)
+{
+    supersaw.noteOff (note);
+    arpAcid.noteOff (note);
+    keys.handle (juce::MidiMessage::noteOff (1, note));
+}
+
+void BoxAudio::arpAllOff()
+{
+    supersaw.allOff();
+    arpAcid.allOff();
+    keys.allOff();
+}
+
+int BoxAudio::followOffset() const noexcept
+{
+    if (! live.bassFollow || ! arp.hasNotes()) return 0;
+    uint64_t lo = 0, hi = 0;
+    arp.activeNotes (lo, hi);
+    int lowest = -1;
+    for (int n = 0; n < 128 && lowest < 0; ++n)
+        if (((n < 64 ? lo >> n : hi >> (n - 64)) & 1u) != 0) lowest = n;
+    if (lowest < 0) return 0;
+    int off = ((lowest - live.key) % 12 + 12) % 12;
+    return off > 6 ? off - 12 : off;   // the shortest way
 }
 
 void BoxAudio::post (const BoxEvent& e)
@@ -128,7 +170,7 @@ void BoxAudio::releaseDue (double upTo)
         {
             const auto o = offs[(size_t) i];
             offs[(size_t) i] = offs[(size_t) --numOffs];
-            if (o.instrument == Arp) keys.handle (juce::MidiMessage::noteOff (1, o.note));
+            if (o.instrument == Arp) arpNoteOff (o.note);
             else if (o.instrument == Bass) bassOff (o.note);
         }
         else ++i;
@@ -137,7 +179,7 @@ void BoxAudio::releaseDue (double upTo)
 
 void BoxAudio::allNotesOff()
 {
-    keys.allOff();
+    arpAllOff();
     bassSynth.allOff();
     acid.allOff();
     numOffs = 0;
@@ -176,6 +218,7 @@ void BoxAudio::handleEvents()
                 {
                     drums.handle (juce::MidiMessage::noteOn (10, e.a, (juce::uint8) juce::jlimit (1, 127, e.b)));
                     flashDrum (e.a);
+                    if ((e.a == 36 || e.a == 35) && numKicks < (int) kickOffsets.size()) kickOffsets[(size_t) numKicks++] = 0;
                 }
                 if (rec && e.c >= 0)
                     pushRecorded ({ Drums, (int) (std::llround (songPos / stepPpq) % juce::jmax (1, live.drumLength)), e.c, e.b, -1 });
@@ -201,8 +244,16 @@ void BoxAudio::handleEvents()
                 bassOff (e.a + 12 * live.bassOctave);
                 break;
 
-            case BoxEvent::ArpOn:    arp.noteOn (e.a, e.b); break;
-            case BoxEvent::ArpOff:   arp.noteOff (e.a); break;
+            case BoxEvent::ArpOn:
+                if (live.arpOn) arp.noteOn (e.a, e.b);
+                else if (! live.muted[Arp]) arpNoteOn (e.a, e.b);
+                break;
+            case BoxEvent::ArpOff:
+                arp.noteOff (e.a);
+                if (! live.arpOn) arpNoteOff (e.a);
+                break;
+            case BoxEvent::PerfOn:   perfHeld.fetch_or (1u << juce::jlimit (0, 31, e.a)); break;
+            case BoxEvent::PerfOff:  perfHeld.fetch_and (~(1u << juce::jlimit (0, 31, e.a))); break;
             case BoxEvent::ArpLatch: arp.setLatch (e.a != 0); break;
             case BoxEvent::ArpClear: arp.clear(); break;
             case BoxEvent::AllOff:   allNotesOff(); arp.clear(); break;
@@ -229,6 +280,7 @@ void BoxAudio::playDrumStep (int64_t k, double from, double to)
         if (vel <= 0) continue;
         drums.handle (juce::MidiMessage::noteOn (10, drumPadNote (p), (juce::uint8) juce::jlimit (1, 127, vel)));
         flashDrum (drumPadNote (p));
+        if ((p == 0 || p == 13) && numKicks < (int) kickOffsets.size()) kickOffsets[(size_t) numKicks++] = subOffset;
     }
 }
 
@@ -243,7 +295,7 @@ void BoxAudio::playBassStep (int64_t k, double from, double to)
 
     const auto& prev = live.bassSteps[(size_t) ((idx + len - 1) % len)];
     const auto& next = live.bassSteps[(size_t) ((idx + 1) % len)];
-    const int note = s.note + 12 * live.bassOctave;
+    const int note = juce::jlimit (0, 127, s.note + 12 * live.bassOctave + followOffset());
     const bool slideIn = prev.note >= 0 && prev.slide && len > 1;
     cancelOffs (Bass, note);
     bassOn (note, s.accent ? 120 : 96, s.accent, slideIn);
@@ -276,12 +328,14 @@ void BoxAudio::tick (double from, double to)
         {
             arp.setRunning (true);
             double start = from;
+            bool now = false;
             if (running)
             {
                 const double grid = arpDivisionPpq (live.arp.division);
-                start = songStart + std::ceil ((from - songStart) / grid - 1.0e-9) * grid;
+                start = songStart + std::floor ((from - songStart) / grid + 1.0e-9) * grid;
+                now = start < from - 1.0e-9;
             }
-            arp.restartAt (start);
+            arp.restartAt (start, now);
         }
     }
     else if (arp.isRunning())
@@ -298,11 +352,11 @@ void BoxAudio::tick (double from, double to)
             if (offs[(size_t) i].instrument == Arp && offs[(size_t) i].note == note)
             {
                 offs[(size_t) i] = offs[(size_t) --numOffs];
-                keys.handle (juce::MidiMessage::noteOff (1, note));
+                arpNoteOff (note);
             }
             else ++i;
         }
-        keys.handle (juce::MidiMessage::noteOn (1, note, (juce::uint8) vel));
+        arpNoteOn (note, vel);
         scheduleOff (Arp, note, off);
     });
 }
@@ -317,16 +371,27 @@ void BoxAudio::render (float* left, float* right, int numSamples)
 
         {
             const juce::SpinLock::ScopedTryLockType lock (snapshotLock);
-            if (lock.isLocked() && snapshotFresh)
+            // a scene waits for the start of the next bar while playing
+            const bool barNow = ! running || snapshotAtBar == false
+                                || std::fmod (clock - songStart, 4.0) + (live.bpm / 60.0 / sr) * n >= 4.0
+                                || std::fmod (clock - songStart, 4.0) < 1.0e-6;
+            if (lock.isLocked() && snapshotFresh && barNow)
             {
-                const int oldSound = live.bassSound;
+                const int oldSound = live.bassSound, oldArpSound = live.arpSound;
+                const bool oldArpOn = live.arpOn;
                 std::swap (live, pending);
                 snapshotFresh = false;
+                snapshotAtBar = false;
+                sceneWaiting = false;
                 drums.setSound (live.drumKit);
-                keys.setSound (live.arpSound);
+                if (live.arpSound < arpSupersaw) keys.setSound (live.arpSound);
                 if (live.bassSound > 0) bassSynth.setSound (live.bassSound - 1);
                 acid.setParams (live.acid);
+                AcidSynth::Params ap = live.acid;   // the arp's acid: brighter, shorter
+                ap.cutoff = 0.5f; ap.envMod = 0.5f; ap.decay = 0.3f; ap.resonance = 0.55f;
+                arpAcid.setParams (ap);
                 if (oldSound != live.bassSound) { acid.allOff(); bassSynth.allOff(); }
+                if (oldArpSound != live.arpSound || oldArpOn != live.arpOn) arpAllOff();
             }
         }
 
@@ -356,14 +421,18 @@ void BoxAudio::render (float* left, float* right, int numSamples)
         float* bl = bufL.data() + 2 * maxChunk; float* br = bufR.data() + 2 * maxChunk;
         for (auto* p : { dl, dr, al, ar, bl, br }) juce::FloatVectorOperations::clear (p, n);
 
+        const double songPpqStart = running ? clock - songStart : clock;
         for (int s = 0; s < n; s += subBlock)
         {
             const int m = juce::jmin (subBlock, n - s);
             const double from = clock, to = clock + m * ppqPerSample;
+            subOffset = s;
             releaseDue (from);
             tick (from, to);
             drums.render (dl + s, dr + s, m);
             keys.render (al + s, ar + s, m);
+            supersaw.render (al + s, ar + s, m);
+            arpAcid.render (al + s, ar + s, m);
             if (live.bassSound == 0) acid.render (bl + s, br + s, m);
             else bassSynth.render (bl + s, br + s, m);
             clock = to;
@@ -377,15 +446,32 @@ void BoxAudio::render (float* left, float* right, int numSamples)
             settings.bpm = live.bpm;
             fx[(size_t) i].process (il[i], ir[i], n, settings);
             const float g = live.muted[(size_t) i] ? 0.0f : live.volume[(size_t) i] * live.master;
-            juce::FloatVectorOperations::addWithMultiply (outL, il[i], g, n);
-            juce::FloatVectorOperations::addWithMultiply (outR, ir[i], g, n);
+            juce::FloatVectorOperations::multiply (il[i], g, n);
+            juce::FloatVectorOperations::multiply (ir[i], g, n);
         }
+
+        // the FX page: reverb sends, pump, echo, glue, tape, vinyl, crush, DJ filter, width, performance pads
+        auto ms = live.master;
+        ms.bpm = live.bpm;
+        master.process (il, ir, n, mixL.data(), mixR.data(), ms, perfHeld.load(), songPpqStart, ppqPerSample,
+                        kickOffsets.data(), numKicks);
+        numKicks = 0;
+        pumpNow = master.pumpLevel();
+        juce::FloatVectorOperations::add (outL, mixL.data(), n);
+        juce::FloatVectorOperations::add (outR, mixR.data(), n);
 
         float pk = 0.0f;
         for (int i = 0; i < n; ++i)
         {
             limiter.processSample (outL[i], outR[i]);
             pk = juce::jmax (pk, std::abs (outL[i]), std::abs (outR[i]));
+            if (++spectrumCount >= 2)
+            {
+                spectrumCount = 0;
+                const int w = spectrumWrite.load (std::memory_order_relaxed);
+                spectrumRing[(size_t) w].store (0.5f * (outL[i] + outR[i]), std::memory_order_relaxed);
+                spectrumWrite.store ((w + 1) % spectrumSize, std::memory_order_relaxed);
+            }
             if (++scopeCount >= 64)   // a coarse wave picture for the screen
             {
                 scopeCount = 0;

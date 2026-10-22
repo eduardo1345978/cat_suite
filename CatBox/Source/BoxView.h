@@ -1,19 +1,21 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <juce_dsp/juce_dsp.h>
 #include "BoxController.h"
 
 namespace catbox
 {
 /**
-    The Cat Box on screen.
+    The Cat Box on screen. Kept simple: the box is played with its knobs and pads, the screen
+    only shows what they do and what you hear.
 
-    Kiosk mode (on the Raspberry Pi): only the 5" display, 800 x 480, full screen; the real
-    knobs, pads and buttons do the rest.
-    Desktop mode (on the PC): the display plus the whole front panel underneath it - drag or
-    scroll the knobs, click the pads and buttons, or use the computer keyboard:
-      pads   1 2 3 4 / Q W E R / A S D F / Z X C V   (Y works as Z)
-      Space = Play, B = Steps, Shift = Shift, T = Tap, Tab = Instrument, , . = Oct- Oct+, Enter = Rec
+    Kiosk mode (on the Raspberry Pi): only the 5" display, 800 x 480, full screen.
+    Desktop mode (on the PC): the display plus the front panel underneath it (12 knobs,
+    16 pads in two rows of 8, 8 buttons). Drag or scroll the knobs, click pads and buttons,
+    or use the computer keyboard:
+      pads   1 2 3 4 5 6 7 8 / Q W E R T Y U I   (Z works as Y)
+      Space = Play, B = Steps, Shift = Shift, N = Scene, Tab = Instr, , . = Oct- Oct+, Enter = Rec
 */
 class BoxView : public juce::Component, private juce::Timer
 {
@@ -24,7 +26,7 @@ public:
     std::function<void()> onSettings;      // right-click menu: sound card / MIDI
     std::function<void()> onToggleFullScreen;
 
-    static constexpr int screenW = 800, screenH = 480, panelH = 450;
+    static constexpr int screenW = 800, screenH = 480, panelH = 440;
     juce::Rectangle<int> logicalBounds() const { return { 0, 0, screenW, kiosk ? screenH : screenH + panelH }; }
 
     void paint (juce::Graphics&) override;
@@ -37,29 +39,33 @@ public:
     bool keyStateChanged (bool isKeyDown) override;
     void modifierKeysChanged (const juce::ModifierKeys&) override;
 
-    static juce::Colour instrumentColour (int instrument);
+    static juce::Colour pageColour (int page);
 
     struct Palette
     {
-        juce::Colour bg, screen, cell, text, dim, faint, padOff;
+        juce::Colour bg, screen, cell, text, dim, faint;
     };
 
 private:
     void timerCallback() override;
+    void updateSpectrum();
     juce::Point<float> toLogical (juce::Point<float>) const;
     const Palette& pal() const;
 
     void paintScreen (juce::Graphics&, juce::Rectangle<float>);
     void paintKnobCell (juce::Graphics&, juce::Rectangle<float>, int knob);
     void paintBottom (juce::Graphics&, juce::Rectangle<float>);
-    void paintStepRow (juce::Graphics&, juce::Rectangle<float>, int instrument);
-    void paintScope (juce::Graphics&, juce::Rectangle<float>);
+    void paintSteps (juce::Graphics&, juce::Rectangle<float>);
+    void paintPerfGrid (juce::Graphics&, juce::Rectangle<float>);
+    void paintSpectrum (juce::Graphics&, juce::Rectangle<float>);
     void paintPanel (juce::Graphics&, juce::Rectangle<float>);
-    void paintPad (juce::Graphics&, juce::Rectangle<float>, int pad, bool big);
+    void paintPad (juce::Graphics&, juce::Rectangle<float>, int pad);
 
     juce::Colour padColour (int pad, bool& lit, bool& outlined, bool& thick) const;
     juce::String padLabel (int pad) const;
+    juce::String presetTitle() const;
 
+    juce::Rectangle<float> tabArea (int page) const;
     juce::Rectangle<float> knobArea (int knob) const;
     juce::Rectangle<float> padArea (int pad) const;
     juce::Rectangle<float> buttonArea (int button) const;
@@ -73,6 +79,11 @@ private:
     uint32_t pressedPads = 0;          // mouse / keyboard presses, for instant feedback
     std::array<bool, numPads> keyPadDown {};
     std::array<bool, NumButtons> keyButtonDown {};
+
+    static constexpr int fftOrder = 10, numBands = 40;
+    juce::dsp::FFT fft { fftOrder };
+    std::vector<float> fftData;
+    std::array<float, numBands> bands {};
 
     enum class Drag { None, Knob, Pad, Button } drag = Drag::None;
     int dragIndex = -1;
