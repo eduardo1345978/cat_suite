@@ -175,7 +175,13 @@ public:
             box.setPage (Bass);
             const auto bassBefore = box.getData().inst[Bass];
             press (BtnChaos);
-            check (box.getData().inst[Bass].values != bassBefore.values, "Chaos changes the bass sound", {});
+            box.pump();
+            check (box.getData().inst[Bass].values == bassBefore.values, "a quick tap on Chaos does nothing", {});
+            box.buttonDown (BtnChaos);
+            juce::Thread::sleep (650);
+            box.pump();
+            box.buttonUp (BtnChaos);
+            check (box.getData().inst[Bass].values != bassBefore.values, "holding Chaos changes the bass sound", {});
             check (box.getData().inst[Bass].bassSteps == bassBefore.bassSteps, "Chaos keeps the bass line", {});
             check (box.getData().inst[Bass].values[slot::BVolume] == bassBefore.values[slot::BVolume]
                    && box.getData().globals[GTempo] == tempo0, "Chaos keeps volume and tempo", {});
@@ -184,7 +190,7 @@ public:
             shiftPress (BtnChaos);
             check (box.getData().inst[Bass].values == bassBefore.values, "Shift + Chaos takes it back", {});
             box.setPage (PageFx);
-            for (int i = 0; i < 20; ++i) { press (BtnChaos); renderSeconds (audio, 0.15, nullptr); }
+            for (int i = 0; i < 20; ++i) { box.chaos(); renderSeconds (audio, 0.15, nullptr); }
             const auto fxChaos = renderSeconds (audio, 1.0, nullptr);
             check (fxChaos.finite && fxChaos.peak <= 1.0f && fxChaos.rms > 0.005f, "20 x Chaos on the FX page stays clean",
                    "rms " + juce::String (fxChaos.rms, 4));

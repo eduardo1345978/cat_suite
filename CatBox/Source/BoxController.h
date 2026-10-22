@@ -78,7 +78,7 @@ public:
     void setMuted (int instrument, bool muted);
 
     /** Chaos: new random sound settings for the page on screen (patterns, tempo, key and volume stay).
-        Shift + Chaos takes the last one back. */
+        The button must be held for 0.6 s, so it is never pressed by accident. Shift + Chaos takes the last one back. */
     void chaos();
     bool undoChaos();
 
@@ -116,6 +116,9 @@ private:
     std::array<std::array<float, numSlots>, NumPages> chaosUndo {};
     std::array<bool, NumPages> hasChaosUndo {};
     juce::Random chaosRnd;
+    bool chaosArmed = false;            // Chaos only fires when held for a moment (no accidents)
+    juce::uint32 chaosDownAt = 0;
+    static constexpr juce::uint32 chaosHoldMs = 600;
     int bassSel = -1;
 
     std::array<float, numSlots> knobRemainder {};

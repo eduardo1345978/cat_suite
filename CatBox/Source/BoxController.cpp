@@ -468,7 +468,7 @@ void BoxController::buttonDown (int b)
 
         case BtnChaos:
             if (sh) { if (! undoChaos()) setFlash ("Nothing to take back"); }
-            else chaos();
+            else { chaosArmed = true; chaosDownAt = juce::Time::getMillisecondCounter(); setFlash ("Keep holding Chaos..."); }
             break;
 
         case BtnScene:
@@ -553,6 +553,7 @@ void BoxController::buttonUp (int b)
 {
     if (b == BtnShift) { shift = false; if (! sceneMode.load()) saveArm = false; }
     if (b == BtnRec) rec = false;
+    if (b == BtnChaos && chaosArmed) { chaosArmed = false; setFlash ("Chaos: hold it a moment"); }
 }
 
 bool BoxController::isButtonLit (int b) const
@@ -838,6 +839,8 @@ void BoxController::timerCallback()
         }
     }
     if (got) { publish(); markDirty(); }
+
+    if (chaosArmed && juce::Time::getMillisecondCounter() - chaosDownAt >= chaosHoldMs) { chaosArmed = false; chaos(); }
 
     if (dirty && juce::Time::getMillisecondCounter() - lastChange > 1500) saveState();
 }
