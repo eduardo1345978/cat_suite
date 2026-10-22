@@ -1,0 +1,96 @@
+# Cat Box (the groovebox): builds it for the Raspberry Pi (Linux ARM64) and for Windows,
+# and runs its self test on both (every instrument plays, the controller map, Rec, presets).
+name: Build Cat Box
+
+on:
+  push:
+    branches: [ main, catbox ]
+    paths:
+      - 'CatBox/**'
+      - 'Shared/Source/CatSounds.*'
+      - 'Shared/Source/SafetyLimiter.h'
+      - 'DrumCat/Source/DrumCatEngine.*'
+      - 'BassCat/Source/BassEngine.*'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/build-catbox.yml'
+  workflow_dispatch:
+
+jobs:
+  raspberry-pi:
+    name: Raspberry Pi (Linux ARM64)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Libraries (the same ones CatBox/pi/setup_pi.sh installs on the Pi)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config libasound2-dev libfreetype-dev \
+            libfontconfig1-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxcomposite-dev libxext-dev xvfb
+
+      - name: Reuse the JUCE download
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: juce-arm64-${{ hashFiles('cmake/JuceSetup.cmake') }}
+
+      - name: Build Cat Box
+        run: |
+          cmake -B build -G Ninja -DCAT_BOX_ONLY=ON -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target CatBox
+
+      - name: Self test
+        run: |
+          exe=$(find build -type f -name Cat-Box -perm -u+x | head -1)
+          echo "built: $exe"
+          xvfb-run -a "$exe" --selftest "$PWD/catbox-test.wav"
+          cat catbox-test.txt
+
+      - name: Keep the Pi build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cat-Box-RaspberryPi
+          path: |
+            build/CatBox/CatBox_artefacts/Release/Cat-Box
+            catbox-test.wav
+            catbox-test.txt
+          retention-days: 30
+
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reuse the JUCE download
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: juce-8.0.15-box-${{ hashFiles('cmake/JuceSetup.cmake') }}
+
+      - name: Build Cat Box
+        run: |
+          cmake -B build -A x64 -DCAT_BOX_ONLY=ON
+          cmake --build build --config Release --target CatBox
+
+      - name: Self test
+        shell: pwsh
+        run: |
+          $t = Start-Process "build\CatBox\CatBox_artefacts\Release\Cat-Box.exe" -ArgumentList '--selftest', "`"$PWD\catbox-test.wav`"" -Wait -PassThru
+          if (Test-Path catbox-test.txt) { Get-Content catbox-test.txt }
+          if ($t.ExitCode -ne 0) { throw "Cat Box self test failed (exit code $($t.ExitCode))" }
+
+      - name: Keep the Windows build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cat-Box-Windows
+          path: |
+            build/CatBox/CatBox_artefacts/Release/Cat-Box.exe
+            catbox-test.wav
+            catbox-test.txt
+          retention-days: 30

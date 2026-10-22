@@ -14,6 +14,13 @@ endif()
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/JuceSetup.cmake)
 
+# On the Raspberry Pi only the Cat Box is needed: cmake -B build -DCAT_BOX_ONLY=ON
+option(CAT_BOX_ONLY "Build only Cat Box (the groovebox app for the Raspberry Pi)" OFF)
+if(CAT_BOX_ONLY)
+    add_subdirectory(CatBox)
+    return()
+endif()
+
 add_subdirectory(Shared)
 add_subdirectory(ChordCat)
 add_subdirectory(PattCat)
@@ -29,6 +36,7 @@ add_subdirectory(MuseCat)
 add_subdirectory(EchoCat)
 add_subdirectory(CatHub)
 add_subdirectory(CatOcean)
+add_subdirectory(CatBox)
 
 option(CAT_BUILD_TESTS "Build the headless VST3 host test (loads the built .vst3 files)" OFF)
 if(CAT_BUILD_TESTS)
