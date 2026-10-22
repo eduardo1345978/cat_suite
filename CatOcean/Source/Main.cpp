@@ -195,7 +195,8 @@ public:
         placeBox.onChange = [this]
         {
             if (updatingPickers) return;
-            static const char* words[NumPlaces] = { "reef", "kelp", "crystal", "ship", "cave", "ice", "lagoon", "ruins", "volcano", "jelly", "open" };
+            static const char* words[NumPlaces] = { "reef", "kelp", "crystal", "ship", "cave", "ice", "lagoon", "ruins", "volcano", "jelly", "open",
+                                                    "city", "trench", "castle", "sky" };
             engine.console (juce::String ("/place ") + words[juce::jlimit (0, NumPlaces - 1, placeBox.getSelectedId() - 1)]);
         };
         timeBox.onChange = [this]

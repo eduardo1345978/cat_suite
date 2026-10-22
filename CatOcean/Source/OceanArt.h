@@ -65,6 +65,10 @@ private:
     void school (Canvas&, const Sim&, float t);       // the migration
     void glow (Canvas&, const Sim&, float t);         // plankton bloom
     void floor (Canvas&, const Sim&, float t);
+    /** layer 0: far away (whales), 1: on the sea floor (crabs, octopus), 2: in front (dolphins, the mermaid cat) */
+    void critters (Canvas&, const Sim&, float t, int layer);
+    /** Halloween (pumpkins and candles on the floor) and Christmas (snow and a tree). */
+    void holiday (Canvas&, const Sim&, float t);
     void bubbles (Canvas&, const Sim&, float dt);
     void weather (Canvas&, const Sim&, float t);
     void overlay (Canvas&, const Sim&, const MusicInfo&, float t);

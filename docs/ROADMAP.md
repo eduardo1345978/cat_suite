@@ -17,7 +17,7 @@ then copy changed files to the PC (D:\Projekty\vst_plugin) and run build_and_ins
 - [x] Fish emotes: !dance (notes circle it) !spin (really turns round) !jump (swims up, leaps out, splash)
 
 ## 2. Cat Ocean content
-- [ ] Stream text and panels SMALLER, more ocean (English stays)
+- [x] Stream text and panels SMALLER, more ocean (English stays)
 - [ ] Creatures: octopus & crabs, whales & dolphins visiting, mermaid cat (VERY rare, sings a solo, everyone gets XP)
 - [ ] Places: underwater city, deep trench (dark, glowing), coral castle, sky ocean (floating islands)
 - [ ] Halloween (automatic all October): pumpkins & candles on the sea floor

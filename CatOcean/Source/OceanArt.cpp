@@ -140,6 +140,10 @@ namespace
             { 0xff6fa9b8, 0xff2f5568, 0xff141c28, 0xff5a5052, 0xff2a2426, 0xff3c3436, 0.4f },   // volcano vents: warm murky water, ash
             { 0xff8fe4ff, 0xff4a7fd8, 0xff1d236e, 0xffe2d8f6, 0xffaa9ccc, 0xff8e84bc, 1.0f },   // jellyfish bay: lavender sand
             { 0xff40d4ff, 0xff1572cc, 0xff051f58, 0xff1c4a86, 0xff0b2552, 0xff2a5a8e, 1.6f },   // open sea: no beach, just blue
+            { 0xff4fb8d0, 0xff1d6f9a, 0xff0a2f55, 0xffb8c4c8, 0xff7d8a92, 0xff8a98a6, 0.8f },   // underwater city: paved grey floor
+            { 0xff1f5a8a, 0xff0a2348, 0xff02060f, 0xff1c2234, 0xff080a14, 0xff1a2030, 0.0f },   // deep trench: nearly black
+            { 0xff6fe0f0, 0xff2aa6d6, 0xff1a4f8e, 0xfffff0e0, 0xfff0c8b8, 0xffe8a0a8, 1.3f },   // coral castle: pink sand
+            { 0xffaef0ff, 0xff6fc8f0, 0xff3a7ac8, 0xfff8f0ff, 0xffd8c8f0, 0xffb8c8e8, 1.6f },   // sky ocean: light and pastel
         };
         return looks[juce::jlimit (0, NumPlaces - 1, place)];
     }
@@ -189,6 +193,20 @@ Painter::Painter()
         weedSets[PlaceVolcano].push_back ({ 6.0f + r.nextFloat() * (W - 12), 6 + r.nextInt (12), mixc (0xff4a5a2a, 0xff7a6a3a, r.nextFloat()), r.nextFloat() * 6.0f });
     for (int i = 0; i < 14; ++i)   // pale glowing anemones in the jellyfish bay
         weedSets[PlaceJelly].push_back ({ 6.0f + r.nextFloat() * (W - 12), 5 + r.nextInt (9), mixc (0xffffb6e6, 0xffc8b6ff, r.nextFloat()), r.nextFloat() * 6.0f, i % 3 == 0 });
+    for (int i = 0; i < 12; ++i)   // little planters and hedges in the city
+        weedSets[PlaceCity].push_back ({ 6.0f + r.nextFloat() * (W - 12), 5 + r.nextInt (8), mixc (0xff3f8a5a, 0xff6fc08a, r.nextFloat()), r.nextFloat() * 6.0f });
+    for (int i = 0; i < 18; ++i)   // glowing tube worms in the trench
+    {
+        static const Colour deep[] = { 0xff2ce8f5, 0xff7dffb0, 0xffff5fa0, 0xff9a7aff };
+        weedSets[PlaceTrench].push_back ({ 6.0f + r.nextFloat() * (W - 12), 6 + r.nextInt (20), deep[r.nextInt (4)], r.nextFloat() * 6.0f, true });
+    }
+    for (int i = 0; i < 28; ++i)   // a coral garden around the castle
+    {
+        static const Colour cor[] = { 0xffff7aa0, 0xffffb07a, 0xffd07aff, 0xff7ae0c0, 0xffffe07a };
+        weedSets[PlaceCastle].push_back ({ 6.0f + r.nextFloat() * (W - 12), 6 + r.nextInt (16), cor[r.nextInt (5)], r.nextFloat() * 6.0f });
+    }
+    for (int i = 0; i < 14; ++i)   // soft pastel sea grass under the sky islands
+        weedSets[PlaceSkyOcean].push_back ({ 6.0f + r.nextFloat() * (W - 12), 8 + r.nextInt (20), mixc (0xff9fe0d0, 0xffd0b8ff, r.nextFloat()), r.nextFloat() * 6.0f });
     sandNoise.resize ((size_t) W);
     for (auto& n : sandNoise) n = r.nextInt (1000);
 }
@@ -200,6 +218,7 @@ void Painter::paint (Canvas& c, const Sim& sim, const MusicInfo& music, float dt
     background (c, sim, t);
     if (sim.place != PlaceCave) sky (c, sim, t);
     decor (c, sim, t);
+    critters (c, sim, t, 0);
     school (c, sim, t);
     if (sim.place != PlaceCave) boat (c, sim, t);
 
@@ -216,7 +235,7 @@ void Painter::paint (Canvas& c, const Sim& sim, const MusicInfo& music, float dt
     for (auto& f : sim.fish) if (f.present) order.push_back (&f);
     std::sort (order.begin(), order.end(), [] (auto* a, auto* b) { return a->genes.lengthPixels() * a->growth > b->genes.lengthPixels() * b->growth; });
     for (auto* f : order) drawFish (c, *f, (float) sim.time);
-    if (sim.place == PlaceDeep || sim.place == PlaceCave || sim.daylight < 0.4f)
+    if (sim.place == PlaceDeep || sim.place == PlaceCave || sim.place == PlaceTrench || sim.daylight < 0.4f)
         for (auto* f : order)   // in the dark, every fish glows a little
             for (int y = -8; y <= 8; ++y)
                 for (int x = -8; x <= 8; ++x)
@@ -226,6 +245,7 @@ void Painter::paint (Canvas& c, const Sim& sim, const MusicInfo& music, float dt
                 }
 
     glow (c, sim, t);
+    critters (c, sim, t, 2);
     bubbles (c, sim, dt);
     // little light sparkles drifting in the water
     for (int i = 0; i < 18; ++i)
@@ -239,6 +259,8 @@ void Painter::paint (Canvas& c, const Sim& sim, const MusicInfo& music, float dt
         c.blend (sx, sy - 1, 0xffffffff, a * 0.5f); c.blend (sx, sy + 1, 0xffffffff, a * 0.5f);
     }
     floor (c, sim, t);
+    holiday (c, sim, t);
+    critters (c, sim, t, 1);
     weather (c, sim, t);
 
     // what the fish say, then names: labels never cover each other (a crowd shows the
@@ -790,6 +812,271 @@ void Painter::weather (Canvas& c, const Sim& sim, float t)
         for (int yy = 0; yy < H; ++yy)
             for (int xx = 0; xx < W; ++xx)
                 c.add (xx, yy, 0xffb0c4ff, sim.lightning * 0.35f);
+    }
+}
+
+//==============================================================================
+void Painter::holiday (Canvas& c, const Sim& sim, float t)
+{
+    const int season = sim.season();
+    if (season == Sim::SeasonNone || sim.place == PlaceSkyOcean) return;
+    const float night = 1.0f - sim.daylight;
+    const int base = (int) floorY + 5;
+    auto glowAt = [&c] (int x, int y, int r, Colour col, float a)
+    {
+        for (int dy = -r; dy <= r; ++dy) for (int dx = -r; dx <= r; ++dx)
+        {
+            const float d = std::sqrt ((float) (dx * dx + dy * dy)) / (float) r;
+            if (d < 1.0f) c.add (x + dx, y + dy, col, a * (1.0f - d));
+        }
+    };
+    if (season == Sim::SeasonHalloween)
+    {
+        // pumpkins with glowing faces, and candles whose flames flicker
+        const int px[] = { 34, 150, 268, 402, 455 };
+        const int ps[] = { 7, 5, 8, 6, 4 };
+        for (int k = 0; k < 5; ++k)
+        {
+            const int r = ps[k], cx = px[k], cy = base - r + 1;
+            for (int y = -r; y <= r; ++y)
+                for (int x = -r - 2; x <= r + 2; ++x)
+                {
+                    const float u = (float) x / (float) (r + 2), v = (float) y / (float) r;
+                    if (u * u + v * v > 1.0f) continue;
+                    Colour col = (std::abs (x) % 3 == 0) ? 0xffd8641a : 0xfff08a2a;   // ribs
+                    if (y < -r / 2) col = light (col, 0.15f);
+                    c.set (cx + x, cy + y, col);
+                }
+            c.set (cx, cy - r - 1, 0xff4a7a2a); c.set (cx + 1, cy - r - 2, 0xff4a7a2a);   // the stalk
+            // the face lit from inside
+            const float flick = 0.75f + 0.25f * std::sin (t * 9.0f + (float) k * 2.0f) * std::sin (t * 5.3f + (float) k);
+            const Colour fire = mixc (0xffffb02a, 0xffffef8a, flick);
+            c.set (cx - r / 2 - 1, cy - 1, fire); c.set (cx - r / 2, cy - 1, fire); c.set (cx - r / 2, cy - 2, fire);
+            c.set (cx + r / 2 + 1, cy - 1, fire); c.set (cx + r / 2, cy - 1, fire); c.set (cx + r / 2, cy - 2, fire);
+            for (int x = -r / 2; x <= r / 2; ++x) c.set (cx + x, cy + r / 3 + (x % 2 == 0 ? 0 : 1), fire);
+            glowAt (cx, cy, r + 8, 0xffff9a2a, (0.12f + 0.25f * night) * flick);
+        }
+        const int cxs[] = { 92, 206, 338, 430 };
+        for (int k = 0; k < 4; ++k)
+        {
+            const int x = cxs[k], h = 6 + k % 3 * 2;
+            for (int y = 0; y < h; ++y) { c.set (x, base - y, 0xfff4ecd8); c.set (x + 1, base - y, 0xffd8ccb0); }
+            const float flick = 0.7f + 0.3f * std::sin (t * 11.0f + (float) k * 3.0f);
+            c.set (x, base - h - 1, 0xffffe08a); c.set (x, base - h - 2, mixc (0xffff8a2a, 0xffffe08a, flick)); c.set (x + 1, base - h - 1, 0xffffb04a);
+            glowAt (x, base - h - 2, 7, 0xffffc05a, (0.15f + 0.3f * night) * flick);
+        }
+    }
+    else if (season == Sim::SeasonChristmas)
+    {
+        // snow: flakes falling through the air and slowly sinking through the water
+        for (int i = 0; i < 70; ++i)
+        {
+            const float sp = 6.0f + hashf ((juce::uint32) i * 7 + 3) * 8.0f;
+            const float x = std::fmod (hashf ((juce::uint32) i * 37 + 2) * (float) W + std::sin (t * 0.7f + (float) i) * 4.0f, (float) W);
+            const float y = std::fmod (hashf ((juce::uint32) i * 11 + 9) * floorY + t * sp, floorY);
+            c.blend ((int) x, (int) y, 0xffffffff, y < surfaceY ? 0.9f : 0.55f);
+        }
+        // a snowy cap on the sand
+        for (int x = 0; x < W; ++x) if (hashf ((juce::uint32) x * 3 + 1) < 0.6f) c.blend (x, base - 1, 0xffffffff, 0.5f);
+        // the tree, with lights that blink and a star on top
+        const int tx = 412, th = 46;
+        for (int y = 0; y < 5; ++y) for (int x = -2; x <= 2; ++x) c.set (tx + x, base - y, 0xff6a4a2a);
+        for (int y = 0; y < th; ++y)
+        {
+            const int tier = y % 15, half = (th - y) * 16 / th + 2 - tier / 4;
+            for (int x = -half; x <= half; ++x)
+            {
+                Colour col = (x + y) % 4 == 0 ? 0xff1f7a3a : 0xff2a9a4a;
+                if (tier < 2 && std::abs (x) > half - 3) col = 0xffffffff;   // snow on the branches
+                c.set (tx + x, base - 5 - y, col);
+            }
+        }
+        static const Colour lights[] = { 0xffff4a4a, 0xffffe04a, 0xff4ab0ff, 0xffff7ae0 };
+        for (int k = 0; k < 16; ++k)
+        {
+            const int y = 3 + (int) (hashf ((juce::uint32) k * 5 + 7) * (th - 6));
+            const int half = (th - y) * 16 / th;
+            const int x = (int) ((hashf ((juce::uint32) k * 13 + 1) * 2.0f - 1.0f) * (float) half);
+            const bool on = std::sin (t * 2.0f + (float) k * 1.7f) > -0.3f;
+            const Colour col = lights[k % 4];
+            c.set (tx + x, base - 5 - y, on ? col : shade (col, 0.4f));
+            if (on) glowAt (tx + x, base - 5 - y, 3, col, 0.25f + 0.25f * night);
+        }
+        const int sy = base - 5 - th - 2;
+        c.set (tx, sy, 0xffffef6a); c.set (tx - 1, sy, 0xffffd02a); c.set (tx + 1, sy, 0xffffd02a); c.set (tx, sy - 1, 0xffffd02a); c.set (tx, sy + 1, 0xffffd02a);
+        glowAt (tx, sy, 9, 0xffffe08a, 0.3f + 0.3f * night);
+        // presents under it
+        const Colour gifts[] = { 0xffe04a4a, 0xff4a8ae0, 0xffe0c04a };
+        for (int k = 0; k < 3; ++k)
+        {
+            const int gx = tx - 20 + k * 14, s = 5 + k % 2;
+            for (int y = 0; y < s; ++y) for (int x = 0; x < s + 2; ++x) c.set (gx + x, base - y, x == (s + 2) / 2 || y == s / 2 ? 0xffffffff : gifts[k]);
+        }
+    }
+}
+
+//==============================================================================
+void Painter::critters (Canvas& c, const Sim& sim, float t, int layer)
+{
+    const float day = 0.45f + 0.55f * sim.daylight;
+    auto ellipse = [&c] (float cx, float cy, float rx, float ry, Colour col, float a)
+    {
+        for (int y = (int) std::floor (cy - ry); y <= (int) std::ceil (cy + ry); ++y)
+            for (int x = (int) std::floor (cx - rx); x <= (int) std::ceil (cx + rx); ++x)
+            {
+                const float dx = ((float) x + 0.5f - cx) / rx, dy = ((float) y + 0.5f - cy) / ry;
+                if (dx * dx + dy * dy <= 1.0f) c.blend (x, y, col, a);
+            }
+    };
+    for (const auto& cr : sim.critters)
+    {
+        const int dir = cr.dir;
+        switch (cr.kind)
+        {
+            case CritterWhale:
+            {
+                if (layer != 0) break;
+                // far away, behind the fish: big and soft
+                const float a = 0.55f;
+                const Colour body = shade (0xff3f6f9a, day), belly = shade (0xff9cc4dc, day);
+                const float x = cr.x, y = cr.y;
+                ellipse (x, y, 46.0f, 12.0f, body, a);
+                ellipse (x + 18.0f * (float) dir, y - 2.0f, 26.0f, 10.0f, body, a);           // the big head
+                ellipse (x + 6.0f * (float) dir, y + 6.0f, 34.0f, 5.0f, belly, a * 0.8f);    // belly
+                for (int k = 0; k < 10; ++k)                                                  // throat grooves
+                    c.blend ((int) (x + (float) dir * (14.0f + k * 2.5f)), (int) (y + 8.0f), shade (belly, 0.8f), a * 0.6f);
+                // tail and flukes, waving slowly
+                const float tw = std::sin (t * 0.9f) * 4.0f;
+                const float tx = x - 50.0f * (float) dir;
+                ellipse (tx, y + tw * 0.4f, 10.0f, 4.0f, body, a);
+                ellipse (tx - 8.0f * (float) dir, y - 5.0f + tw, 6.0f, 2.5f, body, a);
+                ellipse (tx - 8.0f * (float) dir, y + 5.0f + tw, 6.0f, 2.5f, body, a);
+                ellipse (x + 4.0f * (float) dir, y + 10.0f, 7.0f, 2.0f, body, a);             // flipper
+                c.blend ((int) (x + 34.0f * (float) dir), (int) (y - 2.0f), 0xff0b1a2a, 0.9f); // eye
+                break;
+            }
+            case CritterCrab:
+            {
+                if (layer != 1) break;
+                const Colour shell = shade (mixc (0xffe0503a, 0xfff08a2a, cr.hue), day), dark = shade (shell, 0.6f);
+                const int x = (int) std::lround (cr.x), y = (int) std::lround (cr.y);
+                const bool walking = cr.state == 0;
+                const int step = walking ? ((int) (cr.t * 10.0f)) % 2 : 0;
+                // legs
+                for (int k = -1; k <= 1; ++k)
+                {
+                    c.set (x - 4 + k, y + 2 + ((k + step) % 2 == 0 ? 0 : -1), dark);
+                    c.set (x + 4 + k, y + 2 + ((k + step) % 2 == 0 ? -1 : 0), dark);
+                }
+                // shell
+                for (int dx = -3; dx <= 3; ++dx) { c.set (x + dx, y, shell); c.set (x + dx, y + 1, shell); }
+                for (int dx = -2; dx <= 2; ++dx) c.set (x + dx, y - 1, light (shell, 0.15f));
+                // eyes on stalks
+                c.set (x - 1, y - 2, dark); c.set (x + 1, y - 2, dark);
+                c.set (x - 1, y - 3, 0xff10121c); c.set (x + 1, y - 3, 0xff10121c);
+                // claws that snap while it rests
+                const bool open = ! walking && std::sin (t * 6.0f + (float) cr.id) > 0.3f;
+                for (int side : { -1, 1 })
+                {
+                    c.set (x + side * 4, y - 1, shell); c.set (x + side * 5, y - 2, shell);
+                    c.set (x + side * 6, y - 2 - (open ? 1 : 0), shell); c.set (x + side * 6, y - 3 - (open ? 1 : 0), light (shell, 0.2f));
+                }
+                break;
+            }
+            case CritterOctopus:
+            {
+                if (layer != 1) break;
+                const Colour skin = shade (hsv (0.78f + 0.25f * cr.hue, 0.55f, 0.95f), day), dark = shade (skin, 0.65f);
+                const float x = cr.x, y = cr.y;
+                const bool jet = cr.state == 1;
+                // tentacles: curl on the floor, stream behind when it jets up
+                for (int k = 0; k < 5; ++k)
+                {
+                    const float base = x - 5.0f + (float) k * 2.5f;
+                    for (int s = 0; s < 6; ++s)
+                    {
+                        const float wave = std::sin (t * 3.0f + (float) k * 1.3f + (float) s * 0.7f) * (jet ? 0.6f : 1.4f);
+                        const float tx = base + wave + (jet ? 0.0f : ((float) k - 2.0f) * (float) s * 0.45f);
+                        const float ty = y + 4.0f + (float) s * (jet ? 1.4f : 0.6f);
+                        c.blend ((int) std::lround (tx), (int) std::lround (ty), s > 3 ? dark : skin, 1.0f);
+                    }
+                }
+                ellipse (x, y, 6.0f, 5.5f, skin, 1.0f);                                   // the head
+                ellipse (x - 1.5f, y - 2.0f, 2.5f, 1.5f, light (skin, 0.35f), 0.8f);      // shine
+                c.set ((int) (x - 2.0f), (int) (y + 1.0f), 0xff10121c); c.set ((int) (x + 2.0f), (int) (y + 1.0f), 0xff10121c);
+                c.set ((int) (x - 2.0f), (int) y, 0xffffffff);          c.set ((int) (x + 2.0f), (int) y, 0xffffffff);
+                break;
+            }
+            case CritterDolphin:
+            {
+                if (layer != 2) break;
+                // swims along the surface and leaps out in arcs
+                const float jump = juce::jmax (0.0f, std::sin (cr.t * 2.1f)) * 20.0f;
+                const float x = cr.x, y = cr.y - jump;
+                const Colour body = 0xff7f9fbf, belly = 0xffdfe9f2;
+                ellipse (x, y, 9.0f, 3.0f, body, 1.0f);
+                ellipse (x + 1.0f * (float) dir, y + 1.2f, 6.0f, 1.5f, belly, 1.0f);
+                ellipse (x + 9.5f * (float) dir, y + 0.5f, 2.5f, 1.0f, body, 1.0f);                 // the beak
+                c.set ((int) (x - 1.0f * (float) dir), (int) (y - 4.0f), body); c.set ((int) x, (int) (y - 4.0f), body);   // dorsal fin
+                c.set ((int) (x - 2.0f * (float) dir), (int) (y - 5.0f), body);
+                ellipse (x - 10.0f * (float) dir, y - 1.0f, 2.0f, 1.0f, body, 1.0f);                // tail flukes
+                ellipse (x - 10.0f * (float) dir, y + 1.5f, 2.0f, 1.0f, body, 1.0f);
+                c.set ((int) (x + 6.0f * (float) dir), (int) (y - 1.0f), 0xff10121c);                // eye
+                if (jump > 1.0f && jump < 5.0f)                                                      // splash
+                    for (int k = -3; k <= 3; ++k) c.blend ((int) x + k * 2, (int) surfaceY - (3 - std::abs (k)), 0xffffffff, 0.8f);
+                break;
+            }
+            case CritterMermaid:
+            {
+                if (layer != 2) break;
+                const float x = cr.x, y = cr.y;
+                const Colour fur = 0xfff6a24a, tail = hsv (0.47f + 0.05f * std::sin (t), 0.6f, 0.95f), shell = 0xffffb3e6;
+                // the tail, swishing
+                for (int s = 0; s < 12; ++s)
+                {
+                    const float sw = std::sin (t * 3.0f - (float) s * 0.4f) * (float) s * 0.25f;
+                    const float w = 3.0f - (float) s * 0.18f;
+                    ellipse (x + sw, y + 6.0f + (float) s, w, 1.0f, (s % 3 == 0) ? light (tail, 0.3f) : tail, 1.0f);
+                }
+                const float fsw = std::sin (t * 3.0f - 4.8f) * 3.0f;
+                ellipse (x + fsw - 3.0f, y + 19.0f, 3.0f, 1.5f, tail, 1.0f);
+                ellipse (x + fsw + 3.0f, y + 19.0f, 3.0f, 1.5f, tail, 1.0f);
+                // body, shell top, arms
+                ellipse (x, y + 2.0f, 3.5f, 4.5f, fur, 1.0f);
+                c.set ((int) x - 2, (int) y + 1, shell); c.set ((int) x + 1, (int) y + 1, shell);
+                c.set ((int) x - 2, (int) y, shell);     c.set ((int) x + 1, (int) y, shell);
+                const float arm = cr.state == 1 ? std::sin (t * 4.0f) * 2.0f : 0.0f;
+                c.set ((int) x - 4, (int) (y + 1.0f - arm), fur); c.set ((int) x - 5, (int) (y - arm), fur);
+                c.set ((int) x + 4, (int) (y + 1.0f + arm), fur); c.set ((int) x + 5, (int) (y + arm), fur);
+                // the cat head: ears, eyes (closed and happy while she sings), a pink nose
+                ellipse (x, y - 6.0f, 4.5f, 4.0f, fur, 1.0f);
+                c.set ((int) x - 4, (int) y - 10, fur); c.set ((int) x - 3, (int) y - 10, fur); c.set ((int) x - 4, (int) y - 11, fur);
+                c.set ((int) x + 3, (int) y - 10, fur); c.set ((int) x + 2, (int) y - 10, fur); c.set ((int) x + 3, (int) y - 11, fur);
+                if (cr.state == 1) { c.set ((int) x - 2, (int) y - 7, 0xff10121c); c.set ((int) x - 1, (int) y - 6, 0xff10121c);
+                                     c.set ((int) x + 2, (int) y - 7, 0xff10121c); c.set ((int) x + 1, (int) y - 6, 0xff10121c); }
+                else { c.set ((int) x - 2, (int) y - 6, 0xff10121c); c.set ((int) x + 2, (int) y - 6, 0xff10121c); }
+                c.set ((int) x, (int) y - 5, 0xffff8fa8);
+                // a crown of sparkles and the notes she sings
+                if (cr.state == 1)
+                {
+                    for (int k = 0; k < 6; ++k)
+                    {
+                        const float a = t * 1.5f + (float) k * 1.047f;
+                        c.blend ((int) (x + std::cos (a) * 14.0f), (int) (y + std::sin (a) * 14.0f), 0xffffffff, 0.5f + 0.5f * std::sin (t * 5.0f + (float) k));
+                    }
+                    for (int k = 0; k < 3; ++k)
+                    {
+                        const float p = std::fmod (t * 0.6f + (float) k / 3.0f, 1.0f);
+                        const int nx = (int) (x + 8.0f + std::sin (p * 6.0f + (float) k) * 4.0f), ny = (int) (y - 8.0f - p * 26.0f);
+                        const Colour nc = k == 1 ? 0xffffe066 : shell;
+                        const float na = 1.0f - p;
+                        c.blend (nx, ny, nc, na); c.blend (nx + 1, ny, nc, na); c.blend (nx + 1, ny - 1, nc, na); c.blend (nx + 1, ny - 2, nc, na);
+                    }
+                }
+                break;
+            }
+            default: break;
+        }
     }
 }
 
@@ -1664,6 +1951,173 @@ void Painter::decor (Canvas& c, const Sim& sim, float t)
                     const float a = i * 0.45f + t * 0.8f;
                     const int fx = (int) (cx + std::cos (a) * (6 + i % 5)), fy = (int) (cy + std::sin (a * 1.3f) * (4 + i % 3));
                     c.blend (fx, fy, 0xffcfe8ff, 0.7f); c.blend (fx - 1, fy, 0xff9fc8f0, 0.5f);
+                }
+            }
+            break;
+        }
+        case PlaceCity:
+        {
+            // an underwater city: domes and towers with lit windows (brighter at night), arches and street lamps
+            const float lit = 0.45f + 0.55f * sim.daylight;
+            const float night = 1.0f - sim.daylight;
+            struct B { int x, w, h, kind; };   // kind 0 tower, 1 dome, 2 block
+            const B b[] = { { 18, 26, 70, 0 }, { 52, 40, 44, 1 }, { 100, 22, 96, 0 }, { 130, 46, 56, 2 }, { 190, 34, 38, 1 },
+                            { 250, 28, 84, 0 }, { 286, 50, 50, 2 }, { 344, 38, 64, 1 }, { 392, 24, 104, 0 }, { 424, 44, 46, 2 } };
+            for (const auto& bd : b)
+            {
+                const int base = (int) floorY + 6;
+                const Colour wall = shade (mixc (0xff8fb0c0, 0xff3f8fb0, 0.25f), lit), dark = shade (wall, 0.7f), roof = shade (0xff5fd0d8, lit);
+                for (int y = 0; y < bd.h; ++y)
+                    for (int x = 0; x < bd.w; ++x)
+                    {
+                        int top = bd.h;
+                        if (bd.kind == 1) { const float u = (x - bd.w * 0.5f) / (bd.w * 0.5f); top = bd.h - (int) (bd.w * 0.5f * (1.0f - std::sqrt (juce::jmax (0.0f, 1.0f - u * u)))); }
+                        if (y >= top) continue;
+                        Colour col = x < 2 ? light (wall, 0.15f) : (x > bd.w - 3 ? dark : wall);
+                        if (bd.kind == 1 && y > top - 4) col = roof;
+                        if (bd.kind == 0 && y > bd.h - 6) col = roof;
+                        c.blend (bd.x + x, base - y, col, 0.92f);
+                    }
+                if (bd.kind == 0)   // a spire
+                    for (int k = 0; k < 10; ++k) c.blend (bd.x + bd.w / 2, base - bd.h - k, roof, 0.9f);
+                // windows: little lights, some blink
+                for (int wy = 8; wy < bd.h - 10; wy += 9)
+                    for (int wx = 4; wx < bd.w - 4; wx += 7)
+                    {
+                        const juce::uint32 h = (juce::uint32) (bd.x * 31 + wx * 7 + wy * 13);
+                        const bool on = hashf (h) < 0.35f + 0.5f * night && std::sin (t * 0.3f + hashf (h + 1) * 20.0f) > -0.8f;
+                        const Colour wc = on ? mixc (0xffffe9a0, 0xff9ff3ff, hashf (h + 2)) : shade (wall, 0.55f);
+                        c.blend (bd.x + wx, base - wy, wc, 1.0f); c.blend (bd.x + wx + 1, base - wy, wc, 1.0f);
+                        c.blend (bd.x + wx, base - wy - 1, wc, 1.0f); c.blend (bd.x + wx + 1, base - wy - 1, wc, 1.0f);
+                        if (on && night > 0.3f) c.add (bd.x + wx, base - wy, wc, 0.25f * night);
+                    }
+            }
+            // street lamps along the floor
+            for (int i = 0; i < 6; ++i)
+            {
+                const int lx = 40 + i * 80, base = (int) floorY + 6;
+                for (int k = 0; k < 14; ++k) c.set (lx, base - k, 0xff3a4a58);
+                for (int y = -6; y <= 6; ++y) for (int x = -6; x <= 6; ++x)
+                {
+                    const float d = std::sqrt ((float) (x * x + y * y)) / 6.0f;
+                    if (d < 1.0f) c.add (lx + x, base - 15 + y, 0xffffe29a, (0.15f + 0.35f * night) * (1.0f - d));
+                }
+                c.set (lx, base - 15, 0xffffffff);
+            }
+            break;
+        }
+        case PlaceTrench:
+        {
+            // a deep trench: steep dark walls on both sides, glowing dots on them, an anglerfish's light drifting in the dark
+            for (int side = 0; side < 2; ++side)
+                for (int y = (int) surfaceY + 20; y < (int) floorY + 10; ++y)
+                {
+                    const float k = (float) (y - surfaceY) / (floorY - surfaceY);
+                    const int edge = (int) (40.0f + 70.0f * k + std::sin (y * 0.13f + side * 2.0f) * 6.0f + std::sin (y * 0.05f) * 9.0f);
+                    for (int x = 0; x < edge; ++x)
+                    {
+                        const int px = side == 0 ? x : W - 1 - x;
+                        c.blend (px, y, x > edge - 3 ? 0xff2a3450 : 0xff0b0f1c, 0.92f);
+                    }
+                }
+            for (int i = 0; i < 40; ++i)   // bioluminescent dots on the walls
+            {
+                const int side = i % 2;
+                const float y = surfaceY + 30.0f + hashf ((juce::uint32) i * 17 + 3) * (floorY - surfaceY - 30.0f);
+                const float k = (y - surfaceY) / (floorY - surfaceY);
+                const int x = (int) (hashf ((juce::uint32) i * 5 + 1) * (36.0f + 60.0f * k));
+                const float a = 0.5f + 0.5f * std::sin (t * (0.8f + hashf ((juce::uint32) i) * 2.0f) + i);
+                static const Colour dc[] = { 0xff2ce8f5, 0xff7dffb0, 0xffc06bff };
+                const int px = side == 0 ? x : W - 1 - x;
+                c.blend (px, (int) y, dc[i % 3], a);
+                c.add (px, (int) y, dc[i % 3], 0.3f * a);
+            }
+            {
+                // the anglerfish: only its lure and a hint of teeth
+                const float ax = (float) W * 0.5f + std::sin (t * 0.13f) * 120.0f, ay = 170.0f + std::sin (t * 0.31f) * 30.0f;
+                for (int y = -9; y <= 9; ++y) for (int x = -9; x <= 9; ++x)
+                {
+                    const float d = std::sqrt ((float) (x * x + y * y)) / 9.0f;
+                    if (d < 1.0f) c.add ((int) ax + x, (int) ay + y, 0xffbfffe0, 0.3f * (1.0f - d) * (0.7f + 0.3f * std::sin (t * 3.0f)));
+                }
+                c.set ((int) ax, (int) ay, 0xffffffff);
+                for (int k = 1; k < 8; ++k) c.blend ((int) ax - k, (int) ay + k / 2, 0xff2a3044, 0.8f);
+            }
+            break;
+        }
+        case PlaceCastle:
+        {
+            // a castle made of coral: towers with pointed roofs, battlements, a gate, seaweed flags
+            const float lit = 0.5f + 0.5f * sim.daylight;
+            const Colour wall = shade (0xffffa8b8, lit), wallDark = shade (0xffe07a90, lit), roof = shade (0xffff7a5a, lit), gate = shade (0xff7a3a5a, lit);
+            const int base = (int) floorY + 6, cx = 240;
+            for (int y = 0; y < 50; ++y)   // the main wall
+                for (int x = -70; x <= 70; ++x)
+                {
+                    if (y >= 46 && ((x + 70) / 6) % 2 == 1) continue;   // battlements
+                    const bool door = std::abs (x) < 10 && y < 22 && (y < 16 || (x * x + (y - 16) * (y - 16)) < 100);
+                    Colour col = door ? gate : ((x + y) % 7 == 0 ? wallDark : wall);
+                    c.blend (cx + x, base - y, col, 0.95f);
+                }
+            const int towers[] = { -78, -30, 30, 78 };
+            const int th[] = { 72, 92, 92, 72 };
+            for (int k = 0; k < 4; ++k)
+            {
+                const int tx = cx + towers[k];
+                for (int y = 0; y < th[k]; ++y)
+                    for (int x = -9; x <= 9; ++x) c.blend (tx + x, base - y, x < -6 ? light (wall, 0.2f) : (x > 6 ? wallDark : wall), 0.97f);
+                for (int y = 0; y < 18; ++y)   // the pointed roof
+                {
+                    const int half = 11 - y * 11 / 18;
+                    for (int x = -half; x <= half; ++x) c.blend (tx + x, base - th[k] - y, x < 0 ? light (roof, 0.15f) : roof, 1.0f);
+                }
+                for (int y = 0; y < 8; ++y)    // a seaweed flag waving
+                {
+                    const int fx = tx + (int) std::lround (std::sin (t * 2.0f + y * 0.6f + k) * 1.5f) + y / 2;
+                    c.blend (fx, base - th[k] - 18 - y, 0xff4fd17a, 0.9f);
+                }
+                // a round window, lit
+                for (int y = -2; y <= 2; ++y) for (int x = -2; x <= 2; ++x)
+                    if (x * x + y * y <= 4) c.blend (tx + x, base - th[k] + 22 + y, mixc (0xffffe9a0, 0xff6a3a5a, sim.daylight * 0.6f), 1.0f);
+                // bubbles from the roof tips
+                const float life = std::fmod (t * 0.4f + k * 0.27f, 1.0f);
+                c.blend (tx + (int) (std::sin (t + k) * 2.0f), base - th[k] - 20 - (int) (life * 50.0f), 0xffdff8ff, 0.7f * (1.0f - life));
+            }
+            break;
+        }
+        case PlaceSkyOcean:
+        {
+            // floating islands in the sky with waterfalls pouring into the sea
+            struct Isle { float x, y; int w; };
+            const Isle isles[] = { { 70.0f, 14.0f, 46 }, { 205.0f, 6.0f, 34 }, { 330.0f, 18.0f, 54 }, { 440.0f, 9.0f, 30 } };
+            for (int i = 0; i < 4; ++i)
+            {
+                const auto& is = isles[i];
+                const float bob = std::sin (t * 0.5f + i * 1.3f) * 1.5f;
+                const int ix = (int) is.x, iy = (int) (is.y + bob);
+                for (int y = 0; y < is.w / 3; ++y)   // the rock underneath, getting narrower
+                {
+                    const int half = (is.w / 2) * (is.w / 3 - y) / (is.w / 3);
+                    for (int x = -half; x <= half; ++x) c.blend (ix + x, iy + 3 + y, (x + y) % 5 == 0 ? 0xff8a7aa0 : 0xffa898c0, 1.0f);
+                }
+                for (int x = -is.w / 2; x <= is.w / 2; ++x) { c.set (ix + x, iy + 2, 0xff7ad08a); c.set (ix + x, iy + 1, 0xff9fe8a0); }   // grass
+                for (int k = 0; k < 3; ++k)   // little trees
+                {
+                    const int tx = ix - is.w / 3 + k * is.w / 3;
+                    c.set (tx, iy, 0xff6a4a3a); c.set (tx, iy - 1, 0xff6a4a3a);
+                    for (int y = -5; y <= -2; ++y) for (int x = -2; x <= 2; ++x) if (x * x + (y + 3) * (y + 3) <= 5) c.set (tx + x, iy + y, 0xff5fc07a);
+                }
+                // a waterfall from the island down into the sea
+                if (i != 1)
+                {
+                    const int wx = ix + is.w / 4;
+                    for (int y = iy + 3; y < (int) surfaceY + 2; ++y)
+                        for (int x = 0; x < 3; ++x)
+                        {
+                            const float f = std::sin ((y - t * 40.0f) * 0.5f + x) * 0.5f + 0.5f;
+                            c.blend (wx + x, y, mixc (0xffbfefff, 0xffffffff, f), 0.75f);
+                        }
+                    for (int k = -4; k <= 4; ++k) c.blend (wx + 1 + k, (int) surfaceY + (std::abs (k) > 2 ? 1 : 0), 0xffffffff, 0.8f);   // splash
                 }
             }
             break;

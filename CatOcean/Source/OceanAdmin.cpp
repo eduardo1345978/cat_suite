@@ -46,7 +46,7 @@ juce::String Sim::admin (const juce::String& line)
         return "/stats  /fish @name  /viewers  /spawn 5  /feed 10  /give @name 50  /level @name 8  /rare @name gold|rainbow|ghost|glow|crystal|none\n"
                "/weather calm|rain|storm  /time day|night|sunset|sunrise|auto|0-24  /place reef|kelp|crystal|ship|cave|ice|lagoon|ruins\n"
                "/music aqua|lounge|crystal|bubble|...  /event storm|calm|feast|babyboom|rarehunt|plankton|migration|meteors  /vote start|end  /announce text  /party\n"
-               "/reverb 0-100 (the underwater space)  /today  /recap (show today's recap)  /testalert member|superchat|milestone  /cat (how the boat cat is)  /catvisit\n"
+               "/reverb 0-100 (the underwater space)  /today  /recap (show today's recap)  /testalert member|superchat|milestone  /cat (how the boat cat is)  /catvisit  /visit whale|dolphins|mermaid  /season auto|halloween|christmas|none\n"
                "/species  /newspecies  /kick @name  /ban @name  /unban @name  /bans  /favourites  /requests  /clearrequests  /rename @name New Name  /resetname @name\n"
                "/sleepall  /wakeall  /clear food|bubbles|speech  /save   (chat commands like !fish also work here, as the host)";
 
@@ -216,6 +216,23 @@ juce::String Sim::admin (const juce::String& line)
     if (cmd == "cat")
         return "boat cat: " + juce::String (cat.mood == 1 ? "napping" : "awake") + ", hunger " + juce::String (juce::roundToInt (cat.hunger * 100)) + "%, sleepy "
                + juce::String (juce::roundToInt (cat.sleepy * 100)) + "%, happy " + juce::String (juce::roundToInt (cat.happy * 100)) + "%, caught " + juce::String (cat.catches) + " things";
+    if (cmd == "season" || cmd == "holiday")
+    {
+        const auto what = tok.size() < 2 ? juce::String ("auto") : tok[1];
+        seasonSetting = what.startsWith ("hallo") ? SeasonHalloween : what.startsWith ("christ") || what.startsWith ("xmas") ? SeasonChristmas
+                      : what == "none" || what == "off" ? SeasonNone : -1;
+        static const char* names[] = { "none", "Halloween", "Christmas" };
+        return juce::String ("season: ") + names[season()] + (seasonSetting < 0 ? " (by the date)" : "");
+    }
+    if (cmd == "visit")
+    {
+        const auto what = tok.size() < 2 ? juce::String ("whale") : tok[1];
+        if (what.startsWith ("whale")) spawnVisitor (CritterWhale);
+        else if (what.startsWith ("dolphin")) spawnVisitor (CritterDolphin);
+        else if (what.startsWith ("mermaid")) spawnVisitor (CritterMermaid);
+        else return "visit: whale, dolphins or mermaid";
+        return "a " + what + " is coming";
+    }
     if (cmd == "catvisit") { cat.nextVisitor = 0.0f; cat.visitor = VisitorNone; return "a visitor is coming to the boat"; }
     if (cmd == "requests")
     {

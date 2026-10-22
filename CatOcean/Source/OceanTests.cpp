@@ -287,7 +287,7 @@ void testCommandsAndLife (const juce::File& outDir)
     
 
     // places
-    for (auto* where : { "kelp", "crystal", "ship", "cave", "ice", "lagoon", "ruins", "volcano", "jelly", "open", "reef" })
+    for (auto* where : { "kelp", "crystal", "ship", "cave", "ice", "lagoon", "ruins", "volcano", "jelly", "open", "city", "trench", "castle", "sky", "reef" })
     {
         engine.say ("UCmod", "Mod", juce::String ("!place ") + where, true);
         engine.runFrames (30 * 5);
@@ -399,6 +399,36 @@ void testCommandsAndLife (const juce::File& outDir)
     engine.runFrames (3);
     check (sim.wishers.count ("UC1") == 1, "events: !wish during a meteor shower");
     savePng (engine.canvasForTests(), outDir.getChildFile ("14-events.png"));
+
+    // creatures: crabs and the octopus live on the floor; whales and dolphins visit; the mermaid cat sings and everyone gets XP
+    {
+        int crabs = 0, octo = 0;
+        float crabX0 = 0.0f;
+        for (auto& c : sim.critters) { crabs += c.kind == CritterCrab; octo += c.kind == CritterOctopus; if (c.kind == CritterCrab && crabX0 == 0.0f) crabX0 = c.x; }
+        engine.runFrames (30 * 8);
+        float crabX1 = 0.0f;
+        for (auto& c : sim.critters) if (c.kind == CritterCrab) { crabX1 = c.x; break; }
+        check (crabs == 2 && octo == 1 && std::abs (crabX1 - crabX0) > 1.0f, "creatures: two crabs walk the sea floor, an octopus lives there");
+        engine.console ("/visit whale");
+        engine.console ("/visit dolphins");
+        engine.runFrames (30 * 6);
+        int whales = 0, dolphins = 0;
+        for (auto& c : sim.critters) { whales += c.kind == CritterWhale; dolphins += c.kind == CritterDolphin; }
+        check (whales == 1 && dolphins == 3, "creatures: a whale and a pod of 3 dolphins visit");
+        const int xpBefore = M() != nullptr ? M()->xp : 0;
+        const int notesBefore = music.fishNotes;
+        engine.console ("/visit mermaid");
+        bool sang = false;
+        for (int k = 0; k < 30 * 12 && ! sang; ++k) { engine.runFrames (1); sang = sim.mermaidSinging(); }
+        engine.runFrames (30 * 4);
+        savePng (engine.canvasForTests(), outDir.getChildFile ("15-creatures.png"));
+        check (sang && sim.mermaidSightings == 1 && M() != nullptr && M()->xp >= xpBefore + 10 && music.fishNotes > notesBefore + 4,
+               "creatures: the mermaid cat sings a solo and every viewer's fish gets +10 XP");
+        engine.runFrames (30 * 90);
+        bool gone = true;
+        for (auto& c : sim.critters) gone = gone && (c.kind == CritterCrab || c.kind == CritterOctopus);
+        check (gone, "creatures: the visitors swim away again");
+    }
 
     engine.say ("UC4", "Nobody", "!hat crown");
     engine.runFrames (2);
@@ -635,7 +665,7 @@ int renderPlaces (const juce::File& outDir)
         sim.daylight = night ? 0.0f : 1.0f;
         for (int p = 0; p < NumPlaces; ++p)
         {
-            static const char* words[NumPlaces] = { "reef", "kelp", "crystal", "ship", "cave", "ice", "lagoon", "ruins", "volcano", "jelly", "open" };
+            static const char* words[NumPlaces] = { "reef", "kelp", "crystal", "ship", "cave", "ice", "lagoon", "ruins", "volcano", "jelly", "open", "city", "trench", "castle", "sky" };
             engine.say ("UCmod", "Mod", "!place " + juce::String (words[p]), true);
             engine.runFrames (30 * 5);
             savePng (engine.canvasForTests(), outDir.getChildFile (juce::String ("place-") + juce::String (p) + (night ? "-night" : "-day") + ".png"));

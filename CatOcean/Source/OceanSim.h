@@ -30,7 +30,7 @@ int findStyle (const juce::String& word);         // -1 if none
 
 /** Where the ocean is (chat votes where it goes next). */
 enum Place { PlaceReef = 0, PlaceKelp, PlaceDeep, PlaceWreck, PlaceCave, PlaceIce, PlaceLagoon, PlaceRuins,
-             PlaceVolcano, PlaceJelly, PlaceOpenSea, NumPlaces };
+             PlaceVolcano, PlaceJelly, PlaceOpenSea, PlaceCity, PlaceTrench, PlaceCastle, PlaceSkyOcean, NumPlaces };
 juce::String placeName (int place);
 int findPlace (const juce::String& word);
 
@@ -72,6 +72,15 @@ int xpForLevel (int level);
 
 struct Food { float x = 0, y = 0, vy = 10, life = 90; };
 struct Toast { juce::String text; int fishId = 0; float x = 0, y = 0, life = 4.0f; juce::uint32 colour = 0xffffffff; };
+/** Sea creatures that aren't viewers' fish: crabs and an octopus on the floor, whales and dolphins that visit,
+    and (very rarely) a mermaid cat who sings a solo - every viewer's fish gets XP. */
+enum CritterKind { CritterCrab = 0, CritterOctopus, CritterWhale, CritterDolphin, CritterMermaid, NumCritterKinds };
+struct Critter
+{
+    int kind = CritterCrab, id = 0, dir = 1, state = 0;   // state: crab 0 walk / 1 rest, octopus 0 sit / 1 jet, mermaid 0 in / 1 sing / 2 out
+    float x = 0, y = 0, vx = 0, vy = 0, t = 0, timer = 0, hue = 0;
+};
+
 struct Announcement { juce::String text; float life = 8.0f; juce::uint32 colour = 0xffffffff; };
 struct Confetti { float x, y, vx, vy, life; juce::uint32 colour; };
 /** What a viewer wrote in chat, shown in a bubble above their fish. */
@@ -230,6 +239,16 @@ public:
     std::vector<Species> speciesList;
     Vote vote;
     BoatCat cat;
+    std::vector<Critter> critters;
+    /** Holidays: -1 = by the date (Halloween all October, Christmas all December), 0 = none, 1 Halloween, 2 Christmas. */
+    int seasonSetting = -1;
+    enum { SeasonNone = 0, SeasonHalloween, SeasonChristmas };
+    int season() const;
+    int mermaidSightings = 0, whaleVisits = 0, dolphinVisits = 0;
+    /** The mermaid cat is singing now (the music adds her solo); her x for the pan. */
+    bool mermaidSinging (float* x = nullptr) const;
+    /** Admin / tests: a visitor comes now (CritterWhale, CritterDolphin, CritterMermaid). */
+    void spawnVisitor (int kind);
     int weather = WeatherCalm;
     float weatherLevel = 0;                       // 0 calm .. 0.5 rain .. 1 storm (smoothed)
     float lightning = 0;
@@ -267,6 +286,9 @@ private:
     void stepCat (float dt);
     void catSay (const juce::String&, float seconds = 6.0f);
     void stepDay();
+    void stepCritters (float dt);
+    float nextWhale = 900.0f, nextDolphins = 480.0f, nextMermaid = 14400.0f;
+    int critterIds = 0;
     void stepXp (float dt);
     void tryBreeding (float dt);
     void keepPopulation (float dt);

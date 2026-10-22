@@ -53,7 +53,8 @@ juce::String placeName (int p)
 {
     static const char* n[NumPlaces] = { "Aqua reef", "Emerald kelp", "Crystal deep", "Sunken ship",
                                         "Coral cave", "Ice ocean", "Tropical lagoon", "Sunken ruins",
-                                        "Volcano vents", "Jellyfish bay", "Open sea" };
+                                        "Volcano vents", "Jellyfish bay", "Open sea", "Underwater city", "Deep trench",
+                                        "Coral castle", "Sky ocean" };
     return n[juce::jlimit (0, NumPlaces - 1, p)];
 }
 int findPlace (const juce::String& w)
@@ -61,12 +62,16 @@ int findPlace (const juce::String& w)
     const auto x = w.toLowerCase().removeCharacters ("-_ ");
     if (x == "reef" || x == "coral" || x == "aqua" || x == "aquareef") return PlaceReef;
     if (x == "kelp" || x == "forest" || x == "emerald" || x == "emeraldkelp") return PlaceKelp;
-    if (x == "trench" || x == "abyss" || x == "deep" || x == "crystal" || x == "crystaldeep") return PlaceDeep;
+    if (x == "trench" || x == "abyss" || x == "deeptrench" || x == "dark") return PlaceTrench;
+    if (x == "deep" || x == "crystal" || x == "crystaldeep") return PlaceDeep;
+    if (x == "city" || x == "underwatercity" || x == "atlantis" || x == "town") return PlaceCity;
+    if (x == "castle" || x == "coralcastle" || x == "palace") return PlaceCastle;
+    if (x == "sky" || x == "skyocean" || x == "islands" || x == "floating" || x == "clouds") return PlaceSkyOcean;
     if (x == "wreck" || x == "ship" || x == "shipwreck" || x == "sunken" || x == "sunkenship") return PlaceWreck;
     if (x == "cave" || x == "coralcave" || x == "grotto") return PlaceCave;
     if (x == "ice" || x == "iceocean" || x == "arctic" || x == "snow") return PlaceIce;
     if (x == "lagoon" || x == "tropical" || x == "tropicallagoon" || x == "beach") return PlaceLagoon;
-    if (x == "ruins" || x == "sunkenruins" || x == "temple" || x == "city") return PlaceRuins;
+    if (x == "ruins" || x == "sunkenruins" || x == "temple") return PlaceRuins;
     if (x == "volcano" || x == "vents" || x == "volcanovents" || x == "lava" || x == "vent") return PlaceVolcano;
     if (x == "jelly" || x == "jellyfish" || x == "jellybay" || x == "jellyfishbay" || x == "bay") return PlaceJelly;
     if (x == "open" || x == "opensea" || x == "sea" || x == "blue" || x == "whale") return PlaceOpenSea;
@@ -140,6 +145,158 @@ Sim::Sim (juce::uint32 seed) : rng ((juce::int64) seed)
         f.breedCooldown = 30.0f + rng.nextFloat() * 120.0f;
     }
     weatherTimer = 480.0f + rng.nextFloat() * 300.0f;
+    // the floor's residents: two crabs and an octopus
+    for (int i = 0; i < 2; ++i)
+    {
+        Critter cr;
+        cr.kind = CritterCrab; cr.id = ++critterIds;
+        cr.x = 60.0f + rng.nextFloat() * 360.0f; cr.y = floorY - 3.0f; cr.dir = rng.nextBool() ? 1 : -1;
+        cr.timer = 2.0f + rng.nextFloat() * 5.0f; cr.hue = rng.nextFloat();
+        critters.push_back (cr);
+    }
+    Critter oct;
+    oct.kind = CritterOctopus; oct.id = ++critterIds;
+    oct.x = 330.0f; oct.y = floorY - 6.0f; oct.timer = 40.0f + rng.nextFloat() * 50.0f; oct.hue = 0.3f;
+    critters.push_back (oct);
+    nextWhale = 600.0f + rng.nextFloat() * 900.0f;
+    nextDolphins = 300.0f + rng.nextFloat() * 600.0f;
+    nextMermaid = 3.0f * 3600.0f + rng.nextFloat() * 6.0f * 3600.0f;   // very rare: once in 3 - 9 hours
+}
+
+int Sim::season() const
+{
+    if (seasonSetting >= 0) return seasonSetting;
+    const int month = juce::Time::getCurrentTime().getMonth();   // 0 = January
+    return month == 9 ? SeasonHalloween : month == 11 ? SeasonChristmas : SeasonNone;
+}
+
+bool Sim::mermaidSinging (float* x) const
+{
+    for (auto& c : critters)
+        if (c.kind == CritterMermaid && c.state == 1) { if (x != nullptr) *x = c.x; return true; }
+    return false;
+}
+
+void Sim::spawnVisitor (int kind)
+{
+    Critter v;
+    v.id = ++critterIds;
+    v.kind = kind;
+    v.dir = rng.nextBool() ? 1 : -1;
+    switch (kind)
+    {
+        case CritterWhale:
+            v.x = v.dir > 0 ? -110.0f : (float) W + 110.0f;
+            v.y = 150.0f + rng.nextFloat() * 40.0f; v.vx = 9.0f * (float) v.dir;
+            ++whaleVisits;
+            announce ("A WHALE SWIMS BY", 0xff9fd8ff);
+            critters.push_back (v);
+            break;
+        case CritterDolphin:
+            for (int k = 0; k < 3; ++k)
+            {
+                auto d = v;
+                d.id = ++critterIds;
+                d.x = (v.dir > 0 ? -30.0f - 26.0f * (float) k : (float) W + 30.0f + 26.0f * (float) k);
+                d.y = surfaceY + 10.0f + (float) k * 4.0f; d.vx = 46.0f * (float) v.dir; d.t = (float) k * 0.7f;
+                critters.push_back (d);
+            }
+            ++dolphinVisits;
+            announce ("DOLPHINS! THEY JUMP ALONG THE SURFACE", 0xff9fd8ff);
+            break;
+        case CritterMermaid:
+            v.x = v.dir > 0 ? -20.0f : (float) W + 20.0f;
+            v.y = 110.0f; v.vx = 34.0f * (float) v.dir; v.state = 0;
+            critters.push_back (v);
+            break;
+        default: break;
+    }
+}
+
+void Sim::stepCritters (float dt)
+{
+    nextWhale -= dt; nextDolphins -= dt; nextMermaid -= dt;
+    if (nextWhale <= 0.0f) { spawnVisitor (CritterWhale); nextWhale = 900.0f + rng.nextFloat() * 1500.0f; }
+    if (nextDolphins <= 0.0f) { spawnVisitor (CritterDolphin); nextDolphins = 600.0f + rng.nextFloat() * 1200.0f; }
+    if (nextMermaid <= 0.0f) { spawnVisitor (CritterMermaid); nextMermaid = 3.0f * 3600.0f + rng.nextFloat() * 6.0f * 3600.0f; }
+
+    for (auto& c : critters)
+    {
+        c.t += dt;
+        switch (c.kind)
+        {
+            case CritterCrab:
+                // scuttles sideways, stops, looks around, walks again
+                c.timer -= dt;
+                if (c.timer <= 0.0f)
+                {
+                    c.state = c.state == 0 ? 1 : 0;
+                    c.timer = c.state == 0 ? 2.0f + rng.nextFloat() * 4.0f : 1.5f + rng.nextFloat() * 5.0f;
+                    if (c.state == 0 && rng.nextFloat() < 0.4f) c.dir = -c.dir;
+                }
+                if (c.state == 0) c.x += 9.0f * (float) c.dir * dt;
+                if (c.x < 10.0f) { c.x = 10.0f; c.dir = 1; }
+                if (c.x > (float) W - 10.0f) { c.x = (float) W - 10.0f; c.dir = -1; }
+                c.y = floorY - 3.0f;
+                break;
+            case CritterOctopus:
+            {
+                // sits and slowly changes colour; now and then jets up and floats back down
+                c.hue = std::fmod (c.hue + dt * 0.01f, 1.0f);
+                c.timer -= dt;
+                const float home = floorY - 6.0f;
+                if (c.state == 0 && c.timer <= 0.0f) { c.state = 1; c.vy = -55.0f; c.vx = (rng.nextFloat() - 0.5f) * 20.0f; c.timer = 50.0f + rng.nextFloat() * 70.0f; }
+                if (c.state == 1)
+                {
+                    c.vy += 22.0f * dt;                   // slows, then sinks back
+                    c.vy = juce::jmin (c.vy, 12.0f);
+                    c.x += c.vx * dt; c.y += c.vy * dt;
+                    c.vx *= 0.98f;
+                    c.x = juce::jlimit (20.0f, (float) W - 20.0f, c.x);
+                    if (c.y >= home && c.vy > 0.0f) { c.y = home; c.state = 0; c.vx = c.vy = 0.0f; }
+                }
+                break;
+            }
+            case CritterWhale:
+                c.x += c.vx * dt;
+                c.y += std::sin (c.t * 0.25f) * 1.5f * dt;
+                break;
+            case CritterDolphin:
+                c.x += c.vx * dt;
+                break;
+            case CritterMermaid:
+                if (c.state == 0)
+                {
+                    c.x += c.vx * dt;
+                    if ((c.dir > 0 && c.x >= (float) W * 0.5f) || (c.dir < 0 && c.x <= (float) W * 0.5f))
+                    {
+                        c.state = 1; c.timer = 28.0f;
+                        ++mermaidSightings;
+                        announce ("A MERMAID CAT! SHE SINGS FOR EVERYONE: +10 XP FOR EVERY FISH", 0xffffb3e6);
+                        for (auto& f : fish) if (f.viewer() && f.present && ! f.leaving) addXp (f, 10);
+                        for (int k = 0; k < 40; ++k)
+                            confetti.push_back ({ c.x, c.y, (rng.nextFloat() - 0.5f) * 60.0f, -rng.nextFloat() * 50.0f, 2.5f, k % 2 == 0 ? 0xffffb3e6u : 0xff9ff3ffu });
+                    }
+                }
+                else if (c.state == 1)
+                {
+                    c.timer -= dt;
+                    c.y = 110.0f + std::sin (c.t * 0.9f) * 6.0f;
+                    if (c.timer <= 0.0f) { c.state = 2; c.dir = -c.dir; c.vx = 30.0f * (float) c.dir; }
+                }
+                else c.x += c.vx * dt;
+                break;
+            default: break;
+        }
+    }
+    // visitors that have swum off the screen go
+    critters.erase (std::remove_if (critters.begin(), critters.end(), [] (const Critter& c)
+    {
+        const bool visitor = c.kind == CritterWhale || c.kind == CritterDolphin || c.kind == CritterMermaid;
+        const float margin = c.kind == CritterWhale ? 130.0f : 40.0f;
+        const bool goingOut = c.kind != CritterMermaid || c.state == 2;
+        return visitor && goingOut && c.t > 3.0f && (c.x < -margin || c.x > (float) W + margin);
+    }), critters.end());
 }
 
 Fish* Sim::findFish (int id)
@@ -355,6 +512,7 @@ void Sim::step (float dt)
     while (! alerts.empty() && alerts.front().life <= 0.0f) alerts.pop_front();
     recap = juce::jmax (0.0f, recap - dt);
     stepDay();
+    stepCritters (dt);
 
     foodTimer -= dt;
     if (foodTimer <= 0.0f)

@@ -444,7 +444,7 @@ void Music::render (float* l, float* r, int n, Sim& sim)
     // the underwater space: everything sent into one big soft reverb (the amount glides, no jumps)
     if (spaceBuf.getNumSamples() < n) spaceBuf.setSize (2, n, false, false, true);
     // the place shapes the space: caves and ice ring long, the lagoon and the open sea are drier
-    static const float placeSize[] = { 0.9f, 0.9f, 1.3f, 1.1f, 1.6f, 1.4f, 0.6f, 1.2f, 1.0f, 1.2f, 0.75f };
+    static const float placeSize[] = { 0.9f, 0.9f, 1.3f, 1.1f, 1.6f, 1.4f, 0.6f, 1.2f, 1.0f, 1.2f, 0.75f, 1.25f, 1.7f, 1.1f, 0.65f };
     const int pl = juce::jlimit (0, (int) (sizeof (placeSize) / sizeof (placeSize[0])) - 1, sim.place);
     const float target = juce::jlimit (0.0f, 1.0f, space.load() * placeSize[pl]);
     auto* sl = spaceBuf.getWritePointer (0);
@@ -497,6 +497,21 @@ void Music::singFish (Sim& sim, double fromBeat, double toBeat, double pps, int 
         const auto* chord = song->chordAt (local);
         int sung = 0;
         const int maxPerStep = strong ? maxStrong : (stepInBar % 2 == 0 ? 1 : 0);   // no busy 16ths: calm
+        // the mermaid cat's solo: a flowing line on the chord notes, high and shimmering, on every 8th
+        float mx = 0.0f;
+        if (sim.mermaidSinging (&mx) && stepInBar % 2 == 0 && chord != nullptr && rng.nextFloat() < 0.8f)
+        {
+            std::vector<int> tones;
+            for (int nn = 67; nn <= 86; ++nn) if (chord->isTone (nn)) tones.push_back (nn);
+            if (! tones.empty())
+            {
+                const int idx = (int) ((step / 2.0) + (stepInBar >= 8 ? 2 : 0)) % (int) tones.size();
+                const int note = tones[(size_t) (stepInBar % 8 < 4 ? idx : (int) tones.size() - 1 - idx)];
+                fish.noteOn (note, 0.55f * level, (stepInBar % 4 == 0 ? 0.9f : 0.45f) * 60.0f / (float) song->bpm, VoiceFlute,
+                             juce::jlimit (0.1f, 0.9f, mx / (float) W), true);
+                ++fishNotes;
+            }
+        }
         if (singers.empty()) continue;
         const int start = singRotate++ % (int) singers.size();
         for (size_t k = 0; k < singers.size() && sung < maxPerStep; ++k)
