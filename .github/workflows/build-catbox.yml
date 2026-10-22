@@ -37,7 +37,12 @@ jobs:
       - name: Build Cat Box
         run: |
           cmake -B build -G Ninja -DCAT_BOX_ONLY=ON -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --target CatBox
+          set +e
+          cmake --build build --target CatBox 2>&1 | tee build.log
+          status=${PIPESTATUS[0]}
+          # compile errors as notes on the run page (readable without the full log)
+          grep -E "error|required from" build.log | grep -v "^ninja" | head -40 | while IFS= read -r line; do echo "::error::$line"; done
+          exit $status
 
       - name: Self test
         run: |
@@ -76,7 +81,10 @@ jobs:
       - name: Build Cat Box
         run: |
           cmake -B build -A x64 -DCAT_BOX_ONLY=ON
-          cmake --build build --config Release --target CatBox
+          cmake --build build --config Release --target CatBox 2>&1 | Tee-Object -FilePath build.log
+          $status = $LASTEXITCODE
+          Select-String -Path build.log -Pattern "error" | Select-Object -First 40 | ForEach-Object { Write-Host "::error::$($_.Line)" }
+          exit $status
 
       - name: Self test
         shell: pwsh
