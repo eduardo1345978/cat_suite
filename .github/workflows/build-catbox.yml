@@ -51,7 +51,8 @@ jobs:
           xvfb-run -a "$exe" --selftest "$PWD/catbox-test.wav" || status=$?
           cat catbox-test.txt
           # every line as a note on the run page (readable without the full log)
-          echo "::notice title=Cat Box self test (Pi)::$(sed ':a;N;$!ba;s/\n/%0A/g' catbox-test.txt)"
+          python3 -c "t=open('catbox-test.txt').read(); print('::notice title=Cat Box self test (Pi)::' + t.replace('%','%25').replace(chr(10),'%0A'))"
+          grep FAIL catbox-test.txt | head -9 | while IFS= read -r line; do echo "::error::$line"; done
           exit ${status:-0}
 
       - name: Keep the Pi build
