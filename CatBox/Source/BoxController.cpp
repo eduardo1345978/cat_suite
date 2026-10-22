@@ -66,6 +66,20 @@ void BoxController::setLightScreen (bool light)
     markDirty();
 }
 
+void BoxController::setPage (int instrument)
+{
+    data.page = juce::jlimit (0, NumInstruments - 1, instrument);
+    page = data.page;
+    markDirty();
+}
+
+void BoxController::pickDrum (int pad)
+{
+    selectDrum (pad);
+    setFlash ("Drum: " + drumPadName (data.selectedDrum));
+    markDirty();
+}
+
 int BoxController::numStepPages (int instrument) const
 {
     const int len = instrument == Drums ? data.drumLength() : instrument == Bass ? data.bassLength() : 16;

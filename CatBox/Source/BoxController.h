@@ -62,6 +62,8 @@ public:
     int selectedDrum() const noexcept { return data.selectedDrum; }
     bool isLightScreen() const noexcept { return data.lightScreen; }
     void setLightScreen (bool);
+    void setPage (int instrument);
+    void pickDrum (int pad);
 
     // presets and memory
     bool savePreset (int instrument, int presetSlot);

@@ -505,10 +505,14 @@ void DrumKit::render (float* l, float* r, int n)
                     break;
                 case Ride:
                 {
+                    // metal like a real ride (TR-808 cymbal recipe): six detuned square waves, only their
+                    // fizzy highs kept, plus a short ping; no low partials, so it never rings like a bell
+                    static const float metal[6] = { 205.3f, 304.4f, 369.6f, 522.7f, 540.0f, 800.0f };
                     float m = 0.0f;
-                    const float ratios[4] = { 1.0f, 1.47f, 2.09f, 2.56f };
-                    for (int k = 0; k < 4; ++k) m += std::sin (twoPi * wrap (t * 420.0f * ratios[k]));
-                    x = (0.18f * m * std::exp (-t / 0.9f) + 0.3f * h.f1.hp (noise.next(), lpCoef (6000.0f, sr)) * std::exp (-t / 0.25f)) * 0.5f;
+                    for (float f : metal) m += wrap (t * f * 1.6f) < 0.5f ? 1.0f : -1.0f;
+                    const float sizzle = h.f2.lp (h.f1.hp (m * 0.17f + 0.25f * noise.next(), lpCoef (6500.0f, sr)), lpCoef (13000.0f, sr));
+                    const float ping = std::sin (twoPi * wrap (t * 3150.0f)) * std::exp (-t / 0.09f) * 0.08f;
+                    x = (sizzle * (0.75f * std::exp (-t / (live ? 1.4f : 0.9f)) + 0.6f * std::exp (-t / 0.05f)) + ping) * 0.55f;
                     len = 5.0f;
                     break;
                 }
