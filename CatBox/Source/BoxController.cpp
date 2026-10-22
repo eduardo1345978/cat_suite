@@ -403,6 +403,7 @@ juce::String BoxController::buttonLabel (int b) const
         case BtnInstrument: return sh ? "Mute" : "Instr";
         case BtnOctDown:    return pg == PageFx ? "-" : pg == Drums ? (sh ? "Page -" : "Drum -") : (isStepView() && pg == Bass ? "Page -" : "Oct -");
         case BtnOctUp:      return pg == PageFx ? "-" : pg == Drums ? (sh ? "Page +" : "Drum +") : (isStepView() && pg == Bass ? "Page +" : "Oct +");
+        case BtnChaos:      return sh ? "Undo" : "Chaos";
         case BtnRec:        return sh || sceneMode.load() ? "Save" : pg == Arp ? "Hold" : pg == PageFx ? "-" : "Rec";
         default:            return {};
     }
@@ -463,6 +464,11 @@ void BoxController::buttonDown (int b)
 
         case BtnShift:
             shift = true;
+            break;
+
+        case BtnChaos:
+            if (sh) { if (! undoChaos()) setFlash ("Nothing to take back"); }
+            else chaos();
             break;
 
         case BtnScene:
@@ -736,6 +742,65 @@ bool BoxController::loadScene (int sceneSlot)
     publish (true);   // while playing it changes at the next bar
     markDirty();
     setFlash ("Scene " + juce::String (sceneSlot + 1) + (audio.isPlaying() ? " at the next bar" : ""));
+    return true;
+}
+
+namespace
+{
+/** Which knobs Chaos may touch, and in which range (so it stays musical). */
+struct ChaosRange { int slotIndex; float lo, hi; };
+
+const std::vector<ChaosRange>& chaosRanges (int page)
+{
+    static const std::vector<ChaosRange> drums {
+        { slot::DKit, 0, 3 }, { slot::DSwing, 0.0f, 0.5f }, { slot::DHuman, 0.0f, 0.6f }, { slot::DCrush, 0.0f, 0.45f },
+        { slot::DDrive, 0.0f, 0.6f }, { slot::DFilter, 0.45f, 1.0f }, { slot::DEcho, 0.0f, 0.35f }, { slot::DChorus, 0.0f, 0.4f } };
+    static const std::vector<ChaosRange> arp {
+        { slot::ADivision, 1, 7 }, { slot::AMode, 0, NumArpModes - 1 }, { slot::AOctaves, 1, 3 }, { slot::AGate, 0.2f, 0.9f },
+        { slot::ASwing, 0.0f, 0.4f }, { slot::ARatchet, 1, 2 }, { slot::AAccent, 0.2f, 0.9f }, { slot::AFilter, 0.4f, 1.0f },
+        { slot::ASound, 0, 9 }, { slot::AEcho, 0.0f, 0.6f }, { slot::AChorus, 0.0f, 0.6f }, { slot::ADrive, 0.0f, 0.4f } };
+    static const std::vector<ChaosRange> bass {
+        { slot::BSound, 0, 4 }, { slot::BCutoff, 0.1f, 0.7f }, { slot::BResonance, 0.2f, 0.92f }, { slot::BEnvMod, 0.2f, 0.95f },
+        { slot::BDecay, 0.1f, 0.8f }, { slot::BAccent, 0.3f, 1.0f }, { slot::BDrive, 0.0f, 0.7f }, { slot::BSlide, 0.1f, 0.7f },
+        { slot::BWave, 0, 1 }, { slot::BEcho, 0.0f, 0.3f }, { slot::BChorus, 0.0f, 0.3f } };
+    static const std::vector<ChaosRange> fx {
+        { slot::FReverb, 0.2f, 0.9f }, { slot::FSize, 0.3f, 0.95f }, { slot::FDelay, 0.0f, 0.5f }, { slot::FPump, 0.0f, 0.7f },
+        { slot::FDjFilter, 0.3f, 0.7f }, { slot::FTape, 0.0f, 0.6f }, { slot::FVinyl, 0.0f, 0.5f }, { slot::FCrush, 0.0f, 0.3f },
+        { slot::FGlue, 0.0f, 0.6f }, { slot::FWidth, 0.3f, 0.9f }, { slot::FPumpTarget, 0, 3 },
+        { slot::FSendDrums, 0.0f, 0.4f }, { slot::FSendArp, 0.1f, 0.7f }, { slot::FSendBass, 0.0f, 0.25f } };
+    return page == Drums ? drums : page == Arp ? arp : page == Bass ? bass : fx;
+}
+} // namespace
+
+void BoxController::chaos()
+{
+    const int pg = page.load();
+    auto& now = pg == PageFx ? data.fx : data.inst[(size_t) pg].values;
+    chaosUndo[(size_t) pg] = now;
+    hasChaosUndo[(size_t) pg] = true;
+    for (const auto& r : chaosRanges (pg))
+    {
+        const auto& d = paramDesc (pg, r.slotIndex);
+        float v = r.lo + chaosRnd.nextFloat() * (r.hi - r.lo);
+        if (d.kind != Kind::Percent) v = (float) (juce::roundToInt (r.lo) + chaosRnd.nextInt (juce::roundToInt (r.hi) - juce::roundToInt (r.lo) + 1));
+        now[(size_t) r.slotIndex] = juce::jlimit (d.min, d.max, v);
+    }
+    if (pg == Bass && chaosRnd.nextFloat() < 0.6f) now[slot::BSound] = 0.0f;   // mostly the Acid: it has the most knobs to play with
+    data.loadedPreset[(size_t) pg] = -1;
+    publish();
+    markDirty();
+    setFlash ("Chaos! (Shift + Chaos takes it back)");
+}
+
+bool BoxController::undoChaos()
+{
+    const int pg = page.load();
+    if (! hasChaosUndo[(size_t) pg]) return false;
+    auto& now = pg == PageFx ? data.fx : data.inst[(size_t) pg].values;
+    std::swap (now, chaosUndo[(size_t) pg]);   // pressed again, it goes back to the chaos
+    publish();
+    markDirty();
+    setFlash ("Back to before the chaos");
     return true;
 }
 

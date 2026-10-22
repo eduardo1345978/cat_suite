@@ -23,7 +23,7 @@ enum Instrument { Drums = 0, Arp, Bass, NumInstruments };
 /** The FX page (master effects, performance pads, scenes) comes after the three instruments. */
 constexpr int PageFx = 3, NumPages = 4;
 
-enum Button { BtnPlay = 0, BtnSteps, BtnShift, BtnScene, BtnInstrument, BtnOctDown, BtnOctUp, BtnRec, NumButtons };
+enum Button { BtnPlay = 0, BtnSteps, BtnShift, BtnScene, BtnInstrument, BtnOctDown, BtnOctUp, BtnRec, BtnChaos, NumButtons };
 
 constexpr int numKnobs = 12;
 constexpr int numPads = 16;

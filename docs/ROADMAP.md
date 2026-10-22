@@ -76,6 +76,7 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
       16 performance pads, Scene button (16 scenes, at the next bar), Arp Supersaw + Acid, Arp on/off (plain synth),
       Bass follows Arp, Steps per page (fixed "arp doesn't work"), short arp taps sound at once, simpler screen
       with spectrum, PC pads 8 x 2, buttons: Play(Shift=Tap) Steps(Shift=Clear) Shift Scene Instr Oct- Oct+ Rec
+- [x] Chaos button (user asked 22 Oct): random sound settings for the page, musical ranges, patterns stay; Shift + Chaos = undo
 - [ ] NEXT hardware: get it running on the Pi 5 (user HAS: Pi 5 8 GB, 27 W supply, micro SD, HDMI monitor,
       keyboard + mouse, a USB sound card; wants HiFiBerry DAC later) - walk him through setup_pi.sh
 - [ ] SOUND DESIGN (most important next software):

@@ -15,7 +15,7 @@ namespace catbox
     16 pads in two rows of 8, 8 buttons). Drag or scroll the knobs, click pads and buttons,
     or use the computer keyboard:
       pads   1 2 3 4 5 6 7 8 / Q W E R T Y U I   (Z works as Y)
-      Space = Play, B = Steps, Shift = Shift, N = Scene, Tab = Instr, , . = Oct- Oct+, Enter = Rec
+      Space = Play, B = Steps, Shift = Shift, N = Scene, Tab = Instr, , . = Oct- Oct+, Enter = Rec, C = Chaos
 */
 class BoxView : public juce::Component, private juce::Timer
 {

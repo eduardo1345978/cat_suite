@@ -171,6 +171,25 @@ public:
             }
             check (moved, "Follow arp moves the bass line to the arp's chord", {});
 
+            // Chaos: new sound settings on the page, the pattern stays; Shift + Chaos takes them back
+            box.setPage (Bass);
+            const auto bassBefore = box.getData().inst[Bass];
+            press (BtnChaos);
+            check (box.getData().inst[Bass].values != bassBefore.values, "Chaos changes the bass sound", {});
+            check (box.getData().inst[Bass].bassSteps == bassBefore.bassSteps, "Chaos keeps the bass line", {});
+            check (box.getData().inst[Bass].values[slot::BVolume] == bassBefore.values[slot::BVolume]
+                   && box.getData().globals[GTempo] == tempo0, "Chaos keeps volume and tempo", {});
+            const auto chaosSound = renderSeconds (audio, 2.0, nullptr);
+            check (chaosSound.finite && chaosSound.peak <= 1.0f, "the chaos sound stays clean", "peak " + juce::String (chaosSound.peak, 3));
+            shiftPress (BtnChaos);
+            check (box.getData().inst[Bass].values == bassBefore.values, "Shift + Chaos takes it back", {});
+            box.setPage (PageFx);
+            for (int i = 0; i < 20; ++i) { press (BtnChaos); renderSeconds (audio, 0.15, nullptr); }
+            const auto fxChaos = renderSeconds (audio, 1.0, nullptr);
+            check (fxChaos.finite && fxChaos.peak <= 1.0f && fxChaos.rms > 0.005f, "20 x Chaos on the FX page stays clean",
+                   "rms " + juce::String (fxChaos.rms, 4));
+            box.setPage (Arp);
+
             // presets: save to pad 5, change the sound, load pad 5 back
             box.savePreset (Arp, 4);
             check (box.presetFile (Arp, 4).existsAsFile(), "preset file written", {});

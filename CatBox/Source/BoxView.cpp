@@ -57,13 +57,14 @@ int buttonKey (int b)
         case BtnOctDown:    return ',';
         case BtnOctUp:      return '.';
         case BtnRec:        return juce::KeyPress::returnKey;
+        case BtnChaos:      return 'C';
         default:            return 0;   // Shift: modifierKeysChanged
     }
 }
 
 const char* buttonKeyHint (int b)
 {
-    static const char* hints[NumButtons] = { "Space", "B", "Shift", "N", "Tab", ",", ".", "Enter" };
+    static const char* hints[NumButtons] = { "Space", "B", "Shift", "N", "Tab", ",", ".", "Enter", "C" };
     return hints[juce::jlimit (0, NumButtons - 1, b)];
 }
 
@@ -598,8 +599,8 @@ juce::Rectangle<float> BoxView::padArea (int pad) const
 
 juce::Rectangle<float> BoxView::buttonArea (int b) const
 {
-    const float w = 760.0f / 8.0f;
-    return juce::Rectangle<float> { 20.0f + b * w, (float) screenH + 338.0f, w, 62.0f }.reduced (5.0f);
+    const float w = 760.0f / (float) NumButtons;
+    return juce::Rectangle<float> { 20.0f + b * w, (float) screenH + 338.0f, w, 62.0f }.reduced (4.0f);
 }
 
 void BoxView::paintPanel (juce::Graphics& g, juce::Rectangle<float> area)
@@ -640,7 +641,7 @@ void BoxView::paintPanel (juce::Graphics& g, juce::Rectangle<float> area)
         auto r = buttonArea (b);
         const bool lit = box.isButtonLit (b) || (b == BtnShift && mouseShiftLatched);
         const auto litCol = b == BtnRec ? (page == Arp ? col : C::rec) : b == BtnPlay || b == BtnSteps ? C::stepOn
-                          : b == BtnScene ? juce::Colour (0xfff0c94a) : C::global;
+                          : b == BtnScene ? juce::Colour (0xfff0c94a) : b == BtnChaos ? juce::Colour (0xffe0508a) : C::global;
         g.setColour (lit ? litCol : juce::Colour (0xff2b2f39));
         g.fillRoundedRectangle (r, 10.0f);
         g.setColour (lit ? juce::Colours::black : C::text);

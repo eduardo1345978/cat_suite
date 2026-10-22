@@ -16,7 +16,7 @@ namespace catbox
     MIDI map of the controller (channel 16):
       CC 20..31   knobs 1..12, relative (1..63 = clicks right, 65..127 = clicks left, two's complement)
       notes 36..51  pads 1..16 (velocity = how hard)
-      CC 102..109 buttons Play, Steps, Shift, Scene, Instr, Oct-, Oct+, Rec (127 = pressed, 0 = released)
+      CC 102..110 buttons Play, Steps, Shift, Scene, Instr, Oct-, Oct+, Rec, Chaos (127 = pressed, 0 = released)
     Any other channel: notes play the instrument on screen.
 */
 class BoxController : public juce::MidiInputCallback, private juce::Timer
@@ -77,6 +77,11 @@ public:
     void saveState();
     void setMuted (int instrument, bool muted);
 
+    /** Chaos: new random sound settings for the page on screen (patterns, tempo, key and volume stay).
+        Shift + Chaos takes the last one back. */
+    void chaos();
+    bool undoChaos();
+
     /** For the self test: run the timer work now (recorded notes, autosave). */
     void pump() { timerCallback(); }
 
@@ -108,6 +113,9 @@ private:
     std::array<std::atomic<int>, NumInstruments> padOct {};
     std::array<std::atomic<int>, numPads> padHeldNote {}, padHeldInst {};   // -1 = not held / not a note
     bool latchOn = false;
+    std::array<std::array<float, numSlots>, NumPages> chaosUndo {};
+    std::array<bool, NumPages> hasChaosUndo {};
+    juce::Random chaosRnd;
     int bassSel = -1;
 
     std::array<float, numSlots> knobRemainder {};

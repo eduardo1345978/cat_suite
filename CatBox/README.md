@@ -32,12 +32,13 @@ The same program runs in two places:
 | **Instr** | Drums > Arp > Bass > FX (or click the page names on the screen) · **Shift + Instr** = mute |
 | **Oct - / Oct +** | Drums: previous / next drum (**Shift**: step pages) · Arp: pad octave · Bass: pad octave (in Steps: step pages) |
 | **Rec** | Drums / Bass: record what you play into the steps while it runs (Bass: hold two pads = slide, hit hard = accent) · Arp: Hold |
+| **Chaos** | new random sound settings for the page on screen, within musical ranges (patterns, tempo, key and volume stay) · **Shift + Chaos** = take it back (again = back to the chaos) |
 
 Performance pads (FX page, held = on): Repeat 1/4, 1/8, 1/16, 1/32 · Sweep down, Sweep up, Tape stop,
 Reverse · Kill drums, Kill arp, Kill bass, Crush · Wash, Riser, Repeat 1/2, Echo throw.
 
 Computer keyboard: pads `1 2 3 4 5 6 7 8 / Q W E R T Y U I` (Z works as Y), Space = Play, B = Steps,
-Shift = Shift, N = Scene, Tab = Instr, `,` `.` = Oct - / Oct +, Enter = Rec, F11 = full screen.
+Shift = Shift, N = Scene, Tab = Instr, `,` `.` = Oct - / Oct +, Enter = Rec, C = Chaos, F11 = full screen.
 Right-click = sound card and MIDI, light screen, presets folder.
 
 ### Knobs
@@ -77,7 +78,7 @@ The Pico shows up as a normal USB MIDI device and sends on **channel 16**:
 |---|---|
 | Knobs 1-12 | CC 20-31, relative: 1..63 = clicks right, 127..65 = clicks left (two's complement) |
 | Pads 1-16 | notes 36-51, velocity = how hard |
-| Buttons Play, Steps, Shift, Scene, Instr, Oct -, Oct +, Rec | CC 102-109, 127 = pressed, 0 = released |
+| Buttons Play, Steps, Shift, Scene, Instr, Oct -, Oct +, Rec, Chaos | CC 102-110, 127 = pressed, 0 = released |
 
 Any other MIDI keyboard (any other channel) plays the instrument on screen.
 
