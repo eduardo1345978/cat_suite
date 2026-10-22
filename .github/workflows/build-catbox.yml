@@ -45,8 +45,11 @@ jobs:
         run: |
           exe=$(find build -type f -name Cat-Box -perm -u+x | head -1)
           echo "built: $exe"
-          xvfb-run -a "$exe" --selftest "$PWD/catbox-test.wav"
+          xvfb-run -a "$exe" --selftest "$PWD/catbox-test.wav" || status=$?
           cat catbox-test.txt
+          # every line as a note on the run page (readable without the full log)
+          while IFS= read -r line; do echo "::notice title=Cat Box self test (Pi)::$line"; done < catbox-test.txt
+          exit ${status:-0}
 
       - name: Keep the Pi build
         if: always()
