@@ -464,11 +464,11 @@ void BoxView::paintBottom (juce::Graphics& g, juce::Rectangle<float> r)
 
     if (page == Drums)
     {
-        g.drawText (drumPadName (data.selectedDrum) + "  |  " + paramDesc (Drums, slot::DKit).format (iv[slot::DKit])
+        g.drawText (drumPadName (data.selectedDrum) + " v  |  " + paramDesc (Drums, slot::DKit).format (iv[slot::DKit])
                       + "  |  " + juce::String (data.drumLength()) + " steps",
                     line1, juce::Justification::centredLeft);
         paintStepRow (g, info.removeFromTop (36.0f).reduced (0.0f, 7.0f), Drums);
-        hint (info, box.isStepView() ? "Pads = steps of " + drumPadName (data.selectedDrum) + " (tap: on > accent > off). Drum -/+ picks the drum."
+        hint (info, box.isStepView() ? "Pads = steps of " + drumPadName (data.selectedDrum) + " (tap: on > accent > off). Click the drum name or Drum -/+ to pick another."
                                      : juce::String ("Pads play. Steps = draw the beat, Rec = record what you play."));
     }
     else if (page == Arp)
@@ -616,6 +616,17 @@ void BoxView::mouseDown (const juce::MouseEvent& e)
                 dir.startAsProcess();
             }
         });
+        return;
+    }
+
+    // the screen: the three page names switch the instrument, the drum line picks the drum
+    for (int i = 0; i < NumInstruments; ++i)
+        if (juce::Rectangle<float> (192.0f + i * 76.0f, 0.0f, 76.0f, 64.0f).contains (p)) { box.setPage (i); return; }
+    if (box.getPage() == Drums && juce::Rectangle<float> (150.0f, 336.0f, 490.0f, 44.0f).contains (p))
+    {
+        juce::PopupMenu m;
+        for (int d = 0; d < numPads; ++d) m.addItem (d + 1, drumPadName (d), true, d == box.selectedDrum());
+        m.showMenuAsync (juce::PopupMenu::Options(), [this] (int r) { if (r > 0) box.pickDrum (r - 1); });
         return;
     }
     if (kiosk) return;
