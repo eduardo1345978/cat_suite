@@ -1,4 +1,4 @@
-# Cat Box: the Cat Suite groovebox (Bubny / Arp / Bass) for the PC and the Raspberry Pi in the box.
+# Cat Box: the Cat Suite groovebox (Drums / Arp / Bass step sequencers) for the PC and the Raspberry Pi in the box.
 juce_add_gui_app(CatBox
     PRODUCT_NAME "Cat-Box"
     COMPANY_NAME "Cat Suite"
@@ -13,15 +13,11 @@ target_sources(CatBox PRIVATE
     Source/BoxAudio.cpp
     Source/BoxController.cpp
     Source/BoxView.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatSounds.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../DrumCat/Source/DrumCatEngine.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../BassCat/Source/BassEngine.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatSounds.cpp)
 
 target_include_directories(CatBox PRIVATE
     Source
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source
-    ${CMAKE_CURRENT_SOURCE_DIR}/../DrumCat/Source
-    ${CMAKE_CURRENT_SOURCE_DIR}/../BassCat/Source)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source)
 
 target_compile_features(CatBox PRIVATE cxx_std_20)
 if(MSVC)

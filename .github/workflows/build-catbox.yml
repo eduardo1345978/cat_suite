@@ -9,8 +9,6 @@ on:
       - 'CatBox/**'
       - 'Shared/Source/CatSounds.*'
       - 'Shared/Source/SafetyLimiter.h'
-      - 'DrumCat/Source/DrumCatEngine.*'
-      - 'BassCat/Source/BassEngine.*'
       - 'cmake/**'
       - 'CMakeLists.txt'
       - '.github/workflows/build-catbox.yml'

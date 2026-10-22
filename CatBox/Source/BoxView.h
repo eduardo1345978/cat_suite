@@ -13,7 +13,7 @@ namespace catbox
     Desktop mode (on the PC): the display plus the whole front panel underneath it - drag or
     scroll the knobs, click the pads and buttons, or use the computer keyboard:
       pads   1 2 3 4 / Q W E R / A S D F / Z X C V   (Y works as Z)
-      Space = Play, Tab = Instrument, H = Hold, T = Tap, Shift = Shift, , . = Oct- Oct+, Enter = Rec
+      Space = Play, B = Steps, Shift = Shift, T = Tap, Tab = Instrument, , . = Oct- Oct+, Enter = Rec
 */
 class BoxView : public juce::Component, private juce::Timer
 {
@@ -39,22 +39,30 @@ public:
 
     static juce::Colour instrumentColour (int instrument);
 
+    struct Palette
+    {
+        juce::Colour bg, screen, cell, text, dim, faint, padOff;
+    };
+
 private:
     void timerCallback() override;
     juce::Point<float> toLogical (juce::Point<float>) const;
+    const Palette& pal() const;
 
     void paintScreen (juce::Graphics&, juce::Rectangle<float>);
-    void paintKnobCell (juce::Graphics&, juce::Rectangle<float>, int slotIndex);
+    void paintKnobCell (juce::Graphics&, juce::Rectangle<float>, int knob);
     void paintBottom (juce::Graphics&, juce::Rectangle<float>);
+    void paintStepRow (juce::Graphics&, juce::Rectangle<float>, int instrument);
+    void paintScope (juce::Graphics&, juce::Rectangle<float>);
     void paintPanel (juce::Graphics&, juce::Rectangle<float>);
     void paintPad (juce::Graphics&, juce::Rectangle<float>, int pad, bool big);
 
-    juce::Colour padColour (int pad, bool& lit, bool& outlined) const;
+    juce::Colour padColour (int pad, bool& lit, bool& outlined, bool& thick) const;
+    juce::String padLabel (int pad) const;
 
     juce::Rectangle<float> knobArea (int knob) const;
     juce::Rectangle<float> padArea (int pad) const;
     juce::Rectangle<float> buttonArea (int button) const;
-    static juce::String buttonName (int button);
 
     BoxController& box;
     const bool kiosk;

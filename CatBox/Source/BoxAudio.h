@@ -3,22 +3,14 @@
 #include <juce_audio_devices/juce_audio_devices.h>
 #include "BoxModel.h"
 #include "ArpEngine.h"
+#include "AcidSynth.h"
 #include "CatSounds.h"
 #include "SafetyLimiter.h"
-#include "BassEngine.h"
 #include <atomic>
 
 namespace catbox
 {
-/** A drum hit in the loop (quarter notes from the loop start). */
-struct SeqHit
-{
-    double ppq = 0.0;
-    int note = 36;
-    int velocity = 100;
-};
-
-/** Everything the audio thread plays, built on the message thread from BoxData. */
+/** Everything the audio thread plays, built on the message thread from BoxData (fixed size: no allocation). */
 struct AudioSnapshot
 {
     double bpm = 110.0;
@@ -27,14 +19,15 @@ struct AudioSnapshot
     std::array<float, NumInstruments> volume { 0.85f, 0.85f, 0.8f };
     std::array<hub::TrackFxSettings, NumInstruments> fx {};
 
-    std::vector<SeqHit> drumHits;      // sorted by ppq
-    double drumLoop = 8.0;
-    int drumKit = 0;
+    std::array<std::array<uint8_t, maxSteps>, numPads> drumSteps {};
+    std::array<float, numPads> drumLevel {}, drumChance {};
+    int drumLength = 16, drumKit = 0;
+    float drumSwing = 0.0f, drumHuman = 0.0f;
 
-    std::vector<basscat::BassNote> bassNotes;
-    double bassLoop = 8.0;
-    int bassSound = 0;
-    int bassLowNote = 36;
+    std::array<BassStep, maxSteps> bassSteps {};
+    int bassLength = 16, bassOctave = 0, bassSound = 0;
+    float bassSwing = 0.0f;
+    AcidSynth::Params acid;
 
     ArpSettings arp;
     int arpSound = 2;
@@ -43,14 +36,24 @@ struct AudioSnapshot
 /** Small events from the pads / keyboard to the audio thread. */
 struct BoxEvent
 {
-    enum Type : uint8_t { DrumHit, ArpOn, ArpOff, BassOn, BassOff, BassChord, ArpLatch, ArpClear, AllOff } type = DrumHit;
-    int a = 0, b = 0, c = 0, d = 0, e = 0;
+    enum Type : uint8_t { DrumHit, ArpOn, ArpOff, BassOn, BassOff, ArpLatch, ArpClear, AllOff } type = DrumHit;
+    int a = 0, b = 0, c = 0;
+};
+
+/** A note played in while Rec runs, handed back to the message thread to be written into the pattern. */
+struct RecordedNote
+{
+    int instrument = Drums;
+    int step = 0;
+    int value = 0;          // Drums: pad, Bass: note
+    int velocity = 100;
+    int slideFrom = -1;     // Bass: played legato (another pad still held) -> that note's step slides into this one
 };
 
 /**
-    The Cat Box sound engine: one clock, three instruments (Drum-Cat grooves on the drum kit,
-    the arp on the keys synth, Bass-Cat lines on the bass synth), each with its own effects,
-    then the safety limiter. Used by the audio device and by the offline self test alike.
+    The Cat Box sound engine: one clock and three instruments. Drums and Bass are step
+    sequencers on a 1/16 grid, the Arp runs on its own division. Each instrument has its own
+    effects; the safety limiter keeps the output clean. Used by the sound card and the self test.
 */
 class BoxAudio : public juce::AudioIODeviceCallback
 {
@@ -67,16 +70,16 @@ public:
     bool isPlaying() const noexcept { return playing.load(); }
     void setRecording (bool r) noexcept { recording = r; }
     bool isRecording() const noexcept { return recording.load(); }
-
-    /** Hits played in with Rec, picked up by the message thread: (step, note, velocity). */
-    bool popRecordedHit (DrumUserHit&);
+    bool popRecorded (RecordedNote&);
 
     // what the screen shows
-    std::atomic<int> drumStep { -1 }, arpStep { -1 }, bassChordRoot { -1 };
+    std::atomic<int> drumStep { -1 }, bassStep { -1 }, arpStep { -1 };
     std::atomic<uint64_t> arpNotesLo { 0 }, arpNotesHi { 0 };
     std::atomic<uint32_t> drumFlash { 0 };   // bit per pad, set when it plays (the screen clears it)
+    std::atomic<int> bassNoteNow { -1 };
     std::atomic<float> peak { 0.0f };
     std::atomic<bool> arpLatched { false };
+    std::array<std::atomic<float>, 32> scope {};   // a few recent output values for the screen
 
     // juce::AudioIODeviceCallback
     void audioDeviceIOCallbackWithContext (const float* const*, int, float* const* outputs, int numOutputs,
@@ -87,28 +90,34 @@ public:
 private:
     void handleEvents();
     void tick (double from, double to);
-    void playDrums (double from, double to, double songFrom);
-    void playBass (double from, double to, double songFrom);
+    void playDrumStep (int64_t k, double from, double to);
+    void playBassStep (int64_t k, double from, double to);
+    void bassOn (int note, int velocity, bool accent, bool slide);
+    void bassOff (int note);
     void scheduleOff (int instrument, int note, double offPpq);
+    void cancelOffs (int instrument, int note);
     void releaseDue (double upTo);
     void allNotesOff();
     void flashDrum (int note);
+    void pushRecorded (const RecordedNote&);
+    static float hashNoise (int64_t k, int salt) noexcept;
 
     double sr = 48000.0;
     double clock = 0.0;            // quarter notes since start (always runs)
-    double songStart = 0.0;        // where the bar 1 of Play is
+    double songStart = 0.0;        // where step 1 of Play is
     std::atomic<bool> playing { false }, recording { false };
     std::atomic<bool> startRequest { false }, stopRequest { false };
     bool running = false;
 
     hub::DrumKit drums;
     hub::KeysSynth keys;
-    hub::BassSynth bass;
+    hub::BassSynth bassSynth;
+    AcidSynth acid;
     std::array<hub::TrackFx, NumInstruments> fx;
     cat::SafetyLimiter limiter;
     ArpEngine arp;
-    basscat::Chord chord;
-    int bassPrev = -1;
+    juce::Random rnd;
+    int liveBassHeld = 0, lastLiveBass = -1, lastRecordedBassStep = -1;
 
     struct PendingOff { int instrument = 0, note = 0; double ppq = 0.0; };
     std::array<PendingOff, 256> offs;
@@ -122,9 +131,10 @@ private:
     juce::AbstractFifo eventFifo { 512 };
     juce::SpinLock postLock;
 
-    std::array<DrumUserHit, 128> recorded;
-    juce::AbstractFifo recordFifo { 128 };
+    std::array<RecordedNote, 256> recorded;
+    juce::AbstractFifo recordFifo { 256 };
 
     std::vector<float> bufL, bufR;
+    int scopeWrite = 0, scopeCount = 0;
 };
 } // namespace catbox

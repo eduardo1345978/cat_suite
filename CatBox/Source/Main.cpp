@@ -28,8 +28,10 @@ public:
             BoxController box (dir);
             auto& audio = box.getAudio();
             audio.prepare (sr, block);
+            auto press = [&box] (int b) { box.buttonDown (b); box.buttonUp (b); };
+            auto tap = [&box] (int pad) { box.padDown (pad, 100); box.padUp (pad); };
 
-            // the hardware MIDI map: knob 1 (tempo) five clicks right, then the Instrument button
+            // the hardware MIDI map: knob 1 (tempo) five clicks right and back, then the Instrument button
             const float tempo0 = box.getData().globals[GTempo];
             box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (16, 20, 5));
             check (std::abs (box.getData().globals[GTempo] - (tempo0 + 5.0f)) < 0.01f, "knob CC 20 turns the tempo",
@@ -40,22 +42,43 @@ public:
             box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (16, 106, 0));
             check (box.getPage() == Arp, "Instrument button goes to the Arp page", juce::String (box.getPage()));
 
-            // the arp: hold a chord with Hold on, the pads arrive as notes 36.. on channel 16
-            box.buttonDown (BtnHold); box.buttonUp (BtnHold);
+            // Arp: Rec = Hold, then a chord on the pads (notes 36.. on channel 16)
+            press (BtnRec);
+            check (box.isLatched(), "Rec holds the arp", {});
             for (int pad : { 0, 2, 4 })
             {
                 box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::noteOn (16, 36 + pad, (juce::uint8) 100));
                 box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::noteOff (16, 36 + pad));
             }
 
-            // bass page: pad 6 = the chord on the 6th degree
-            box.buttonDown (BtnInstrument); box.buttonUp (BtnInstrument);
-            box.padDown (5, 100); box.padUp (5);
-            check (box.getData().bassChordDegree == 5, "bass pad picks the chord", box.bassChordName());
-            box.buttonDown (BtnInstrument); box.buttonUp (BtnInstrument);   // back to Bubny
-            check (box.getPage() == Drums, "pages go round", {});
+            // Bass steps: tap an empty step, raise its note with knob 2, slide with knob 3
+            press (BtnInstrument);
+            check (box.getPage() == Bass, "next page is Bass", {});
+            press (BtnSteps);
+            tap (1);
+            const int n0 = box.getData().inst[Bass].bassSteps[1].note;
+            check (n0 >= 0 && box.selectedBassStep() == 1, "tapping an empty bass step sets it", noteName (n0));
+            box.turnKnob (1, 2.0f);
+            const int n1 = box.getData().inst[Bass].bassSteps[1].note;
+            check (n1 > n0, "knob 2 moves the step's note up the scale", noteName (n0) + " -> " + noteName (n1));
+            box.turnKnob (2, 1.0f);
+            check (box.getData().inst[Bass].bassSteps[1].slide, "knob 3 sets the slide", {});
+            tap (1);
+            check (box.getData().inst[Bass].bassSteps[1].note < 0, "tapping the picked step clears it", {});
+            tap (1);
+            press (BtnSteps);
 
-            box.buttonDown (BtnPlay); box.buttonUp (BtnPlay);
+            // Drums steps: the kick gets step 3, then an accent
+            press (BtnInstrument);
+            check (box.getPage() == Drums, "pages go round", {});
+            press (BtnSteps);
+            tap (2);
+            check (box.getData().inst[Drums].drumSteps[0][2] == 100, "a drum step goes on", {});
+            tap (2);
+            check (box.getData().inst[Drums].drumSteps[0][2] == 127, "tapped again it is an accent", {});
+            press (BtnSteps);
+
+            press (BtnPlay);
 
             // each instrument on its own must be heard
             for (int i = 0; i < NumInstruments; ++i)
@@ -74,46 +97,80 @@ public:
                    "rms " + juce::String (all.rms, 4) + " peak " + juce::String (all.peak, 3));
             writeWav (wavOut, song);
 
+            // the acid filter: closing the cutoff makes the bass darker (quieter highs = lower level)
+            box.setMuted (Drums, true); box.setMuted (Arp, true);
+            press (BtnInstrument); press (BtnInstrument);   // Bass page
+            const auto open = renderSeconds (audio, 2.0, nullptr);
+            box.turnKnob (slot::BCutoff, -100.0f);
+            box.turnKnob (slot::BEnvMod, -100.0f);
+            renderSeconds (audio, 0.5, nullptr);
+            const auto closed = renderSeconds (audio, 2.0, nullptr);
+            check (closed.rms < open.rms, "the cutoff knob closes the acid filter",
+                   juce::String (open.rms, 4) + " -> " + juce::String (closed.rms, 4));
+            box.turnKnob (slot::BCutoff, 35.0f);
+            box.turnKnob (slot::BEnvMod, 55.0f);
+
             // arp chance 0 -> the arp is silent (its knobs really reach the engine)
-            box.setMuted (Drums, true); box.setMuted (Bass, true);
-            box.buttonDown (BtnInstrument); box.buttonUp (BtnInstrument);   // Arp page
+            box.setMuted (Bass, true); box.setMuted (Arp, false);
+            press (BtnInstrument);   // Drums
+            press (BtnInstrument);   // Arp
             box.turnKnob (slot::AProbability, -200.0f);
-            renderSeconds (audio, 4.0, nullptr);   // let the last notes and echoes ring out
+            renderSeconds (audio, 4.0, nullptr);
             const auto quiet = renderSeconds (audio, 2.0, nullptr);
             check (quiet.rms < 0.002f, "arp chance 0 % = silent", "rms " + juce::String (quiet.rms, 5));
             box.turnKnob (slot::AProbability, 200.0f);
 
             // presets: save to pad 5, change the sound, load pad 5 back
             box.savePreset (Arp, 4);
-            check (box.presetFile (Arp, 4).existsAsFile(), "preset file written", box.presetFile (Arp, 4).getFullPathName());
+            check (box.presetFile (Arp, 4).existsAsFile(), "preset file written", {});
             const float mode = box.getData().inst[Arp].values[slot::AMode];
             box.turnKnob (slot::AMode, 3.0f);
             check (box.getData().inst[Arp].values[slot::AMode] != mode, "knob changes the arp mode", {});
             check (box.loadPreset (Arp, 4) && box.getData().inst[Arp].values[slot::AMode] == mode, "preset loads back", {});
             check (! box.loadPreset (Arp, 9), "empty preset pad is refused", {});
-
-            // Shift + pad loads, Shift + Rec + pad saves (the button way)
-            box.buttonDown (BtnShift); box.buttonDown (BtnRec); box.buttonUp (BtnRec);
-            box.padDown (11, 100); box.padUp (11);
+            box.buttonDown (BtnShift); press (BtnRec);
+            tap (11);
             box.buttonUp (BtnShift);
             check (box.presetExists (Arp, 11), "Shift + Rec + pad saves a preset", {});
+            check (box.isLatched(), "Shift + Rec does not touch Hold", {});
 
-            // Rec on the drum page: a pad played while it runs is kept in the loop
-            box.setMuted (Drums, false);
-            box.buttonDown (BtnInstrument); box.buttonUp (BtnInstrument);   // Bass
-            box.buttonDown (BtnInstrument); box.buttonUp (BtnInstrument);   // Bubny
-            box.buttonDown (BtnRec); box.buttonUp (BtnRec);
-            box.padDown (2, 110); box.padUp (2);
+            // Rec on the drum page: a pad played while it runs is written into its steps
+            for (int j = 0; j < NumInstruments; ++j) box.setMuted (j, false);
+            press (BtnInstrument); press (BtnInstrument);   // Bass, Drums
+            press (BtnRec);
+            check (audio.isRecording(), "Rec arms recording", {});
+            box.padDown (2, 115); box.padUp (2);
             renderSeconds (audio, 0.2, nullptr);
             box.pump();
-            check (box.getData().inst[Drums].drumHits.size() == 1, "Rec keeps a played drum hit",
-                   juce::String ((int) box.getData().inst[Drums].drumHits.size()));
+            int clapSteps = 0;
+            for (auto v : box.getData().inst[Drums].drumSteps[2]) if (v > 0) ++clapSteps;
+            check (clapSteps == 1, "Rec writes a played drum into the steps", juce::String (clapSteps));
+
+            // Rec on the bass page: two pads held together = a slide
+            press (BtnInstrument); press (BtnInstrument);   // Arp, Bass
+            box.buttonDown (BtnShift); press (BtnTap); box.buttonUp (BtnShift);   // Shift + Tap = clear the line
+            box.padDown (0, 100);
+            renderSeconds (audio, 0.3, nullptr);
+            box.padDown (4, 120);
+            renderSeconds (audio, 0.1, nullptr);
+            box.padUp (0); box.padUp (4);
+            box.pump();
+            bool slid = false, accented = false;
+            for (const auto& st : box.getData().inst[Bass].bassSteps)
+            {
+                slid = slid || st.slide;
+                accented = accented || (st.note == box.bassPadNote (4) && st.accent);
+            }
+            check (slid && accented, "Rec writes the bass line (legato = slide, hard = accent)", {});
+            press (BtnRec);
 
             box.saveState();
         }
         {
             BoxController again (dir);
-            check (again.getData().inst[Drums].drumHits.size() == 1 && again.getData().loadedPreset[Arp] == 11,
+            int clapSteps = 0;
+            for (auto v : again.getData().inst[Drums].drumSteps[2]) if (v > 0) ++clapSteps;
+            check (clapSteps == 1 && again.getData().loadedPreset[Arp] == 11 && again.getData().inst[Drums].drumSteps[0][2] == 127,
                    "the box remembers everything after a restart", {});
         }
         dir.deleteRecursively();
@@ -220,7 +277,7 @@ public:
         sel->setSize (520, 420);
         juce::DialogWindow::LaunchOptions o;
         o.content.setOwned (sel);
-        o.dialogTitle = juce::String::fromUTF8 ("Cat Box: zvuková karta a MIDI");
+        o.dialogTitle = "Cat Box: sound card and MIDI";
         o.dialogBackgroundColour = juce::Colour (0xff1b1e26);
         o.escapeKeyTriggersCloseButton = true;
         o.useNativeTitleBar = true;

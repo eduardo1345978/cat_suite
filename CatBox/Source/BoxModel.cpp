@@ -1,7 +1,5 @@
 #include "BoxModel.h"
 #include "CatSounds.h"
-#include "DrumCatEngine.h"
-#include "BassEngine.h"
 #include <cmath>
 
 namespace catbox
@@ -10,30 +8,29 @@ namespace
 {
 ParamDesc percent (const char* name, float def, float min = 0.0f, float max = 1.0f)
 {
-    ParamDesc d; d.name = sk (name); d.kind = Kind::Percent; d.min = min; d.max = max; d.def = def; return d;
+    ParamDesc d; d.name = name; d.kind = Kind::Percent; d.min = min; d.max = max; d.def = def; return d;
 }
 ParamDesc choice (const char* name, juce::StringArray choices, float def)
 {
-    ParamDesc d; d.name = sk (name); d.kind = Kind::Choice; d.min = 0.0f;
+    ParamDesc d; d.name = name; d.kind = Kind::Choice; d.min = 0.0f;
     d.max = (float) juce::jmax (0, choices.size() - 1); d.def = def; d.choices = std::move (choices); return d;
 }
 ParamDesc integer (const char* name, float min, float max, float def)
 {
-    ParamDesc d; d.name = sk (name); d.kind = Kind::Integer; d.min = min; d.max = max; d.def = def; return d;
+    ParamDesc d; d.name = name; d.kind = Kind::Integer; d.min = min; d.max = max; d.def = def; return d;
 }
 ParamDesc global (ParamDesc d, int g) { d.global = g; return d; }
-
-juce::StringArray barChoices() { return { sk ("1 takt"), sk ("2 takty"), sk ("4 takty") }; }
+ParamDesc perDrum (ParamDesc d) { d.perDrum = true; return d; }
 
 using Table = std::array<std::array<ParamDesc, numSlots>, NumInstruments>;
 
 Table buildTable()
 {
     Table t;
-    ParamDesc tempo; tempo.name = sk ("Tempo"); tempo.kind = Kind::Bpm; tempo.min = 60; tempo.max = 180; tempo.def = 110;
+    ParamDesc tempo; tempo.name = "Tempo"; tempo.kind = Kind::Bpm; tempo.min = 40; tempo.max = 240; tempo.def = 110;
     const auto tempoG  = global (tempo, GTempo);
-    const auto keyG    = global (choice ("Tónina", keyNames(), 0), GKey);
-    const auto scaleG  = global (choice ("Stupnica", scaleNames(), 1), GScale);
+    const auto keyG    = global (choice ("Key", keyNames(), 0), GKey);
+    const auto scaleG  = global (choice ("Scale", scaleNames(), 1), GScale);
     const auto masterG = global (percent ("Master", 0.8f), GMaster);
 
     for (auto& inst : t)
@@ -45,54 +42,52 @@ Table buildTable()
     }
 
     auto& d = t[Drums];
-    d[slot::DStyle]   = choice ("Štýl", drumcat::getStyleNames(), 0);
-    d[slot::DDensity] = percent ("Hustota", 0.5f);
-    d[slot::DFills]   = percent ("Breaky", 0.35f);
-    d[slot::DSwing]   = percent ("Swing", 0.0f);
-    d[slot::DKit]     = choice ("Súprava", hub::DrumKit::soundNames(), 0);
-    d[slot::DBars]    = choice ("Dĺžka", barChoices(), 1);
-    d[slot::DSeed]    = integer ("Variácia", 1, 99, 1);
-    d[slot::DHuman]   = percent ("Human", 0.5f);
-    d[slot::DCrush]   = percent ("Crush", 0.0f);
-    d[slot::DFilter]  = percent ("Filter", 1.0f);
-    d[slot::DVolume]  = percent ("Hlasitosť", 0.85f);
-    d[slot::DEcho]    = percent ("Echo", 0.0f);
-    d[slot::DDrive]   = percent ("Drive", 0.0f);
-    d[slot::DChorus]  = percent ("Chorus", 0.0f);
+    d[slot::DKit]    = choice ("Kit", hub::DrumKit::soundNames(), 0);
+    d[slot::DSwing]  = percent ("Swing", 0.0f);
+    d[slot::DLength] = choice ("Length", { "16 steps", "32 steps", "64 steps" }, 0);
+    d[slot::DHuman]  = percent ("Human", 0.0f);
+    d[slot::DLevel]  = perDrum (percent ("Drum level", 1.0f));
+    d[slot::DChance] = perDrum (percent ("Drum chance", 1.0f));
+    d[slot::DCrush]  = percent ("Crush", 0.0f);
+    d[slot::DDrive]  = percent ("Drive", 0.0f);
+    d[slot::DFilter] = percent ("Filter", 1.0f);
+    d[slot::DEcho]   = percent ("Echo", 0.0f);
+    d[slot::DVolume] = percent ("Volume", 0.85f);
+    d[slot::DChorus] = percent ("Chorus", 0.0f);
 
     auto& a = t[Arp];
-    a[slot::ADivision]    = choice ("Delenie", { "1/4", "1/8", "1/8 T", "1/8 .", "1/16", "1/16 T", "1/16 .", "1/32" }, 4);
-    a[slot::AMode]        = choice ("Režim", { sk ("Hore"), sk ("Dole"), sk ("Hore-dole"), sk ("Dole-hore"), sk ("Ako hráš"),
-                                               sk ("Náhodne"), sk ("Zbiehavo"), sk ("Akord") }, 0);
-    a[slot::AOctaves]     = integer ("Oktávy", 1, 4, 2);
+    a[slot::ADivision]    = choice ("Division", { "1/4", "1/8", "1/8 T", "1/8 .", "1/16", "1/16 T", "1/16 .", "1/32" }, 4);
+    a[slot::AMode]        = choice ("Mode", { "Up", "Down", "Up-down", "Down-up", "As played", "Random", "Converge", "Chord" }, 0);
+    a[slot::AOctaves]     = integer ("Octaves", 1, 4, 2);
     a[slot::AGate]        = percent ("Gate", 0.6f, 0.1f, 1.0f);
     a[slot::ASwing]       = percent ("Swing", 0.0f, 0.0f, 0.75f);
-    a[slot::ALength]      = integer ("Dĺžka", 1, 16, 16);
+    a[slot::ALength]      = integer ("Length", 1, 16, 16);
     a[slot::ARatchet]     = integer ("Ratchet", 1, 4, 1);
-    a[slot::AProbability] = percent ("Šanca", 1.0f);
-    a[slot::AAccent]      = percent ("Akcent", 0.5f);
+    a[slot::AProbability] = percent ("Chance", 1.0f);
+    a[slot::AAccent]      = percent ("Accent", 0.5f);
     a[slot::AFilter]      = percent ("Filter", 1.0f);
-    a[slot::AVolume]      = percent ("Hlasitosť", 0.85f);
-    a[slot::ASound]       = choice ("Zvuk", hub::KeysSynth::soundNames(), 2);
+    a[slot::AVolume]      = percent ("Volume", 0.85f);
+    a[slot::ASound]       = choice ("Sound", hub::KeysSynth::soundNames(), 2);
     a[slot::AEcho]        = percent ("Echo", 0.25f);
     a[slot::AChorus]      = percent ("Chorus", 0.0f);
     a[slot::ADrive]       = percent ("Drive", 0.0f);
 
     auto& b = t[Bass];
-    b[slot::BStyle]   = choice ("Štýl", basscat::getStyleNames(), 0);
-    b[slot::BDensity] = percent ("Hustota", 0.5f);
-    b[slot::BGhosts]  = percent ("Ghost tóny", 0.3f);
-    b[slot::BSlides]  = percent ("Slidy", 0.3f);
-    b[slot::BSound]   = choice ("Zvuk", hub::BassSynth::soundNames(), 1);
-    b[slot::BBars]    = choice ("Dĺžka", barChoices(), 1);
-    b[slot::BSeed]    = integer ("Variácia", 1, 99, 1);
-    b[slot::BDrive]   = percent ("Drive", 0.1f);
-    b[slot::BFilter]  = percent ("Filter", 1.0f);
-    b[slot::BOctave]  = integer ("Oktáva", -1, 1, 0);
-    b[slot::BVolume]  = percent ("Hlasitosť", 0.8f);
-    b[slot::BEcho]    = percent ("Echo", 0.0f);
-    b[slot::BChorus]  = percent ("Chorus", 0.0f);
-    b[slot::BFills]   = percent ("Breaky", 0.35f);
+    b[slot::BSound]     = choice ("Sound", bassSoundNames(), 0);
+    b[slot::BCutoff]    = percent ("Cutoff", 0.35f);
+    b[slot::BResonance] = percent ("Resonance", 0.6f);
+    b[slot::BEnvMod]    = percent ("Env mod", 0.55f);
+    b[slot::BDecay]     = percent ("Decay", 0.4f);
+    b[slot::BLength]    = integer ("Length", 1, maxSteps, 16);
+    b[slot::BAccent]    = percent ("Accent", 0.6f);
+    b[slot::BDrive]     = percent ("Drive", 0.2f);
+    b[slot::BSlide]     = percent ("Slide time", 0.35f);
+    b[slot::BOctave]    = integer ("Octave", -1, 1, 0);
+    b[slot::BVolume]    = percent ("Volume", 0.8f);
+    b[slot::BEcho]      = percent ("Echo", 0.0f);
+    b[slot::BChorus]    = percent ("Chorus", 0.0f);
+    b[slot::BWave]      = choice ("Wave", { "Saw", "Square" }, 0);
+    b[slot::BSwing]     = percent ("Swing", 0.0f);
     return t;
 }
 
@@ -121,16 +116,15 @@ const ParamDesc& paramDesc (int instrument, int slotIndex)
     return table()[(size_t) juce::jlimit (0, NumInstruments - 1, instrument)][(size_t) juce::jlimit (0, numSlots - 1, slotIndex)];
 }
 
-juce::String instrumentName (int i)   { return i == Drums ? "Bubny" : i == Arp ? "Arp" : "Bass"; }
+juce::String instrumentName (int i)   { return i == Drums ? "Drums" : i == Arp ? "Arp" : "Bass"; }
 juce::String instrumentFolder (int i) { return i == Drums ? "Drums" : i == Arp ? "Arp" : "Bass"; }
 
 //==============================================================================
-juce::StringArray keyNames() { return { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "H" }; }
+juce::StringArray keyNames() { return { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }; }
 
 juce::StringArray scaleNames()
 {
-    return { sk ("Dur"), sk ("Mol"), sk ("Dórska"), sk ("Mixolýdická"), sk ("Harmonická mol"),
-             sk ("Pentatonika dur"), sk ("Pentatonika mol"), sk ("Blues") };
+    return { "Major", "Minor", "Dorian", "Mixolydian", "Harmonic minor", "Major penta", "Minor penta", "Blues" };
 }
 
 const std::vector<int>& scaleIntervals (int scale)
@@ -150,15 +144,10 @@ int scaleNote (int key, int scale, int degree, int baseNote)
     return juce::jlimit (0, 127, baseNote + key + 12 * oct + iv[(size_t) idx]);
 }
 
-juce::String degreeChordName (int key, int scale, int degree)
+juce::String noteName (int midiNote)
 {
-    const int root = scaleNote (key, scale, degree, 48);
-    const int third = scaleNote (key, scale, degree + 2, 48) - root;
-    const int fifth = scaleNote (key, scale, degree + 4, 48) - root;
-    juce::String name = keyNames()[root % 12];
-    if (third == 3) name << (fifth == 6 ? "dim" : "m");
-    else if (fifth == 8) name << "aug";
-    return name;
+    if (midiNote < 0) return "-";
+    return keyNames()[midiNote % 12] + juce::String (midiNote / 12 - 1);
 }
 
 double arpDivisionPpq (int index)
@@ -167,15 +156,15 @@ double arpDivisionPpq (int index)
     return v[juce::jlimit (0, 7, index)];
 }
 
-int barsFromChoice (float c)
+int drumStepsFromChoice (float c)
 {
     const int i = juce::jlimit (0, 2, juce::roundToInt (c));
-    return i == 0 ? 1 : i == 1 ? 2 : 4;
+    return i == 0 ? 16 : i == 1 ? 32 : 64;
 }
 
 int drumPadNote (int pad)
 {
-    // bottom row first, like a drum machine: kick, snare, clap, rim / hats, ride, crash / toms / extras
+    // first row: kick, snare, clap, rim / hats, ride, crash / toms, cowbell / shaker and spares
     static const int notes[numPads] = { 36, 38, 39, 37,  42, 46, 51, 49,  41, 45, 48, 56,  70, 35, 40, 57 };
     return notes[juce::jlimit (0, numPads - 1, pad)];
 }
@@ -184,24 +173,51 @@ juce::String drumPadName (int pad)
 {
     static const char* names[numPads] = { "Kick", "Snare", "Clap", "Rim", "Hat", "Open hat", "Ride", "Crash",
                                           "Tom 1", "Tom 2", "Tom 3", "Cowbell", "Shaker", "Kick 2", "Snare 2", "Crash 2" };
-    return sk (names[juce::jlimit (0, numPads - 1, pad)]);
+    return names[juce::jlimit (0, numPads - 1, pad)];
+}
+
+juce::StringArray bassSoundNames()
+{
+    juce::StringArray s { "Acid" };
+    s.addArray (hub::BassSynth::soundNames());
+    return s;
 }
 
 //==============================================================================
+InstrumentState BoxData::defaults (int instrument)
+{
+    InstrumentState s;
+    for (int i = 0; i < numSlots; ++i)
+    {
+        const auto& d = paramDesc (instrument, i);
+        if (d.used() && d.global < 0 && ! d.perDrum) s.values[(size_t) i] = d.def;
+    }
+    s.drumLevel.fill (1.0f);
+    s.drumChance.fill (1.0f);
+    s.arpSteps.fill (StepOn);
+    s.arpSteps[0] = s.arpSteps[8] = StepAccent;
+
+    if (instrument == Drums)
+    {
+        // a plain starting beat so the box makes sound on its first start (change it on the pads)
+        for (int st : { 0, 8 })        s.drumSteps[0][(size_t) st] = 110;   // kick
+        for (int st : { 4, 12 })       s.drumSteps[1][(size_t) st] = 105;   // snare
+        for (int st = 0; st < 16; st += 2) s.drumSteps[4][(size_t) st] = st % 4 == 0 ? 90 : 70;   // hat
+    }
+    if (instrument == Bass)
+    {
+        // C minor: a simple line to start from
+        const int line[16] = { 36, -1, 36, -1, 48, -1, 36, 39, -1, 36, -1, 43, 36, -1, 46, 48 };
+        for (int st = 0; st < 16; ++st) s.bassSteps[(size_t) st].note = line[st];
+        s.bassSteps[7].slide = true;
+        s.bassSteps[4].accent = s.bassSteps[12].accent = true;
+    }
+    return s;
+}
+
 BoxData::BoxData()
 {
-    for (int i = 0; i < NumInstruments; ++i)
-    {
-        for (int s = 0; s < numSlots; ++s)
-        {
-            const auto& d = paramDesc (i, s);
-            if (d.used() && d.global < 0) inst[(size_t) i].values[(size_t) s] = d.def;
-        }
-        inst[(size_t) i].arpSteps.fill (StepOn);
-    }
-    auto& steps = inst[Arp].arpSteps;
-    steps[0] = steps[8] = StepAccent;
-
+    for (int i = 0; i < NumInstruments; ++i) inst[(size_t) i] = defaults (i);
     globals[GTempo] = 110.0f;
     globals[GKey] = 0.0f;
     globals[GScale] = 1.0f;
@@ -213,7 +229,10 @@ float BoxData::get (int instrument, int slotIndex) const
     const auto& d = paramDesc (instrument, slotIndex);
     if (! d.used()) return 0.0f;
     if (d.global >= 0) return globals[(size_t) d.global];
-    return inst[(size_t) juce::jlimit (0, NumInstruments - 1, instrument)].values[(size_t) slotIndex];
+    const auto& s = inst[(size_t) juce::jlimit (0, NumInstruments - 1, instrument)];
+    if (d.perDrum)
+        return slotIndex == slot::DLevel ? s.drumLevel[(size_t) selectedDrum] : s.drumChance[(size_t) selectedDrum];
+    return s.values[(size_t) slotIndex];
 }
 
 void BoxData::set (int instrument, int slotIndex, float value)
@@ -222,14 +241,20 @@ void BoxData::set (int instrument, int slotIndex, float value)
     if (! d.used()) return;
     value = juce::jlimit (d.min, d.max, value);
     if (d.kind != Kind::Percent) value = std::round (value);
-    if (d.global >= 0) globals[(size_t) d.global] = value;
-    else inst[(size_t) juce::jlimit (0, NumInstruments - 1, instrument)].values[(size_t) slotIndex] = value;
+    if (d.global >= 0) { globals[(size_t) d.global] = value; return; }
+    auto& s = inst[(size_t) juce::jlimit (0, NumInstruments - 1, instrument)];
+    if (d.perDrum)
+        (slotIndex == slot::DLevel ? s.drumLevel : s.drumChance)[(size_t) selectedDrum] = value;
+    else
+        s.values[(size_t) slotIndex] = value;
 }
 
+//==============================================================================
 juce::var BoxData::instrumentToVar (int instrument, const InstrumentState& s)
 {
     auto* o = new juce::DynamicObject();
     o->setProperty ("instrument", instrumentFolder (instrument));
+    o->setProperty ("v", 2);
     o->setProperty ("tempo", s.tempo);
     juce::Array<juce::var> values;
     for (auto v : s.values) values.add (v);
@@ -242,23 +267,42 @@ juce::var BoxData::instrumentToVar (int instrument, const InstrumentState& s)
     }
     if (instrument == Drums)
     {
-        juce::Array<juce::var> hits;
-        for (const auto& h : s.drumHits) hits.add (juce::Array<juce::var> { h.step, h.note, h.velocity });
+        juce::Array<juce::var> hits, level, chance;
+        for (int p = 0; p < numPads; ++p)
+        {
+            level.add (s.drumLevel[(size_t) p]);
+            chance.add (s.drumChance[(size_t) p]);
+            for (int st = 0; st < maxSteps; ++st)
+                if (const int v = s.drumSteps[(size_t) p][(size_t) st]; v > 0)
+                    hits.add (juce::Array<juce::var> { p, st, v });
+        }
         o->setProperty ("hits", hits);
+        o->setProperty ("level", level);
+        o->setProperty ("chance", chance);
+    }
+    if (instrument == Bass)
+    {
+        juce::Array<juce::var> notes;
+        for (int st = 0; st < maxSteps; ++st)
+            if (const auto& b = s.bassSteps[(size_t) st]; b.note >= 0)
+                notes.add (juce::Array<juce::var> { st, b.note, b.slide ? 1 : 0, b.accent ? 1 : 0 });
+        o->setProperty ("notes", notes);
     }
     return juce::var (o);
 }
 
 bool BoxData::instrumentFromVar (int instrument, const juce::var& v, InstrumentState& s)
 {
-    if (! v.isObject() || v["instrument"].toString() != instrumentFolder (instrument)) return false;
-    InstrumentState fresh = BoxData().inst[(size_t) instrument];   // defaults for anything missing
-    if (v.hasProperty ("tempo")) fresh.tempo = juce::jlimit (60.0f, 180.0f, (float) v["tempo"]);
+    if (! v.isObject() || v["instrument"].toString() != instrumentFolder (instrument) || (int) v.getProperty ("v", 1) < 2)
+        return false;
+    InstrumentState fresh = defaults (instrument);
+    if (instrument != Arp) { for (auto& p : fresh.drumSteps) p.fill (0); for (auto& b : fresh.bassSteps) b = {}; }
+    if (v.hasProperty ("tempo")) fresh.tempo = juce::jlimit (40.0f, 240.0f, (float) v["tempo"]);
     if (auto* values = v["values"].getArray())
         for (int i = 0; i < juce::jmin (numSlots, values->size()); ++i)
         {
             const auto& d = paramDesc (instrument, i);
-            if (d.used() && d.global < 0)
+            if (d.used() && d.global < 0 && ! d.perDrum)
                 fresh.values[(size_t) i] = juce::jlimit (d.min, d.max, (float) (*values)[i]);
         }
     if (auto* steps = v["steps"].getArray())
@@ -267,8 +311,26 @@ bool BoxData::instrumentFromVar (int instrument, const juce::var& v, InstrumentS
     if (auto* hits = v["hits"].getArray())
         for (const auto& h : *hits)
             if (auto* a = h.getArray(); a != nullptr && a->size() >= 3)
-                fresh.drumHits.push_back ({ juce::jlimit (0, 63, (int) (*a)[0]), juce::jlimit (0, 127, (int) (*a)[1]),
-                                            juce::jlimit (1, 127, (int) (*a)[2]) });
+            {
+                const int p = (int) (*a)[0], st = (int) (*a)[1];
+                if (p >= 0 && p < numPads && st >= 0 && st < maxSteps)
+                    fresh.drumSteps[(size_t) p][(size_t) st] = (uint8_t) juce::jlimit (1, 127, (int) (*a)[2]);
+            }
+    if (auto* lv = v["level"].getArray())
+        for (int p = 0; p < juce::jmin (numPads, lv->size()); ++p) fresh.drumLevel[(size_t) p] = juce::jlimit (0.0f, 1.0f, (float) (*lv)[p]);
+    if (auto* ch = v["chance"].getArray())
+        for (int p = 0; p < juce::jmin (numPads, ch->size()); ++p) fresh.drumChance[(size_t) p] = juce::jlimit (0.0f, 1.0f, (float) (*ch)[p]);
+    if (auto* notes = v["notes"].getArray())
+        for (const auto& n : *notes)
+            if (auto* a = n.getArray(); a != nullptr && a->size() >= 4)
+            {
+                const int st = (int) (*a)[0];
+                if (st < 0 || st >= maxSteps) continue;
+                auto& b = fresh.bassSteps[(size_t) st];
+                b.note = juce::jlimit (0, 127, (int) (*a)[1]);
+                b.slide = (int) (*a)[2] != 0;
+                b.accent = (int) (*a)[3] != 0;
+            }
     s = std::move (fresh);
     return true;
 }
@@ -276,13 +338,14 @@ bool BoxData::instrumentFromVar (int instrument, const juce::var& v, InstrumentS
 juce::var BoxData::toVar() const
 {
     auto* o = new juce::DynamicObject();
-    o->setProperty ("format", "catbox-1");
+    o->setProperty ("format", "catbox-2");
     o->setProperty ("tempo", globals[GTempo]);
     o->setProperty ("key", globals[GKey]);
     o->setProperty ("scale", globals[GScale]);
     o->setProperty ("master", globals[GMaster]);
     o->setProperty ("page", page);
-    o->setProperty ("bassChord", bassChordDegree);
+    o->setProperty ("selectedDrum", selectedDrum);
+    o->setProperty ("light", lightScreen);
     juce::Array<juce::var> insts;
     for (int i = 0; i < NumInstruments; ++i)
     {
@@ -298,14 +361,15 @@ juce::var BoxData::toVar() const
 
 void BoxData::fromVar (const juce::var& v)
 {
-    if (! v.isObject()) return;
+    if (! v.isObject() || v["format"].toString() != "catbox-2") return;   // older memory: start fresh
     *this = BoxData();
-    globals[GTempo]  = juce::jlimit (60.0f, 180.0f, (float) v.getProperty ("tempo", 110.0f));
+    globals[GTempo]  = juce::jlimit (40.0f, 240.0f, (float) v.getProperty ("tempo", 110.0f));
     globals[GKey]    = (float) juce::jlimit (0, 11, (int) v.getProperty ("key", 0));
     globals[GScale]  = (float) juce::jlimit (0, scaleNames().size() - 1, (int) v.getProperty ("scale", 1));
     globals[GMaster] = juce::jlimit (0.0f, 1.0f, (float) v.getProperty ("master", 0.8f));
     page = juce::jlimit (0, NumInstruments - 1, (int) v.getProperty ("page", 0));
-    bassChordDegree = juce::jlimit (0, 15, (int) v.getProperty ("bassChord", 0));
+    selectedDrum = juce::jlimit (0, numPads - 1, (int) v.getProperty ("selectedDrum", 0));
+    lightScreen = (bool) v.getProperty ("light", false);
     if (auto* insts = v["instruments"].getArray())
         for (int i = 0; i < juce::jmin ((int) NumInstruments, insts->size()); ++i)
         {
