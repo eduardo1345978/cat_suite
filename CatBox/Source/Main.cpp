@@ -237,9 +237,12 @@ public:
             BoxController again (dir);
             int clapSteps = 0;
             for (auto v : again.getData().inst[Drums].drumSteps[2]) if (v > 0) ++clapSteps;
-            check (clapSteps == 1 && again.getData().loadedScene == 6 && again.getData().inst[Drums].drumSteps[0][2] == 127
-                     && again.getData().inst[Bass].bassSteps[0].note >= 0,
-                   "the box remembers everything after a restart", {});
+            int bassNotes = 0;
+            for (const auto& st : again.getData().inst[Bass].bassSteps) if (st.note >= 0) ++bassNotes;
+            check (clapSteps == 1, "after a restart: the recorded drum", juce::String (clapSteps));
+            check (again.getData().loadedScene == 6, "after a restart: the scene number", juce::String (again.getData().loadedScene));
+            check (again.getData().inst[Drums].drumSteps[0][2] == 127, "after a restart: the drum steps", {});
+            check (bassNotes == 2, "after a restart: the recorded bass line", juce::String (bassNotes));
         }
         dir.deleteRecursively();
 
