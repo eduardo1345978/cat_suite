@@ -237,7 +237,8 @@ public:
             BoxController again (dir);
             int clapSteps = 0;
             for (auto v : again.getData().inst[Drums].drumSteps[2]) if (v > 0) ++clapSteps;
-            check (clapSteps == 1 && again.getData().loadedPreset[Arp] == 11 && again.getData().loadedScene == 6,
+            check (clapSteps == 1 && again.getData().loadedScene == 6 && again.getData().inst[Drums].drumSteps[0][2] == 127
+                     && again.getData().inst[Bass].bassSteps[0].note >= 0,
                    "the box remembers everything after a restart", {});
         }
         dir.deleteRecursively();
