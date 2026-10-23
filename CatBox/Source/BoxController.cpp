@@ -153,6 +153,36 @@ void BoxController::turnKnob (int knob, float clicks)
     paramChanged();
 }
 
+void BoxController::resetKnob (int knob)
+{
+    if (knob < 0 || knob >= numKnobs) return;
+    if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "reset"); o->setProperty ("k", knob); sendRemote (o); return; }
+    const int pg = page.load();
+    const int s = knob + (shift.load() ? numKnobs : 0);
+    if (pg == Bass && isStepView() && ! shift.load() && knob >= 1 && knob <= 3) return;   // a bass step has no default
+    const auto& d = paramDesc (pg, s);
+    if (! d.used()) return;
+    lastKnobPg = pg;
+    lastKnobSl = s;
+    lastKnobAt = juce::Time::getMillisecondCounter();
+    knobRemainder[(size_t) s] = 0.0f;
+    const float before = data.get (pg, s);
+    data.set (pg, s, d.perDrum ? 1.0f : d.def);
+    if (data.get (pg, s) == before) return;
+    if (s == slot::Key || s == slot::Scale)
+    {
+        key = juce::roundToInt (data.globals[GKey]);
+        scale = juce::roundToInt (data.globals[GScale]);
+    }
+    paramChanged();
+}
+
+float BoxController::chaosHoldProgress() const
+{
+    if (! chaosArmed) return 0.0f;
+    return juce::jlimit (0.0f, 1.0f, (float) (juce::Time::getMillisecondCounter() - chaosDownAt) / (float) chaosHoldMs);
+}
+
 void BoxController::paramChanged()
 {
     publish();
@@ -1126,6 +1156,7 @@ void BoxController::handleLinkMessage (const juce::var& m, const std::function<v
     const auto t = m["t"].toString();
     const int pg = (int) m.getProperty ("page", 0), slotIndex = (int) m.getProperty ("slot", 0);
     if (t == "knob")        turnKnob ((int) m["k"], (float) m["c"]);
+    else if (t == "reset")  resetKnob ((int) m["k"]);
     else if (t == "button") (bool) m["down"] ? buttonDown ((int) m["b"]) : buttonUp ((int) m["b"]);
     else if (t == "pad")    (bool) m["down"] ? padDown ((int) m["p"], (int) m.getProperty ("v", 100)) : padUp ((int) m["p"]);
     else if (t == "page")   setPage ((int) m["p"]);

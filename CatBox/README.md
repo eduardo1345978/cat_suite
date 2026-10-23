@@ -8,7 +8,9 @@ Everything plays together at one tempo, in one key. Nothing is generated: you dr
 The same program runs in two places:
 
 - **On the PC** (`Cat-Box.exe`): the 5" screen plus the whole front panel in one window. Drag or
-  scroll the knobs, click the pads and buttons, or use the computer keyboard.
+  scroll the knobs, click the pads and buttons, or use the computer keyboard. Point at a knob and it
+  shows its value; double-click it to put it back where it started. Click a pad near its top to hit it
+  hard, near its bottom to hit it softly. **F1** shows all keys. The window opens where you closed it.
 - **In the box** (Raspberry Pi 5 + HiFiBerry + 5" screen + Pico controller): `Cat-Box --kiosk` shows
   only the 800 x 480 screen, full screen; the real knobs, pads and buttons do the rest.
 
@@ -47,7 +49,7 @@ itself on UDP port 50651.
 | | What it does |
 |---|---|
 | **12 knobs** | the sound of the page on screen; with **Shift** held a second layer (key, scale, effects, master) |
-| **16 pads** (2 rows of 8) | Drums: play the drums (the last one hit is the *selected drum*) · Arp and Bass: **like a piano** - the bottom row is the white keys C D E F G A B C, the top row the black keys above them (C# D# - F# G# A# - C#); the key's notes glow a little, its root most (Shift + knob 8: *Pads* = Piano or Scale) · FX: performance effects while held |
+| **16 pads** (2 rows of 8) | Drums: play the drums (the last one hit is the *selected drum*) · Arp and Bass: **like a piano** - the bottom row is the white keys C D E F G A B C, the top row the black keys above them (C# D# - F# G# A# - C#); all pads look the same, the notes of the key glow a little and the root most (Shift + knob 8: *Pads* = Piano or Scale) · FX: performance effects while held |
 | **Play** | start / stop · **Shift + Play** = tap tempo |
 | **Steps** | the pads become 16 steps (per page). Drums: steps of the selected drum (tap: on > accent > off) · Arp: on > rest > tie > accent · Bass: tap an empty step = set it, tap a set step = pick it, tap again = clear; knobs 2 / 3 / 4 edit the picked step's note / slide / accent · **Shift + Steps** = clear (all drums or the selected one in Steps, the bass line, held arp notes, the FX page) |
 | **Shift** | second knob layer; **Shift + pad** = load preset, **Shift + Rec + pad** = save preset |

@@ -40,6 +40,9 @@ public:
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
     void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override;
+    void mouseMove (const juce::MouseEvent&) override;
+    void mouseExit (const juce::MouseEvent&) override;
     bool keyPressed (const juce::KeyPress&) override;
     bool keyStateChanged (bool isKeyDown) override;
     void modifierKeysChanged (const juce::ModifierKeys&) override;
@@ -71,6 +74,12 @@ private:
     void paintPanel (juce::Graphics&, juce::Rectangle<float>);
     void paintPad (juce::Graphics&, juce::Rectangle<float>, int pad);
 
+    void paintHelp (juce::Graphics&, juce::Rectangle<float>);
+    void paintChaosBar (juce::Graphics&, juce::Rectangle<float>, float progress);
+    float chaosProgress() const;
+    void setButtonPressed (int button, bool down);
+    int knobAt (juce::Point<float>) const;
+
     juce::Colour padColour (int pad, bool& lit, bool& outlined, bool& thick) const;
     juce::String padLabel (int pad) const;
     juce::String presetTitle() const;
@@ -100,5 +109,13 @@ private:
     float lastDragY = 0.0f;
     bool mouseShiftLatched = false;
     bool boxPreview = false;
+    bool helpShown = false;            // F1: the keys and controls
+    int hoverKnob = -1;                // the PC panel shows this knob's value instead of its name
+    uint32_t pressedButtons = 0;       // held buttons look pressed
+    juce::uint32 chaosPressedAt = 0;   // linked to a box, the bar is timed here
+
+public:
+    void showHelp (bool b) { helpShown = b; repaint(); }
+    bool isHelpShown() const noexcept { return helpShown; }
 };
 } // namespace catbox

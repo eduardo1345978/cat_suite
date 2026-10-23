@@ -33,6 +33,8 @@ public:
 
     // knobs and buttons (message thread)
     void turnKnob (int knob, float clicks);
+    /** Sets the knob's parameter back to its starting value (a double-click on the PC). */
+    void resetKnob (int knob);
     void buttonDown (int button);
     void buttonUp (int button);
     // pads (any thread)
@@ -107,6 +109,8 @@ public:
         The button must be held for 0.6 s, so it is never pressed by accident. Shift + Chaos takes the last one back. */
     void chaos();
     bool undoChaos();
+    /** 0..1 while Chaos is held and not fired yet (the screen fills a bar), else 0. */
+    float chaosHoldProgress() const;
 
     /** For the self test: run the timer work now (recorded notes, autosave). */
     void pump() { timerCallback(); }

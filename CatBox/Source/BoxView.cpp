@@ -2,6 +2,7 @@
 #include "MasterFx.h"
 #include <cmath>
 #include <algorithm>
+#include <iterator>
 
 namespace catbox
 {
@@ -239,8 +240,8 @@ juce::Colour BoxView::padColour (int pad, bool& lit, bool& outlined, bool& thick
             const int pc = ((padNote - juce::roundToInt (data.globals[GKey])) % 12 + 12) % 12;
             const auto& iv = scaleIntervals (juce::roundToInt (data.globals[GScale]));
             const bool inKey = std::find (iv.begin(), iv.end(), pc) != iv.end();
-            if (piano)   // white keys light, black keys dark; the key's notes a little brighter, its root brightest
-                return (pad >= 8 ? juce::Colour (0xff5a5f6b) : juce::Colour (0xff1c1f26)).interpolatedWith (col, pc == 0 ? 0.6f : inKey ? 0.28f : 0.0f);
+            if (piano)   // plain pads like the drums; the key's notes a little brighter, its root brightest
+                return off.interpolatedWith (col, pc == 0 ? 0.42f : inKey ? 0.2f : 0.05f);
             const bool root = pad % (int) iv.size() == 0;
             return off.interpolatedWith (col, root ? 0.38f : 0.16f);
         }
@@ -314,6 +315,78 @@ void BoxView::paint (juce::Graphics& g)
     if (isBoxScreen()) paintBoxScreen (g, { 0.0f, 0.0f, (float) screenW, (float) screenH });
     else paintScreen (g, { 0.0f, 0.0f, (float) screenW, (float) screenH });
     if (! kiosk) paintPanel (g, { 0.0f, (float) screenH, (float) screenW, (float) panelH });
+    if (helpShown) paintHelp (g, { 0.0f, 0.0f, (float) screenW, (float) screenH });
+}
+
+void BoxView::paintHelp (juce::Graphics& g, juce::Rectangle<float> area)
+{
+    const auto& P = pal();
+    g.setColour (P.screen.withAlpha (0.96f));
+    g.fillRect (area);
+    auto r = area.reduced (28.0f, 20.0f);
+    g.setColour (P.text);
+    g.setFont (font (24.0f, true));
+    g.drawText ("Keys and controls", r.removeFromTop (36.0f), juce::Justification::centredLeft);
+    g.setColour (P.dim);
+    g.setFont (font (13.0f));
+    g.drawText ("F1 or Esc closes this", r.withHeight (0.0f).withY (r.getY() - 26.0f), juce::Justification::centredRight);
+
+    const char* rows[][2] = {
+        { "1 - 8,  Q - I", "the 16 pads (Z works as Y)" },
+        { "Space", "Play / Stop    (Shift: tap tempo)" },
+        { "B", "Steps: the pads edit the pattern" },
+        { "Shift", "second knob layer, Shift + pad = load preset" },
+        { "Shift + Enter + pad", "save a preset" },
+        { "N", "Scenes: pad = recall, Enter + pad = save" },
+        { "Tab", "next page: Drums, Arp, Bass, FX    (Shift: mute)" },
+        { ",   .", "Oct - / Oct + (Drums: previous / next drum)" },
+        { "Enter", "Rec (Arp: Hold)" },
+        { "C (hold)", "Chaos: new sound for this page    (Shift + C: undo)" },
+        { "knobs", "drag up / down or scroll, Shift = fine, double-click = back to start" },
+        { "F11", "full screen     right-click: sound card, MIDI, light screen" },
+    };
+    const float rh = r.getHeight() / (float) std::size (rows);
+    for (auto& row : rows)
+    {
+        auto line = r.removeFromTop (rh);
+        g.setColour (pageColour (box.getPage()));
+        g.setFont (font (16.0f, true));
+        g.drawText (row[0], line.removeFromLeft (200.0f), juce::Justification::centredLeft);
+        g.setColour (P.text);
+        g.setFont (font (16.0f));
+        g.drawFittedText (row[1], line.toNearestInt(), juce::Justification::centredLeft, 1, 0.8f);
+    }
+}
+
+float BoxView::chaosProgress() const
+{
+    const float own = box.chaosHoldProgress();
+    if (own > 0.0f || ! box.isRemote() || ((pressedButtons >> BtnChaos) & 1u) == 0) return own;
+    return juce::jlimit (0.0f, 1.0f, (float) (juce::Time::getMillisecondCounter() - chaosPressedAt) / 600.0f);
+}
+
+void BoxView::paintChaosBar (juce::Graphics& g, juce::Rectangle<float> r, float progress)
+{
+    if (progress <= 0.0f) return;
+    g.setColour (pal().faint);
+    g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
+    g.setColour (juce::Colour (0xffe0508a));
+    g.fillRoundedRectangle (r.withWidth (juce::jmax (r.getHeight(), r.getWidth() * progress)), r.getHeight() * 0.5f);
+}
+
+void BoxView::setButtonPressed (int b, bool down)
+{
+    if (b < 0 || b >= NumButtons) return;
+    if (down) pressedButtons |= 1u << b; else pressedButtons &= ~(1u << b);
+    if (b == BtnChaos && down) chaosPressedAt = juce::Time::getMillisecondCounter();
+}
+
+int BoxView::knobAt (juce::Point<float> p) const
+{
+    if (kiosk) return -1;
+    for (int k = 0; k < numKnobs; ++k)
+        if (knobArea (k).contains (p)) return k;
+    return -1;
 }
 
 juce::Rectangle<float> BoxView::tabArea (int p) const
@@ -507,6 +580,7 @@ void BoxView::paintBoxScreen (juce::Graphics& g, juce::Rectangle<float> area)
         g.setColour (P.text);
         g.drawFittedText (flash, f.reduced (16.0f, 2.0f).toNearestInt(), juce::Justification::centred, 1, 0.7f);
     }
+    paintChaosBar (g, { 200.0f, 154.0f, 400.0f, 10.0f }, chaosProgress());
 }
 
 void BoxView::paintScope (juce::Graphics& g, juce::Rectangle<float> r)
@@ -834,6 +908,7 @@ void BoxView::paintBottom (juce::Graphics& g, juce::Rectangle<float> r)
         g.setColour (P.text);
         g.setFont (font (19.0f, true));
         g.drawFittedText (flash, f.reduced (12.0f, 4.0f).toNearestInt(), juce::Justification::centred, 2);
+        paintChaosBar (g, f.reduced (24.0f, 0.0f).removeFromBottom (14.0f).withTrimmedBottom (6.0f), chaosProgress());
     }
 }
 
@@ -870,21 +945,30 @@ void BoxView::paintPanel (juce::Graphics& g, juce::Rectangle<float> area)
     {
         auto r = knobArea (k);
         const juce::Point<float> c { r.getCentreX(), r.getY() + 27.0f };
-        g.setColour (juce::Colour (0xff0e1014));
-        g.fillEllipse (c.x - 24.0f, c.y - 24.0f, 48.0f, 48.0f);
-        g.setColour (C::bodyEdge.brighter (0.4f));
-        g.drawEllipse (c.x - 24.0f, c.y - 24.0f, 48.0f, 48.0f, 1.5f);
         const auto v = box.knobView (k);
+        const bool active = v.used && (hoverKnob == k || (drag == Drag::Knob && dragIndex == k));
+        const auto ring = v.global ? C::global : col;
+        // the value as a ring around the knob (like the LEDs around a real encoder)
+        drawArc (g, c, 27.5f, -2.35f, 2.35f, 3.0f, juce::Colour (0xff2a2e38));
+        if (v.used && v.fraction > 0.001f)
+            drawArc (g, c, 27.5f, -2.35f, -2.35f + 4.7f * juce::jlimit (0.0f, 1.0f, v.fraction), 3.0f, ring.withAlpha (active ? 1.0f : 0.75f));
+        juce::ColourGradient cap (juce::Colour (0xff2a2e37), c.x, c.y - 22.0f, juce::Colour (0xff0b0d11), c.x, c.y + 22.0f, false);
+        g.setGradientFill (cap);
+        g.fillEllipse (c.x - 22.0f, c.y - 22.0f, 44.0f, 44.0f);
+        g.setColour (active ? ring.withAlpha (0.8f) : C::bodyEdge.brighter (0.4f));
+        g.drawEllipse (c.x - 22.0f, c.y - 22.0f, 44.0f, 44.0f, active ? 2.0f : 1.2f);
         if (v.used)
         {
             const float ang = -2.35f + 4.7f * juce::jlimit (0.0f, 1.0f, v.fraction);
-            g.setColour (v.global ? C::global : col);
-            g.drawLine (c.x + std::sin (ang) * 8.0f, c.y - std::cos (ang) * 8.0f,
-                        c.x + std::sin (ang) * 20.0f, c.y - std::cos (ang) * 20.0f, 3.0f);
+            g.setColour (C::text.withAlpha (0.9f));
+            g.drawLine (c.x + std::sin (ang) * 7.0f, c.y - std::cos (ang) * 7.0f,
+                        c.x + std::sin (ang) * 18.0f, c.y - std::cos (ang) * 18.0f, 3.0f);
         }
-        g.setColour (C::dim);
-        g.setFont (font (12.0f));
-        g.drawFittedText (v.used ? v.name : juce::String ("-"), r.withTrimmedTop (54.0f).toNearestInt(), juce::Justification::centredTop, 1, 0.75f);
+        // hovered or turned: the value instead of the name
+        g.setColour (active ? ring : C::dim);
+        g.setFont (font (12.0f, active));
+        g.drawFittedText (! v.used ? juce::String ("-") : active ? v.value : v.name,
+                          r.withTrimmedTop (58.0f).toNearestInt(), juce::Justification::centredTop, 1, 0.75f);
     }
 
     for (int p = 0; p < numPads; ++p) paintPad (g, padArea (p), p);
@@ -892,11 +976,24 @@ void BoxView::paintPanel (juce::Graphics& g, juce::Rectangle<float> area)
     for (int b = 0; b < NumButtons; ++b)
     {
         auto r = buttonArea (b);
+        const bool held = ((pressedButtons >> b) & 1u) != 0;
+        if (held) r = r.reduced (1.5f);
         const bool lit = box.isButtonLit (b) || (b == BtnShift && mouseShiftLatched);
         const auto litCol = b == BtnRec ? (page == Arp ? col : C::rec) : b == BtnPlay || b == BtnSteps ? C::stepOn
                           : b == BtnScene ? juce::Colour (0xfff0c94a) : b == BtnChaos ? juce::Colour (0xffe0508a) : C::global;
-        g.setColour (lit ? litCol : juce::Colour (0xff2b2f39));
+        g.setColour (lit ? litCol : held ? juce::Colour (0xff3a3f4b) : juce::Colour (0xff2b2f39));
         g.fillRoundedRectangle (r, 10.0f);
+        if (! held && ! lit)   // a little top light, so it reads as a button
+        {
+            g.setColour (juce::Colours::white.withAlpha (0.05f));
+            g.fillRoundedRectangle (r.withHeight (r.getHeight() * 0.5f), 10.0f);
+        }
+        if (b == BtnChaos)
+            if (const float pr = chaosProgress(); pr > 0.0f)
+            {
+                g.setColour (juce::Colour (0xffe0508a));
+                g.fillRoundedRectangle (r.withWidth (r.getWidth() * pr), 10.0f);
+            }
         g.setColour (lit ? juce::Colours::black : C::text);
         g.setFont (font (15.0f, true));
         g.drawText (box.buttonLabel (b), r.withTrimmedBottom (14.0f), juce::Justification::centred);
@@ -907,7 +1004,7 @@ void BoxView::paintPanel (juce::Graphics& g, juce::Rectangle<float> area)
 
     g.setColour (C::dim.withAlpha (0.7f));
     g.setFont (font (12.0f));
-    g.drawText ("Shift + pad = load preset, Shift + Rec + pad = save  |  Shift + Play = tap tempo  |  right-click = settings",
+    g.drawText ("Shift + pad = load preset  |  Shift + Rec + pad = save  |  double-click a knob = back to start  |  F1 = all keys  |  right-click = settings",
                 juce::Rectangle<float> (20.0f, area.getBottom() - 30.0f, 760.0f, 20.0f), juce::Justification::centred);
 }
 
@@ -915,9 +1012,11 @@ void BoxView::paintPanel (juce::Graphics& g, juce::Rectangle<float> area)
 void BoxView::mouseDown (const juce::MouseEvent& e)
 {
     const auto p = toLogical (e.position);
+    if (helpShown && ! e.mods.isPopupMenu()) { showHelp (false); return; }
     if (e.mods.isPopupMenu())
     {
         juce::PopupMenu m;
+        m.addItem (6, "Keys and controls (F1)");
         m.addItem (1, "Sound card and MIDI...");
         m.addItem (2, "Full screen (F11)");
         m.addItem (4, "Light screen", true, box.isLightScreen());
@@ -929,6 +1028,7 @@ void BoxView::mouseDown (const juce::MouseEvent& e)
             if (r == 2 && onToggleFullScreen) onToggleFullScreen();
             if (r == 4) box.setLightScreen (! box.isLightScreen());
             if (r == 5) setBoxScreen (! boxPreview);
+            if (r == 6) showHelp (true);
             if (r == 3)
             {
                 auto dir = box.getDataDirectory().getChildFile ("Presets");
@@ -958,7 +1058,10 @@ void BoxView::mouseDown (const juce::MouseEvent& e)
         {
             drag = Drag::Pad; dragIndex = pad;
             pressedPads |= 1u << pad;
-            box.padDown (pad, 100);
+            // like a real pad: hit near the top = hard, near the bottom = soft
+            const auto pr = padArea (pad);
+            const float rel = juce::jlimit (0.0f, 1.0f, (p.y - pr.getY()) / pr.getHeight());
+            box.padDown (pad, juce::roundToInt (juce::jmap (rel, 127.0f, 45.0f)));
             return;
         }
     for (int b = 0; b < NumButtons; ++b)
@@ -971,6 +1074,7 @@ void BoxView::mouseDown (const juce::MouseEvent& e)
                 return;
             }
             drag = Drag::Button; dragIndex = b;
+            setButtonPressed (b, true);
             box.buttonDown (b);
             return;
         }
@@ -996,11 +1100,35 @@ void BoxView::mouseUp (const juce::MouseEvent&)
     }
     if (drag == Drag::Button)
     {
+        setButtonPressed (dragIndex, false);
         box.buttonUp (dragIndex);
         if (mouseShiftLatched && dragIndex != BtnRec) { mouseShiftLatched = false; box.buttonUp (BtnShift); }
     }
     drag = Drag::None;
     dragIndex = -1;
+}
+
+void BoxView::mouseDoubleClick (const juce::MouseEvent& e)
+{
+    if (e.mods.isPopupMenu()) return;
+    if (const int k = knobAt (toLogical (e.position)); k >= 0) { drag = Drag::None; box.resetKnob (k); }
+}
+
+void BoxView::mouseMove (const juce::MouseEvent& e)
+{
+    if (kiosk) return;
+    const auto p = toLogical (e.position);
+    hoverKnob = knobAt (p);
+    bool over = hoverKnob >= 0;
+    for (int i = 0; i < numPads && ! over; ++i) over = padArea (i).contains (p);
+    for (int b = 0; b < NumButtons && ! over; ++b) over = buttonArea (b).contains (p);
+    for (int i = 0; i < NumPages && ! over; ++i) over = ! isBoxScreen() && tabArea (i).contains (p);
+    setMouseCursor (over ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+}
+
+void BoxView::mouseExit (const juce::MouseEvent&)
+{
+    hoverKnob = -1;
 }
 
 void BoxView::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w)
@@ -1020,6 +1148,8 @@ void BoxView::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelD
 bool BoxView::keyPressed (const juce::KeyPress& k)
 {
     if (k.getKeyCode() == juce::KeyPress::F11Key) { if (onToggleFullScreen) onToggleFullScreen(); return true; }
+    if (k.getKeyCode() == juce::KeyPress::F1Key) { showHelp (! helpShown); return true; }
+    if (k.getKeyCode() == juce::KeyPress::escapeKey && helpShown) { showHelp (false); return true; }
     return true;   // every other key is read in keyStateChanged (and Tab must not move the focus)
 }
 
@@ -1040,6 +1170,7 @@ bool BoxView::keyStateChanged (bool)
         const bool down = keyDown (key);
         if (down == keyButtonDown[(size_t) b]) continue;
         keyButtonDown[(size_t) b] = down;
+        setButtonPressed (b, down);
         down ? box.buttonDown (b) : box.buttonUp (b);
     }
     return true;

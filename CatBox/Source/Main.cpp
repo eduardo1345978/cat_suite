@@ -187,7 +187,10 @@ public:
             box.pump();
             check (box.getData().inst[Bass].values == bassBefore.values, "a quick tap on Chaos does nothing", {});
             box.buttonDown (BtnChaos);
-            juce::Thread::sleep (650);
+            juce::Thread::sleep (300);
+            const float half = box.chaosHoldProgress();
+            check (half > 0.3f && half < 0.95f, "holding Chaos fills the bar on the screen", juce::String (half, 2));
+            juce::Thread::sleep (350);
             box.pump();
             box.buttonUp (BtnChaos);
             check (box.getData().inst[Bass].values != bassBefore.values, "holding Chaos changes the bass sound", {});
@@ -198,6 +201,10 @@ public:
             check (chaosSound.finite && chaosSound.peak <= 1.0f, "the chaos sound stays clean", "peak " + juce::String (chaosSound.peak, 3));
             shiftPress (BtnChaos);
             check (box.getData().inst[Bass].values == bassBefore.values, "Shift + Chaos takes it back", {});
+            box.turnKnob (slot::BCutoff, 20.0f);
+            check (box.getData().inst[Bass].values[slot::BCutoff] != paramDesc (Bass, slot::BCutoff).def, "the cutoff knob moved", {});
+            box.resetKnob (slot::BCutoff);
+            check (box.getData().inst[Bass].values[slot::BCutoff] == paramDesc (Bass, slot::BCutoff).def, "double-click puts a knob back to its start", {});
             box.setPage (PageFx);
             for (int i = 0; i < 20; ++i) { box.chaos(); renderSeconds (audio, 0.15, nullptr); }
             const auto fxChaos = renderSeconds (audio, 1.0, nullptr);
@@ -476,9 +483,17 @@ public:
             setResizable (true, true);
             setResizeLimits (400 + extra, 465, 2200, 1900);
             centreWithSize (juce::roundToInt (lb.getWidth() * 0.82) + extra, juce::roundToInt (lb.getHeight() * 0.82));
+            // opens where it was closed (size and place)
+            windowFile = box.getDataDirectory().getChildFile ("window.txt");
+            if (windowFile.existsAsFile()) restoreWindowStateFromString (windowFile.loadFileAsString());
         }
         setVisible (true);
         view->grabKeyboardFocus();
+    }
+
+    ~MainWindow() override
+    {
+        if (windowFile != juce::File() && ! isFullScreen()) windowFile.replaceWithText (getWindowStateAsString());
     }
 
     void closeButtonPressed() override { juce::JUCEApplication::getInstance()->systemRequestedQuit(); }
@@ -499,6 +514,7 @@ public:
 
 private:
     juce::AudioDeviceManager& deviceManager;
+    juce::File windowFile;
 };
 
 //==============================================================================
