@@ -136,6 +136,17 @@ void BoxController::turnKnob (int knob, float clicks)
     lastKnobSl = s;
     lastKnobAt = juce::Time::getMillisecondCounter();
     if (isSoundMode()) { editEngine (s, clicks); return; }
+    if (pg == PageChords && isStepView() && ! shift.load() && knob >= 1 && knob <= 3)   // knobs 2-4 edit the picked chord
+    {
+        if (chordSel < 0) return;
+        auto& rem = knobRemainder[(size_t) s];
+        rem += clicks;
+        const float w = std::trunc (rem);
+        if (w == 0.0f) return;
+        rem -= w;
+        editChord (knob, (int) w);
+        return;
+    }
 
     // Bass steps: knobs 2-4 edit the picked step (note, slide, accent)
     const bool stepEdit = pg == Bass && isStepView() && ! shift.load() && knob >= 1 && knob <= 3 && bassSel >= 0;
@@ -208,6 +219,18 @@ BoxController::KnobView BoxController::knobView (int knob) const
     const int pg = page.load();
     const int s = knob + (shift.load() ? numKnobs : 0);
     if (isSoundMode()) return engineView (knob + (shift.load() ? numKnobs : 0));
+    if (pg == PageChords && isStepView() && ! shift.load() && knob >= 1 && knob <= 3)
+    {
+        v.used = v.stepEdit = true;
+        if (chordSel < 0) { v.name = knob == 1 ? "Chord root" : knob == 2 ? "Chord type" : "Inversion"; v.value = "tap a pad"; return v; }
+        const auto& ch = data.chords[(size_t) chordSel];
+        const juce::String n = "Pad " + juce::String (chordSel + 1) + " ";
+        if (knob == 1) { v.name = n + "root"; v.value = chordName (key.load(), { ch.root, 0, 0 }); v.fraction = ch.root / 23.0f; }
+        if (knob == 2) { v.name = n + "type"; v.value = chordTypeNames()[ch.type]; v.fraction = ch.type / 15.0f; }
+        if (knob == 3) { v.name = n + "inversion"; v.value = ch.inversion == 0 ? juce::String ("Root position") : juce::String (ch.inversion);
+                         v.fraction = ch.inversion / 4.0f; }
+        return v;
+    }
     if (pg == Bass && isStepView() && ! shift.load() && knob >= 1 && knob <= 3)
     {
         v.used = v.stepEdit = true;
@@ -391,6 +414,14 @@ void BoxController::padDown (int pad, int velocity)
         return;
     }
 
+    if (pg == PageChords)   // chords on the Arp's sound
+    {
+        padHeldInst[(size_t) pad] = PageChords;
+        padHeldNote[(size_t) pad] = pad;
+        runOnMessageThread ([this, pad, velocity] { chordPadDown (pad, velocity); });
+        return;
+    }
+
     if (pg == PageFx)   // performance pads: on while held
     {
         BoxEvent e; e.type = BoxEvent::PerfOn; e.a = pad;
@@ -456,6 +487,7 @@ void BoxController::padUp (int pad)
     const int inst = padHeldInst[(size_t) pad].exchange (-1);
     const int note = padHeldNote[(size_t) pad].exchange (-1);
     if (note < 0 || inst < 0) return;
+    if (inst == PageChords) { runOnMessageThread ([this, pad] { chordPadUp (pad); }); return; }
     BoxEvent e;
     e.type = inst == PageFx ? BoxEvent::PerfOff : inst == Arp ? BoxEvent::ArpOff : BoxEvent::BassOff;
     e.a = note;
@@ -478,7 +510,7 @@ juce::String BoxController::buttonLabel (int b) const
         case BtnOctUp:      return isSoundMode() ? "Page +" : pg == PageFx ? "-" : pg == Drums ? (sh ? "Page +" : "Drum +") : (isStepView() && pg == Bass ? "Page +" : "Oct +");
         case BtnChaos:      return sh ? "Undo" : "Chaos";
         case BtnSound:      return "Sound";
-        case BtnRec:        return sh || sceneMode.load() ? "Save" : pg == Arp ? "Hold" : pg == PageFx ? "-" : "Rec";
+        case BtnRec:        return sh || sceneMode.load() ? "Save" : pg == Arp || pg == PageChords ? "Hold" : pg == PageFx ? "-" : "Rec";
         default:            return {};
     }
 }
@@ -497,6 +529,12 @@ void BoxController::clearPage()
         for (auto& s : data.inst[Bass].bassSteps) s = {};
         bassSel = -1;
         setFlash ("Cleared the bass line");
+    }
+    else if (pg == PageChords)
+    {
+        data.chords = defaultChords (scale.load());
+        chordSel = -1;
+        setFlash ("Chords: the key's chords again");
     }
     else if (pg == Arp)
     {
@@ -532,6 +570,7 @@ void BoxController::buttonDown (int b)
             if (stepViews[(size_t) pg].load())
                 setFlash (pg == Drums ? "Steps: pads = 16 steps of " + drumPadName (data.selectedDrum)
                         : pg == Arp   ? juce::String ("Steps: tap a pad: on > rest > tie > accent")
+                        : pg == PageChords ? juce::String ("Edit chords: tap a pad, knobs 2-4 = root, type, inversion")
                                       : juce::String ("Steps: tap = set / pick, knobs 2-4 = note, slide, accent"));
             else
                 setFlash ("Pads play");
@@ -584,6 +623,14 @@ void BoxController::buttonDown (int b)
                 markDirty();
                 break;
             }
+            if (pg == PageChords)
+            {
+                data.set (PageChords, slot::COctave, data.get (PageChords, slot::COctave) + (float) dir);
+                const int o = juce::roundToInt (data.get (PageChords, slot::COctave));
+                setFlash ("Chord octave " + juce::String (o > 0 ? "+" : "") + juce::String (o));
+                markDirty();
+                break;
+            }
             const bool paging = (pg == Drums && sh) || (pg == Bass && isStepView());
             if (paging)
             {
@@ -615,7 +662,7 @@ void BoxController::buttonDown (int b)
                 setFlash (sceneMode.load() ? "Save scene: press a pad" : "Save preset: press a pad (1-16)");
                 break;
             }
-            if (pg == Arp)
+            if (pg == Arp || pg == PageChords)
             {
                 latchOn = ! latchOn;
                 BoxEvent e; e.type = BoxEvent::ArpLatch; e.a = latchOn ? 1 : 0;
@@ -661,7 +708,7 @@ bool BoxController::isButtonLit (int b) const
         case BtnInstrument: return instrHeld;
         case BtnScene: return sceneMode.load();
         case BtnSound: return isSoundMode();
-        case BtnRec:   return page.load() == Arp ? latchOn : page.load() < NumInstruments && audio.isRecording();
+        case BtnRec:   return page.load() == Arp || page.load() == PageChords ? latchOn : page.load() < NumInstruments && audio.isRecording();
         default:       return false;
     }
 }
@@ -713,6 +760,18 @@ void BoxController::handleIncomingMidiMessage (juce::MidiInput*, const juce::Mid
 
     // a normal MIDI keyboard plays the instrument on screen
     if (! (m.isNoteOn() || m.isNoteOff())) return;
+    if (page.load() == PageChords)   // a keyboard on the Chords page: each key plays a chord on that root (like the Orchid)
+    {
+        runOnMessageThread ([this, note = m.getNoteNumber(), vel = (int) m.getVelocity(), on = m.isNoteOn()]
+        {
+            const int k = numPads + note;
+            if (! on) { releaseChord (k); return; }
+            int shiftOct = 0;
+            const auto c = chordForNote (note, shiftOct);
+            playChord (k, c, shiftOct, vel);
+        });
+        return;
+    }
     BoxEvent e;
     e.a = m.getNoteNumber();
     e.b = m.getVelocity();
@@ -764,6 +823,7 @@ bool BoxController::savePreset (int pg, int presetSlot)
     pg = juce::jlimit (0, NumPages - 1, pg);
     juce::var v;
     if (pg == PageFx) v = BoxData::fxToVar (data.fx);
+    else if (pg == PageChords) v = BoxData::chordsToVar (data.chordVals, data.chords);
     else
     {
         auto state = data.inst[(size_t) pg];
@@ -795,6 +855,7 @@ bool BoxController::loadPreset (int pg, int presetSlot)
     {
         const auto v = juce::JSON::parse (f);
         if (pg == PageFx) ok = BoxData::fxFromVar (v, data.fx);
+        else if (pg == PageChords) { ok = BoxData::chordsFromVar (v, data.chordVals, data.chords); chordSel = -1; }
         else
         {
             InstrumentState state;
@@ -880,14 +941,17 @@ const std::vector<ChaosRange>& chaosRanges (int page)
         { slot::FDjFilter, 0.3f, 0.7f }, { slot::FTape, 0.0f, 0.6f }, { slot::FVinyl, 0.0f, 0.5f }, { slot::FCrush, 0.0f, 0.3f },
         { slot::FGlue, 0.0f, 0.6f }, { slot::FWidth, 0.3f, 0.9f }, { slot::FPumpTarget, 0, 3 },
         { slot::FSendDrums, 0.0f, 0.4f }, { slot::FSendArp, 0.1f, 0.7f }, { slot::FSendBass, 0.0f, 0.25f } };
-    return page == Drums ? drums : page == Arp ? arp : page == Bass ? bass : fx;
+    static const std::vector<ChaosRange> chords {
+        { slot::CVoicing, 0, 3 }, { slot::CLeading, 0.3f, 1.0f }, { slot::CStrum, 0.0f, 0.5f }, { slot::CStrumDir, 0, 2 },
+        { slot::CBassNote, 0, 1 }, { slot::CVelocity, 0.5f, 1.0f } };
+    return page == Drums ? drums : page == Arp ? arp : page == Bass ? bass : page == PageChords ? chords : fx;
 }
 } // namespace
 
 void BoxController::chaos()
 {
     const int pg = page.load();
-    auto& now = pg == PageFx ? data.fx : data.inst[(size_t) pg].values;
+    auto& now = pg == PageFx ? data.fx : pg == PageChords ? data.chordVals : data.inst[(size_t) pg].values;
     chaosUndo[(size_t) pg] = now;
     hasChaosUndo[(size_t) pg] = true;
     for (const auto& r : chaosRanges (pg))
@@ -908,7 +972,7 @@ bool BoxController::undoChaos()
 {
     const int pg = page.load();
     if (! hasChaosUndo[(size_t) pg]) return false;
-    auto& now = pg == PageFx ? data.fx : data.inst[(size_t) pg].values;
+    auto& now = pg == PageFx ? data.fx : pg == PageChords ? data.chordVals : data.inst[(size_t) pg].values;
     std::swap (now, chaosUndo[(size_t) pg]);   // pressed again, it goes back to the chaos
     publish();
     markDirty();
@@ -984,6 +1048,7 @@ bool BoxController::storeLocalPresetJson (int pg, int slotIndex, const juce::var
     bool valid = false;
     if (pg < 0) { BoxData probe; valid = probe.sceneFromVar (preset); }
     else if (pg == PageFx) { std::array<float, numSlots> tmp {}; valid = BoxData::fxFromVar (preset, tmp); }
+    else if (pg == PageChords) { std::array<float, numSlots> tmp {}; std::array<ChordSlot, numPads> cs {}; valid = BoxData::chordsFromVar (preset, tmp, cs); }
     else { auto tmp = std::make_unique<InstrumentState>(); valid = BoxData::instrumentFromVar (pg, preset, *tmp); }
     if (! valid) return false;
     const bool ok = writeSafely (pg < 0 ? sceneFile (slotIndex) : presetFile (pg, slotIndex), juce::JSON::toString (preset));
@@ -1022,6 +1087,7 @@ void BoxController::rescanNames()
                 bool valid = false;
                 if (pg < 0) valid = v.isObject() && v["format"].toString() == "catbox-scene-1";
                 else if (pg == PageFx) { std::array<float, numSlots> tmp {}; valid = BoxData::fxFromVar (v, tmp); }
+                else if (pg == PageChords) { std::array<float, numSlots> tmp {}; std::array<ChordSlot, numPads> cs {}; valid = BoxData::chordsFromVar (v, tmp, cs); }
                 else { auto tmp = std::make_unique<InstrumentState>(); valid = BoxData::instrumentFromVar (pg, v, *tmp); }
                 if (valid)
                 {
@@ -1099,6 +1165,8 @@ juce::var BoxController::makeState() const
     o->setProperty ("knobPage", lastKnobPg);
     o->setProperty ("knobSlot", lastKnobSl);
     o->setProperty ("sound", soundMode.load());
+    o->setProperty ("chordSel", chordSel);
+    o->setProperty ("chordNow", chordNowName);
     juce::Array<juce::var> ep;
     for (auto& x : enginePages) ep.add (x.load());
     o->setProperty ("enginePages", ep);
@@ -1147,6 +1215,8 @@ void BoxController::applyState (const juce::var& v)
     lastKnobPg = (int) v.getProperty ("knobPage", -1);
     lastKnobSl = (int) v.getProperty ("knobSlot", -1);
     soundMode = (bool) v.getProperty ("sound", false);
+    chordSel = (int) v.getProperty ("chordSel", -1);
+    chordNowName = v["chordNow"].toString();
     if (auto* ep = v["enginePages"].getArray())
         for (int i = 0; i < juce::jmin ((int) enginePages.size(), ep->size()); ++i) enginePages[(size_t) i] = (int) (*ep)[i];
     const auto names = v["names"];
@@ -1394,6 +1464,199 @@ void BoxController::resetEngineSlot (int s)
     lastKnobSl = s;
     lastKnobAt = juce::Time::getMillisecondCounter();
     paramChanged();
+}
+
+//==============================================================================
+// The Chords page: chords on the pads (or Orchid style: one hand picks the type, the other the root),
+// played on the Arp's sound - with the arp on they are arpeggiated, with it off they ring as chords.
+ChordSlot BoxController::chordForPad (int pad) const
+{
+    if (! isOrchid()) return data.chords[(size_t) juce::jlimit (0, numPads - 1, pad)];
+    const int d = juce::jlimit (0, 7, pad - 8);
+    const int sc = scale.load(), k = key.load();
+    ChordSlot c;
+    if (juce::roundToInt (data.chordVals[slot::CRoots]) == 1)   // Piano: the root pads are the white keys C D E F G A B C
+    {
+        static const int white[8] = { 0, 2, 4, 5, 7, 9, 11, 12 };
+        c.root = ((white[d] - k) % 12 + 12) % 12 + (d == 7 ? 12 : 0);   // the top C an octave up
+        const auto& iv = scaleIntervals (sc);
+        int degree = -1;
+        for (size_t i = 0; i < iv.size(); ++i) if (iv[i] == c.root % 12) degree = (int) i;
+        c.type = degree >= 0 ? diatonicChord (sc, degree, false).type : 0;
+    }
+    else c = diatonicChord (sc, d, false);   // Scale: the root pads are the key's scale, I .. VII and I
+    if (orchidType.load() >= 0) c.type = orchidType.load();
+    return c;
+}
+
+ChordSlot BoxController::chordForNote (int note, int& octaveShift) const
+{
+    const int k = key.load(), sc = scale.load();
+    ChordSlot c;
+    c.root = ((note - k) % 12 + 12) % 12;
+    octaveShift = (int) std::floor ((double) (note - (48 + k + c.root)) / 12.0);
+    const auto& iv = scaleIntervals (sc);
+    int degree = -1;
+    for (size_t i = 0; i < iv.size(); ++i) if (iv[i] == c.root) degree = (int) i;
+    c.type = orchidType.load() >= 0 ? orchidType.load() : degree >= 0 ? diatonicChord (sc, degree, false).type : 0;
+    return c;
+}
+
+int BoxController::buildChord (const ChordSlot& c, int octaveShift, std::array<int, 8>& out)
+{
+    const auto& iv = chordIntervals (c.type);
+    const int n = juce::jmin (6, (int) iv.size());
+    const int oct = juce::roundToInt (data.chordVals[slot::COctave]) + octaveShift;
+    const int root = 48 + key.load() + c.root + 12 * oct;
+    const int voicing = juce::roundToInt (data.chordVals[slot::CVoicing]);
+    const float leading = data.chordVals[slot::CLeading];
+
+    auto shape = [&] (int inversion, int shift, std::vector<int>& v)
+    {
+        v.clear();
+        for (int i = 0; i < n; ++i) v.push_back (root + iv[(size_t) i] + shift);
+        std::sort (v.begin(), v.end());
+        for (int i = 0; i < inversion % n; ++i) { v.push_back (v.front() + 12); v.erase (v.begin()); }
+        if (voicing == 1 && n >= 3) v[1] += 12;                                  // Open
+        else if (voicing == 2 && n >= 4) v[(size_t) (n - 2)] -= 12;              // Drop 2
+        else if (voicing == 3 && n >= 3) { v.front() -= 12; v.back() += 12; }   // Spread
+        std::sort (v.begin(), v.end());
+    };
+    auto mean = [] (const std::vector<int>& v) { double s = 0; for (int x : v) s += x; return v.empty() ? 0.0 : s / (double) v.size(); };
+
+    std::vector<int> best, cand;
+    shape (c.inversion, 0, best);
+    if (leading > 0.01f && lastChordCount > 0 && c.inversion == 0)   // voice leading: the shape that moves the least
+    {
+        const double home = mean (best);
+        double bestCost = 1.0e9;
+        std::vector<int> pick = best;
+        for (int shift : { -12, 0, 12 })
+            for (int inv = 0; inv < n; ++inv)
+            {
+                shape (inv, shift, cand);
+                double move = 0.0;
+                for (int x : cand)
+                {
+                    int d = 99;
+                    for (int i = 0; i < lastChordCount; ++i) d = juce::jmin (d, std::abs (x - lastChord[(size_t) i]));
+                    move += d;
+                }
+                const double cost = leading * move + (1.0 - leading) * 4.0 * std::abs (mean (cand) - home) + (shift != 0 ? 0.5 : 0.0);
+                if (cost < bestCost) { bestCost = cost; pick = cand; }
+            }
+        best = pick;
+    }
+    int count = 0;
+    for (int x : best) if (count < 7) out[(size_t) count++] = juce::jlimit (24, 108, x);
+    lastChordCount = count;
+    for (int i = 0; i < count; ++i) lastChord[(size_t) i] = out[(size_t) i];
+    if (juce::roundToInt (data.chordVals[slot::CBassNote]) == 1 && count < 8)   // the root an octave below
+        out[(size_t) count++] = juce::jlimit (24, 108, root - 12);
+    return count;
+}
+
+void BoxController::playChord (int k, const ChordSlot& c, int octaveShift, int velocity)
+{
+    if (k < 0 || k >= numChordKeys) return;
+    releaseChord (k);
+    auto& notes = padChord[(size_t) k];
+    const int count = buildChord (c, octaveShift, notes);
+    padChordCount[(size_t) k] = count;
+
+    const float dyn = data.chordVals[slot::CVelocity];
+    const int vel = juce::jlimit (1, 127, juce::roundToInt ((float) velocity * (0.45f + 0.75f * dyn)));
+    const float strumMs = data.chordVals[slot::CStrum] * 120.0f;   // between two notes
+    const int dir = juce::roundToInt (data.chordVals[slot::CStrumDir]);
+    std::array<int, 8> order {};
+    for (int i = 0; i < count; ++i) order[(size_t) i] = notes[(size_t) i];
+    std::sort (order.begin(), order.begin() + count);
+    const bool down = dir == 1 || (dir == 2 && strumFlip);
+    strumFlip = ! strumFlip;
+    if (down) std::reverse (order.begin(), order.begin() + count);
+    for (int i = 0; i < count; ++i)
+    {
+        BoxEvent e;
+        e.type = BoxEvent::ArpOn;
+        e.a = order[(size_t) i];
+        e.b = vel;
+        e.c = juce::roundToInt (strumMs * (float) i);
+        audio.post (e);
+    }
+
+    juce::String names;
+    static const char* nn[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+    for (int i = 0; i < count; ++i) names << nn[order[(size_t) i] % 12] << " ";
+    chordNowName = chordName (key.load(), c) + "   " + names.trim();
+}
+
+void BoxController::releaseChord (int k)
+{
+    if (k < 0 || k >= numChordKeys) return;
+    for (int i = 0; i < padChordCount[(size_t) k]; ++i)
+    {
+        BoxEvent e;
+        e.type = BoxEvent::ArpOff;
+        e.a = padChord[(size_t) k][(size_t) i];
+        audio.post (e);
+    }
+    padChordCount[(size_t) k] = 0;
+}
+
+void BoxController::chordPadDown (int pad, int velocity)
+{
+    if (isStepView())   // edit: pick the pad's chord (and hear it)
+    {
+        chordSel = pad;
+        playChord (pad, data.chords[(size_t) pad], 0, velocity);
+        setFlash ("Pad " + juce::String (pad + 1) + ": " + chordName (key.load(), data.chords[(size_t) pad]));
+        return;
+    }
+    if (! isOrchid()) { playChord (pad, data.chords[(size_t) pad], 0, velocity); return; }
+    if (pad < 8)   // Orchid: the top row picks the chord type; a held root changes with it
+    {
+        orchidType = orchidPadType (pad);
+        if (orchidRootPad >= 0) playChord (orchidRootPad, chordForPad (orchidRootPad), 0, orchidVelocity);
+        return;
+    }
+    orchidRootPad = pad;
+    orchidVelocity = velocity;
+    playChord (pad, chordForPad (pad), 0, velocity);
+}
+
+void BoxController::chordPadUp (int pad)
+{
+    if (isOrchid() && pad < 8 && ! isStepView())
+    {
+        if (orchidType.load() == orchidPadType (pad)) orchidType = -1;
+        return;
+    }
+    releaseChord (pad);
+    if (orchidRootPad == pad) orchidRootPad = -1;
+}
+
+void BoxController::editChord (int knob, int clicks)
+{
+    if (chordSel < 0 || chordSel >= numPads) return;
+    auto& ch = data.chords[(size_t) chordSel];
+    if (knob == 1) ch.root = juce::jlimit (0, 23, ch.root + clicks);
+    else if (knob == 2) ch.type = juce::jlimit (0, 15, ch.type + clicks);
+    else if (knob == 3) ch.inversion = juce::jlimit (0, (int) chordIntervals (ch.type).size() - 1, ch.inversion + clicks);
+    ch.inversion = juce::jlimit (0, (int) chordIntervals (ch.type).size() - 1, ch.inversion);
+    data.loadedPreset[PageChords] = -1;
+    setFlash ("Pad " + juce::String (chordSel + 1) + ": " + chordName (key.load(), ch));
+    markDirty();
+}
+
+juce::String BoxController::chordPadLabel (int pad) const
+{
+    if (! isOrchid() || isStepView()) return chordName (key.load(), data.chords[(size_t) juce::jlimit (0, numPads - 1, pad)]);
+    if (pad < 8)
+    {
+        static const char* t[] = { "Maj", "Min", "Dim", "Sus4", "7", "Maj7", "Min7", "Add9" };
+        return t[pad];
+    }
+    return chordName (key.load(), chordForPad (pad));
 }
 
 } // namespace catbox

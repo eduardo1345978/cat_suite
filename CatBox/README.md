@@ -2,7 +2,8 @@
 
 A groovebox you play yourself: **Drums** (a step sequencer, 16 drums x 16 / 32 / 64 steps), **Arp**
 (an arpeggiator like the Behringer Poly D's with a 16-step rhythm, or a plain synth), **Bass** (a
-303-style step sequencer with its own Acid synth) and **FX** (master effects and performance pads).
+303-style step sequencer with its own Acid synth), **Chords** (one finger = one chord, or played like the
+Telepathic Instruments Orchid) and **FX** (master effects and performance pads).
 Everything plays together at one tempo, in one key. Nothing is generated: you draw the steps or play them in.
 
 The same program runs in two places:
@@ -54,11 +55,27 @@ itself on UDP port 50651.
 | **Steps** | the pads become 16 steps (per page). Drums: steps of the selected drum (tap: on > accent > off) · Arp: on > rest > tie > accent · Bass: tap an empty step = set it, tap a set step = pick it, tap again = clear; knobs 2 / 3 / 4 edit the picked step's note / slide / accent · **Shift + Steps** = clear (all drums or the selected one in Steps, the bass line, held arp notes, the FX page) |
 | **Shift** | second knob layer; **Shift + pad** = load preset, **Shift + Rec + pad** = save preset |
 | **Scene** | the pads become 16 scenes: pad = recall (all instruments, FX, tempo, key; at the next bar while playing), **Rec + pad** = save |
-| **Instr** | Drums > Arp > Bass > FX (or click the page names on the screen) · **hold Instr and turn any knob** = flip through the pages quickly (right = next, left = back) · **Shift + Instr** = mute |
+| **Instr** | Drums > Arp > Bass > Chords > FX (or click the page names on the screen) · **hold Instr and turn any knob** = flip through the pages quickly (right = next, left = back) · **Shift + Instr** = mute |
 | **Oct - / Oct +** | Drums: previous / next drum (**Shift**: step pages) · Arp: pad octave · Bass: pad octave (in Steps: step pages) |
 | **Rec** | Drums / Bass: record what you play into the steps while it runs (Bass: hold two pads = slide, hit hard = accent) · Arp: Hold |
 | **Sound** | (Arp and Bass) the knobs edit the page's **engine** instead: knob 1 = the engine, and with the **Glide** engine (Glide-Cat's synth: voices that glide from note to note) knob 2 = its factory sound (66), knob 3 = how it glides, Shift + knob 1 = Init (start from a plain sound); **Oct - / Oct +** flip through its 12 knob pages (Sound, Osc / Filter / Amp of both layers, Glide, Expression, Modulators, Matrix, FX); Shift = the next 12 knobs of the page. A changed sound is marked with *; save it as a page preset (Shift + Rec + pad) |
 | **Chaos** | hold it for 0.6 s (a quick tap does nothing, so no accidents): new random sound settings for the page on screen, within musical ranges (patterns, tempo, key and volume stay) · **Shift + Chaos** = take it back (again = back to the chaos) |
+
+### The Chords page
+
+The chords play on the **Arp's sound** (any engine, e.g. Glide): with the arp on they are arpeggiated, with it off
+(Shift + knob 7 on the Arp page) they ring as chords; with Bass > Follow arp the bass line follows them too.
+- **Chord pads** (knob 2 = Play): each pad is a chord. They start as the chords of the key (bottom row the triads
+  I .. VII and I, top row their 7th chords). **Steps** = edit: tap a pad, knobs 2 / 3 / 4 = its root, type
+  (16 types: major, minor, 7, maj7, m7, sus2, sus4, dim, aug, m7b5, dim7, 6, m6, add9, 9, m9) and inversion.
+  **Shift + Steps** = the key's chords again.
+- **Orchid**: like the Telepathic Instruments Orchid - hold a chord type on the top row (Maj, Min, Dim, Sus4, 7, Maj7,
+  Min7, Add9) and play a root on the bottom row (the key's scale, or the white keys: Shift + knob 3); with no type held
+  you get the key's own chord on that root. Change the type while the root is held and the chord changes.
+- A **MIDI keyboard** on the Chords page plays a chord on every key (with the held type, or the key's chord).
+- Knobs: Voicing (close, open, drop 2, spread), **Voice leading** (how close each chord stays to the last one),
+  **Strum** (time between the notes) and from where (low, high, both in turn), Octave (also Oct - / Oct +), Bass note
+  (adds the root an octave down), Soft / hard. **Rec** = Hold (the chord keeps playing). 16 presets like every page.
 
 Performance pads (FX page, held = on): Repeat 1/4, 1/8, 1/16, 1/32 · Sweep down, Sweep up, Tape stop,
 Reverse · Kill drums, Kill arp, Kill bass, Crush · Wash, Riser, Repeat 1/2, Echo throw.

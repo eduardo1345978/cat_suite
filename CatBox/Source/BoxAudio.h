@@ -50,7 +50,7 @@ struct AudioSnapshot
 struct BoxEvent
 {
     enum Type : uint8_t { DrumHit, ArpOn, ArpOff, BassOn, BassOff, ArpLatch, ArpClear, AllOff, PerfOn, PerfOff } type = DrumHit;
-    int a = 0, b = 0, c = 0;
+    int a = 0, b = 0, c = 0;   // ArpOn: c = delay in ms (a strummed chord)
 };
 
 /** A note played in while Rec runs, handed back to the message thread to be written into the pattern. */
@@ -157,6 +157,12 @@ private:
     ArpEngine arp;
     juce::Random rnd;
     int liveBassHeld = 0, lastLiveBass = -1, lastRecordedBassStep = -1;
+
+    struct DelayedOn { int note = 0, velocity = 0; double ppq = 0.0; };   // strummed chord notes still to come
+    std::array<DelayedOn, 64> delayedOns;
+    int numDelayed = 0;
+    void playDelayed (double upTo);
+    void arpKeyOn (int note, int velocity);
 
     struct PendingOff { int instrument = 0, note = 0; double ppq = 0.0; };
     std::array<PendingOff, 256> offs;

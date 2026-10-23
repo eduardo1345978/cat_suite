@@ -87,6 +87,7 @@ juce::Colour BoxView::pageColour (int i)
         case Drums: return juce::Colour (0xffe8894a);
         case Arp:   return juce::Colour (0xff33c2a2);
         case Bass:  return juce::Colour (0xff9b7cec);
+        case PageChords: return juce::Colour (0xffd9b13b);
         default:    return juce::Colour (0xff4fa3e8);
     }
 }
@@ -187,6 +188,19 @@ juce::Colour BoxView::padColour (int pad, bool& lit, bool& outlined, bool& thick
         return lit ? col : off.interpolatedWith (col, pad < 4 || pad == PerfRepeat2 ? 0.3f : 0.16f);
     }
 
+    if (page == PageChords)
+    {
+        lit = pressed || box.chordPadSounding (pad);
+        outlined = box.isStepView() && box.selectedChord() == pad;
+        if (lit) return col;
+        if (box.isOrchid() && ! box.isStepView())   // top row: chord types, bottom row: roots
+        {
+            if (pad < 8) return box.orchidHeldType() == orchidPadType (pad) ? col.withMultipliedBrightness (0.8f) : off.interpolatedWith (col, 0.12f);
+            return off.interpolatedWith (col, pad == 8 || pad == 15 ? 0.42f : 0.26f);
+        }
+        return off.interpolatedWith (col, pad >= 8 ? 0.3f : 0.18f);
+    }
+
     if (box.isStepView())
     {
         const int step = (page == Arp ? 0 : juce::jmin (box.stepPage (page), box.numStepPages (page) - 1) * numPads) + pad;
@@ -256,6 +270,7 @@ juce::String BoxView::padLabel (int pad) const
     if (box.isSceneMode()) return "Scene " + juce::String (pad + 1);
     if (box.isShiftHeld()) return juce::String (pad + 1);
     if (page == PageFx) return perfName (pad);
+    if (page == PageChords) return box.chordPadLabel (pad);
     if (box.isStepView())
     {
         if (page == Arp)
@@ -340,7 +355,7 @@ void BoxView::paintHelp (juce::Graphics& g, juce::Rectangle<float> area)
         { "Shift", "second knob layer, Shift + pad = load preset" },
         { "Shift + Enter + pad", "save a preset" },
         { "N", "Scenes: pad = recall, Enter + pad = save" },
-        { "Tab", "next page (hold Tab + turn a knob = flip fast, Shift: mute)" },
+        { "Tab", "next page: Drums, Arp, Bass, Chords, FX (hold Tab + turn a knob = flip fast)" },
         { ",   .", "Oct - / Oct + (Drums: previous / next drum)" },
         { "Enter", "Rec (Arp: Hold)" },
         { "C (hold)", "Chaos: new sound for this page    (Shift + C: undo)" },
@@ -394,7 +409,7 @@ int BoxView::knobAt (juce::Point<float> p) const
 
 juce::Rectangle<float> BoxView::tabArea (int p) const
 {
-    return { 170.0f + p * 62.0f, 12.0f, 60.0f, 40.0f };
+    return { 158.0f + p * 56.0f, 12.0f, 54.0f, 40.0f };
 }
 
 void BoxView::paintScreen (juce::Graphics& g, juce::Rectangle<float> area)
@@ -410,8 +425,8 @@ void BoxView::paintScreen (juce::Graphics& g, juce::Rectangle<float> area)
 
     // header: page name, the four pages, preset / scene, play + tempo
     g.setColour (col);
-    g.setFont (font (34.0f, true));
-    g.drawText (instrumentName (page).toUpperCase(), juce::Rectangle<float> (20.0f, 0.0f, 150.0f, 64.0f), juce::Justification::centredLeft);
+    g.setFont (font (28.0f, true));
+    g.drawFittedText (instrumentName (page).toUpperCase(), juce::Rectangle<int> (20, 0, 136, 64), juce::Justification::centredLeft, 1, 0.7f);
     for (int i = 0; i < NumPages; ++i)
     {
         const auto t = tabArea (i);
@@ -419,12 +434,12 @@ void BoxView::paintScreen (juce::Graphics& g, juce::Rectangle<float> area)
         const bool muted = i < NumInstruments && data.muted[(size_t) i];
         if (active) { g.setColour (pageColour (i).withAlpha (0.16f)); g.fillRoundedRectangle (t, 8.0f); }
         g.setColour (muted ? C::rec : active ? pageColour (i) : P.dim);
-        g.setFont (font (15.0f, active));
+        g.setFont (font (14.0f, active));
         g.drawText (instrumentName (i), t, juce::Justification::centred);
     }
     g.setColour (P.text);
     g.setFont (font (22.0f, true));
-    g.drawFittedText (presetTitle(), juce::Rectangle<int> (430, 0, 190, 64), juce::Justification::centred, 1, 0.8f);
+    g.drawFittedText (presetTitle(), juce::Rectangle<int> (446, 0, 184, 64), juce::Justification::centred, 1, 0.7f);
     {
         const float cy = 32.0f, x = 640.0f;
         juce::Path p;
@@ -719,6 +734,16 @@ void BoxView::paintStrip (juce::Graphics& g, juce::Rectangle<float> r)
         return;
     }
 
+    if (page == PageChords)
+    {
+        const auto now = box.chordNow();
+        g.setColour (now.isEmpty() ? P.dim : col);
+        g.setFont (font (now.isEmpty() ? 20.0f : 30.0f, now.isNotEmpty()));
+        g.drawFittedText (now.isEmpty() ? juce::String (box.isOrchid() ? "top row = chord type, bottom row = root" : "one pad = one chord") : now,
+                          r.toNearestInt(), juce::Justification::centred, 1, 0.7f);
+        return;
+    }
+
     int len = 16, cur = -1;
     auto stepColour = [&] (int s) -> juce::Colour
     {
@@ -780,6 +805,24 @@ void BoxView::paintSteps (juce::Graphics& g, juce::Rectangle<float> r)
     const auto col = pageColour (page);
     const auto& data = box.getData();
     auto& audio = box.getAudio();
+    if (page == PageChords)
+    {
+        const auto& cv = data.chordVals;
+        g.setColour (P.text);
+        g.setFont (font (17.0f, true));
+        g.drawText (paramDesc (PageChords, slot::CPlay).format (cv[slot::CPlay]) + "  |  " + paramDesc (PageChords, slot::CVoicing).format (cv[slot::CVoicing])
+                        + "  |  on the Arp's sound: " + paramDesc (Arp, slot::ASound).format (data.inst[Arp].values[slot::ASound]),
+                    r.removeFromTop (28.0f), juce::Justification::centredLeft);
+        const auto now = box.chordNow();
+        g.setColour (now.isEmpty() ? P.dim : col);
+        g.setFont (font (now.isEmpty() ? 16.0f : 34.0f, now.isNotEmpty()));
+        g.drawFittedText (now.isEmpty() ? juce::String (box.isOrchid() ? "hold a type (top row) and play a root (bottom row)" : "play a pad: one finger = one chord")
+                                        : now, r.removeFromTop (60.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.7f);
+        g.setColour (P.dim);
+        g.setFont (font (13.0f));
+        g.drawText ("Steps = edit the chords   Oct - / Oct + = octave   Rec = Hold", r.removeFromTop (22.0f), juce::Justification::centredLeft);
+        return;
+    }
     const auto& iv = data.inst[(size_t) page].values;
 
     // one line saying what plays

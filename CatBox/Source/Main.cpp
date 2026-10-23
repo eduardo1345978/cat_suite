@@ -45,8 +45,10 @@ public:
             box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (16, 106, 127));
             box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (16, 106, 0));
             check (box.getPage() == Arp, "Instr button goes to the Arp page", juce::String (box.getPage()));
+            press (BtnInstrument);
+            check (box.getPage() == PageChords, "after Bass comes the Chords page", juce::String (box.getPage()));
             press (BtnInstrument); press (BtnInstrument);
-            check (box.getPage() == PageFx, "the fourth page is FX", juce::String (box.getPage()));
+            check (box.getPage() == PageFx, "the fifth page is FX", juce::String (box.getPage()));
             press (BtnInstrument);
             check (box.getPage() == Drums, "pages go round", {});
             box.buttonDown (BtnInstrument);
@@ -280,6 +282,48 @@ public:
                 press (BtnSound);
                 check (! box.isSoundMode() && juce::roundToInt (box.getData().inst[Arp].values[slot::ASound]) == arpSound0, "Sound off, the Arp sound is back", {});
                 soloOnly (-1);
+            }
+
+            // the Chords page: one pad = one chord on the Arp's sound; Orchid: type on top, root below; edit; presets; a keyboard
+            {
+                box.setPage (PageChords);
+                soloOnly (Arp);
+                check (box.chordPadLabel (8).isNotEmpty() && box.chordPadLabel (0) != box.chordPadLabel (8), "the chord pads have chord names",
+                       box.chordPadLabel (8) + " / " + box.chordPadLabel (0));
+                box.padDown (8, 100);
+                check (box.chordPadSounding (8) && box.chordNow().isNotEmpty(), "a chord pad plays a chord", box.chordNow());
+                const auto chordSound = renderSeconds (audio, 0.6, nullptr);
+                box.padUp (8);
+                renderSeconds (audio, 0.1, nullptr);
+                check (chordSound.finite && chordSound.rms > 0.002f && ! box.chordPadSounding (8), "the chord sounds on the Arp and stops", "rms " + juce::String (chordSound.rms, 4));
+                box.turnKnob (slot::CStrum, 30.0f);
+                box.padDown (11, 110);
+                const auto strum = renderSeconds (audio, 0.4, nullptr);
+                box.padUp (11);
+                check (strum.finite && strum.rms > 0.002f, "a strummed chord plays", {});
+                box.turnKnob (slot::CPlay, 1.0f);
+                check (box.isOrchid() && box.chordPadLabel (1) == "Min", "Orchid: the top row picks the chord type", box.chordPadLabel (1));
+                box.padDown (1, 100);
+                box.padDown (12, 100);
+                const auto orchid = box.chordNow();
+                check (orchid.upToFirstOccurrenceOf (" ", false, false).endsWith ("m"), "Orchid: Min held + a root = a minor chord", orchid);
+                box.padUp (12); box.padUp (1);
+                box.turnKnob (slot::CPlay, -1.0f);
+                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::noteOn (1, 62, (juce::uint8) 100));
+                const auto keyChord = box.chordNow();
+                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::noteOff (1, 62));
+                check (keyChord.startsWith ("D"), "a MIDI keyboard on the Chords page plays a chord on each key", keyChord);
+                press (BtnSteps);
+                box.padDown (0, 100); box.padUp (0);
+                const auto before = box.chordPadLabel (0);
+                box.turnKnob (2, 2.0f);
+                check (box.selectedChord() == 0 && box.chordPadLabel (0) != before, "Steps: knob 3 changes the picked chord's type", before + " > " + box.chordPadLabel (0));
+                box.savePreset (PageChords, 3);
+                box.turnKnob (2, 3.0f);
+                check (box.loadPreset (PageChords, 3) && box.getData().chords[0].type != 0, "a Chords preset keeps the chords", box.chordPadLabel (0));
+                press (BtnSteps);
+                soloOnly (-1);
+                box.setPage (Arp);
             }
 
             // presets: save to pad 5, change the sound, load pad 5 back

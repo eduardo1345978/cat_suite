@@ -1,6 +1,7 @@
 #include "BoxModel.h"
 #include "CatSounds.h"
 #include <cmath>
+#include <algorithm>
 
 namespace catbox
 {
@@ -93,6 +94,17 @@ Table buildTable()
     b[slot::BFollow]    = choice ("Follow arp", { "Off", "On" }, 0);
     b[slot::BKeys]      = choice ("Pads", { "Piano", "Scale" }, 0);
 
+    auto& c = t[PageChords];
+    c[slot::CPlay]     = choice ("Play", { "Chord pads", "Orchid" }, 0);
+    c[slot::CVoicing]  = choice ("Voicing", { "Close", "Open", "Drop 2", "Spread" }, 0);
+    c[slot::CLeading]  = percent ("Voice leading", 0.7f);
+    c[slot::CStrum]    = percent ("Strum", 0.0f);
+    c[slot::CStrumDir] = choice ("Strum from", { "Low", "High", "Low / high" }, 0);
+    c[slot::COctave]   = integer ("Octave", -2, 2, 0);
+    c[slot::CBassNote] = choice ("Bass note", { "Off", "On" }, 0);
+    c[slot::CVelocity] = percent ("Soft / hard", 0.75f);
+    c[slot::CRoots]    = choice ("Orchid roots", { "Scale", "Piano" }, 0);
+
     auto& f = t[PageFx];
     f[slot::FReverb]     = percent ("Reverb", 0.6f);
     f[slot::FSize]       = percent ("Room size", 0.6f);
@@ -136,7 +148,7 @@ const ParamDesc& paramDesc (int page, int slotIndex)
     return table()[(size_t) juce::jlimit (0, NumPages - 1, page)][(size_t) juce::jlimit (0, numSlots - 1, slotIndex)];
 }
 
-juce::String instrumentName (int i)   { return i == Drums ? "Drums" : i == Arp ? "Arp" : i == Bass ? "Bass" : "FX"; }
+juce::String instrumentName (int i)   { return i == Drums ? "Drums" : i == Arp ? "Arp" : i == Bass ? "Bass" : i == PageChords ? "Chords" : "FX"; }
 juce::String instrumentFolder (int i) { return instrumentName (i); }
 
 //==============================================================================
@@ -229,6 +241,117 @@ int bassSoundGlide()
 }
 
 //==============================================================================
+// Chords
+juce::StringArray chordTypeNames()
+{
+    return { "Major", "Minor", "7", "Maj7", "Min7", "Sus2", "Sus4", "Dim", "Aug", "Min7 b5", "Dim7", "6", "Min6", "Add9", "9", "Min9" };
+}
+
+juce::String chordSuffix (int type)
+{
+    static const char* s[] = { "", "m", "7", "maj7", "m7", "sus2", "sus4", "dim", "aug", "m7b5", "dim7", "6", "m6", "add9", "9", "m9" };
+    return s[juce::jlimit (0, 15, type)];
+}
+
+const std::vector<int>& chordIntervals (int type)
+{
+    static const std::vector<std::vector<int>> iv = {
+        { 0, 4, 7 }, { 0, 3, 7 }, { 0, 4, 7, 10 }, { 0, 4, 7, 11 }, { 0, 3, 7, 10 }, { 0, 2, 7 }, { 0, 5, 7 }, { 0, 3, 6 },
+        { 0, 4, 8 }, { 0, 3, 6, 10 }, { 0, 3, 6, 9 }, { 0, 4, 7, 9 }, { 0, 3, 7, 9 }, { 0, 4, 7, 14 }, { 0, 4, 7, 10, 14 }, { 0, 3, 7, 10, 14 } };
+    return iv[(size_t) juce::jlimit (0, 15, type)];
+}
+
+int orchidPadType (int pad)
+{
+    static const int types[8] = { 0, 1, 7, 6, 2, 3, 4, 13 };   // Maj, Min, Dim, Sus4, 7, Maj7, Min7, Add9
+    return types[juce::jlimit (0, 7, pad)];
+}
+
+ChordSlot diatonicChord (int scale, int degree, bool seventh)
+{
+    const auto& iv = scaleIntervals (scale);
+    const int n = (int) iv.size();
+    auto note = [&iv, n] (int k) { return iv[(size_t) (k % n)] + 12 * (k / n); };
+    auto inScale = [&iv] (int semis) { return std::find (iv.begin(), iv.end(), ((semis % 12) + 12) % 12) != iv.end(); };
+    ChordSlot c;
+    const int root = note (degree);
+    c.root = juce::jlimit (0, 23, root);
+    int third, fifth, sev;
+    if (n == 7) { third = note (degree + 2) - root; fifth = note (degree + 4) - root; sev = note (degree + 6) - root; }
+    else   // pentatonic and other short scales: stack thirds that are in the scale
+    {
+        third = inScale (root + 4) ? 4 : 3;
+        fifth = inScale (root + 7) ? 7 : inScale (root + 6) ? 6 : 7;
+        sev = inScale (root + 10) ? 10 : inScale (root + 11) ? 11 : 10;
+    }
+    int t = 0;
+    if (third == 4 && fifth == 8) t = 8;
+    else if (third == 3 && fifth == 6) t = seventh ? (sev == 9 ? 10 : 9) : 7;
+    else if (third == 3) t = seventh ? 4 : 1;
+    else if (third == 2) t = 5;
+    else if (third == 5) t = 6;
+    else t = seventh ? (sev == 11 ? 3 : 2) : 0;
+    c.type = t;
+    return c;
+}
+
+std::array<ChordSlot, numPads> defaultChords (int scale)
+{
+    std::array<ChordSlot, numPads> c;
+    for (int d = 0; d < 8; ++d)
+    {
+        c[(size_t) (8 + d)] = diatonicChord (scale, d, false);   // bottom row: triads
+        c[(size_t) d] = diatonicChord (scale, d, true);          // top row: 7th chords
+    }
+    return c;
+}
+
+juce::String chordName (int key, const ChordSlot& c)
+{
+    static const char* names[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+    return juce::String (names[(key + c.root) % 12]) + chordSuffix (c.type) + (c.inversion > 0 ? "/" + juce::String (c.inversion) : juce::String());
+}
+
+std::array<float, numSlots> BoxData::chordDefaults()
+{
+    std::array<float, numSlots> v {};
+    for (int i = 0; i < numSlots; ++i)
+        if (const auto& d = paramDesc (PageChords, i); d.used() && d.global < 0) v[(size_t) i] = d.def;
+    return v;
+}
+
+juce::var BoxData::chordsToVar (const std::array<float, numSlots>& vals, const std::array<ChordSlot, numPads>& slots)
+{
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("instrument", "Chords");
+    o->setProperty ("v", 2);
+    juce::Array<juce::var> values, chords;
+    for (auto x : vals) values.add (x);
+    for (const auto& c : slots) chords.add (juce::Array<juce::var> { c.root, c.type, c.inversion });
+    o->setProperty ("values", values);
+    o->setProperty ("chords", chords);
+    return juce::var (o);
+}
+
+bool BoxData::chordsFromVar (const juce::var& v, std::array<float, numSlots>& vals, std::array<ChordSlot, numPads>& slots)
+{
+    if (! v.isObject() || v["instrument"].toString() != "Chords") return false;
+    auto fresh = chordDefaults();
+    if (auto* values = v["values"].getArray())
+        for (int i = 0; i < juce::jmin (numSlots, values->size()); ++i)
+            if (const auto& d = paramDesc (PageChords, i); d.used() && d.global < 0)
+                fresh[(size_t) i] = juce::jlimit (d.min, d.max, (float) (*values)[i]);
+    auto c = defaultChords (1);
+    if (auto* list = v["chords"].getArray())
+        for (int i = 0; i < juce::jmin (numPads, list->size()); ++i)
+            if (auto* a = (*list)[i].getArray(); a != nullptr && a->size() >= 3)
+                c[(size_t) i] = { juce::jlimit (0, 23, (int) (*a)[0]), juce::jlimit (0, 15, (int) (*a)[1]), juce::jlimit (0, 4, (int) (*a)[2]) };
+    vals = fresh;
+    slots = c;
+    return true;
+}
+
+//==============================================================================
 InstrumentState BoxData::defaults (int instrument)
 {
     InstrumentState s;
@@ -303,6 +426,7 @@ juce::var BoxData::sceneToVar() const
     for (int i = 0; i < NumInstruments; ++i) insts.add (instrumentToVar (i, inst[(size_t) i]));
     o->setProperty ("instruments", insts);
     o->setProperty ("fx", fxToVar (fx));
+    o->setProperty ("chords", chordsToVar (chordVals, chords));
     return juce::var (o);
 }
 
@@ -316,6 +440,7 @@ bool BoxData::sceneFromVar (const juce::var& v)
         if (! instrumentFromVar (i, (*insts)[i], fresh[(size_t) i])) return false;
     inst = fresh;
     fxFromVar (v["fx"], fx);
+    if (v.hasProperty ("chords")) chordsFromVar (v["chords"], chordVals, chords);
     globals[GTempo] = juce::jlimit (40.0f, 240.0f, (float) v.getProperty ("tempo", globals[GTempo]));
     globals[GKey]   = (float) juce::jlimit (0, 11, (int) v.getProperty ("key", (int) globals[GKey]));
     globals[GScale] = (float) juce::jlimit (0, scaleNames().size() - 1, (int) v.getProperty ("scale", (int) globals[GScale]));
@@ -326,6 +451,8 @@ BoxData::BoxData()
 {
     for (int i = 0; i < NumInstruments; ++i) inst[(size_t) i] = defaults (i);
     fx = fxDefaults();
+    chordVals = chordDefaults();
+    chords = defaultChords (1);
     globals[GTempo] = 110.0f;
     globals[GKey] = 0.0f;
     globals[GScale] = 1.0f;
@@ -338,6 +465,7 @@ float BoxData::get (int instrument, int slotIndex) const
     if (! d.used()) return 0.0f;
     if (d.global >= 0) return globals[(size_t) d.global];
     if (instrument == PageFx) return fx[(size_t) slotIndex];
+    if (instrument == PageChords) return chordVals[(size_t) slotIndex];
     const auto& s = inst[(size_t) juce::jlimit (0, NumInstruments - 1, instrument)];
     if (d.perDrum)
         return slotIndex == slot::DLevel ? s.drumLevel[(size_t) selectedDrum] : s.drumChance[(size_t) selectedDrum];
@@ -352,6 +480,7 @@ void BoxData::set (int instrument, int slotIndex, float value)
     if (d.kind != Kind::Percent) value = std::round (value);
     if (d.global >= 0) { globals[(size_t) d.global] = value; return; }
     if (instrument == PageFx) { fx[(size_t) slotIndex] = value; return; }
+    if (instrument == PageChords) { chordVals[(size_t) slotIndex] = value; return; }
     auto& s = inst[(size_t) juce::jlimit (0, NumInstruments - 1, instrument)];
     if (d.perDrum)
         (slotIndex == slot::DLevel ? s.drumLevel : s.drumChance)[(size_t) selectedDrum] = value;
@@ -460,6 +589,8 @@ juce::var BoxData::toVar() const
     o->setProperty ("light", lightScreen);
     o->setProperty ("fx", fxToVar (fx));
     o->setProperty ("fxPreset", loadedPreset[PageFx]);
+    o->setProperty ("chords", chordsToVar (chordVals, chords));
+    o->setProperty ("chordsPreset", loadedPreset[PageChords]);
     o->setProperty ("scene", loadedScene);
     juce::Array<juce::var> insts;
     for (int i = 0; i < NumInstruments; ++i)
@@ -485,6 +616,8 @@ void BoxData::fromVar (const juce::var& v)
     page = juce::jlimit (0, NumPages - 1, (int) v.getProperty ("page", 0));
     fxFromVar (v["fx"], fx);
     loadedPreset[PageFx] = juce::jlimit (-1, numPresetSlots - 1, (int) v.getProperty ("fxPreset", -1));
+    if (v.hasProperty ("chords")) chordsFromVar (v["chords"], chordVals, chords);
+    loadedPreset[PageChords] = juce::jlimit (-1, numPresetSlots - 1, (int) v.getProperty ("chordsPreset", -1));
     loadedScene = juce::jlimit (-1, numPresetSlots - 1, (int) v.getProperty ("scene", -1));
     selectedDrum = juce::jlimit (0, numPads - 1, (int) v.getProperty ("selectedDrum", 0));
     lightScreen = (bool) v.getProperty ("light", false);

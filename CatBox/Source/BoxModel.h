@@ -21,8 +21,9 @@ namespace catbox
 {
 enum Instrument { Drums = 0, Arp, Bass, NumInstruments };
 
-/** The FX page (master effects, performance pads, scenes) comes after the three instruments. */
-constexpr int PageFx = 3, NumPages = 4;
+/** After the three instruments: the Chords page (chords on the pads, played on the Arp's sound),
+    then the FX page (master effects, performance pads, scenes). */
+constexpr int PageChords = 3, PageFx = 4, NumPages = 5;
 
 enum Button { BtnPlay = 0, BtnSteps, BtnShift, BtnScene, BtnInstrument, BtnOctDown, BtnOctUp, BtnRec, BtnChaos, BtnSound, NumButtons };
 
@@ -51,6 +52,9 @@ namespace slot
     constexpr int BSound = 1, BCutoff = 2, BResonance = 3, BEnvMod = 4, BDecay = 5, BLength = 6, BAccent = 7,
                   BDrive = 8, BSlide = 9, BOctave = 10, BVolume = 11,
                   BEcho = 14, BChorus = 15, BWave = 16, BSwing = 17, BFollow = 18, BKeys = 19;
+    // Chords page
+    constexpr int CPlay = 1, CVoicing = 2, CLeading = 3, CStrum = 4, CStrumDir = 5, COctave = 6, CBassNote = 7, CVelocity = 8,
+                  CRoots = 14;
     // FX page
     constexpr int FReverb = 1, FSize = 2, FDelay = 3, FPump = 4, FDjFilter = 5, FTape = 6, FVinyl = 7,
                   FCrush = 8, FGlue = 9, FWidth = 10, FPumpTarget = 11,
@@ -112,6 +116,27 @@ constexpr int arpSoundSupersaw = 8, arpSoundAcid = 9, arpSoundGlide = 10;
 int bassSoundGlide();
 
 //==============================================================================
+// Chords
+/** 16 chord types: Maj, m, 7, maj7, m7, sus2, sus4, dim, aug, m7b5, dim7, 6, m6, add9, 9, m9. */
+juce::StringArray chordTypeNames();          // as shown on the knob ("Major", "Minor", ...)
+juce::String chordSuffix (int type);         // as written after the root ("", "m", "7", ...)
+const std::vector<int>& chordIntervals (int type);
+/** Orchid mode: the top row of pads picks the chord type (Maj, Min, Dim, Sus4, 7, Maj7, Min7, Add9). */
+int orchidPadType (int pad);
+
+/** One chord on a pad: root in semitones above the key's root (0..23), type, inversion. */
+struct ChordSlot
+{
+    int root = 0, type = 0, inversion = 0;
+    bool operator== (const ChordSlot& o) const { return root == o.root && type == o.type && inversion == o.inversion; }
+};
+/** The chord built on a degree of the key's scale (0 = the root; 7th chords when seventh). */
+ChordSlot diatonicChord (int scale, int degree, bool seventh);
+/** The 16 starting chords: bottom row the triads I..VII + I, top row their 7th chords. */
+std::array<ChordSlot, numPads> defaultChords (int scale);
+juce::String chordName (int key, const ChordSlot&);   // e.g. "Am7"
+
+//==============================================================================
 /** Arp pattern step states. */
 enum StepState : uint8_t { StepOn = 0, StepRest, StepTie, StepAccent, NumStepStates };
 
@@ -144,7 +169,9 @@ struct BoxData
     std::array<float, numSlots> fx {};              // the FX page knobs
     std::array<bool, NumInstruments> muted {};
     std::array<int, NumInstruments> padOctave {};   // Arp / Bass: octave shift of the pads
-    std::array<int, NumPages> loadedPreset { -1, -1, -1, -1 };
+    std::array<int, NumPages> loadedPreset { -1, -1, -1, -1, -1 };
+    std::array<float, numSlots> chordVals {};       // the Chords page knobs
+    std::array<ChordSlot, numPads> chords {};       // the chord on each pad
     int loadedScene = -1;
     int page = Drums;
     int selectedDrum = 0;
@@ -167,6 +194,9 @@ struct BoxData
     static std::array<float, numSlots> fxDefaults();
     static juce::var fxToVar (const std::array<float, numSlots>&);
     static bool fxFromVar (const juce::var&, std::array<float, numSlots>&);
+    static std::array<float, numSlots> chordDefaults();
+    static juce::var chordsToVar (const std::array<float, numSlots>&, const std::array<ChordSlot, numPads>&);
+    static bool chordsFromVar (const juce::var&, std::array<float, numSlots>&, std::array<ChordSlot, numPads>&);
 
     /** A scene: all three instruments, the FX page, tempo, key and scale. */
     juce::var sceneToVar() const;

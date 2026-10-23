@@ -55,7 +55,7 @@ public:
     const BoxData& getData() const noexcept { return data; }
     int getPage() const noexcept { return page.load(); }
     bool isShiftHeld() const noexcept { return shift.load(); }
-    bool isStepView() const noexcept { const int p = page.load(); return p < NumInstruments && stepViews[(size_t) p].load(); }
+    bool isStepView() const noexcept { const int p = page.load(); return p != PageFx && stepViews[(size_t) juce::jlimit (0, NumPages - 1, p)].load(); }
     /** Sound mode (the Sound button, on Arp and Bass): the knobs edit the page's engine, Oct - / Oct + flip its knob pages. */
     bool isSoundMode() const noexcept { const int p = page.load(); return soundMode.load() && (p == Arp || p == Bass); }
     bool isGlide (int page) const;                  // the page's Sound is the Glide engine
@@ -64,6 +64,14 @@ public:
     juce::String enginePageName() const;            // e.g. "Osc I"
     juce::String engineTitle() const;               // e.g. "Glide: Glossy Keys *"
     KnobView engineView (int slotIndex) const;      // a knob in Sound mode (slot 0..23)
+
+    // the Chords page (played on the Arp's sound)
+    int selectedChord() const noexcept { return chordSel; }
+    juce::String chordNow() const { return chordNowName; }       // the chord sounding now, e.g. "Am7  A C E G"
+    juce::String chordPadLabel (int pad) const;                   // what a pad plays on the Chords page
+    bool chordPadSounding (int pad) const noexcept { return pad >= 0 && pad < numPads && padChordCount[(size_t) pad] > 0; }
+    int orchidHeldType() const noexcept { return orchidType.load(); }
+    bool isOrchid() const noexcept { return juce::roundToInt (data.chordVals[slot::CPlay]) == 1; }
     bool isSceneMode() const noexcept { return sceneMode.load(); }
     bool isLatched() const noexcept { return latchOn; }
     bool isButtonLit (int button) const;
@@ -146,11 +154,29 @@ private:
 
     std::atomic<int> page { Drums }, key { 0 }, scale { 1 }, lastBassNote { 36 };
     std::atomic<bool> shift { false }, rec { false }, saveArm { false }, sceneMode { false };
-    std::array<std::atomic<bool>, NumInstruments> stepViews {};
+    std::array<std::atomic<bool>, NumPages> stepViews {};
     std::atomic<bool> soundMode { false };
     std::array<std::atomic<int>, NumInstruments> enginePages {};
     std::array<float, numSlots> engineRemainder {};
     juce::String engineId (int slotIndex) const;
+    static constexpr int numChordKeys = numPads + 128;            // the 16 pads, then a MIDI keyboard's notes
+    std::array<std::array<int, 8>, numChordKeys> padChord {};
+    std::array<int, numChordKeys> padChordCount {};
+    std::atomic<int> orchidType { -1 };
+    int orchidRootPad = -1, orchidVelocity = 100;
+    std::array<int, 8> lastChord {};
+    int lastChordCount = 0;
+    bool strumFlip = false;
+    int chordSel = -1;
+    juce::String chordNowName;
+    ChordSlot chordForPad (int pad) const;
+    ChordSlot chordForNote (int note, int& octaveShift) const;
+    int buildChord (const ChordSlot&, int octaveShift, std::array<int, 8>& out);
+    void playChord (int key, const ChordSlot&, int octaveShift, int velocity);
+    void releaseChord (int key);
+    void chordPadDown (int pad, int velocity);
+    void chordPadUp (int pad);
+    void editChord (int knob, int clicks);
     void editEngine (int slotIndex, float clicks);
     void resetEngineSlot (int slotIndex);
     std::array<std::atomic<int>, NumPages> stepPages {};

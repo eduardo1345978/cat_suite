@@ -255,10 +255,16 @@ void BoxAudio::handleEvents()
                 break;
 
             case BoxEvent::ArpOn:
-                if (live.arpOn) arp.noteOn (e.a, e.b);
-                else if (! live.muted[Arp]) arpNoteOn (e.a, e.b);
+                if (e.c > 0 && numDelayed < (int) delayedOns.size())   // strummed: a little later
+                    delayedOns[(size_t) numDelayed++] = { e.a, e.b, clock + (double) e.c * 0.001 * live.bpm / 60.0 };
+                else arpKeyOn (e.a, e.b);
                 break;
             case BoxEvent::ArpOff:
+                for (int i = 0; i < numDelayed;)   // released before it was strummed: it never starts
+                {
+                    if (delayedOns[(size_t) i].note == e.a) delayedOns[(size_t) i] = delayedOns[(size_t) --numDelayed];
+                    else ++i;
+                }
                 arp.noteOff (e.a);
                 if (! live.arpOn) arpNoteOff (e.a);
                 break;
@@ -266,11 +272,31 @@ void BoxAudio::handleEvents()
             case BoxEvent::PerfOff:  perfHeld.fetch_and (~(1u << juce::jlimit (0, 31, e.a))); break;
             case BoxEvent::ArpLatch: arp.setLatch (e.a != 0); break;
             case BoxEvent::ArpClear: arp.clear(); break;
-            case BoxEvent::AllOff:   allNotesOff(); arp.clear(); break;
+            case BoxEvent::AllOff:   allNotesOff(); arp.clear(); numDelayed = 0; break;
         }
     };
     for (int i = 0; i < scope.blockSize1; ++i) handle (events[(size_t) (scope.startIndex1 + i)]);
     for (int i = 0; i < scope.blockSize2; ++i) handle (events[(size_t) (scope.startIndex2 + i)]);
+}
+
+void BoxAudio::arpKeyOn (int note, int velocity)
+{
+    if (live.arpOn) arp.noteOn (note, velocity);
+    else if (! live.muted[Arp]) arpNoteOn (note, velocity);
+}
+
+void BoxAudio::playDelayed (double upTo)
+{
+    for (int i = 0; i < numDelayed;)
+    {
+        if (delayedOns[(size_t) i].ppq <= upTo)
+        {
+            const auto d = delayedOns[(size_t) i];
+            delayedOns[(size_t) i] = delayedOns[(size_t) --numDelayed];
+            arpKeyOn (d.note, d.velocity);
+        }
+        else ++i;
+    }
 }
 
 //==============================================================================
@@ -445,6 +471,7 @@ void BoxAudio::render (float* left, float* right, int numSamples)
             const int m = juce::jmin (subBlock, n - s);
             const double from = clock, to = clock + m * ppqPerSample;
             subOffset = s;
+            if (numDelayed > 0) playDelayed (to);
             releaseDue (from);
             tick (from, to);
             drums.render (dl + s, dr + s, m);
