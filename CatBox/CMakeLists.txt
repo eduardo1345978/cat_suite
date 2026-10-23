@@ -20,12 +20,14 @@ target_sources(CatBox PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatSounds.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../GlideCat/Source/GlideSynth.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../GlideCat/Source/GlideFX.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../GlideCat/Source/GlideData.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../GlideCat/Source/GlideData.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../OrbitCat/Source/OrbitEngine.cpp)
 
 target_include_directories(CatBox PRIVATE
     Source
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source
-    ${CMAKE_CURRENT_SOURCE_DIR}/../GlideCat/Source)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../GlideCat/Source
+    ${CMAKE_CURRENT_SOURCE_DIR}/../OrbitCat/Source)
 
 target_compile_features(CatBox PRIVATE cxx_std_20)
 if(MSVC)

@@ -3,7 +3,8 @@
 A groovebox you play yourself: **Drums** (a step sequencer, 16 drums x 16 / 32 / 64 steps), **Arp**
 (an arpeggiator like the Behringer Poly D's with a 16-step rhythm, or a plain synth), **Bass** (a
 303-style step sequencer with its own Acid synth), **Chords** (one finger = one chord, or played like the
-Telepathic Instruments Orchid) and **FX** (master effects and performance pads).
+Telepathic Instruments Orchid), **Orbit** (every held note is a planet that plays when it crosses a line)
+and **FX** (master effects and performance pads).
 Everything plays together at one tempo, in one key. Nothing is generated: you draw the steps or play them in.
 
 The same program runs in two places:
@@ -55,7 +56,7 @@ itself on UDP port 50651.
 | **Steps** | the pads become 16 steps (per page). Drums: steps of the selected drum (tap: on > accent > off) · Arp: on > rest > tie > accent · Bass: tap an empty step = set it, tap a set step = pick it, tap again = clear; knobs 2 / 3 / 4 edit the picked step's note / slide / accent · **Shift + Steps** = clear (all drums or the selected one in Steps, the bass line, held arp notes, the FX page) |
 | **Shift** | second knob layer; **Shift + pad** = load preset, **Shift + Rec + pad** = save preset |
 | **Scene** | the pads become 16 scenes: pad = recall (all instruments, FX, tempo, key; at the next bar while playing), **Rec + pad** = save |
-| **Instr** | Drums > Arp > Bass > Chords > FX (or click the page names on the screen) · **hold Instr and turn any knob** = flip through the pages quickly (right = next, left = back) · **Shift + Instr** = mute |
+| **Instr** | Drums > Arp > Bass > Chords > Orbit > FX (or click the page names on the screen) · **hold Instr and turn any knob** = flip through the pages quickly (right = next, left = back) · **Shift + Instr** = mute |
 | **Oct - / Oct +** | Drums: previous / next drum (**Shift**: step pages) · Arp: pad octave · Bass: pad octave (in Steps: step pages) |
 | **Rec** | Drums / Bass: record what you play into the steps while it runs (Bass: hold two pads = slide, hit hard = accent) · Arp: Hold |
 | **Sound** | (Arp and Bass) the knobs edit the page's **engine** instead: knob 1 = the engine, and with the **Glide** engine (Glide-Cat's synth: voices that glide from note to note) knob 2 = its factory sound (66), knob 3 = how it glides, Shift + knob 1 = Init (start from a plain sound); **Oct - / Oct +** flip through its 12 knob pages (Sound, Osc / Filter / Amp of both layers, Glide, Expression, Modulators, Matrix, FX); Shift = the next 12 knobs of the page. A changed sound is marked with *; save it as a page preset (Shift + Rec + pad) |
@@ -76,6 +77,20 @@ The chords play on the **Arp's sound** (any engine, e.g. Glide): with the arp on
 - Knobs: Voicing (close, open, drop 2, spread), **Voice leading** (how close each chord stays to the last one),
   **Strum** (time between the notes) and from where (low, high, both in turn), Octave (also Oct - / Oct +), Bass note
   (adds the root an octave down), Soft / hard. **Rec** = Hold (the chord keeps playing). 16 presets like every page.
+
+### The Orbit page
+
+Orbit-Cat in the box: hold notes on the pads (the key's scale, or like a piano: Shift + knob 6) and each one becomes a
+**planet** circling a sun; a planet plays its note every time it crosses one of the **lines**. Heavy planets are louder,
+wide orbits are slow (Kepler), ellipses speed up near the sun, and the planets pull on each other. The screen shows the
+system turning; a planet lights up when it plays.
+- Knob 2 = **System** (40 systems from Orbit-Cat: Clockwork, Binary Dance, Comet Tails, Lazy Moons, Resonance ...),
+  then Gravity, Drag (the orbits spiral in: a slow speed-up), Turbulence, Lines (1-6), Line angle, **Grid** (free or
+  1/4 .. 1/16T), Speed (x1/4 .. x4), Orbits (tiny .. huge), Note length, Soft / hard.
+- Shift + knob 3 = **Plays on** the Arp's sound or the Bass sound (any engine); Shift + knob 4 = Ellipses; Oct - / Oct + = pad octave.
+- **Rec** = Hold (the planets keep turning after you let go). **Steps** = edit the planets: pads 1-8 pick one
+  (planet 1 = the lowest held note), knobs 2-7 = its mass, orbit, ellipse, speed, octave and note length.
+  **Shift + Steps** = all planets gone. 16 presets like every page.
 
 Performance pads (FX page, held = on): Repeat 1/4, 1/8, 1/16, 1/32 · Sweep down, Sweep up, Tape stop,
 Reverse · Kill drums, Kill arp, Kill bass, Crush · Wash, Riser, Repeat 1/2, Echo throw.

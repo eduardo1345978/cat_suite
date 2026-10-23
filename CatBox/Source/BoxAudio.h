@@ -43,13 +43,22 @@ struct AudioSnapshot
     glidecat::Settings arpGlide, bassGlide;
     glidecat::FxSettings arpGlideFx, bassGlideFx;
 
+    // the Orbit page
+    orbitcat::GlobalParams orbitGlobal;
+    Planets orbitPlanets {};
+    int orbitGrid = 3;            // quantize choice (0 = free)
+    int orbitTarget = Arp;        // which sound the planets play: Arp or Bass
+    float orbitGate = 1.0f;       // note length factor
+    float orbitDynamics = 0.7f;
+
     MasterSettings master;
 };
 
 /** Small events from the pads / keyboard to the audio thread. */
 struct BoxEvent
 {
-    enum Type : uint8_t { DrumHit, ArpOn, ArpOff, BassOn, BassOff, ArpLatch, ArpClear, AllOff, PerfOn, PerfOff } type = DrumHit;
+    enum Type : uint8_t { DrumHit, ArpOn, ArpOff, BassOn, BassOff, ArpLatch, ArpClear, AllOff, PerfOn, PerfOff,
+                          OrbitOn, OrbitOff, OrbitLatch, OrbitClear } type = DrumHit;
     int a = 0, b = 0, c = 0;   // ArpOn: c = delay in ms (a strummed chord)
 };
 
@@ -100,6 +109,13 @@ public:
     std::atomic<int> bassNoteNow { -1 };
     std::atomic<float> peak { 0.0f };
     std::atomic<bool> arpLatched { false };
+    // the Orbit page: where the planets are (for the screen)
+    struct PlanetView { std::atomic<bool> active { false }; std::atomic<float> theta { 0.0f }, radius { 0.0f }, mass { 50.0f }; std::atomic<int> note { 60 }; };
+    std::array<PlanetView, orbitcat::maxBodies> planetView;
+    std::atomic<uint32_t> planetFlash { 0 };     // bit per planet, set when it plays (the screen clears it)
+    std::atomic<uint32_t> planetFlashLink { 0 }; // the same, read by the link to a PC
+    std::atomic<int> orbitHits { 0 };            // notes the planets played (self test)
+    std::atomic<bool> orbitLatched { false };
     std::array<std::atomic<float>, 32> scope {};   // a few recent output values for the screen
     static constexpr int spectrumSize = 1024;
     std::array<std::atomic<float>, spectrumSize> spectrumRing {};   // the output at half rate, for the spectrum
@@ -157,6 +173,15 @@ private:
     ArpEngine arp;
     juce::Random rnd;
     int liveBassHeld = 0, lastLiveBass = -1, lastRecordedBassStep = -1;
+
+    orbitcat::OrbitEngine orbit;
+    std::array<bool, 128> orbitKeyDown {};
+    bool orbitLatch = false;
+    struct OrbitNote { int note = 0, velocity = 0; double ppq = 0.0, offPpq = 0.0; };   // planet notes waiting for the grid
+    std::array<OrbitNote, 128> orbitNotes;
+    int numOrbitNotes = 0;
+    void stepOrbit (double from, double to);
+    void playOrbitNotes (double upTo);
 
     struct DelayedOn { int note = 0, velocity = 0; double ppq = 0.0; };   // strummed chord notes still to come
     std::array<DelayedOn, 64> delayedOns;

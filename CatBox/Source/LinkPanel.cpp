@@ -95,7 +95,7 @@ LinkPanel::LinkPanel (BoxController& b, LinkClient& l) : box (b), link (l)
     };
     disconnectButton.onClick = [this] { link.disconnect(); refresh(); };
 
-    pageBox.addItemList ({ "Drums", "Arp", "Bass", "Chords", "FX", "Scenes" }, 1);
+    pageBox.addItemList ({ "Drums", "Arp", "Bass", "Chords", "Orbit", "FX", "Scenes" }, 1);
     pageBox.setSelectedItemIndex (0, juce::dontSendNotification);
     pageBox.onChange = [this] { refresh(); };
 

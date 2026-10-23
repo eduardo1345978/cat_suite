@@ -88,6 +88,7 @@ juce::Colour BoxView::pageColour (int i)
         case Arp:   return juce::Colour (0xff33c2a2);
         case Bass:  return juce::Colour (0xff9b7cec);
         case PageChords: return juce::Colour (0xffd9b13b);
+        case PageOrbit:  return juce::Colour (0xff8fd14f);
         default:    return juce::Colour (0xff4fa3e8);
     }
 }
@@ -153,6 +154,9 @@ void BoxView::timerCallback()
         if ((f >> p) & 1u) flashLevel[(size_t) p] = 1.0f;
         else flashLevel[(size_t) p] *= 0.78f;
     }
+    const uint32_t pf = box.getAudio().planetFlash.exchange (0);
+    for (int i = 0; i < (int) planetGlow.size(); ++i)
+        planetGlow[(size_t) i] = ((pf >> i) & 1u) ? 1.0f : planetGlow[(size_t) i] * 0.8f;
     updateSpectrum();
     if (! hasKeyboardFocus (true) && isShowing() && getPeer() != nullptr && getPeer()->isFocused()) grabKeyboardFocus();
     repaint();
@@ -186,6 +190,25 @@ juce::Colour BoxView::padColour (int pad, bool& lit, bool& outlined, bool& thick
     {
         lit = pressed || ((audio.perfHeld.load() >> pad) & 1u) != 0;
         return lit ? col : off.interpolatedWith (col, pad < 4 || pad == PerfRepeat2 ? 0.3f : 0.16f);
+    }
+
+    if (page == PageOrbit)
+    {
+        if (box.isStepView())   // planets 1-8
+        {
+            outlined = pad == box.selectedPlanet();
+            if (pad >= numPlanets) return off.withMultipliedBrightness (0.6f);
+            const float m = box.getData().planets[(size_t) pad].mass / 100.0f;
+            return off.interpolatedWith (col, 0.25f + 0.5f * m);
+        }
+        const int note = box.orbitPadNote (pad);
+        if (note < 0) return off.withMultipliedBrightness (0.55f);
+        bool planet = false;
+        for (const auto& pv : audio.planetView) planet = planet || (pv.active.load() && pv.note.load() == note);
+        lit = pressed || planet;
+        if (lit) return col;
+        const int pc = ((note - juce::roundToInt (data.globals[GKey])) % 12 + 12) % 12;
+        return off.interpolatedWith (col, pc == 0 ? 0.42f : 0.2f);
     }
 
     if (page == PageChords)
@@ -271,6 +294,12 @@ juce::String BoxView::padLabel (int pad) const
     if (box.isShiftHeld()) return juce::String (pad + 1);
     if (page == PageFx) return perfName (pad);
     if (page == PageChords) return box.chordPadLabel (pad);
+    if (page == PageOrbit)
+    {
+        if (box.isStepView()) return pad < numPlanets ? "Planet " + juce::String (pad + 1) : juce::String();
+        const int n = box.orbitPadNote (pad);
+        return n < 0 ? juce::String() : noteName (n);
+    }
     if (box.isStepView())
     {
         if (page == Arp)
@@ -355,7 +384,7 @@ void BoxView::paintHelp (juce::Graphics& g, juce::Rectangle<float> area)
         { "Shift", "second knob layer, Shift + pad = load preset" },
         { "Shift + Enter + pad", "save a preset" },
         { "N", "Scenes: pad = recall, Enter + pad = save" },
-        { "Tab", "next page: Drums, Arp, Bass, Chords, FX (hold Tab + turn a knob = flip fast)" },
+        { "Tab", "next page: Drums, Arp, Bass, Chords, Orbit, FX (hold Tab + turn a knob = flip fast)" },
         { ",   .", "Oct - / Oct + (Drums: previous / next drum)" },
         { "Enter", "Rec (Arp: Hold)" },
         { "C (hold)", "Chaos: new sound for this page    (Shift + C: undo)" },
@@ -409,7 +438,7 @@ int BoxView::knobAt (juce::Point<float> p) const
 
 juce::Rectangle<float> BoxView::tabArea (int p) const
 {
-    return { 158.0f + p * 56.0f, 12.0f, 54.0f, 40.0f };
+    return { 152.0f + p * 48.0f, 12.0f, 47.0f, 40.0f };
 }
 
 void BoxView::paintScreen (juce::Graphics& g, juce::Rectangle<float> area)
@@ -434,8 +463,8 @@ void BoxView::paintScreen (juce::Graphics& g, juce::Rectangle<float> area)
         const bool muted = i < NumInstruments && data.muted[(size_t) i];
         if (active) { g.setColour (pageColour (i).withAlpha (0.16f)); g.fillRoundedRectangle (t, 8.0f); }
         g.setColour (muted ? C::rec : active ? pageColour (i) : P.dim);
-        g.setFont (font (14.0f, active));
-        g.drawText (instrumentName (i), t, juce::Justification::centred);
+        g.setFont (font (13.0f, active));
+        g.drawFittedText (instrumentName (i), t.toNearestInt(), juce::Justification::centred, 1, 0.8f);
     }
     g.setColour (P.text);
     g.setFont (font (22.0f, true));
@@ -554,6 +583,7 @@ void BoxView::paintBoxScreen (juce::Graphics& g, juce::Rectangle<float> area)
     if (box.isShiftHeld() && ! box.isSoundMode()) paintSlotGrid (g, mid);
     else if (box.isSceneMode()) paintSlotGrid (g, mid);
     else if (box.isSoundMode()) paintEngineGrid (g, mid);
+    else if (page == PageOrbit) { g.setColour (P.cell); g.fillRoundedRectangle (mid, 14.0f); paintOrbit (g, mid.reduced (10.0f)); }
     else paintScope (g, mid);
 
     // a knob was turned: its name, a big number and a bar
@@ -630,6 +660,69 @@ void BoxView::paintEngineGrid (juce::Graphics& g, juce::Rectangle<float> r)
         g.fillRoundedRectangle (bar, 5.0f);
         g.setColour (col);
         g.fillRoundedRectangle (bar.withWidth (juce::jmax (10.0f, bar.getWidth() * juce::jlimit (0.0f, 1.0f, v.fraction))), 5.0f);
+    }
+}
+
+void BoxView::paintOrbit (juce::Graphics& g, juce::Rectangle<float> r)
+{
+    // the Orbit page: a sun, the lines where the planets play, and the planets themselves
+    const auto& P = pal();
+    const auto col = pageColour (PageOrbit);
+    auto& audio = box.getAudio();
+    const auto& ov = box.getData().orbitVals;
+    const auto c = r.getCentre();
+    const float tilt = 0.55f;   // seen a little from above
+    float maxR = 6.0f;
+    for (const auto& pv : audio.planetView) if (pv.active.load()) maxR = juce::jmax (maxR, pv.radius.load());
+    const float scaleX = (r.getWidth() * 0.5f - 12.0f) / maxR, scaleY = juce::jmin (scaleX * tilt, (r.getHeight() * 0.5f - 10.0f) / maxR);
+    auto at = [&] (float theta, float radius) { return juce::Point<float> (c.x + std::cos (theta) * radius * scaleX, c.y - std::sin (theta) * radius * scaleY); };
+
+    // the lines (spokes)
+    const int spokes = juce::jlimit (1, 6, juce::roundToInt (ov[slot::OSpokes]));
+    const float align = juce::degreesToRadians (15.0f * (float) juce::roundToInt (ov[slot::OAlign]));
+    for (int k = 0; k < spokes; ++k)
+    {
+        const auto end = at (align + juce::MathConstants<float>::twoPi * (float) k / (float) spokes, maxR * 1.05f);
+        g.setColour (col.withAlpha (0.35f));
+        g.drawLine (c.x, c.y, end.x, end.y, 1.6f);
+    }
+    // the orbits (rings) and the sun
+    for (const auto& pv : audio.planetView)
+        if (pv.active.load())
+        {
+            const float rr = pv.radius.load();
+            g.setColour (P.faint);
+            g.drawEllipse (c.x - rr * scaleX, c.y - rr * scaleY, 2.0f * rr * scaleX, 2.0f * rr * scaleY, 1.0f);
+        }
+    g.setColour (juce::Colour (0xfff0c94a).withAlpha (0.25f));
+    g.fillEllipse (c.x - 14.0f, c.y - 14.0f, 28.0f, 28.0f);
+    g.setColour (juce::Colour (0xfff0c94a));
+    g.fillEllipse (c.x - 8.0f, c.y - 8.0f, 16.0f, 16.0f);
+
+    // the planets: size = mass, they light up when they play
+    for (int i = 0; i < (int) audio.planetView.size(); ++i)
+    {
+        const auto& pv = audio.planetView[(size_t) i];
+        if (! pv.active.load()) continue;
+        const auto p = at (pv.theta.load(), pv.radius.load());
+        const float size = 6.0f + 10.0f * juce::jlimit (0.0f, 1.0f, pv.mass.load() / 100.0f);
+        const float glow = planetGlow[(size_t) i];
+        if (glow > 0.05f)
+        {
+            g.setColour (col.withAlpha (0.45f * glow));
+            g.fillEllipse (p.x - size * 1.6f, p.y - size * 1.6f, size * 3.2f, size * 3.2f);
+        }
+        g.setColour (col.interpolatedWith (juce::Colours::white, 0.6f * glow));
+        g.fillEllipse (p.x - size * 0.5f, p.y - size * 0.5f, size, size);
+        g.setColour (P.text.withAlpha (0.8f));
+        g.setFont (font (11.0f, true));
+        g.drawText (noteName (pv.note.load()), juce::Rectangle<float> (p.x - 20.0f, p.y + size * 0.5f, 40.0f, 14.0f), juce::Justification::centred);
+    }
+    if (box.isStepView())
+    {
+        g.setColour (P.dim);
+        g.setFont (font (13.0f));
+        g.drawText ("Planet " + juce::String (box.selectedPlanet() + 1) + ": knobs 2-7", r.removeFromTop (18.0f), juce::Justification::topRight);
     }
 }
 
@@ -734,6 +827,19 @@ void BoxView::paintStrip (juce::Graphics& g, juce::Rectangle<float> r)
         return;
     }
 
+    if (page == PageOrbit)
+    {
+        int planets = 0;
+        for (const auto& pv : audio.planetView) planets += pv.active.load() ? 1 : 0;
+        const auto sys = orbitSystemNames()[juce::roundToInt (data.orbitVals[slot::OSystem])];
+        g.setColour (planets > 0 ? col : P.dim);
+        g.setFont (font (22.0f, planets > 0));
+        g.drawFittedText (planets > 0 ? sys + "   " + juce::String (planets) + (planets == 1 ? " planet" : " planets") + (box.isOrbitHeld() ? "   HOLD" : "")
+                                      : juce::String ("hold notes: each one becomes a planet"),
+                          r.toNearestInt(), juce::Justification::centred, 1, 0.7f);
+        return;
+    }
+
     if (page == PageChords)
     {
         const auto now = box.chordNow();
@@ -805,6 +911,17 @@ void BoxView::paintSteps (juce::Graphics& g, juce::Rectangle<float> r)
     const auto col = pageColour (page);
     const auto& data = box.getData();
     auto& audio = box.getAudio();
+    if (page == PageOrbit)
+    {
+        const auto& ov = data.orbitVals;
+        g.setColour (P.text);
+        g.setFont (font (17.0f, true));
+        g.drawText (orbitSystemNames()[juce::roundToInt (ov[slot::OSystem])] + "  |  grid " + paramDesc (PageOrbit, slot::OQuantize).format (ov[slot::OQuantize])
+                        + "  |  on the " + paramDesc (PageOrbit, slot::OPlaysOn).format (ov[slot::OPlaysOn]),
+                    r.removeFromTop (28.0f), juce::Justification::centredLeft);
+        paintOrbit (g, r.reduced (0.0f, 2.0f));
+        return;
+    }
     if (page == PageChords)
     {
         const auto& cv = data.chordVals;

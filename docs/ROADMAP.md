@@ -93,7 +93,7 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
       - [x] Chords page: 16 pads = 16 chords (presets AND own: pad + knob chord type), voice-leading knob, strum
             (direction + speed), chords feed Arp / Choir / Glide / own chord sound; play it like ORCHID
             (one hand picks the chord type, pads / keys the root); NO Markov generator
-      - [ ] Orbit page with animation (his favourite) - planets play the notes you hold
+      - [x] Orbit page with animation (his favourite) - planets play the notes you hold (40 systems, planet edit, Hold, Arp or Bass sound)
       - [ ] Choir engine (Sing-Cat) as an engine with presets; no meows, no Talk-Cat
       - [ ] Effects TE style, as many as possible: echo with freeze / duck / ping-pong / tape wobble / shimmer,
             phaser, tremolo, tone, warmth, prism, shimmer/bloom rooms, ensemble

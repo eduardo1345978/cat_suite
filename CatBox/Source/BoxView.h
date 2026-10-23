@@ -64,6 +64,7 @@ private:
     void paintBoxScreen (juce::Graphics&, juce::Rectangle<float>);
     void paintScope (juce::Graphics&, juce::Rectangle<float>);
     void paintEngineGrid (juce::Graphics&, juce::Rectangle<float>);
+    void paintOrbit (juce::Graphics&, juce::Rectangle<float>);
     void paintSlotGrid (juce::Graphics&, juce::Rectangle<float>);
     void paintStrip (juce::Graphics&, juce::Rectangle<float>);
     juce::String loadedName() const;
@@ -96,6 +97,7 @@ private:
     juce::Point<float> offset;
 
     std::array<float, numPads> flashLevel {};
+    std::array<float, orbitcat::maxBodies> planetGlow {};
     uint32_t pressedPads = 0;          // mouse / keyboard presses, for instant feedback
     std::array<bool, numPads> keyPadDown {};
     std::array<bool, NumButtons> keyButtonDown {};

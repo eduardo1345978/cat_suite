@@ -272,11 +272,79 @@ void BoxAudio::handleEvents()
             case BoxEvent::PerfOff:  perfHeld.fetch_and (~(1u << juce::jlimit (0, 31, e.a))); break;
             case BoxEvent::ArpLatch: arp.setLatch (e.a != 0); break;
             case BoxEvent::ArpClear: arp.clear(); break;
-            case BoxEvent::AllOff:   allNotesOff(); arp.clear(); numDelayed = 0; break;
+            case BoxEvent::AllOff:   allNotesOff(); arp.clear(); numDelayed = 0; orbit.reset(); orbitKeyDown.fill (false); numOrbitNotes = 0; break;
+            case BoxEvent::OrbitOn:
+                orbitKeyDown[(size_t) juce::jlimit (0, 127, e.a)] = true;
+                orbit.addNote (juce::jlimit (0, 127, e.a), 1, live.orbitGlobal, live.orbitPlanets, rnd);
+                break;
+            case BoxEvent::OrbitOff:
+                orbitKeyDown[(size_t) juce::jlimit (0, 127, e.a)] = false;
+                if (! orbitLatch) orbit.removeNote (e.a, 1);
+                break;
+            case BoxEvent::OrbitLatch:
+                orbitLatch = e.a != 0;
+                if (! orbitLatch)   // Hold off: the planets whose keys are up leave
+                    for (auto& b : orbit.bodies)
+                        if (b.active && ! orbitKeyDown[(size_t) juce::jlimit (0, 127, b.note)]) orbit.removeNote (b.note, b.channel);
+                break;
+            case BoxEvent::OrbitClear: orbit.reset(); orbitKeyDown.fill (false); break;
         }
     };
     for (int i = 0; i < scope.blockSize1; ++i) handle (events[(size_t) (scope.startIndex1 + i)]);
     for (int i = 0; i < scope.blockSize2; ++i) handle (events[(size_t) (scope.startIndex2 + i)]);
+}
+
+//==============================================================================
+// The Orbit page: every held note is a planet; it plays when it crosses one of the lines
+void BoxAudio::stepOrbit (double from, double to)
+{
+    if (orbit.numActive() == 0) return;
+    const double grid = orbitcat::quantizeToPpq (live.orbitGrid);
+    const double secondsToPpq = live.bpm / 60.0;
+    orbit.step (to - from, live.orbitGlobal, live.orbitPlanets, [&] (int i, double frac, double speedRatio)
+    {
+        const auto& b = orbit.bodies[(size_t) i];
+        const auto& p = live.orbitPlanets[(size_t) b.slot];
+        double t = from + frac * (to - from);
+        if (grid > 0.0)   // on the grid: the next grid point (from the start of the song while playing)
+        {
+            const double origin = running ? songStart : 0.0;
+            t = origin + std::ceil ((t - origin) / grid - 1.0e-9) * grid;
+        }
+        const float fast = juce::jlimit (0.0f, 1.0f, (float) (speedRatio - 1.0) * 0.5f);
+        const float level = juce::jlimit (0.1f, 1.0f, 0.45f + 0.35f * p.mass / 100.0f + 0.3f * p.boost * fast);
+        const int vel = juce::jlimit (1, 127, juce::roundToInt (127.0f * level * (0.35f + 0.65f * live.orbitDynamics)));
+        const int note = juce::jlimit (0, 127, b.note + 12 * p.octave);
+        const double len = juce::jmax (0.03, (double) p.gate * (double) live.orbitGate * secondsToPpq);
+        if (numOrbitNotes < (int) orbitNotes.size()) orbitNotes[(size_t) numOrbitNotes++] = { note, vel, t, t + len };
+        planetFlash.fetch_or (1u << i);
+        planetFlashLink.fetch_or (1u << i);
+    });
+}
+
+void BoxAudio::playOrbitNotes (double upTo)
+{
+    for (int i = 0; i < numOrbitNotes;)
+    {
+        if (orbitNotes[(size_t) i].ppq > upTo) { ++i; continue; }
+        const auto n = orbitNotes[(size_t) i];
+        orbitNotes[(size_t) i] = orbitNotes[(size_t) --numOrbitNotes];
+        const int inst = live.orbitTarget == Bass ? Bass : Arp;
+        if (live.muted[(size_t) inst]) continue;
+        for (int k = 0; k < numOffs;)   // the same pitch still ringing is released first
+        {
+            if (offs[(size_t) k].instrument == inst && offs[(size_t) k].note == n.note)
+            {
+                offs[(size_t) k] = offs[(size_t) --numOffs];
+                inst == Arp ? arpNoteOff (n.note) : bassOff (n.note);
+            }
+            else ++k;
+        }
+        if (inst == Arp) arpNoteOn (n.note, n.velocity);
+        else bassOn (n.note, n.velocity, n.velocity >= 115, false);
+        scheduleOff (inst, n.note, n.offPpq);
+        orbitHits.fetch_add (1);
+    }
 }
 
 void BoxAudio::arpKeyOn (int note, int velocity)
@@ -472,6 +540,8 @@ void BoxAudio::render (float* left, float* right, int numSamples)
             const double from = clock, to = clock + m * ppqPerSample;
             subOffset = s;
             if (numDelayed > 0) playDelayed (to);
+            stepOrbit (from, to);
+            if (numOrbitNotes > 0) playOrbitNotes (to);
             releaseDue (from);
             tick (from, to);
             drums.render (dl + s, dr + s, m);
@@ -547,6 +617,18 @@ void BoxAudio::render (float* left, float* right, int numSamples)
     arpNotesLo = lo;
     arpNotesHi = hi;
     arpLatched = arp.getLatch();
+    orbitLatched = orbitLatch;
+    for (int i = 0; i < orbitcat::maxBodies; ++i)
+    {
+        const auto& b = orbit.bodies[(size_t) i];
+        auto& v = planetView[(size_t) i];
+        v.active = b.active;
+        if (! b.active) continue;
+        v.theta = (float) b.theta;
+        v.radius = (float) b.radiusNow;
+        v.mass = live.orbitPlanets[(size_t) b.slot].mass;
+        v.note = b.note;
+    }
 }
 
 } // namespace catbox

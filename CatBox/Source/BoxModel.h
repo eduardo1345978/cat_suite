@@ -5,6 +5,7 @@
 #include <vector>
 #include <cstdint>
 #include "Engines.h"
+#include "OrbitEngine.h"
 
 /**
     Cat Box: the data model shared by the engine, the controller logic and the screen.
@@ -22,8 +23,9 @@ namespace catbox
 enum Instrument { Drums = 0, Arp, Bass, NumInstruments };
 
 /** After the three instruments: the Chords page (chords on the pads, played on the Arp's sound),
-    then the FX page (master effects, performance pads, scenes). */
-constexpr int PageChords = 3, PageFx = 4, NumPages = 5;
+    the Orbit page (held notes are planets that play when they cross a line), then the FX page
+    (master effects, performance pads, scenes). */
+constexpr int PageChords = 3, PageOrbit = 4, PageFx = 5, NumPages = 6;
 
 enum Button { BtnPlay = 0, BtnSteps, BtnShift, BtnScene, BtnInstrument, BtnOctDown, BtnOctUp, BtnRec, BtnChaos, BtnSound, NumButtons };
 
@@ -55,6 +57,10 @@ namespace slot
     // Chords page
     constexpr int CPlay = 1, CVoicing = 2, CLeading = 3, CStrum = 4, CStrumDir = 5, COctave = 6, CBassNote = 7, CVelocity = 8,
                   CRoots = 14;
+    // Orbit page
+    constexpr int OSystem = 1, OGravity = 2, ODrag = 3, OTurbulence = 4, OSpokes = 5, OAlign = 6, OQuantize = 7,
+                  OSpeed = 8, OSize = 9, OGate = 10, ODynamics = 11,
+                  OPlaysOn = 14, OEcc = 15, OOctave = 16, OPads = 17;
     // FX page
     constexpr int FReverb = 1, FSize = 2, FDelay = 3, FPump = 4, FDjFilter = 5, FTape = 6, FVinyl = 7,
                   FCrush = 8, FGlue = 9, FWidth = 10, FPumpTarget = 11,
@@ -137,6 +143,15 @@ std::array<ChordSlot, numPads> defaultChords (int scale);
 juce::String chordName (int key, const ChordSlot&);   // e.g. "Am7"
 
 //==============================================================================
+// Orbit
+constexpr int numPlanets = orbitcat::numSlots;   // 8 planet settings (lowest held note = planet 1)
+using Planets = std::array<orbitcat::BodyParams, numPlanets>;
+juce::StringArray orbitSystemNames();            // Orbit-Cat's systems (Clockwork, Binary Dance ...)
+/** The knob choices that scale every planet. */
+float orbitSpeedFactor (int choice);             // x1/4 .. x4
+float orbitSizeFactor (int choice);              // smaller .. bigger orbits
+
+//==============================================================================
 /** Arp pattern step states. */
 enum StepState : uint8_t { StepOn = 0, StepRest, StepTie, StepAccent, NumStepStates };
 
@@ -169,7 +184,9 @@ struct BoxData
     std::array<float, numSlots> fx {};              // the FX page knobs
     std::array<bool, NumInstruments> muted {};
     std::array<int, NumInstruments> padOctave {};   // Arp / Bass: octave shift of the pads
-    std::array<int, NumPages> loadedPreset { -1, -1, -1, -1, -1 };
+    std::array<int, NumPages> loadedPreset { -1, -1, -1, -1, -1, -1 };
+    std::array<float, numSlots> orbitVals {};       // the Orbit page knobs
+    Planets planets {};                             // the Orbit page's 8 planet settings
     std::array<float, numSlots> chordVals {};       // the Chords page knobs
     std::array<ChordSlot, numPads> chords {};       // the chord on each pad
     int loadedScene = -1;
@@ -197,6 +214,11 @@ struct BoxData
     static std::array<float, numSlots> chordDefaults();
     static juce::var chordsToVar (const std::array<float, numSlots>&, const std::array<ChordSlot, numPads>&);
     static bool chordsFromVar (const juce::var&, std::array<float, numSlots>&, std::array<ChordSlot, numPads>&);
+    static std::array<float, numSlots> orbitDefaults();
+    /** Loads one of the systems: its planets and the knobs that belong to it (gravity, drag ...). */
+    static void orbitSystem (int system, std::array<float, numSlots>& vals, Planets& planets);
+    static juce::var orbitToVar (const std::array<float, numSlots>&, const Planets&);
+    static bool orbitFromVar (const juce::var&, std::array<float, numSlots>&, Planets&);
 
     /** A scene: all three instruments, the FX page, tempo, key and scale. */
     juce::var sceneToVar() const;

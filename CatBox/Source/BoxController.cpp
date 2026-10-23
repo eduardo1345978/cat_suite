@@ -136,6 +136,16 @@ void BoxController::turnKnob (int knob, float clicks)
     lastKnobSl = s;
     lastKnobAt = juce::Time::getMillisecondCounter();
     if (isSoundMode()) { editEngine (s, clicks); return; }
+    if (pg == PageOrbit && isStepView() && ! shift.load() && knob >= 1 && knob <= 6)   // knobs 2-7 edit the picked planet
+    {
+        auto& rem = knobRemainder[(size_t) s];
+        rem += clicks;
+        const float w = std::trunc (rem);
+        if (w == 0.0f) return;
+        rem -= w;
+        editPlanet (knob, (int) w);
+        return;
+    }
     if (pg == PageChords && isStepView() && ! shift.load() && knob >= 1 && knob <= 3)   // knobs 2-4 edit the picked chord
     {
         if (chordSel < 0) return;
@@ -168,6 +178,12 @@ void BoxController::turnKnob (int knob, float clicks)
     const float before = data.get (pg, s);
     data.set (pg, s, before + clicks * d.step() * (d.kind == Kind::Percent ? (d.max - d.min) : 1.0f));
     if (data.get (pg, s) == before) return;
+    if (pg == PageOrbit && s == slot::OSystem)   // a new system: its planets and its gravity, lines ...
+    {
+        BoxData::orbitSystem (juce::roundToInt (data.orbitVals[slot::OSystem]), data.orbitVals, data.planets);
+        data.loadedPreset[PageOrbit] = -1;
+        setFlash ("System: " + orbitSystemNames()[juce::roundToInt (data.orbitVals[slot::OSystem])]);
+    }
     if (s == slot::Key || s == slot::Scale)
     {
         key = juce::roundToInt (data.globals[GKey]);
@@ -193,6 +209,8 @@ void BoxController::resetKnob (int knob)
     const float before = data.get (pg, s);
     data.set (pg, s, d.perDrum ? 1.0f : d.def);
     if (data.get (pg, s) == before) return;
+    if (pg == PageOrbit && s == slot::OSystem)
+        BoxData::orbitSystem (juce::roundToInt (data.orbitVals[slot::OSystem]), data.orbitVals, data.planets);
     if (s == slot::Key || s == slot::Scale)
     {
         key = juce::roundToInt (data.globals[GKey]);
@@ -219,6 +237,22 @@ BoxController::KnobView BoxController::knobView (int knob) const
     const int pg = page.load();
     const int s = knob + (shift.load() ? numKnobs : 0);
     if (isSoundMode()) return engineView (knob + (shift.load() ? numKnobs : 0));
+    if (pg == PageOrbit && isStepView() && ! shift.load() && knob >= 1 && knob <= 6)
+    {
+        v.used = v.stepEdit = true;
+        const auto& p = data.planets[(size_t) juce::jlimit (0, numPlanets - 1, planetSel)];
+        const juce::String n = "Planet " + juce::String (planetSel + 1) + " ";
+        switch (knob)
+        {
+            case 1:  v.name = n + "mass";    v.value = juce::String (juce::roundToInt (p.mass)) + " kg"; v.fraction = p.mass / 100.0f; break;
+            case 2:  v.name = n + "orbit";   v.value = juce::String (p.radius, 1) + " AU";               v.fraction = p.radius / 32.0f; break;
+            case 3:  v.name = n + "ellipse"; v.value = juce::String (juce::roundToInt (p.eccentricity * 100.0f)) + "%"; v.fraction = p.eccentricity / 0.9f; break;
+            case 4:  v.name = n + "speed";   v.value = "x" + juce::String (p.speed, 2);                  v.fraction = (p.speed - 0.25f) / 3.75f; break;
+            case 5:  v.name = n + "octave";  v.value = (p.octave > 0 ? "+" : "") + juce::String (p.octave); v.fraction = (p.octave + 2) / 4.0f; break;
+            default: v.name = n + "length";  v.value = juce::String (juce::roundToInt (p.gate * 1000.0f)) + " ms"; v.fraction = std::log (p.gate / 0.02f) / std::log (200.0f); break;
+        }
+        return v;
+    }
     if (pg == PageChords && isStepView() && ! shift.load() && knob >= 1 && knob <= 3)
     {
         v.used = v.stepEdit = true;
@@ -338,6 +372,28 @@ void BoxController::publish (bool atBar)
     s.master.pumpTarget = juce::roundToInt (f[slot::FPumpTarget]);
     s.master.sends = { f[slot::FSendDrums], f[slot::FSendArp], f[slot::FSendBass] };
 
+    {
+        const auto& o = data.orbitVals;
+        s.orbitGlobal.gravity = o[slot::OGravity];
+        s.orbitGlobal.drag = o[slot::ODrag];
+        s.orbitGlobal.turbulence = o[slot::OTurbulence];
+        s.orbitGlobal.spokes = juce::roundToInt (o[slot::OSpokes]);
+        s.orbitGlobal.alignRadians = juce::degreesToRadians (15.0 * juce::roundToInt (o[slot::OAlign]));
+        s.orbitGrid = juce::roundToInt (o[slot::OQuantize]);
+        s.orbitTarget = juce::roundToInt (o[slot::OPlaysOn]) == 1 ? Bass : Arp;
+        s.orbitGate = std::pow (2.0f, (o[slot::OGate] - 0.5f) * 4.0f);
+        s.orbitDynamics = o[slot::ODynamics];
+        const float speed = orbitSpeedFactor (juce::roundToInt (o[slot::OSpeed])), size = orbitSizeFactor (juce::roundToInt (o[slot::OSize]));
+        for (int i = 0; i < numPlanets; ++i)
+        {
+            auto p = data.planets[(size_t) i];
+            p.speed = juce::jlimit (0.05f, 16.0f, p.speed * speed);
+            p.radius = juce::jlimit (0.5f, 64.0f, p.radius * size);
+            p.eccentricity = juce::jlimit (0.0f, 0.9f, p.eccentricity + o[slot::OEcc] * 0.9f);
+            s.orbitPlanets[(size_t) i] = p;
+        }
+    }
+
     audio.setSnapshot (s, atBar);
 }
 
@@ -422,6 +478,27 @@ void BoxController::padDown (int pad, int velocity)
         return;
     }
 
+    if (pg == PageOrbit)
+    {
+        if (isStepView())   // edit: pads 1-8 pick a planet
+        {
+            if (pad < numPlanets)
+                runOnMessageThread ([this, pad]
+                {
+                    planetSel = pad;
+                    setFlash ("Planet " + juce::String (pad + 1) + ": knobs 2-7 = mass, orbit, ellipse, speed, octave, length");
+                });
+            return;
+        }
+        const int note = orbitPadNote (pad);
+        if (note < 0) return;
+        BoxEvent e; e.type = BoxEvent::OrbitOn; e.a = note; e.b = velocity;
+        padHeldInst[(size_t) pad] = PageOrbit;
+        padHeldNote[(size_t) pad] = note;
+        audio.post (e);
+        return;
+    }
+
     if (pg == PageFx)   // performance pads: on while held
     {
         BoxEvent e; e.type = BoxEvent::PerfOn; e.a = pad;
@@ -489,7 +566,7 @@ void BoxController::padUp (int pad)
     if (note < 0 || inst < 0) return;
     if (inst == PageChords) { runOnMessageThread ([this, pad] { chordPadUp (pad); }); return; }
     BoxEvent e;
-    e.type = inst == PageFx ? BoxEvent::PerfOff : inst == Arp ? BoxEvent::ArpOff : BoxEvent::BassOff;
+    e.type = inst == PageFx ? BoxEvent::PerfOff : inst == PageOrbit ? BoxEvent::OrbitOff : inst == Arp ? BoxEvent::ArpOff : BoxEvent::BassOff;
     e.a = note;
     if (inst == PageFx || inst == Arp || inst == Bass) audio.post (e);
 }
@@ -510,7 +587,7 @@ juce::String BoxController::buttonLabel (int b) const
         case BtnOctUp:      return isSoundMode() ? "Page +" : pg == PageFx ? "-" : pg == Drums ? (sh ? "Page +" : "Drum +") : (isStepView() && pg == Bass ? "Page +" : "Oct +");
         case BtnChaos:      return sh ? "Undo" : "Chaos";
         case BtnSound:      return "Sound";
-        case BtnRec:        return sh || sceneMode.load() ? "Save" : pg == Arp || pg == PageChords ? "Hold" : pg == PageFx ? "-" : "Rec";
+        case BtnRec:        return sh || sceneMode.load() ? "Save" : pg == Arp || pg == PageChords || pg == PageOrbit ? "Hold" : pg == PageFx ? "-" : "Rec";
         default:            return {};
     }
 }
@@ -529,6 +606,12 @@ void BoxController::clearPage()
         for (auto& s : data.inst[Bass].bassSteps) s = {};
         bassSel = -1;
         setFlash ("Cleared the bass line");
+    }
+    else if (pg == PageOrbit)
+    {
+        BoxEvent e; e.type = BoxEvent::OrbitClear;
+        audio.post (e);
+        setFlash ("The planets are gone");
     }
     else if (pg == PageChords)
     {
@@ -571,6 +654,7 @@ void BoxController::buttonDown (int b)
                 setFlash (pg == Drums ? "Steps: pads = 16 steps of " + drumPadName (data.selectedDrum)
                         : pg == Arp   ? juce::String ("Steps: tap a pad: on > rest > tie > accent")
                         : pg == PageChords ? juce::String ("Edit chords: tap a pad, knobs 2-4 = root, type, inversion")
+                        : pg == PageOrbit ? juce::String ("Planets: pads 1-8 pick one, knobs 2-7 = mass, orbit, ellipse, speed, octave, length")
                                       : juce::String ("Steps: tap = set / pick, knobs 2-4 = note, slide, accent"));
             else
                 setFlash ("Pads play");
@@ -623,6 +707,14 @@ void BoxController::buttonDown (int b)
                 markDirty();
                 break;
             }
+            if (pg == PageOrbit)
+            {
+                data.set (PageOrbit, slot::OOctave, data.get (PageOrbit, slot::OOctave) + (float) dir);
+                const int o = juce::roundToInt (data.get (PageOrbit, slot::OOctave));
+                setFlash ("Pad octave " + juce::String (o > 0 ? "+" : "") + juce::String (o));
+                markDirty();
+                break;
+            }
             if (pg == PageChords)
             {
                 data.set (PageChords, slot::COctave, data.get (PageChords, slot::COctave) + (float) dir);
@@ -660,6 +752,14 @@ void BoxController::buttonDown (int b)
             {
                 saveArm = true;   // the next pad saves (also when Rec is already let go, e.g. clicked with the mouse)
                 setFlash (sceneMode.load() ? "Save scene: press a pad" : "Save preset: press a pad (1-16)");
+                break;
+            }
+            if (pg == PageOrbit)
+            {
+                orbitLatch = ! orbitLatch;
+                BoxEvent e; e.type = BoxEvent::OrbitLatch; e.a = orbitLatch ? 1 : 0;
+                audio.post (e);
+                setFlash (orbitLatch ? "Hold: the planets keep turning" : "Hold off");
                 break;
             }
             if (pg == Arp || pg == PageChords)
@@ -708,7 +808,8 @@ bool BoxController::isButtonLit (int b) const
         case BtnInstrument: return instrHeld;
         case BtnScene: return sceneMode.load();
         case BtnSound: return isSoundMode();
-        case BtnRec:   return page.load() == Arp || page.load() == PageChords ? latchOn : page.load() < NumInstruments && audio.isRecording();
+        case BtnRec:   return page.load() == Arp || page.load() == PageChords ? latchOn : page.load() == PageOrbit ? orbitLatch
+                              : page.load() < NumInstruments && audio.isRecording();
         default:       return false;
     }
 }
@@ -780,6 +881,7 @@ void BoxController::handleIncomingMidiMessage (juce::MidiInput*, const juce::Mid
     {
         case Drums: if (m.isNoteOff()) return; e.type = BoxEvent::DrumHit; break;
         case Bass:  e.type = m.isNoteOn() ? BoxEvent::BassOn : BoxEvent::BassOff; break;
+        case PageOrbit: e.type = m.isNoteOn() ? BoxEvent::OrbitOn : BoxEvent::OrbitOff; break;
         default:    e.type = m.isNoteOn() ? BoxEvent::ArpOn : BoxEvent::ArpOff; break;   // Arp and the FX page
     }
     audio.post (e);
@@ -824,6 +926,7 @@ bool BoxController::savePreset (int pg, int presetSlot)
     juce::var v;
     if (pg == PageFx) v = BoxData::fxToVar (data.fx);
     else if (pg == PageChords) v = BoxData::chordsToVar (data.chordVals, data.chords);
+    else if (pg == PageOrbit) v = BoxData::orbitToVar (data.orbitVals, data.planets);
     else
     {
         auto state = data.inst[(size_t) pg];
@@ -856,6 +959,7 @@ bool BoxController::loadPreset (int pg, int presetSlot)
         const auto v = juce::JSON::parse (f);
         if (pg == PageFx) ok = BoxData::fxFromVar (v, data.fx);
         else if (pg == PageChords) { ok = BoxData::chordsFromVar (v, data.chordVals, data.chords); chordSel = -1; }
+        else if (pg == PageOrbit) ok = BoxData::orbitFromVar (v, data.orbitVals, data.planets);
         else
         {
             InstrumentState state;
@@ -944,14 +1048,17 @@ const std::vector<ChaosRange>& chaosRanges (int page)
     static const std::vector<ChaosRange> chords {
         { slot::CVoicing, 0, 3 }, { slot::CLeading, 0.3f, 1.0f }, { slot::CStrum, 0.0f, 0.5f }, { slot::CStrumDir, 0, 2 },
         { slot::CBassNote, 0, 1 }, { slot::CVelocity, 0.5f, 1.0f } };
-    return page == Drums ? drums : page == Arp ? arp : page == Bass ? bass : page == PageChords ? chords : fx;
+    static const std::vector<ChaosRange> orbit {
+        { slot::OGravity, 0.2f, 0.9f }, { slot::ODrag, 0.0f, 0.4f }, { slot::OTurbulence, 0.0f, 0.5f }, { slot::OSpokes, 1, 4 },
+        { slot::OAlign, 0, 23 }, { slot::OSpeed, 2, 5 }, { slot::OSize, 1, 3 }, { slot::OGate, 0.3f, 0.7f }, { slot::OEcc, 0.0f, 0.5f } };
+    return page == Drums ? drums : page == Arp ? arp : page == Bass ? bass : page == PageChords ? chords : page == PageOrbit ? orbit : fx;
 }
 } // namespace
 
 void BoxController::chaos()
 {
     const int pg = page.load();
-    auto& now = pg == PageFx ? data.fx : pg == PageChords ? data.chordVals : data.inst[(size_t) pg].values;
+    auto& now = pg == PageFx ? data.fx : pg == PageChords ? data.chordVals : pg == PageOrbit ? data.orbitVals : data.inst[(size_t) pg].values;
     chaosUndo[(size_t) pg] = now;
     hasChaosUndo[(size_t) pg] = true;
     for (const auto& r : chaosRanges (pg))
@@ -972,7 +1079,7 @@ bool BoxController::undoChaos()
 {
     const int pg = page.load();
     if (! hasChaosUndo[(size_t) pg]) return false;
-    auto& now = pg == PageFx ? data.fx : pg == PageChords ? data.chordVals : data.inst[(size_t) pg].values;
+    auto& now = pg == PageFx ? data.fx : pg == PageChords ? data.chordVals : pg == PageOrbit ? data.orbitVals : data.inst[(size_t) pg].values;
     std::swap (now, chaosUndo[(size_t) pg]);   // pressed again, it goes back to the chaos
     publish();
     markDirty();
@@ -1049,6 +1156,7 @@ bool BoxController::storeLocalPresetJson (int pg, int slotIndex, const juce::var
     if (pg < 0) { BoxData probe; valid = probe.sceneFromVar (preset); }
     else if (pg == PageFx) { std::array<float, numSlots> tmp {}; valid = BoxData::fxFromVar (preset, tmp); }
     else if (pg == PageChords) { std::array<float, numSlots> tmp {}; std::array<ChordSlot, numPads> cs {}; valid = BoxData::chordsFromVar (preset, tmp, cs); }
+    else if (pg == PageOrbit) { std::array<float, numSlots> tmp {}; Planets ps {}; valid = BoxData::orbitFromVar (preset, tmp, ps); }
     else { auto tmp = std::make_unique<InstrumentState>(); valid = BoxData::instrumentFromVar (pg, preset, *tmp); }
     if (! valid) return false;
     const bool ok = writeSafely (pg < 0 ? sceneFile (slotIndex) : presetFile (pg, slotIndex), juce::JSON::toString (preset));
@@ -1088,6 +1196,7 @@ void BoxController::rescanNames()
                 if (pg < 0) valid = v.isObject() && v["format"].toString() == "catbox-scene-1";
                 else if (pg == PageFx) { std::array<float, numSlots> tmp {}; valid = BoxData::fxFromVar (v, tmp); }
                 else if (pg == PageChords) { std::array<float, numSlots> tmp {}; std::array<ChordSlot, numPads> cs {}; valid = BoxData::chordsFromVar (v, tmp, cs); }
+                else if (pg == PageOrbit) { std::array<float, numSlots> tmp {}; Planets ps {}; valid = BoxData::orbitFromVar (v, tmp, ps); }
                 else { auto tmp = std::make_unique<InstrumentState>(); valid = BoxData::instrumentFromVar (pg, v, *tmp); }
                 if (valid)
                 {
@@ -1189,6 +1298,14 @@ juce::var BoxController::makeLive()
     o->setProperty ("peak", audio.peak.load());
     o->setProperty ("wait", audio.sceneWaiting.load());
     o->setProperty ("bn", audio.bassNoteNow.load());
+    juce::Array<juce::var> orb;   // the planets: note, angle, distance, mass (only the active ones)
+    for (const auto& pv : audio.planetView)
+        if (pv.active.load())
+            orb.add (juce::Array<juce::var> { pv.note.load(), std::round (pv.theta.load() * 1000.0f) / 1000.0f,
+                                              std::round (pv.radius.load() * 100.0f) / 100.0f, std::round (pv.mass.load()) });
+    o->setProperty ("orb", orb);
+    o->setProperty ("orbFlash", (int) audio.planetFlashLink.exchange (0));
+    o->setProperty ("orbHold", audio.orbitLatched.load());
     // the last ~40 ms of sound, rounded (for the oscilloscope and spectrum on the PC)
     juce::Array<juce::var> wave;
     const int w = audio.spectrumWrite.load (std::memory_order_relaxed);
@@ -1257,6 +1374,20 @@ void BoxController::applyLive (const juce::var& v)
     audio.peak = (float) v.getProperty ("peak", 0.0);
     audio.sceneWaiting = (bool) v["wait"];
     audio.bassNoteNow = (int) v.getProperty ("bn", -1);
+    if (auto* orb = v["orb"].getArray())
+        for (int i = 0; i < orbitcat::maxBodies; ++i)
+        {
+            auto& pv = audio.planetView[(size_t) i];
+            auto* a = i < orb->size() ? (*orb)[i].getArray() : nullptr;
+            pv.active = a != nullptr && a->size() >= 4;
+            if (! pv.active.load()) continue;
+            pv.note = (int) (*a)[0];
+            pv.theta = (float) (*a)[1];
+            pv.radius = (float) (*a)[2];
+            pv.mass = (float) (*a)[3];
+        }
+    audio.planetFlash.fetch_or ((uint32_t) (int) v.getProperty ("orbFlash", 0));
+    orbitLatch = (bool) v.getProperty ("orbHold", false);
     if (auto* wave = v["wave"].getArray())
     {
         const int n = juce::jmin (BoxAudio::spectrumSize, wave->size());
@@ -1657,6 +1788,32 @@ juce::String BoxController::chordPadLabel (int pad) const
         return t[pad];
     }
     return chordName (key.load(), chordForPad (pad));
+}
+
+//==============================================================================
+// The Orbit page
+int BoxController::orbitPadNote (int pad) const
+{
+    const int base = 48 + 12 * juce::roundToInt (data.orbitVals[slot::OOctave]);
+    if (juce::roundToInt (data.orbitVals[slot::OPads]) == 0) return pianoPadNote (pad, base);
+    return scaleNote (key.load(), scale.load(), pad, base);
+}
+
+void BoxController::editPlanet (int knob, int clicks)
+{
+    auto& p = data.planets[(size_t) juce::jlimit (0, numPlanets - 1, planetSel)];
+    switch (knob)
+    {
+        case 1:  p.mass = juce::jlimit (1.0f, 100.0f, p.mass + 2.0f * (float) clicks); break;
+        case 2:  p.radius = juce::jlimit (1.0f, 32.0f, p.radius + 0.5f * (float) clicks); break;
+        case 3:  p.eccentricity = juce::jlimit (0.0f, 0.9f, p.eccentricity + 0.02f * (float) clicks); break;
+        case 4:  p.speed = juce::jlimit (0.25f, 4.0f, p.speed + 0.05f * (float) clicks); break;
+        case 5:  p.octave = juce::jlimit (-2, 2, p.octave + clicks); break;
+        default: p.gate = juce::jlimit (0.02f, 4.0f, p.gate * std::pow (1.08f, (float) clicks)); break;
+    }
+    data.loadedPreset[PageOrbit] = -1;
+    publish();
+    markDirty();
 }
 
 } // namespace catbox

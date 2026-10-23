@@ -71,6 +71,10 @@ public:
     juce::String chordPadLabel (int pad) const;                   // what a pad plays on the Chords page
     bool chordPadSounding (int pad) const noexcept { return pad >= 0 && pad < numPads && padChordCount[(size_t) pad] > 0; }
     int orchidHeldType() const noexcept { return orchidType.load(); }
+    // the Orbit page (held notes are planets)
+    int orbitPadNote (int pad) const;
+    int selectedPlanet() const noexcept { return planetSel; }
+    bool isOrbitHeld() const noexcept { return orbitLatch; }
     bool isOrchid() const noexcept { return juce::roundToInt (data.chordVals[slot::CPlay]) == 1; }
     bool isSceneMode() const noexcept { return sceneMode.load(); }
     bool isLatched() const noexcept { return latchOn; }
@@ -168,6 +172,9 @@ private:
     int lastChordCount = 0;
     bool strumFlip = false;
     int chordSel = -1;
+    int planetSel = 0;
+    bool orbitLatch = false;
+    void editPlanet (int knob, int clicks);
     juce::String chordNowName;
     ChordSlot chordForPad (int pad) const;
     ChordSlot chordForNote (int note, int& octaveShift) const;

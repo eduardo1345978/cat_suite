@@ -105,6 +105,27 @@ Table buildTable()
     c[slot::CVelocity] = percent ("Soft / hard", 0.75f);
     c[slot::CRoots]    = choice ("Orchid roots", { "Scale", "Piano" }, 0);
 
+    auto& o = t[PageOrbit];
+    o[slot::OSystem]     = choice ("System", orbitSystemNames(), 14);   // Quiet Orbit
+    o[slot::OGravity]    = percent ("Gravity", 0.4f);
+    o[slot::ODrag]       = percent ("Drag", 0.0f);
+    o[slot::OTurbulence] = percent ("Turbulence", 0.05f);
+    o[slot::OSpokes]     = integer ("Lines", 1, 6, 1);
+    {
+        juce::StringArray deg;
+        for (int i = 0; i < 24; ++i) deg.add (juce::String (i * 15) + juce::String::fromUTF8 ("\u00b0"));
+        o[slot::OAlign]  = choice ("Line angle", deg, 6);
+    }
+    o[slot::OQuantize]   = choice ("Grid", orbitcat::getQuantizeNames(), 3);
+    o[slot::OSpeed]      = choice ("Speed", { "x1/4", "x1/2", "x3/4", "x1", "x1.5", "x2", "x3", "x4" }, 3);
+    o[slot::OSize]       = choice ("Orbits", { "Tiny", "Small", "Normal", "Wide", "Huge" }, 2);
+    o[slot::OGate]       = percent ("Note length", 0.5f);
+    o[slot::ODynamics]   = percent ("Soft / hard", 0.7f);
+    o[slot::OPlaysOn]    = choice ("Plays on", { "Arp sound", "Bass sound" }, 0);
+    o[slot::OEcc]        = percent ("Ellipses", 0.0f);
+    o[slot::OOctave]     = integer ("Octave", -2, 2, 0);
+    o[slot::OPads]       = choice ("Pads", { "Piano", "Scale" }, 1);
+
     auto& f = t[PageFx];
     f[slot::FReverb]     = percent ("Reverb", 0.6f);
     f[slot::FSize]       = percent ("Room size", 0.6f);
@@ -148,7 +169,7 @@ const ParamDesc& paramDesc (int page, int slotIndex)
     return table()[(size_t) juce::jlimit (0, NumPages - 1, page)][(size_t) juce::jlimit (0, numSlots - 1, slotIndex)];
 }
 
-juce::String instrumentName (int i)   { return i == Drums ? "Drums" : i == Arp ? "Arp" : i == Bass ? "Bass" : i == PageChords ? "Chords" : "FX"; }
+juce::String instrumentName (int i)   { return i == Drums ? "Drums" : i == Arp ? "Arp" : i == Bass ? "Bass" : i == PageChords ? "Chords" : i == PageOrbit ? "Orbit" : "FX"; }
 juce::String instrumentFolder (int i) { return instrumentName (i); }
 
 //==============================================================================
@@ -312,6 +333,92 @@ juce::String chordName (int key, const ChordSlot& c)
     return juce::String (names[(key + c.root) % 12]) + chordSuffix (c.type) + (c.inversion > 0 ? "/" + juce::String (c.inversion) : juce::String());
 }
 
+//==============================================================================
+juce::StringArray orbitSystemNames()
+{
+    juce::StringArray n;
+    for (const auto& p : orbitcat::getOrbitPresets()) n.add (p.name);
+    return n;
+}
+
+float orbitSpeedFactor (int c)
+{
+    static const float f[] = { 0.25f, 0.5f, 0.75f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f };
+    return f[juce::jlimit (0, 7, c)];
+}
+
+float orbitSizeFactor (int c)
+{
+    static const float f[] = { 0.5f, 0.75f, 1.0f, 1.4f, 2.0f };
+    return f[juce::jlimit (0, 4, c)];
+}
+
+std::array<float, numSlots> BoxData::orbitDefaults()
+{
+    std::array<float, numSlots> v {};
+    for (int i = 0; i < numSlots; ++i)
+        if (const auto& d = paramDesc (PageOrbit, i); d.used() && d.global < 0) v[(size_t) i] = d.def;
+    return v;
+}
+
+void BoxData::orbitSystem (int system, std::array<float, numSlots>& vals, Planets& planets)
+{
+    const auto& list = orbitcat::getOrbitPresets();
+    system = juce::jlimit (0, (int) list.size() - 1, system);
+    const auto& p = list[(size_t) system];
+    planets = p.bodies;
+    vals[slot::OSystem] = (float) system;
+    vals[slot::OGravity] = p.global.gravity;
+    vals[slot::ODrag] = p.global.drag;
+    vals[slot::OTurbulence] = p.global.turbulence;
+    vals[slot::OSpokes] = (float) juce::jlimit (1, 6, p.global.spokes);
+    vals[slot::OAlign] = (float) (juce::roundToInt (p.alignDegrees / 15.0f) % 24);
+    vals[slot::OQuantize] = (float) juce::jlimit (0, 6, p.quantize);
+}
+
+juce::var BoxData::orbitToVar (const std::array<float, numSlots>& vals, const Planets& planets)
+{
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("instrument", "Orbit");
+    o->setProperty ("v", 2);
+    juce::Array<juce::var> values, ps;
+    for (auto x : vals) values.add (x);
+    for (const auto& b : planets)
+        ps.add (juce::Array<juce::var> { b.mass, b.radius, b.eccentricity, b.speed, b.octave, b.damp, b.gate, b.boost });
+    o->setProperty ("values", values);
+    o->setProperty ("planets", ps);
+    return juce::var (o);
+}
+
+bool BoxData::orbitFromVar (const juce::var& v, std::array<float, numSlots>& vals, Planets& planets)
+{
+    if (! v.isObject() || v["instrument"].toString() != "Orbit") return false;
+    auto fresh = orbitDefaults();
+    Planets pl {};
+    orbitSystem (juce::roundToInt (fresh[slot::OSystem]), fresh, pl);
+    if (auto* values = v["values"].getArray())
+        for (int i = 0; i < juce::jmin (numSlots, values->size()); ++i)
+            if (const auto& d = paramDesc (PageOrbit, i); d.used() && d.global < 0)
+                fresh[(size_t) i] = juce::jlimit (d.min, d.max, (float) (*values)[i]);
+    if (auto* list = v["planets"].getArray())
+        for (int i = 0; i < juce::jmin (numPlanets, list->size()); ++i)
+            if (auto* a = (*list)[i].getArray(); a != nullptr && a->size() >= 8)
+            {
+                auto& b = pl[(size_t) i];
+                b.mass = juce::jlimit (1.0f, 100.0f, (float) (*a)[0]);
+                b.radius = juce::jlimit (1.0f, 32.0f, (float) (*a)[1]);
+                b.eccentricity = juce::jlimit (0.0f, 0.9f, (float) (*a)[2]);
+                b.speed = juce::jlimit (0.25f, 4.0f, (float) (*a)[3]);
+                b.octave = juce::jlimit (-2, 2, (int) (*a)[4]);
+                b.damp = juce::jlimit (0.0f, 1.0f, (float) (*a)[5]);
+                b.gate = juce::jlimit (0.02f, 4.0f, (float) (*a)[6]);
+                b.boost = juce::jlimit (0.0f, 1.0f, (float) (*a)[7]);
+            }
+    vals = fresh;
+    planets = pl;
+    return true;
+}
+
 std::array<float, numSlots> BoxData::chordDefaults()
 {
     std::array<float, numSlots> v {};
@@ -427,6 +534,7 @@ juce::var BoxData::sceneToVar() const
     o->setProperty ("instruments", insts);
     o->setProperty ("fx", fxToVar (fx));
     o->setProperty ("chords", chordsToVar (chordVals, chords));
+    o->setProperty ("orbit", orbitToVar (orbitVals, planets));
     return juce::var (o);
 }
 
@@ -441,6 +549,7 @@ bool BoxData::sceneFromVar (const juce::var& v)
     inst = fresh;
     fxFromVar (v["fx"], fx);
     if (v.hasProperty ("chords")) chordsFromVar (v["chords"], chordVals, chords);
+    if (v.hasProperty ("orbit")) orbitFromVar (v["orbit"], orbitVals, planets);
     globals[GTempo] = juce::jlimit (40.0f, 240.0f, (float) v.getProperty ("tempo", globals[GTempo]));
     globals[GKey]   = (float) juce::jlimit (0, 11, (int) v.getProperty ("key", (int) globals[GKey]));
     globals[GScale] = (float) juce::jlimit (0, scaleNames().size() - 1, (int) v.getProperty ("scale", (int) globals[GScale]));
@@ -453,6 +562,8 @@ BoxData::BoxData()
     fx = fxDefaults();
     chordVals = chordDefaults();
     chords = defaultChords (1);
+    orbitVals = orbitDefaults();
+    orbitSystem (juce::roundToInt (orbitVals[slot::OSystem]), orbitVals, planets);
     globals[GTempo] = 110.0f;
     globals[GKey] = 0.0f;
     globals[GScale] = 1.0f;
@@ -466,6 +577,7 @@ float BoxData::get (int instrument, int slotIndex) const
     if (d.global >= 0) return globals[(size_t) d.global];
     if (instrument == PageFx) return fx[(size_t) slotIndex];
     if (instrument == PageChords) return chordVals[(size_t) slotIndex];
+    if (instrument == PageOrbit) return orbitVals[(size_t) slotIndex];
     const auto& s = inst[(size_t) juce::jlimit (0, NumInstruments - 1, instrument)];
     if (d.perDrum)
         return slotIndex == slot::DLevel ? s.drumLevel[(size_t) selectedDrum] : s.drumChance[(size_t) selectedDrum];
@@ -481,6 +593,7 @@ void BoxData::set (int instrument, int slotIndex, float value)
     if (d.global >= 0) { globals[(size_t) d.global] = value; return; }
     if (instrument == PageFx) { fx[(size_t) slotIndex] = value; return; }
     if (instrument == PageChords) { chordVals[(size_t) slotIndex] = value; return; }
+    if (instrument == PageOrbit) { orbitVals[(size_t) slotIndex] = value; return; }
     auto& s = inst[(size_t) juce::jlimit (0, NumInstruments - 1, instrument)];
     if (d.perDrum)
         (slotIndex == slot::DLevel ? s.drumLevel : s.drumChance)[(size_t) selectedDrum] = value;
@@ -591,6 +704,8 @@ juce::var BoxData::toVar() const
     o->setProperty ("fxPreset", loadedPreset[PageFx]);
     o->setProperty ("chords", chordsToVar (chordVals, chords));
     o->setProperty ("chordsPreset", loadedPreset[PageChords]);
+    o->setProperty ("orbit", orbitToVar (orbitVals, planets));
+    o->setProperty ("orbitPreset", loadedPreset[PageOrbit]);
     o->setProperty ("scene", loadedScene);
     juce::Array<juce::var> insts;
     for (int i = 0; i < NumInstruments; ++i)
@@ -618,6 +733,8 @@ void BoxData::fromVar (const juce::var& v)
     loadedPreset[PageFx] = juce::jlimit (-1, numPresetSlots - 1, (int) v.getProperty ("fxPreset", -1));
     if (v.hasProperty ("chords")) chordsFromVar (v["chords"], chordVals, chords);
     loadedPreset[PageChords] = juce::jlimit (-1, numPresetSlots - 1, (int) v.getProperty ("chordsPreset", -1));
+    if (v.hasProperty ("orbit")) orbitFromVar (v["orbit"], orbitVals, planets);
+    loadedPreset[PageOrbit] = juce::jlimit (-1, numPresetSlots - 1, (int) v.getProperty ("orbitPreset", -1));
     loadedScene = juce::jlimit (-1, numPresetSlots - 1, (int) v.getProperty ("scene", -1));
     selectedDrum = juce::jlimit (0, numPads - 1, (int) v.getProperty ("selectedDrum", 0));
     lightScreen = (bool) v.getProperty ("light", false);

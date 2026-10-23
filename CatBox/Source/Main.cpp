@@ -48,7 +48,9 @@ public:
             press (BtnInstrument); press (BtnInstrument);
             check (box.getPage() == PageChords, "after Bass comes the Chords page", juce::String (box.getPage()));
             press (BtnInstrument);
-            check (box.getPage() == PageFx, "the fifth page is FX", juce::String (box.getPage()));
+            check (box.getPage() == PageOrbit, "then the Orbit page", juce::String (box.getPage()));
+            press (BtnInstrument);
+            check (box.getPage() == PageFx, "the sixth page is FX", juce::String (box.getPage()));
             press (BtnInstrument);
             check (box.getPage() == Drums, "pages go round", {});
             box.buttonDown (BtnInstrument);
@@ -322,6 +324,61 @@ public:
                 box.turnKnob (2, 3.0f);
                 check (box.loadPreset (PageChords, 3) && box.getData().chords[0].type != 0, "a Chords preset keeps the chords", box.chordPadLabel (0));
                 press (BtnSteps);
+                soloOnly (-1);
+                box.setPage (Arp);
+            }
+
+            // the Orbit page: every held note is a planet that plays when it crosses a line
+            {
+                box.setPage (PageOrbit);
+                soloOnly (Arp);
+                auto countPlanets = [&audio]
+                {
+                    int n = 0;
+                    for (const auto& pv : audio.planetView) n += pv.active.load() ? 1 : 0;
+                    return n;
+                };
+                const int hits0 = audio.orbitHits.load();
+                for (int pad : { 0, 2, 4 }) box.padDown (pad, 100);
+                const auto orbitSound = renderSeconds (audio, 2.5, nullptr);
+                check (countPlanets() == 3, "each held note is a planet", juce::String (countPlanets()));
+                check (orbitSound.finite && orbitSound.peak <= 1.0f && orbitSound.rms > 0.002f && audio.orbitHits.load() - hits0 >= 3,
+                       "the planets play notes on the Arp's sound", juce::String (audio.orbitHits.load() - hits0) + " notes, rms " + juce::String (orbitSound.rms, 4));
+                for (int pad : { 0, 2, 4 }) box.padUp (pad);
+                renderSeconds (audio, 0.1, nullptr);
+                check (countPlanets() == 0, "let go: the planets leave", {});
+                press (BtnRec);
+                box.padDown (7, 100); box.padUp (7);
+                const int hits1 = audio.orbitHits.load();
+                renderSeconds (audio, 2.5, nullptr);
+                check (box.isOrbitHeld() && countPlanets() == 1 && audio.orbitHits.load() > hits1, "Rec = Hold: the planet keeps turning and playing",
+                       juce::String (audio.orbitHits.load() - hits1));
+                const auto sys0 = box.knobView (slot::OSystem).value;
+                box.turnKnob (slot::OSystem, 3.0f);
+                check (box.knobView (slot::OSystem).value != sys0, "the System knob loads another planet system", sys0 + " > " + box.knobView (slot::OSystem).value);
+                press (BtnSteps);
+                box.padDown (2, 100); box.padUp (2);
+                const float mass0 = box.getData().planets[2].mass;
+                box.turnKnob (1, 10.0f);
+                check (box.selectedPlanet() == 2 && box.getData().planets[2].mass != mass0, "Steps: pad = planet, knob 2 = its mass",
+                       juce::String (mass0) + " > " + juce::String (box.getData().planets[2].mass));
+                press (BtnSteps);
+                const auto saved = box.getData().planets;
+                box.savePreset (PageOrbit, 2);
+                box.turnKnob (slot::OSystem, 2.0f);
+                check (box.loadPreset (PageOrbit, 2) && box.getData().planets[2].mass == saved[2].mass, "an Orbit preset keeps its planets", {});
+                box.buttonDown (BtnShift);
+                box.turnKnob (slot::OPlaysOn - numKnobs, 1.0f);
+                box.buttonUp (BtnShift);
+                soloOnly (Bass);
+                const auto onBass = renderSeconds (audio, 2.5, nullptr);
+                check (onBass.finite && onBass.rms > 0.002f, "the planets can play the Bass sound", "rms " + juce::String (onBass.rms, 4));
+                box.buttonDown (BtnShift);
+                box.turnKnob (slot::OPlaysOn - numKnobs, -1.0f);
+                box.buttonUp (BtnShift);
+                press (BtnRec);
+                renderSeconds (audio, 0.1, nullptr);
+                check (! box.isOrbitHeld() && countPlanets() == 0, "Hold off: the planet leaves", juce::String (countPlanets()));
                 soloOnly (-1);
                 box.setPage (Arp);
             }
