@@ -119,6 +119,17 @@ void BoxController::turnKnob (int knob, float clicks)
 {
     if (knob < 0 || knob >= numKnobs || clicks == 0.0f) return;
     if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "knob"); o->setProperty ("k", knob); o->setProperty ("c", clicks); sendRemote (o); return; }
+    if (instrHeld)   // Instr held + any knob = flip through the pages quickly
+    {
+        instrRemainder += clicks;
+        const int whole = (int) std::trunc (instrRemainder);
+        if (whole == 0) return;
+        instrRemainder -= (float) whole;
+        instrTurned = true;
+        setPage (((page.load() + whole) % NumPages + NumPages) % NumPages);
+        setFlash (instrumentName (page.load()));
+        return;
+    }
     const int pg = page.load();
     const int s = knob + (shift.load() ? numKnobs : 0);
     lastKnobPg = pg;
@@ -545,7 +556,7 @@ void BoxController::buttonDown (int b)
                 markDirty();
                 setFlash (instrumentName (pg) + (m ? " muted" : " on"));
             }
-            else setPage ((pg + 1) % NumPages);
+            else { instrHeld = true; instrTurned = false; instrRemainder = 0.0f; }   // switches on release, or by a knob while held
             break;
 
         case BtnOctDown:
@@ -611,6 +622,11 @@ void BoxController::buttonUp (int b)
 {
     if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "button"); o->setProperty ("b", b); o->setProperty ("down", false); sendRemote (o); return; }
     if (b == BtnShift) { shift = false; if (! sceneMode.load()) saveArm = false; }
+    if (b == BtnInstrument && instrHeld)
+    {
+        instrHeld = false;
+        if (! instrTurned) setPage ((page.load() + 1) % NumPages);
+    }
     if (b == BtnRec) rec = false;
     if (b == BtnChaos && chaosArmed) { chaosArmed = false; setFlash ("Chaos: hold it a moment"); }
 }
@@ -622,6 +638,7 @@ bool BoxController::isButtonLit (int b) const
         case BtnPlay:  return audio.isPlaying();
         case BtnSteps: return isStepView();
         case BtnShift: return shift.load();
+        case BtnInstrument: return instrHeld;
         case BtnScene: return sceneMode.load();
         case BtnRec:   return page.load() == Arp ? latchOn : page.load() < NumInstruments && audio.isRecording();
         default:       return false;

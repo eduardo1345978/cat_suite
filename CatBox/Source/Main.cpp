@@ -49,6 +49,15 @@ public:
             check (box.getPage() == PageFx, "the fourth page is FX", juce::String (box.getPage()));
             press (BtnInstrument);
             check (box.getPage() == Drums, "pages go round", {});
+            box.buttonDown (BtnInstrument);
+            box.turnKnob (4, 2.0f);
+            check (box.getPage() == Bass, "Instr held + a knob flips through the pages", juce::String (box.getPage()));
+            box.turnKnob (4, -3.0f);
+            box.buttonUp (BtnInstrument);
+            check (box.getPage() == PageFx && std::abs (box.getData().globals[GTempo] - tempo0) < 0.01f,
+                   "turning back goes round, and letting go of Instr stays there", juce::String (box.getPage()));
+            press (BtnInstrument);
+            check (box.getPage() == Drums, "a plain Instr press still goes to the next page", {});
 
             // Steps is per page: Steps on the drums does not turn the Arp pads into steps
             press (BtnSteps);

@@ -54,7 +54,7 @@ itself on UDP port 50651.
 | **Steps** | the pads become 16 steps (per page). Drums: steps of the selected drum (tap: on > accent > off) · Arp: on > rest > tie > accent · Bass: tap an empty step = set it, tap a set step = pick it, tap again = clear; knobs 2 / 3 / 4 edit the picked step's note / slide / accent · **Shift + Steps** = clear (all drums or the selected one in Steps, the bass line, held arp notes, the FX page) |
 | **Shift** | second knob layer; **Shift + pad** = load preset, **Shift + Rec + pad** = save preset |
 | **Scene** | the pads become 16 scenes: pad = recall (all instruments, FX, tempo, key; at the next bar while playing), **Rec + pad** = save |
-| **Instr** | Drums > Arp > Bass > FX (or click the page names on the screen) · **Shift + Instr** = mute |
+| **Instr** | Drums > Arp > Bass > FX (or click the page names on the screen) · **hold Instr and turn any knob** = flip through the pages quickly (right = next, left = back) · **Shift + Instr** = mute |
 | **Oct - / Oct +** | Drums: previous / next drum (**Shift**: step pages) · Arp: pad octave · Bass: pad octave (in Steps: step pages) |
 | **Rec** | Drums / Bass: record what you play into the steps while it runs (Bass: hold two pads = slide, hit hard = accent) · Arp: Hold |
 | **Chaos** | hold it for 0.6 s (a quick tap does nothing, so no accidents): new random sound settings for the page on screen, within musical ranges (patterns, tempo, key and volume stay) · **Shift + Chaos** = take it back (again = back to the chaos) |

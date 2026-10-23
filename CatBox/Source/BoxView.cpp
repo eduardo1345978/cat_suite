@@ -338,7 +338,7 @@ void BoxView::paintHelp (juce::Graphics& g, juce::Rectangle<float> area)
         { "Shift", "second knob layer, Shift + pad = load preset" },
         { "Shift + Enter + pad", "save a preset" },
         { "N", "Scenes: pad = recall, Enter + pad = save" },
-        { "Tab", "next page: Drums, Arp, Bass, FX    (Shift: mute)" },
+        { "Tab", "next page (hold Tab + turn a knob = flip fast, Shift: mute)" },
         { ",   .", "Oct - / Oct + (Drums: previous / next drum)" },
         { "Enter", "Rec (Arp: Hold)" },
         { "C (hold)", "Chaos: new sound for this page    (Shift + C: undo)" },

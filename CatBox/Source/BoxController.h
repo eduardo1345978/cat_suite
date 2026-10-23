@@ -152,6 +152,8 @@ private:
     void sendRemote (juce::DynamicObject*);
     int lastKnobPg = -1, lastKnobSl = -1;
     juce::uint32 lastKnobAt = 0;
+    bool instrHeld = false, instrTurned = false;   // Instr held: the knobs flip through the pages
+    float instrRemainder = 0.0f;
     bool chaosArmed = false;            // Chaos only fires when held for a moment (no accidents)
     juce::uint32 chaosDownAt = 0;
     static constexpr juce::uint32 chaosHoldMs = 600;
