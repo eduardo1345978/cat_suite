@@ -56,6 +56,14 @@ public:
     int getPage() const noexcept { return page.load(); }
     bool isShiftHeld() const noexcept { return shift.load(); }
     bool isStepView() const noexcept { const int p = page.load(); return p < NumInstruments && stepViews[(size_t) p].load(); }
+    /** Sound mode (the Sound button, on Arp and Bass): the knobs edit the page's engine, Oct - / Oct + flip its knob pages. */
+    bool isSoundMode() const noexcept { const int p = page.load(); return soundMode.load() && (p == Arp || p == Bass); }
+    bool isGlide (int page) const;                  // the page's Sound is the Glide engine
+    int enginePage() const noexcept { const int p = page.load(); return p < NumInstruments ? enginePages[(size_t) p].load() : 0; }
+    int numEnginePages() const;
+    juce::String enginePageName() const;            // e.g. "Osc I"
+    juce::String engineTitle() const;               // e.g. "Glide: Glossy Keys *"
+    KnobView engineView (int slotIndex) const;      // a knob in Sound mode (slot 0..23)
     bool isSceneMode() const noexcept { return sceneMode.load(); }
     bool isLatched() const noexcept { return latchOn; }
     bool isButtonLit (int button) const;
@@ -139,6 +147,12 @@ private:
     std::atomic<int> page { Drums }, key { 0 }, scale { 1 }, lastBassNote { 36 };
     std::atomic<bool> shift { false }, rec { false }, saveArm { false }, sceneMode { false };
     std::array<std::atomic<bool>, NumInstruments> stepViews {};
+    std::atomic<bool> soundMode { false };
+    std::array<std::atomic<int>, NumInstruments> enginePages {};
+    std::array<float, numSlots> engineRemainder {};
+    juce::String engineId (int slotIndex) const;
+    void editEngine (int slotIndex, float clicks);
+    void resetEngineSlot (int slotIndex);
     std::array<std::atomic<int>, NumPages> stepPages {};
     std::array<std::atomic<int>, NumInstruments> padOct {};
     std::array<std::atomic<int>, numPads> padHeldNote {}, padHeldInst {};   // -1 = not held / not a note

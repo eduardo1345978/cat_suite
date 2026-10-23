@@ -210,6 +210,7 @@ juce::StringArray arpSoundNames()
     auto s = hub::KeysSynth::soundNames();   // 8 sounds
     s.add ("Supersaw");
     s.add ("Acid");
+    s.add ("Glide");
     return s;
 }
 
@@ -217,7 +218,14 @@ juce::StringArray bassSoundNames()
 {
     juce::StringArray s { "Acid" };
     s.addArray (hub::BassSynth::soundNames());
+    s.add ("Glide");
     return s;
+}
+
+int bassSoundGlide()
+{
+    static const int index = bassSoundNames().size() - 1;
+    return index;
 }
 
 //==============================================================================
@@ -233,6 +241,7 @@ InstrumentState BoxData::defaults (int instrument)
     s.drumChance.fill (1.0f);
     s.arpSteps.fill (StepOn);
     s.arpSteps[0] = s.arpSteps[8] = StepAccent;
+    if (instrument == Arp || instrument == Bass) s.glide = engine::glideDefaults (instrument);
 
     if (instrument == Drums)
     {
@@ -389,6 +398,7 @@ juce::var BoxData::instrumentToVar (int instrument, const InstrumentState& s)
                 notes.add (juce::Array<juce::var> { st, b.note, b.slide ? 1 : 0, b.accent ? 1 : 0 });
         o->setProperty ("notes", notes);
     }
+    if (instrument == Arp || instrument == Bass) o->setProperty ("glide", engine::toVar (s.glide));
     return juce::var (o);
 }
 
@@ -432,6 +442,7 @@ bool BoxData::instrumentFromVar (int instrument, const juce::var& v, InstrumentS
                 b.slide = (int) (*a)[2] != 0;
                 b.accent = (int) (*a)[3] != 0;
             }
+    if (v.hasProperty ("glide") && (instrument == Arp || instrument == Bass)) engine::fromVar (v["glide"], fresh.glide);
     s = std::move (fresh);
     return true;
 }

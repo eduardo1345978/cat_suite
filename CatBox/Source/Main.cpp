@@ -221,6 +221,67 @@ public:
                    "rms " + juce::String (fxChaos.rms, 4));
             box.setPage (Arp);
 
+            // the Glide engine: Sound = Glide, the Sound button opens its knob pages
+            {
+                box.setPage (Arp);
+                const int arpSound0 = juce::roundToInt (box.getData().inst[Arp].values[slot::ASound]);
+                box.buttonDown (BtnShift);
+                box.turnKnob (slot::ASound - numKnobs, 30.0f);
+                box.buttonUp (BtnShift);
+                check (box.isGlide (Arp), "the Arp's Sound can be the Glide engine", box.engineTitle());
+                press (BtnSound);
+                check (box.isSoundMode() && box.knobView (1).name == "Preset", "Sound: the knobs edit the engine", box.knobView (1).name);
+                soloOnly (Arp);
+                box.turnKnob (1, -500.0f);
+                const int numSounds = engine::glideSoundNames().size();
+                int broken = 0, quiet = 0;
+                juce::String quietNames;
+                for (int i = 0; i < numSounds; ++i)
+                {
+                    if (i > 0) box.turnKnob (1, 1.0f);
+                    box.padDown (8, 100);
+                    const auto r = renderSeconds (audio, 0.3, nullptr);
+                    box.padUp (8);
+                    renderSeconds (audio, 0.05, nullptr);
+                    if (! r.finite || r.peak > 1.0f) ++broken;
+                    if (r.rms < 0.001f) { ++quiet; quietNames << engine::glideSoundNames()[i] << " "; }
+                }
+                check (box.getData().inst[Arp].glide.sound == numSounds - 1, "the Preset knob steps through every Glide sound", juce::String (numSounds));
+                check (broken == 0 && quiet <= 8, "every Glide sound plays and stays clean (slow pads may be quiet in 0.3 s)", juce::String (broken) + " broken, quiet: " + quietNames);
+                press (BtnOctUp);
+                check (box.enginePageName() == "Osc I" && box.knobView (3).name == "Saw", "Oct + goes to the next knob page", box.enginePageName() + " / " + box.knobView (3).name);
+                const auto saw0 = box.knobView (3).value;
+                box.turnKnob (3, -30.0f);
+                check (box.knobView (3).value != saw0 && box.engineTitle().endsWith ("*"), "a knob changes the Glide sound (marked *)", saw0 + " > " + box.knobView (3).value);
+                box.resetKnob (3);
+                check (std::abs (engine::get (box.getData().inst[Arp].glide, "l1_saw") - 0.8f) < 0.001f, "double-click puts a Glide knob back", {});
+                const int sound0 = box.getData().inst[Arp].glide.sound;
+                box.savePreset (Arp, 13);
+                press (BtnOctDown);
+                box.turnKnob (1, -5.0f);
+                check (box.getData().inst[Arp].glide.sound != sound0, "the Preset knob loads another Glide sound", {});
+                check (box.loadPreset (Arp, 13) && box.getData().inst[Arp].glide.sound == sound0 && box.isGlide (Arp),
+                       "a page preset keeps its Glide sound", juce::String (box.getData().inst[Arp].glide.sound));
+                const auto glideSound = renderSeconds (audio, 0.5, nullptr);
+                check (glideSound.finite, "the Glide engine runs clean after loading a preset", {});
+
+                // Bass with the Glide engine (knob 1 in Sound mode = the engine)
+                box.setPage (Bass);
+                box.turnKnob (0, 30.0f);
+                check (box.isGlide (Bass), "the Bass can play the Glide engine", box.engineTitle());
+                soloOnly (Bass);
+                const auto glideBass = renderSeconds (audio, 1.5, nullptr);
+                check (glideBass.finite && glideBass.rms > 0.003f && glideBass.peak <= 1.0f, "the bass line plays on the Glide engine",
+                       "rms " + juce::String (glideBass.rms, 4));
+                box.turnKnob (0, -30.0f);
+                check (! box.isGlide (Bass), "and back to the Acid", {});
+                box.setPage (Arp);
+                box.turnKnob (0, (float) (arpSound0 - arpSoundGlide));
+                press (BtnSound);
+                check (! box.isSoundMode() && juce::roundToInt (box.getData().inst[Arp].values[slot::ASound]) == arpSound0, "Sound off, the Arp sound is back", {});
+                soloOnly (-1);
+            }
+
             // presets: save to pad 5, change the sound, load pad 5 back
             box.savePreset (Arp, 4);
             check (box.presetFile (Arp, 4).existsAsFile(), "preset file written", {});

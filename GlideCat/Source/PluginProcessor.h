@@ -7,6 +7,7 @@
 #include "PresetBar.h"
 #include "GlideSynth.h"
 #include "GlideFX.h"
+#include "GlideData.h"
 #include "HostSync.h"
 #include "MidiLearn.h"
 #include "MidiScheduler.h"
@@ -54,12 +55,7 @@ public:
     cat::NoteMonitor noteMonitor;
     glidecat::Synth synth;
 
-    struct Preset
-    {
-        const char* name;
-        const char* category;
-        std::vector<std::pair<juce::String, float>> values;
-    };
+    using Preset = glidecat::Preset;
     static const std::vector<Preset>& soundPresets();
     static const std::vector<Preset>& glidePresets();
     void applySoundPreset (int index);

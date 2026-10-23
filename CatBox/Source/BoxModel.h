@@ -4,6 +4,7 @@
 #include <array>
 #include <vector>
 #include <cstdint>
+#include "Engines.h"
 
 /**
     Cat Box: the data model shared by the engine, the controller logic and the screen.
@@ -23,7 +24,7 @@ enum Instrument { Drums = 0, Arp, Bass, NumInstruments };
 /** The FX page (master effects, performance pads, scenes) comes after the three instruments. */
 constexpr int PageFx = 3, NumPages = 4;
 
-enum Button { BtnPlay = 0, BtnSteps, BtnShift, BtnScene, BtnInstrument, BtnOctDown, BtnOctUp, BtnRec, BtnChaos, NumButtons };
+enum Button { BtnPlay = 0, BtnSteps, BtnShift, BtnScene, BtnInstrument, BtnOctDown, BtnOctUp, BtnRec, BtnChaos, BtnSound, NumButtons };
 
 constexpr int numKnobs = 12;
 constexpr int numPads = 16;
@@ -106,7 +107,9 @@ juce::String drumPadName (int pad);
 juce::StringArray bassSoundNames();
 /** Arp sounds: the hub::KeysSynth sounds, then Supersaw and Acid (Cat Box's own). */
 juce::StringArray arpSoundNames();
-constexpr int arpSoundSupersaw = 8, arpSoundAcid = 9;
+constexpr int arpSoundSupersaw = 8, arpSoundAcid = 9, arpSoundGlide = 10;
+/** The Glide engine's index in bassSoundNames() (the last one). */
+int bassSoundGlide();
 
 //==============================================================================
 /** Arp pattern step states. */
@@ -130,6 +133,7 @@ struct InstrumentState
     std::array<float, numPads> drumLevel {}, drumChance {};                  // Drums: per drum
     std::array<BassStep, maxSteps> bassSteps {};                             // Bass
     float tempo = 110.0f;                                                    // saved with presets, applied only while stopped
+    EngineState glide;                                                       // Arp / Bass: the Glide engine (when the Sound is Glide)
 };
 
 /** Everything the box remembers between power-ons. */

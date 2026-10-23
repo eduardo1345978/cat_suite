@@ -63,6 +63,7 @@ private:
     void paintScreen (juce::Graphics&, juce::Rectangle<float>);
     void paintBoxScreen (juce::Graphics&, juce::Rectangle<float>);
     void paintScope (juce::Graphics&, juce::Rectangle<float>);
+    void paintEngineGrid (juce::Graphics&, juce::Rectangle<float>);
     void paintSlotGrid (juce::Graphics&, juce::Rectangle<float>);
     void paintStrip (juce::Graphics&, juce::Rectangle<float>);
     juce::String loadedName() const;

@@ -19,5 +19,6 @@ cat_add_synth_plugin(GlideCat
     SOURCES
         Source/GlideSynth.cpp
         Source/GlideFX.cpp
+        Source/GlideData.cpp
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp)

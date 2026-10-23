@@ -27,6 +27,10 @@ void BoxAudio::prepare (double sampleRate, int)
     acid.prepare (sr);
     arpAcid.prepare (sr);
     supersaw.prepare (sr);
+    arpGlide.prepare (sr, maxChunk);
+    bassGlide.prepare (sr, maxChunk);
+    arpGlideFx.prepare (sr, maxChunk);
+    bassGlideFx.prepare (sr, maxChunk);
     master.prepare (sr, maxChunk);
     for (auto& f : fx) f.prepare (sr);
     limiter.prepare (sr);
@@ -72,7 +76,8 @@ void BoxAudio::setSnapshot (const AudioSnapshot& s, bool atBar)
 //==============================================================================
 void BoxAudio::arpNoteOn (int note, int velocity)
 {
-    if (live.arpSound == arpSoundSupersaw) supersaw.noteOn (note, velocity);
+    if (arpIsGlide()) arpGlide.notesOn ({ { 1, note } }, { (float) juce::jlimit (1, 127, velocity) / 127.0f });
+    else if (live.arpSound == arpSoundSupersaw) supersaw.noteOn (note, velocity);
     else if (live.arpSound == arpSoundAcid) arpAcid.noteOn (note, velocity >= 110, false);
     else keys.handle (juce::MidiMessage::noteOn (1, note, (juce::uint8) juce::jlimit (1, 127, velocity)));
 }
@@ -81,6 +86,7 @@ void BoxAudio::arpNoteOff (int note)
 {
     supersaw.noteOff (note);
     arpAcid.noteOff (note);
+    arpGlide.noteOff (1, note);
     keys.handle (juce::MidiMessage::noteOff (1, note));
 }
 
@@ -88,6 +94,7 @@ void BoxAudio::arpAllOff()
 {
     supersaw.allOff();
     arpAcid.allOff();
+    arpGlide.allNotesOff();
     keys.allOff();
 }
 
@@ -182,6 +189,7 @@ void BoxAudio::allNotesOff()
     arpAllOff();
     bassSynth.allOff();
     acid.allOff();
+    bassGlide.allNotesOff();
     numOffs = 0;
     liveBassHeld = 0;
     bassNoteNow = -1;
@@ -190,7 +198,8 @@ void BoxAudio::allNotesOff()
 void BoxAudio::bassOn (int note, int velocity, bool accent, bool slide)
 {
     note = juce::jlimit (0, 127, note);
-    if (live.bassSound == 0) acid.noteOn (note, accent, slide);
+    if (bassIsGlide()) bassGlide.notesOn ({ { 1, note } }, { (float) juce::jlimit (1, 127, accent ? 127 : velocity) / 127.0f });
+    else if (live.bassSound == 0) acid.noteOn (note, accent, slide);
     else bassSynth.handle (juce::MidiMessage::noteOn (1, note, (juce::uint8) juce::jlimit (1, 127, accent ? 127 : velocity)));
     bassNoteNow = note;
 }
@@ -199,6 +208,7 @@ void BoxAudio::bassOff (int note)
 {
     acid.noteOff (note);
     bassSynth.handle (juce::MidiMessage::noteOff (1, note));
+    bassGlide.noteOff (1, note);
     if (bassNoteNow.load() == note) bassNoteNow = -1;
 }
 
@@ -391,12 +401,14 @@ void BoxAudio::render (float* left, float* right, int numSamples)
                 sceneWaiting = false;
                 drums.setSound (live.drumKit);
                 if (live.arpSound < arpSoundSupersaw) keys.setSound (live.arpSound);
-                if (live.bassSound > 0) bassSynth.setSound (live.bassSound - 1);
+                if (live.bassSound > 0 && ! bassIsGlide()) bassSynth.setSound (live.bassSound - 1);
+                arpGlide.setSettings (live.arpGlide);
+                bassGlide.setSettings (live.bassGlide);
                 acid.setParams (live.acid);
                 AcidSynth::Params ap = live.acid;   // the arp's acid: brighter, shorter
                 ap.cutoff = 0.5f; ap.envMod = 0.5f; ap.decay = 0.3f; ap.resonance = 0.55f;
                 arpAcid.setParams (ap);
-                if (oldSound != live.bassSound) { acid.allOff(); bassSynth.allOff(); }
+                if (oldSound != live.bassSound) { acid.allOff(); bassSynth.allOff(); bassGlide.allNotesOff(); }
                 if (oldArpSound != live.arpSound || oldArpOn != live.arpOn) arpAllOff();
             }
         }
@@ -439,10 +451,24 @@ void BoxAudio::render (float* left, float* right, int numSamples)
             keys.render (al + s, ar + s, m);
             supersaw.render (al + s, ar + s, m);
             arpAcid.render (al + s, ar + s, m);
-            if (live.bassSound == 0) acid.render (bl + s, br + s, m);
+            if (arpIsGlide()) arpGlide.render (al + s, ar + s, m);
+            if (bassIsGlide()) bassGlide.render (bl + s, br + s, m);
+            else if (live.bassSound == 0) acid.render (bl + s, br + s, m);
             else bassSynth.render (bl + s, br + s, m);
             clock = to;
         }
+
+        // the Glide engine's own effects and volume
+        auto glideFx = [this, n] (glidecat::Effects& e, const glidecat::FxSettings& fs, float vol, float* l, float* r)
+        {
+            auto f = fs;
+            f.bpm = live.bpm;
+            e.process (l, r, n, f);
+            juce::FloatVectorOperations::multiply (l, vol, n);
+            juce::FloatVectorOperations::multiply (r, vol, n);
+        };
+        if (arpIsGlide()) glideFx (arpGlideFx, live.arpGlideFx, live.arpGlide.volume, al, ar);
+        if (bassIsGlide()) glideFx (bassGlideFx, live.bassGlideFx, live.bassGlide.volume, bl, br);
 
         float* il[NumInstruments] = { dl, al, bl };
         float* ir[NumInstruments] = { dr, ar, br };

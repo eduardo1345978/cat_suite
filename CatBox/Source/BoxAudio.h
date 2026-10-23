@@ -8,6 +8,8 @@
 #include "MasterFx.h"
 #include "CatSounds.h"
 #include "SafetyLimiter.h"
+#include "GlideSynth.h"
+#include "GlideFX.h"
 #include <atomic>
 
 namespace catbox
@@ -36,6 +38,10 @@ struct AudioSnapshot
     bool arpOn = true;          // false = the Arp page plays like a plain synth
     bool bassFollow = false;    // the bass line moves to the root of the chord held on the Arp
     int key = 0;
+
+    // the Glide engine (when Arp's or Bass's Sound is Glide)
+    glidecat::Settings arpGlide, bassGlide;
+    glidecat::FxSettings arpGlideFx, bassGlideFx;
 
     MasterSettings master;
 };
@@ -139,6 +145,10 @@ private:
     hub::BassSynth bassSynth;
     AcidSynth acid, arpAcid;
     SuperSaw supersaw;
+    glidecat::Synth arpGlide, bassGlide;
+    glidecat::Effects arpGlideFx, bassGlideFx;
+    bool arpIsGlide() const noexcept { return live.arpSound == arpSoundGlide; }
+    bool bassIsGlide() const noexcept { return live.bassSound == bassSoundGlide(); }
     MasterFx master;
     std::array<int, 64> kickOffsets {};
     int numKicks = 0, subOffset = 0;

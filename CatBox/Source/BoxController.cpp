@@ -135,6 +135,7 @@ void BoxController::turnKnob (int knob, float clicks)
     lastKnobPg = pg;
     lastKnobSl = s;
     lastKnobAt = juce::Time::getMillisecondCounter();
+    if (isSoundMode()) { editEngine (s, clicks); return; }
 
     // Bass steps: knobs 2-4 edit the picked step (note, slide, accent)
     const bool stepEdit = pg == Bass && isStepView() && ! shift.load() && knob >= 1 && knob <= 3 && bassSel >= 0;
@@ -170,6 +171,7 @@ void BoxController::resetKnob (int knob)
     if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "reset"); o->setProperty ("k", knob); sendRemote (o); return; }
     const int pg = page.load();
     const int s = knob + (shift.load() ? numKnobs : 0);
+    if (isSoundMode()) { resetEngineSlot (s); return; }
     if (pg == Bass && isStepView() && ! shift.load() && knob >= 1 && knob <= 3) return;   // a bass step has no default
     const auto& d = paramDesc (pg, s);
     if (! d.used()) return;
@@ -205,6 +207,7 @@ BoxController::KnobView BoxController::knobView (int knob) const
     KnobView v;
     const int pg = page.load();
     const int s = knob + (shift.load() ? numKnobs : 0);
+    if (isSoundMode()) return engineView (knob + (shift.load() ? numKnobs : 0));
     if (pg == Bass && isStepView() && ! shift.load() && knob >= 1 && knob <= 3)
     {
         v.used = v.stepEdit = true;
@@ -281,7 +284,8 @@ void BoxController::publish (bool atBar)
     s.acid.accent = b[slot::BAccent];
     s.acid.slide = b[slot::BSlide];
     s.acid.wave = juce::roundToInt (b[slot::BWave]);
-    if (s.bassSound != 0) s.fx[Bass].filter = 0.85f * (1.0f - b[slot::BCutoff]);   // the other bass sounds: cutoff = track filter
+    if (s.bassSound != 0 && s.bassSound != bassSoundGlide()) s.fx[Bass].filter = 0.85f * (1.0f - b[slot::BCutoff]);   // the other bass sounds: cutoff = track filter
+    if (s.bassSound == bassSoundGlide()) engine::toSettings (bi.glide, s.bassGlide, s.bassGlideFx);   // the other bass sounds: cutoff = track filter
 
     s.arp.division = juce::roundToInt (a[slot::ADivision]);
     s.arp.mode = juce::roundToInt (a[slot::AMode]);
@@ -294,6 +298,7 @@ void BoxController::publish (bool atBar)
     s.arp.accent = a[slot::AAccent];
     s.arp.steps = data.inst[Arp].arpSteps;
     s.arpSound = juce::roundToInt (a[slot::ASound]);
+    if (s.arpSound == arpSoundGlide) engine::toSettings (data.inst[Arp].glide, s.arpGlide, s.arpGlideFx);
     s.arpOn = juce::roundToInt (a[slot::AArpOn]) == 0;
     s.key = key.load();
 
@@ -469,9 +474,10 @@ juce::String BoxController::buttonLabel (int b) const
         case BtnShift:      return "Shift";
         case BtnScene:      return "Scene";
         case BtnInstrument: return sh ? "Mute" : "Instr";
-        case BtnOctDown:    return pg == PageFx ? "-" : pg == Drums ? (sh ? "Page -" : "Drum -") : (isStepView() && pg == Bass ? "Page -" : "Oct -");
-        case BtnOctUp:      return pg == PageFx ? "-" : pg == Drums ? (sh ? "Page +" : "Drum +") : (isStepView() && pg == Bass ? "Page +" : "Oct +");
+        case BtnOctDown:    return isSoundMode() ? "Page -" : pg == PageFx ? "-" : pg == Drums ? (sh ? "Page -" : "Drum -") : (isStepView() && pg == Bass ? "Page -" : "Oct -");
+        case BtnOctUp:      return isSoundMode() ? "Page +" : pg == PageFx ? "-" : pg == Drums ? (sh ? "Page +" : "Drum +") : (isStepView() && pg == Bass ? "Page +" : "Oct +");
         case BtnChaos:      return sh ? "Undo" : "Chaos";
+        case BtnSound:      return "Sound";
         case BtnRec:        return sh || sceneMode.load() ? "Save" : pg == Arp ? "Hold" : pg == PageFx ? "-" : "Rec";
         default:            return {};
     }
@@ -540,6 +546,12 @@ void BoxController::buttonDown (int b)
             else { chaosArmed = true; chaosDownAt = juce::Time::getMillisecondCounter(); setFlash ("Keep holding Chaos..."); }
             break;
 
+        case BtnSound:
+            if (pg != Arp && pg != Bass) { setFlash ("Sound works on Arp and Bass"); break; }
+            soundMode = ! soundMode.load();
+            setFlash (soundMode.load() ? "Sound: " + engineTitle() + " - Oct - / Oct + = knob pages" : juce::String ("Sound off"));
+            break;
+
         case BtnScene:
             sceneMode = ! sceneMode.load();
             saveArm = false;
@@ -564,6 +576,14 @@ void BoxController::buttonDown (int b)
         {
             if (pg == PageFx) break;
             const int dir = b == BtnOctUp ? 1 : -1;
+            if (isSoundMode())   // flip through the engine's knob pages
+            {
+                auto& ep = enginePages[(size_t) pg];
+                ep = juce::jlimit (0, numEnginePages() - 1, ep.load() + dir);
+                setFlash (enginePageName() + "  (" + juce::String (ep.load() + 1) + " / " + juce::String (numEnginePages()) + ")");
+                markDirty();
+                break;
+            }
             const bool paging = (pg == Drums && sh) || (pg == Bass && isStepView());
             if (paging)
             {
@@ -640,6 +660,7 @@ bool BoxController::isButtonLit (int b) const
         case BtnShift: return shift.load();
         case BtnInstrument: return instrHeld;
         case BtnScene: return sceneMode.load();
+        case BtnSound: return isSoundMode();
         case BtnRec:   return page.load() == Arp ? latchOn : page.load() < NumInstruments && audio.isRecording();
         default:       return false;
     }
@@ -1077,6 +1098,10 @@ juce::var BoxController::makeState() const
     o->setProperty ("names", namesVar());
     o->setProperty ("knobPage", lastKnobPg);
     o->setProperty ("knobSlot", lastKnobSl);
+    o->setProperty ("sound", soundMode.load());
+    juce::Array<juce::var> ep;
+    for (auto& x : enginePages) ep.add (x.load());
+    o->setProperty ("enginePages", ep);
     return juce::var (o);
 }
 
@@ -1121,6 +1146,9 @@ void BoxController::applyState (const juce::var& v)
     if (f.isNotEmpty() && f != flash) setFlash (f);
     lastKnobPg = (int) v.getProperty ("knobPage", -1);
     lastKnobSl = (int) v.getProperty ("knobSlot", -1);
+    soundMode = (bool) v.getProperty ("sound", false);
+    if (auto* ep = v["enginePages"].getArray())
+        for (int i = 0; i < juce::jmin ((int) enginePages.size(), ep->size()); ++i) enginePages[(size_t) i] = (int) (*ep)[i];
     const auto names = v["names"];
     bool namesChanged = false;
     if (auto* pages = names["pages"].getArray())
@@ -1195,6 +1223,177 @@ void BoxController::handleLinkMessage (const juce::var& m, const std::function<v
         reply (juce::var (o));
     }
     else if (t == "hello")  reply (makeState());
+}
+
+//==============================================================================
+// Sound mode: the page's engine
+bool BoxController::isGlide (int pg) const
+{
+    if (pg == Arp) return juce::roundToInt (data.inst[Arp].values[slot::ASound]) == arpSoundGlide;
+    if (pg == Bass) return juce::roundToInt (data.inst[Bass].values[slot::BSound]) == bassSoundGlide();
+    return false;
+}
+
+int BoxController::numEnginePages() const
+{
+    return isGlide (page.load()) ? (int) engine::glidePages().size() : 1;
+}
+
+juce::String BoxController::enginePageName() const
+{
+    if (! isGlide (page.load())) return "Sound";
+    const auto& pages = engine::glidePages();
+    return pages[(size_t) juce::jlimit (0, (int) pages.size() - 1, enginePage())].name;
+}
+
+juce::String BoxController::engineTitle() const
+{
+    const int pg = page.load();
+    if (pg != Arp && pg != Bass) return {};
+    if (! isGlide (pg)) return paramDesc (pg, pg == Arp ? slot::ASound : slot::BSound).format (data.inst[(size_t) pg].values[pg == Arp ? slot::ASound : slot::BSound]);
+    const auto& g = data.inst[(size_t) pg].glide;
+    return "Glide: " + engine::glideSoundNames()[g.sound] + (g.edited ? " *" : "");
+}
+
+juce::String BoxController::engineId (int s) const
+{
+    const int pg = page.load();
+    if ((pg != Arp && pg != Bass) || s < 0 || s >= numSlots) return {};
+    if (! isGlide (pg)) return s == 0 ? juce::String ("@sound") : juce::String();
+    const auto& pages = engine::glidePages();
+    return pages[(size_t) juce::jlimit (0, (int) pages.size() - 1, enginePage())].ids[(size_t) s];
+}
+
+BoxController::KnobView BoxController::engineView (int s) const
+{
+    KnobView v;
+    const int pg = page.load();
+    const auto id = engineId (s);
+    if (id.isEmpty()) return v;
+    v.used = true;
+    const int soundSlot = pg == Arp ? slot::ASound : slot::BSound;
+    const auto& g = data.inst[(size_t) pg].glide;
+    if (id == "@sound")
+    {
+        const auto& d = paramDesc (pg, soundSlot);
+        const float x = data.inst[(size_t) pg].values[(size_t) soundSlot];
+        v.name = "Engine";
+        v.value = d.format (x);
+        v.fraction = d.max > d.min ? (x - d.min) / (d.max - d.min) : 0.0f;
+        return v;
+    }
+    if (id == "@preset")
+    {
+        const auto names = engine::glideSoundNames();
+        v.name = "Preset";
+        v.value = names[g.sound] + (g.edited ? " *" : "");
+        v.fraction = names.size() > 1 ? (float) g.sound / (float) (names.size() - 1) : 0.0f;
+        return v;
+    }
+    if (id == "@motion")
+    {
+        const auto names = engine::glideMotionNames();
+        v.name = "Glide";
+        v.value = names[g.motion];
+        v.fraction = names.size() > 1 ? (float) g.motion / (float) (names.size() - 1) : 0.0f;
+        return v;
+    }
+    if (id == "@init")
+    {
+        v.name = "Init";
+        v.value = "turn right";
+        return v;
+    }
+    const int i = glidecat::paramIndex (id);
+    if (i < 0) { v.used = false; return v; }
+    const auto& p = glidecat::params()[(size_t) i];
+    v.name = engine::shortName (p);
+    v.value = p.format (g.v[(size_t) i]);
+    v.fraction = p.toNormalised (g.v[(size_t) i]);
+    return v;
+}
+
+void BoxController::editEngine (int s, float clicks)
+{
+    const int pg = page.load();
+    const auto id = engineId (s);
+    if (id.isEmpty()) return;
+    auto& inst = data.inst[(size_t) pg];
+    auto& g = inst.glide;
+
+    auto whole = [this, s, clicks]() -> int   // knobs that step: whole clicks only (a mouse drag sends fractions)
+    {
+        auto& rem = engineRemainder[(size_t) s];
+        rem += clicks;
+        const float w = std::trunc (rem);
+        rem -= w;
+        return (int) w;
+    };
+
+    if (id == "@sound")
+    {
+        const int w = whole();
+        if (w == 0) return;
+        const int soundSlot = pg == Arp ? slot::ASound : slot::BSound;
+        data.set (pg, soundSlot, data.get (pg, soundSlot) + (float) w);
+        enginePages[(size_t) pg] = 0;
+        setFlash (engineTitle());
+    }
+    else if (id == "@preset")
+    {
+        const int w = whole();
+        if (w == 0) return;
+        engine::loadGlideSound (g, juce::jlimit (0, engine::glideSoundNames().size() - 1, g.sound + w));
+        setFlash (engine::glideSoundNames()[g.sound]);
+    }
+    else if (id == "@motion")
+    {
+        const int w = whole();
+        if (w == 0) return;
+        engine::loadGlideMotion (g, juce::jlimit (0, engine::glideMotionNames().size() - 1, g.motion + w));
+        setFlash ("Glide: " + engine::glideMotionNames()[g.motion]);
+    }
+    else if (id == "@init")
+    {
+        if (whole() <= 0) return;
+        engine::initGlide (g);
+        g.edited = true;
+        setFlash ("Init: a plain sound to start from");
+    }
+    else
+    {
+        const int i = glidecat::paramIndex (id);
+        if (i < 0) return;
+        const auto& p = glidecat::params()[(size_t) i];
+        const float before = g.v[(size_t) i];
+        if (p.type == glidecat::ParamInfo::Float)
+            engine::set (g, id, p.fromNormalised (p.toNormalised (before) + clicks * 0.01f));
+        else
+        {
+            const int w = whole();
+            if (w == 0) return;
+            engine::set (g, id, before + (float) w);
+        }
+        if (g.v[(size_t) i] == before) return;
+        g.edited = true;
+    }
+    paramChanged();
+}
+
+void BoxController::resetEngineSlot (int s)
+{
+    const auto id = engineId (s);
+    const int i = glidecat::paramIndex (id);
+    if (i < 0) return;
+    auto& g = data.inst[(size_t) page.load()].glide;
+    const float def = glidecat::params()[(size_t) i].def;
+    if (g.v[(size_t) i] == def) return;
+    engine::set (g, id, def);
+    g.edited = true;
+    lastKnobPg = page.load();
+    lastKnobSl = s;
+    lastKnobAt = juce::Time::getMillisecondCounter();
+    paramChanged();
 }
 
 } // namespace catbox
