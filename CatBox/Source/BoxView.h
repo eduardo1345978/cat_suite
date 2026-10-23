@@ -25,6 +25,11 @@ public:
 
     std::function<void()> onSettings;      // right-click menu: sound card / MIDI
     std::function<void()> onToggleFullScreen;
+    std::function<juce::String()> linkInfo;   // e.g. "Link: 192.168.1.23" (the box shows it with Shift)
+
+    /** The simple 5" screen of the box (always in kiosk mode; on the PC from the right-click menu). */
+    void setBoxScreen (bool b) { boxPreview = b; repaint(); }
+    bool isBoxScreen() const noexcept { return kiosk || boxPreview; }
 
     static constexpr int screenW = 800, screenH = 480, panelH = 440;
     juce::Rectangle<int> logicalBounds() const { return { 0, 0, screenW, kiosk ? screenH : screenH + panelH }; }
@@ -53,6 +58,11 @@ private:
     const Palette& pal() const;
 
     void paintScreen (juce::Graphics&, juce::Rectangle<float>);
+    void paintBoxScreen (juce::Graphics&, juce::Rectangle<float>);
+    void paintScope (juce::Graphics&, juce::Rectangle<float>);
+    void paintSlotGrid (juce::Graphics&, juce::Rectangle<float>);
+    void paintStrip (juce::Graphics&, juce::Rectangle<float>);
+    juce::String loadedName() const;
     void paintKnobCell (juce::Graphics&, juce::Rectangle<float>, int knob);
     void paintBottom (juce::Graphics&, juce::Rectangle<float>);
     void paintSteps (juce::Graphics&, juce::Rectangle<float>);
@@ -89,5 +99,6 @@ private:
     int dragIndex = -1;
     float lastDragY = 0.0f;
     bool mouseShiftLatched = false;
+    bool boxPreview = false;
 };
 } // namespace catbox

@@ -81,10 +81,16 @@ public:
     bool popRecorded (RecordedNote&);
     double getSampleRate() const noexcept { return sr; }
 
+    /** Mirror mode (the PC app linked to a box): no sound here, the screen atomics come from the box. */
+    void setMirror (bool m) noexcept { mirror = m; }
+    bool isMirror() const noexcept { return mirror.load(); }
+    void mirrorTransport (bool isPlaying, bool isRecording) noexcept { playing = isPlaying; recording = isRecording; }
+
     // what the screen shows
     std::atomic<int> drumStep { -1 }, bassStep { -1 }, arpStep { -1 };
     std::atomic<uint64_t> arpNotesLo { 0 }, arpNotesHi { 0 };
     std::atomic<uint32_t> drumFlash { 0 };   // bit per pad, set when it plays (the screen clears it)
+    std::atomic<uint32_t> drumFlashLink { 0 };   // the same, read by the link to a PC
     std::atomic<int> bassNoteNow { -1 };
     std::atomic<float> peak { 0.0f };
     std::atomic<bool> arpLatched { false };
@@ -125,7 +131,7 @@ private:
     double clock = 0.0;            // quarter notes since start (always runs)
     double songStart = 0.0;        // where step 1 of Play is
     std::atomic<bool> playing { false }, recording { false };
-    std::atomic<bool> startRequest { false }, stopRequest { false };
+    std::atomic<bool> startRequest { false }, stopRequest { false }, mirror { false };
     bool running = false;
 
     hub::DrumKit drums;

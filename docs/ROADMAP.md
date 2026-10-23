@@ -77,6 +77,11 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
       Bass follows Arp, Steps per page (fixed "arp doesn't work"), short arp taps sound at once, simpler screen
       with spectrum, PC pads 8 x 2, buttons: Play(Shift=Tap) Steps(Shift=Clear) Shift Scene Instr Oct- Oct+ Rec
 - [x] Chaos button (user asked 22 Oct): random sound settings for the page, musical ranges, patterns stay; Shift + Chaos = undo
+- [x] Chaos only when held 0.6 s, Chaos alone in the corner of the case layout (user asked 22 Oct)
+- [x] Simple 5" box screen (user asked 23 Oct): page + preset name + tempo, big oscilloscope, knob card with name /
+      big number / bar, preset & scene grid with names (Shift / Scene), step strip
+- [x] PC app that connects to the box (user asked 23 Oct): network link (TCP 50650, discovery UDP 50651), PC plays the
+      box and mirrors its screen, preset library with names: load, rename, copy PC <-> box
 - [ ] NEXT hardware: get it running on the Pi 5 (user HAS: Pi 5 8 GB, 27 W supply, micro SD, HDMI monitor,
       keyboard + mouse, a USB sound card; wants HiFiBerry DAC later) - walk him through setup_pi.sh
 - [ ] SOUND DESIGN (most important next software):

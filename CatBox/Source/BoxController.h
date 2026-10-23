@@ -44,6 +44,11 @@ public:
     // what the screen shows (message thread)
     struct KnobView { juce::String name, value; float fraction = 0.0f; bool used = false, global = false, stepEdit = false; };
     KnobView knobView (int knob) const;
+    KnobView slotView (int page, int slotIndex) const;
+    /** The knob turned last (page, slot with Shift, when) - the box screen shows it big. */
+    int lastKnobPage() const noexcept { return lastKnobPg; }
+    int lastKnobSlot() const noexcept { return lastKnobSl; }
+    juce::uint32 lastKnobTime() const noexcept { return lastKnobAt; }
 
     const BoxData& getData() const noexcept { return data; }
     int getPage() const noexcept { return page.load(); }
@@ -76,6 +81,27 @@ public:
     juce::File sceneFile (int sceneSlot) const;
     void saveState();
     void setMuted (int instrument, bool muted);
+
+    // names of presets and scenes ("" = empty slot); page -1 = scenes
+    juce::String presetName (int page, int slotIndex) const;      // the box's names while linked, else this one's
+    juce::String localPresetName (int page, int slotIndex) const;
+    bool renamePreset (int page, int slotIndex, const juce::String& name);
+    juce::var localPresetJson (int page, int slotIndex) const;
+    bool storeLocalPresetJson (int page, int slotIndex, const juce::var& preset);
+    void rescanNames();
+    juce::var namesVar() const;
+    std::function<void()> onNamesChanged;
+
+    // the link between the box and the PC app (see BoxLink.h)
+    /** PC app linked to a box: every knob, pad and button goes there, this one only mirrors it. nullptr = play here. */
+    void setRemoteSink (std::function<void (const juce::var&)>);
+    bool isRemote() const noexcept { return remoteSink != nullptr; }
+    juce::var makeState() const;     // the box's state for a linked PC
+    juce::var makeLive();            // what is playing right now (and the sound picture)
+    void applyState (const juce::var&);
+    void applyLive (const juce::var&);
+    /** The box receives a message from the PC; reply sends an answer to that PC. */
+    void handleLinkMessage (const juce::var& message, const std::function<void (const juce::var&)>& reply);
 
     /** Chaos: new random sound settings for the page on screen (patterns, tempo, key and volume stay).
         The button must be held for 0.6 s, so it is never pressed by accident. Shift + Chaos takes the last one back. */
@@ -116,6 +142,12 @@ private:
     std::array<std::array<float, numSlots>, NumPages> chaosUndo {};
     std::array<bool, NumPages> hasChaosUndo {};
     juce::Random chaosRnd;
+    std::function<void (const juce::var&)> remoteSink;
+    std::array<std::array<juce::String, numPresetSlots>, NumPages> localNames, remoteNames;
+    std::array<juce::String, numPresetSlots> localSceneNames, remoteSceneNames;
+    void sendRemote (juce::DynamicObject*);
+    int lastKnobPg = -1, lastKnobSl = -1;
+    juce::uint32 lastKnobAt = 0;
     bool chaosArmed = false;            // Chaos only fires when held for a moment (no accidents)
     juce::uint32 chaosDownAt = 0;
     static constexpr juce::uint32 chaosHoldMs = 600;

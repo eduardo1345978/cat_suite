@@ -10,6 +10,8 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "BoxController.h"
 #include "BoxView.h"
+#include "BoxLink.h"
+#include "LinkPanel.h"
 #include <cmath>
 #include <cstdio>
 
@@ -257,6 +259,81 @@ public:
             press (BtnRec);
 
             box.saveState();
+
+            // the box screen and the PC panel draw without trouble (also right after a knob turn)
+            {
+                BoxView screen (box, true);
+                screen.setSize (BoxView::screenW, BoxView::screenH);
+                box.setPage (Bass);
+                box.turnKnob (2, 2.0f);
+                const auto shot = screen.createComponentSnapshot (screen.getLocalBounds());
+                check (shot.isValid() && shot.getWidth() == BoxView::screenW, "the 5\" box screen draws (knob card shown)", {});
+                box.buttonDown (BtnShift);
+                const auto grid = screen.createComponentSnapshot (screen.getLocalBounds());
+                box.buttonUp (BtnShift);
+                check (grid.isValid(), "the box screen draws the preset grid", {});
+                juce::PNGImageFormat png;
+                if (auto os = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + "-screen.png").createOutputStream())
+                    png.writeImageToStream (shot, *os);
+            }
+        }
+
+        // the link: a box and a PC app talk over the network (here: on this computer)
+        {
+            const auto dirA = dir.getSiblingFile (dir.getFileName() + "-box"), dirB = dir.getSiblingFile (dir.getFileName() + "-pc");
+            {
+                BoxController boxA (dirA), pc (dirB);
+                boxA.getAudio().prepare (sr, block);
+                pc.getAudio().prepare (sr, block);
+                const int port = 50700 + juce::Random::getSystemRandom().nextInt (200);
+                LinkServer server (boxA, port, false, "127.0.0.1");
+                check (server.isListening(), "the box listens for a PC", "port " + juce::String (port));
+                LinkClient client (pc, false);
+                const bool connected = client.connect ("127.0.0.1", port);
+                check (connected && pc.isRemote(), "the PC app connects to the box", {});
+                wait (600);
+
+                const float t0 = boxA.getData().globals[GTempo];
+                pc.turnKnob (0, 3.0f);
+                wait (500);
+                check (std::abs (boxA.getData().globals[GTempo] - (t0 + 3.0f)) < 0.01f, "a knob on the PC turns the box",
+                       juce::String (boxA.getData().globals[GTempo]));
+                check (std::abs (pc.getData().globals[GTempo] - (t0 + 3.0f)) < 0.01f, "the PC shows what the box has", {});
+
+                pc.buttonDown (BtnInstrument); pc.buttonUp (BtnInstrument);
+                wait (400);
+                check (boxA.getPage() == Arp && pc.getPage() == Arp, "a button on the PC presses it on the box", {});
+
+                boxA.savePreset (Arp, 2);
+                wait (500);
+                check (pc.presetName (Arp, 2) == "Arp 3", "the PC sees the box's presets", pc.presetName (Arp, 2));
+                pc.renamePreset (Arp, 2, "Night Pluck");
+                wait (500);
+                check (boxA.presetName (Arp, 2) == "Night Pluck" && pc.presetName (Arp, 2) == "Night Pluck",
+                       "a preset renamed on the PC is renamed on the box", boxA.presetName (Arp, 2));
+                bool copied = false;
+                client.requestPreset (Arp, 2, [&] (const juce::var& json) { copied = pc.storeLocalPresetJson (Arp, 2, json); });
+                wait (500);
+                check (copied && pc.localPresetName (Arp, 2) == "Night Pluck", "a preset copies from the box to the PC", {});
+                {
+                    LinkPanel panel (pc, client);
+                    panel.setSize (LinkPanel::panelWidth, 900);
+                    check (panel.rowText (2) == "Night Pluck", "the PC panel lists the box's preset", panel.rowText (2));
+                    const auto img = panel.createComponentSnapshot (panel.getLocalBounds());
+                    check (img.isValid(), "the PC panel draws", {});
+                }
+
+                pc.buttonDown (BtnPlay); pc.buttonUp (BtnPlay);
+                for (int i = 0; i < 10; ++i) { renderSeconds (boxA.getAudio(), 0.05, nullptr); wait (50); }
+                check (pc.getAudio().isPlaying(), "the PC shows that the box plays", {});
+                const auto silent = renderSeconds (pc.getAudio(), 0.3, nullptr);
+                check (silent.rms == 0.0f, "linked, the PC itself stays silent (the box plays)", {});
+
+                client.disconnect();
+                check (! pc.isRemote(), "after Disconnect the PC plays by itself again", {});
+            }
+            dirA.deleteRecursively();
+            dirB.deleteRecursively();
         }
         {
             BoxController again (dir);
@@ -279,6 +356,12 @@ public:
 
 private:
     struct Stats { float rms = 0.0f, peak = 0.0f; bool finite = true; };
+
+    /** Lets the message loop run (network messages, timers). */
+    static void wait (int ms)
+    {
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (ms);
+    }
 
     Stats renderSeconds (BoxAudio& audio, double seconds, juce::AudioBuffer<float>* keep)
     {
@@ -332,17 +415,42 @@ private:
 };
 
 //==============================================================================
+/** The PC window: the box (screen + front panel) and, on the right, the link and preset library. */
+class AppContent : public juce::Component
+{
+public:
+    AppContent (BoxView* v, LinkPanel* p) : view (v), panel (p)
+    {
+        addAndMakeVisible (view.get());
+        if (panel != nullptr) addAndMakeVisible (panel.get());
+    }
+    void resized() override
+    {
+        auto r = getLocalBounds();
+        if (panel != nullptr) panel->setBounds (r.removeFromRight (LinkPanel::panelWidth));
+        view->setBounds (r);
+    }
+    BoxView& getView() { return *view; }
+    LinkPanel* getPanel() { return panel.get(); }
+
+private:
+    std::unique_ptr<BoxView> view;
+    std::unique_ptr<LinkPanel> panel;
+};
+
 class MainWindow : public juce::DocumentWindow
 {
 public:
-    MainWindow (BoxController& box, juce::AudioDeviceManager& dm, bool kiosk)
+    MainWindow (BoxController& box, juce::AudioDeviceManager& dm, bool kiosk, LinkClient* link, std::function<juce::String()> info)
         : DocumentWindow ("Cat Box", juce::Colour (0xff0b0d12), kiosk ? 0 : DocumentWindow::allButtons),
           deviceManager (dm)
     {
         auto* view = new BoxView (box, kiosk);
         view->onSettings = [this] { showSettings(); };
         view->onToggleFullScreen = [this] { setFullScreen (! isFullScreen()); };
-        setContentOwned (view, false);
+        view->linkInfo = std::move (info);
+        auto* content = new AppContent (view, link != nullptr ? new LinkPanel (box, *link) : nullptr);
+        setContentOwned (content, false);
 
         const auto lb = view->logicalBounds();
         if (kiosk)
@@ -355,11 +463,11 @@ public:
         }
         else
         {
+            const int extra = link != nullptr ? LinkPanel::panelWidth : 0;
             setUsingNativeTitleBar (true);
             setResizable (true, true);
-            setResizeLimits (400, 465, 1600, 1860);   // also creates the constrainer
-            if (auto* c = getConstrainer()) c->setFixedAspectRatio ((double) lb.getWidth() / lb.getHeight());
-            centreWithSize (juce::roundToInt (lb.getWidth() * 0.82), juce::roundToInt (lb.getHeight() * 0.82));
+            setResizeLimits (400 + extra, 465, 2200, 1900);
+            centreWithSize (juce::roundToInt (lb.getWidth() * 0.82) + extra, juce::roundToInt (lb.getHeight() * 0.82));
         }
         setVisible (true);
         view->grabKeyboardFocus();
@@ -391,7 +499,7 @@ class CatBoxApplication : public juce::JUCEApplication, private juce::Timer
 public:
     const juce::String getApplicationName() override    { return "Cat-Box"; }
     const juce::String getApplicationVersion() override { return "1.0.0"; }
-    bool moreThanOneInstanceAllowed() override          { return false; }
+    bool moreThanOneInstanceAllowed() override          { return true; }
 
     void initialise (const juce::String& commandLine) override
     {
@@ -405,7 +513,9 @@ public:
             return;
         }
 
+        // --kiosk: the box (full screen, answers PCs on the network); --box: the same in a window (to try it on a PC)
         const bool kiosk = args.contains ("--kiosk");
+        const bool isBox = kiosk || args.contains ("--box");
         juce::File dataDir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
                                  .getChildFile ("CatSuite").getChildFile ("CatBox");
         if (const int at = args.indexOf ("--data"); at >= 0 && args[at + 1].isNotEmpty())
@@ -414,7 +524,16 @@ public:
 
         box = std::make_unique<BoxController> (dataDir);
         startAudio (dataDir);
-        window = std::make_unique<MainWindow> (*box, deviceManager, kiosk);
+        std::function<juce::String()> info;
+        if (isBox)
+        {
+            server = std::make_unique<LinkServer> (*box);
+            info = [this] { const auto a = LinkServer::ownAddress();
+                            return server != nullptr && server->isListening() ? "PC link: " + (a.isNotEmpty() ? a : juce::String ("no network"))
+                                                                              : juce::String ("PC link: port busy"); };
+        }
+        else link = std::make_unique<LinkClient> (*box);
+        window = std::make_unique<MainWindow> (*box, deviceManager, kiosk, link.get(), info);
         startTimer (2000);   // a controller plugged in later (the Pico) is switched on by itself
     }
 
@@ -422,6 +541,8 @@ public:
     {
         stopTimer();
         window = nullptr;
+        link = nullptr;
+        server = nullptr;
         if (box != nullptr)
         {
             if (auto xml = deviceManager.createStateXml())
@@ -478,6 +599,8 @@ private:
 
     juce::AudioDeviceManager deviceManager;
     std::unique_ptr<BoxController> box;
+    std::unique_ptr<LinkServer> server;   // the box
+    std::unique_ptr<LinkClient> link;     // the PC app
     std::unique_ptr<MainWindow> window;
     juce::StringArray seenMidi;
 };

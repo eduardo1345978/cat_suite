@@ -14,6 +14,8 @@ target_sources(CatBox PRIVATE
     Source/BoxController.cpp
     Source/BoxView.cpp
     Source/MasterFx.cpp
+    Source/BoxLink.cpp
+    Source/LinkPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatSounds.cpp)
 
 target_include_directories(CatBox PRIVATE
@@ -29,6 +31,7 @@ target_compile_definitions(CatBox PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_JACK=0
+    JUCE_MODAL_LOOPS_PERMITTED=1
     JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:CatBox,JUCE_PRODUCT_NAME>"
     JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:CatBox,JUCE_VERSION>")
 

@@ -16,6 +16,7 @@ BoxController::BoxController (juce::File dataDirectory) : dataDir (std::move (da
 
     syncAtomics();
     lastBassNote = scaleNote (key.load(), scale.load(), 0, 36);
+    rescanNames();
     publish();
     startTimerHz (30);
 }
@@ -23,7 +24,7 @@ BoxController::BoxController (juce::File dataDirectory) : dataDir (std::move (da
 BoxController::~BoxController()
 {
     stopTimer();
-    if (dirty) saveState();
+    if (dirty && ! isRemote()) saveState();
 }
 
 void BoxController::syncAtomics()
@@ -68,6 +69,7 @@ void BoxController::setLightScreen (bool light)
 
 void BoxController::setPage (int p)
 {
+    if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "page"); o->setProperty ("p", p); sendRemote (o); return; }
     data.page = juce::jlimit (0, NumPages - 1, p);
     page = data.page;
     markDirty();
@@ -75,6 +77,7 @@ void BoxController::setPage (int p)
 
 void BoxController::pickDrum (int pad)
 {
+    if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "drum"); o->setProperty ("p", pad); sendRemote (o); return; }
     selectDrum (pad);
     setFlash ("Drum: " + drumPadName (data.selectedDrum));
     markDirty();
@@ -115,8 +118,12 @@ void BoxController::editBassStep (int knob, int clicks)
 void BoxController::turnKnob (int knob, float clicks)
 {
     if (knob < 0 || knob >= numKnobs || clicks == 0.0f) return;
+    if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "knob"); o->setProperty ("k", knob); o->setProperty ("c", clicks); sendRemote (o); return; }
     const int pg = page.load();
     const int s = knob + (shift.load() ? numKnobs : 0);
+    lastKnobPg = pg;
+    lastKnobSl = s;
+    lastKnobAt = juce::Time::getMillisecondCounter();
 
     // Bass steps: knobs 2-4 edit the picked step (note, slide, accent)
     const bool stepEdit = pg == Bass && isStepView() && ! shift.load() && knob >= 1 && knob <= 3 && bassSel >= 0;
@@ -167,6 +174,12 @@ BoxController::KnobView BoxController::knobView (int knob) const
         if (knob == 3) { v.name = "Accent"; v.value = bassSel >= 0 ? (st.accent ? "On" : "Off") : "-"; v.fraction = st.accent ? 1.0f : 0.0f; }
         return v;
     }
+    return slotView (pg, s);
+}
+
+BoxController::KnobView BoxController::slotView (int pg, int s) const
+{
+    KnobView v;
     const auto& d = paramDesc (pg, s);
     if (! d.used()) return v;
     const float value = data.get (pg, s);
@@ -306,6 +319,11 @@ void BoxController::tapBassStep (int step)
 void BoxController::padDown (int pad, int velocity)
 {
     if (pad < 0 || pad >= numPads) return;
+    if (isRemote())
+    {
+        runOnMessageThread ([this, pad, velocity] { auto* o = new juce::DynamicObject(); o->setProperty ("t", "pad"); o->setProperty ("p", pad); o->setProperty ("v", velocity); o->setProperty ("down", true); sendRemote (o); });
+        return;
+    }
     velocity = juce::jlimit (1, 127, velocity);
     padHeldInst[(size_t) pad] = -1;
     const int pg = page.load();
@@ -380,6 +398,11 @@ void BoxController::padDown (int pad, int velocity)
 void BoxController::padUp (int pad)
 {
     if (pad < 0 || pad >= numPads) return;
+    if (isRemote())
+    {
+        runOnMessageThread ([this, pad] { auto* o = new juce::DynamicObject(); o->setProperty ("t", "pad"); o->setProperty ("p", pad); o->setProperty ("down", false); sendRemote (o); });
+        return;
+    }
     const int inst = padHeldInst[(size_t) pad].exchange (-1);
     const int note = padHeldNote[(size_t) pad].exchange (-1);
     if (note < 0 || inst < 0) return;
@@ -441,6 +464,7 @@ void BoxController::clearPage()
 
 void BoxController::buttonDown (int b)
 {
+    if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "button"); o->setProperty ("b", b); o->setProperty ("down", true); sendRemote (o); return; }
     const int pg = page.load();
     const bool sh = shift.load();
     switch (b)
@@ -551,6 +575,7 @@ void BoxController::buttonDown (int b)
 
 void BoxController::buttonUp (int b)
 {
+    if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "button"); o->setProperty ("b", b); o->setProperty ("down", false); sendRemote (o); return; }
     if (b == BtnShift) { shift = false; if (! sceneMode.load()) saveArm = false; }
     if (b == BtnRec) rec = false;
     if (b == BtnChaos && chaosArmed) { chaosArmed = false; setFlash ("Chaos: hold it a moment"); }
@@ -643,17 +668,12 @@ juce::File BoxController::sceneFile (int sceneSlot) const
 
 bool BoxController::presetExists (int pg, int presetSlot) const
 {
-    const auto f = presetFile (pg, presetSlot);
-    if (! f.existsAsFile()) return false;
-    const auto v = juce::JSON::parse (f);
-    if (pg == PageFx) { std::array<float, numSlots> tmp {}; return BoxData::fxFromVar (v, tmp); }
-    auto tmp = std::make_unique<InstrumentState>();
-    return BoxData::instrumentFromVar (pg, v, *tmp);
+    return presetName (pg, presetSlot).isNotEmpty();
 }
 
 bool BoxController::sceneExists (int sceneSlot) const
 {
-    return sceneFile (sceneSlot).existsAsFile();
+    return presetName (-1, sceneSlot).isNotEmpty();
 }
 
 namespace
@@ -678,8 +698,11 @@ bool BoxController::savePreset (int pg, int presetSlot)
         state.tempo = data.globals[GTempo];
         v = BoxData::instrumentToVar (pg, state);
     }
+    const auto oldName = localPresetName (pg, presetSlot);
+    v.getDynamicObject()->setProperty ("name", oldName.isNotEmpty() ? oldName : instrumentName (pg) + " " + juce::String (presetSlot + 1));
     const bool ok = writeSafely (presetFile (pg, presetSlot), juce::JSON::toString (v));
     if (ok) data.loadedPreset[(size_t) pg] = presetSlot;
+    rescanNames();
     setFlash (ok ? "Saved: " + instrumentName (pg) + " " + juce::String (presetSlot + 1) : juce::String ("Could not save the preset"));
     markDirty();
     return ok;
@@ -688,6 +711,12 @@ bool BoxController::savePreset (int pg, int presetSlot)
 bool BoxController::loadPreset (int pg, int presetSlot)
 {
     pg = juce::jlimit (0, NumPages - 1, pg);
+    if (isRemote())
+    {
+        auto* o = new juce::DynamicObject(); o->setProperty ("t", "load"); o->setProperty ("page", pg); o->setProperty ("slot", presetSlot);
+        sendRemote (o);
+        return presetExists (pg, presetSlot);
+    }
     const auto f = presetFile (pg, presetSlot);
     bool ok = f.existsAsFile();
     if (ok)
@@ -720,8 +749,12 @@ bool BoxController::loadPreset (int pg, int presetSlot)
 
 bool BoxController::saveScene (int sceneSlot)
 {
-    const bool ok = writeSafely (sceneFile (sceneSlot), juce::JSON::toString (data.sceneToVar()));
+    auto v = data.sceneToVar();
+    const auto oldName = localPresetName (-1, sceneSlot);
+    v.getDynamicObject()->setProperty ("name", oldName.isNotEmpty() ? oldName : "Scene " + juce::String (sceneSlot + 1));
+    const bool ok = writeSafely (sceneFile (sceneSlot), juce::JSON::toString (v));
     if (ok) data.loadedScene = sceneSlot;
+    rescanNames();
     setFlash (ok ? "Saved scene " + juce::String (sceneSlot + 1) : juce::String ("Could not save the scene"));
     markDirty();
     return ok;
@@ -729,6 +762,12 @@ bool BoxController::saveScene (int sceneSlot)
 
 bool BoxController::loadScene (int sceneSlot)
 {
+    if (isRemote())
+    {
+        auto* o = new juce::DynamicObject(); o->setProperty ("t", "load"); o->setProperty ("page", -1); o->setProperty ("slot", sceneSlot);
+        sendRemote (o);
+        return sceneExists (sceneSlot);
+    }
     const auto f = sceneFile (sceneSlot);
     if (! f.existsAsFile() || ! data.sceneFromVar (juce::JSON::parse (f)))
     {
@@ -842,7 +881,268 @@ void BoxController::timerCallback()
 
     if (chaosArmed && juce::Time::getMillisecondCounter() - chaosDownAt >= chaosHoldMs) { chaosArmed = false; chaos(); }
 
-    if (dirty && juce::Time::getMillisecondCounter() - lastChange > 1500) saveState();
+    if (dirty && ! isRemote() && juce::Time::getMillisecondCounter() - lastChange > 1500) saveState();
+}
+
+//==============================================================================
+// names of presets and scenes
+juce::String BoxController::localPresetName (int pg, int slotIndex) const
+{
+    if (slotIndex < 0 || slotIndex >= numPresetSlots) return {};
+    return pg < 0 ? localSceneNames[(size_t) slotIndex] : localNames[(size_t) juce::jlimit (0, NumPages - 1, pg)][(size_t) slotIndex];
+}
+
+juce::String BoxController::presetName (int pg, int slotIndex) const
+{
+    if (! isRemote()) return localPresetName (pg, slotIndex);
+    if (slotIndex < 0 || slotIndex >= numPresetSlots) return {};
+    return pg < 0 ? remoteSceneNames[(size_t) slotIndex] : remoteNames[(size_t) juce::jlimit (0, NumPages - 1, pg)][(size_t) slotIndex];
+}
+
+juce::var BoxController::localPresetJson (int pg, int slotIndex) const
+{
+    const auto f = pg < 0 ? sceneFile (slotIndex) : presetFile (pg, slotIndex);
+    return f.existsAsFile() ? juce::JSON::parse (f) : juce::var();
+}
+
+bool BoxController::storeLocalPresetJson (int pg, int slotIndex, const juce::var& preset)
+{
+    if (slotIndex < 0 || slotIndex >= numPresetSlots || ! preset.isObject()) return false;
+    // only what this page can read
+    bool valid = false;
+    if (pg < 0) { BoxData probe; valid = probe.sceneFromVar (preset); }
+    else if (pg == PageFx) { std::array<float, numSlots> tmp {}; valid = BoxData::fxFromVar (preset, tmp); }
+    else { auto tmp = std::make_unique<InstrumentState>(); valid = BoxData::instrumentFromVar (pg, preset, *tmp); }
+    if (! valid) return false;
+    const bool ok = writeSafely (pg < 0 ? sceneFile (slotIndex) : presetFile (pg, slotIndex), juce::JSON::toString (preset));
+    rescanNames();
+    return ok;
+}
+
+bool BoxController::renamePreset (int pg, int slotIndex, const juce::String& newName)
+{
+    const auto name = newName.trim().substring (0, 24);
+    if (name.isEmpty()) return false;
+    if (isRemote())
+    {
+        auto* o = new juce::DynamicObject(); o->setProperty ("t", "rename"); o->setProperty ("page", pg); o->setProperty ("slot", slotIndex); o->setProperty ("name", name);
+        sendRemote (o);
+        return true;
+    }
+    auto v = localPresetJson (pg, slotIndex);
+    if (! v.isObject()) return false;
+    v.getDynamicObject()->setProperty ("name", name);
+    const bool ok = writeSafely (pg < 0 ? sceneFile (slotIndex) : presetFile (pg, slotIndex), juce::JSON::toString (v));
+    rescanNames();
+    return ok;
+}
+
+void BoxController::rescanNames()
+{
+    for (int pg = -1; pg < NumPages; ++pg)
+        for (int i = 0; i < numPresetSlots; ++i)
+        {
+            const auto f = pg < 0 ? sceneFile (i) : presetFile (pg, i);
+            juce::String name;
+            if (f.existsAsFile())
+            {
+                const auto v = juce::JSON::parse (f);
+                bool valid = false;
+                if (pg < 0) valid = v.isObject() && v["format"].toString() == "catbox-scene-1";
+                else if (pg == PageFx) { std::array<float, numSlots> tmp {}; valid = BoxData::fxFromVar (v, tmp); }
+                else { auto tmp = std::make_unique<InstrumentState>(); valid = BoxData::instrumentFromVar (pg, v, *tmp); }
+                if (valid)
+                {
+                    name = v["name"].toString().trim();
+                    if (name.isEmpty()) name = (pg < 0 ? juce::String ("Scene") : instrumentName (pg)) + " " + juce::String (i + 1);
+                }
+            }
+            (pg < 0 ? localSceneNames[(size_t) i] : localNames[(size_t) pg][(size_t) i]) = name;
+        }
+    if (onNamesChanged) onNamesChanged();
+}
+
+juce::var BoxController::namesVar() const
+{
+    juce::Array<juce::var> pages;
+    for (int pg = 0; pg < NumPages; ++pg)
+    {
+        juce::Array<juce::var> names;
+        for (auto& n : localNames[(size_t) pg]) names.add (n);
+        pages.add (names);
+    }
+    juce::Array<juce::var> scenes;
+    for (auto& n : localSceneNames) scenes.add (n);
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("pages", pages);
+    o->setProperty ("scenes", scenes);
+    return juce::var (o);
+}
+
+//==============================================================================
+// the link between the box and the PC app
+void BoxController::sendRemote (juce::DynamicObject* o)
+{
+    juce::var v (o);
+    if (remoteSink) remoteSink (v);
+}
+
+void BoxController::setRemoteSink (std::function<void (const juce::var&)> sink)
+{
+    const bool was = isRemote();
+    remoteSink = std::move (sink);
+    audio.setMirror (isRemote());
+    if (was && ! isRemote())   // back to playing here: this PC's own state again
+    {
+        BoxData mine;
+        const auto last = dataDir.getChildFile ("last.json");
+        if (last.existsAsFile()) mine.fromVar (juce::JSON::parse (last));
+        data = mine;
+        shift = false; sceneMode = false; latchOn = false; bassSel = -1;
+        for (auto& sv : stepViews) sv = false;
+        audio.mirrorTransport (false, false);
+        syncAtomics();
+        rescanNames();
+        publish();
+    }
+    if (onNamesChanged) onNamesChanged();
+}
+
+juce::var BoxController::makeState() const
+{
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("t", "state");
+    o->setProperty ("data", data.toVar());
+    o->setProperty ("shift", shift.load());
+    o->setProperty ("scene", sceneMode.load());
+    o->setProperty ("latch", latchOn);
+    o->setProperty ("bassSel", bassSel);
+    juce::Array<juce::var> sv, sp;
+    for (auto& x : stepViews) sv.add (x.load());
+    for (auto& x : stepPages) sp.add (x.load());
+    o->setProperty ("steps", sv);
+    o->setProperty ("stepPages", sp);
+    o->setProperty ("flash", getFlash());
+    o->setProperty ("names", namesVar());
+    o->setProperty ("knobPage", lastKnobPg);
+    o->setProperty ("knobSlot", lastKnobSl);
+    return juce::var (o);
+}
+
+juce::var BoxController::makeLive()
+{
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("t", "live");
+    o->setProperty ("play", audio.isPlaying());
+    o->setProperty ("rec", audio.isRecording());
+    o->setProperty ("ds", audio.drumStep.load());
+    o->setProperty ("bs", audio.bassStep.load());
+    o->setProperty ("as", audio.arpStep.load());
+    const uint64_t lo = audio.arpNotesLo.load(), hi = audio.arpNotesHi.load();
+    o->setProperty ("an", juce::Array<juce::var> { (int) (lo & 0xffffffffu), (int) (lo >> 32), (int) (hi & 0xffffffffu), (int) (hi >> 32) });
+    o->setProperty ("perf", (int) audio.perfHeld.load());
+    o->setProperty ("flash", (int) audio.drumFlashLink.exchange (0));
+    o->setProperty ("peak", audio.peak.load());
+    o->setProperty ("wait", audio.sceneWaiting.load());
+    o->setProperty ("bn", audio.bassNoteNow.load());
+    // the last ~40 ms of sound, rounded (for the oscilloscope and spectrum on the PC)
+    juce::Array<juce::var> wave;
+    const int w = audio.spectrumWrite.load (std::memory_order_relaxed);
+    for (int i = 0; i < BoxAudio::spectrumSize; ++i)
+        wave.add (std::round (audio.spectrumRing[(size_t) ((w + i) % BoxAudio::spectrumSize)].load (std::memory_order_relaxed) * 1000.0f) / 1000.0f);
+    o->setProperty ("wave", wave);
+    return juce::var (o);
+}
+
+void BoxController::applyState (const juce::var& v)
+{
+    if (! isRemote() || ! v.isObject()) return;
+    data.fromVar (v["data"]);
+    shift = (bool) v["shift"];
+    sceneMode = (bool) v["scene"];
+    latchOn = (bool) v["latch"];
+    bassSel = (int) v.getProperty ("bassSel", -1);
+    if (auto* sv = v["steps"].getArray())
+        for (int i = 0; i < juce::jmin ((int) stepViews.size(), sv->size()); ++i) stepViews[(size_t) i] = (bool) (*sv)[i];
+    if (auto* sp = v["stepPages"].getArray())
+        for (int i = 0; i < juce::jmin ((int) stepPages.size(), sp->size()); ++i) stepPages[(size_t) i] = (int) (*sp)[i];
+    const auto f = v["flash"].toString();
+    if (f.isNotEmpty() && f != flash) setFlash (f);
+    lastKnobPg = (int) v.getProperty ("knobPage", -1);
+    lastKnobSl = (int) v.getProperty ("knobSlot", -1);
+    const auto names = v["names"];
+    bool namesChanged = false;
+    if (auto* pages = names["pages"].getArray())
+        for (int pg = 0; pg < juce::jmin ((int) NumPages, pages->size()); ++pg)
+            if (auto* list = (*pages)[pg].getArray())
+                for (int i = 0; i < juce::jmin (numPresetSlots, list->size()); ++i)
+                {
+                    const auto n = (*list)[i].toString();
+                    if (remoteNames[(size_t) pg][(size_t) i] != n) { remoteNames[(size_t) pg][(size_t) i] = n; namesChanged = true; }
+                }
+    if (auto* list = names["scenes"].getArray())
+        for (int i = 0; i < juce::jmin (numPresetSlots, list->size()); ++i)
+        {
+            const auto n = (*list)[i].toString();
+            if (remoteSceneNames[(size_t) i] != n) { remoteSceneNames[(size_t) i] = n; namesChanged = true; }
+        }
+    syncAtomics();
+    if (namesChanged && onNamesChanged) onNamesChanged();
+}
+
+void BoxController::applyLive (const juce::var& v)
+{
+    if (! isRemote() || ! v.isObject()) return;
+    audio.mirrorTransport ((bool) v["play"], (bool) v["rec"]);
+    audio.drumStep = (int) v.getProperty ("ds", -1);
+    audio.bassStep = (int) v.getProperty ("bs", -1);
+    audio.arpStep = (int) v.getProperty ("as", -1);
+    if (auto* an = v["an"].getArray(); an != nullptr && an->size() == 4)
+    {
+        auto u = [an] (int i) { return (uint64_t) (uint32_t) (int) (*an)[i]; };
+        audio.arpNotesLo = u (0) | (u (1) << 32);
+        audio.arpNotesHi = u (2) | (u (3) << 32);
+    }
+    audio.perfHeld = (uint32_t) (int) v.getProperty ("perf", 0);
+    audio.drumFlash.fetch_or ((uint32_t) (int) v.getProperty ("flash", 0));
+    audio.peak = (float) v.getProperty ("peak", 0.0);
+    audio.sceneWaiting = (bool) v["wait"];
+    audio.bassNoteNow = (int) v.getProperty ("bn", -1);
+    if (auto* wave = v["wave"].getArray())
+    {
+        const int n = juce::jmin (BoxAudio::spectrumSize, wave->size());
+        for (int i = 0; i < n; ++i) audio.spectrumRing[(size_t) i].store ((float) (*wave)[i], std::memory_order_relaxed);
+        audio.spectrumWrite.store (n % BoxAudio::spectrumSize, std::memory_order_relaxed);
+    }
+}
+
+void BoxController::handleLinkMessage (const juce::var& m, const std::function<void (const juce::var&)>& reply)
+{
+    if (isRemote() || ! m.isObject()) return;
+    const auto t = m["t"].toString();
+    const int pg = (int) m.getProperty ("page", 0), slotIndex = (int) m.getProperty ("slot", 0);
+    if (t == "knob")        turnKnob ((int) m["k"], (float) m["c"]);
+    else if (t == "button") (bool) m["down"] ? buttonDown ((int) m["b"]) : buttonUp ((int) m["b"]);
+    else if (t == "pad")    (bool) m["down"] ? padDown ((int) m["p"], (int) m.getProperty ("v", 100)) : padUp ((int) m["p"]);
+    else if (t == "page")   setPage ((int) m["p"]);
+    else if (t == "drum")   pickDrum ((int) m["p"]);
+    else if (t == "load")   pg < 0 ? loadScene (slotIndex) : loadPreset (pg, slotIndex);
+    else if (t == "rename") renamePreset (pg, slotIndex, m["name"].toString());
+    else if (t == "putPreset")
+    {
+        const bool ok = storeLocalPresetJson (pg, slotIndex, m["data"]);
+        setFlash (ok ? "From the PC: " + presetName (pg, slotIndex) : juce::String ("The PC sent a preset this page can't use"));
+    }
+    else if (t == "getPreset")
+    {
+        auto* o = new juce::DynamicObject();
+        o->setProperty ("t", "preset");
+        o->setProperty ("page", pg);
+        o->setProperty ("slot", slotIndex);
+        o->setProperty ("data", localPresetJson (pg, slotIndex));
+        reply (juce::var (o));
+    }
+    else if (t == "hello")  reply (makeState());
 }
 
 } // namespace catbox

@@ -304,7 +304,8 @@ void BoxView::paint (juce::Graphics& g)
 {
     g.fillAll (pal().bg);
     g.addTransform (juce::AffineTransform::scale (scale).translated (offset));
-    paintScreen (g, { 0.0f, 0.0f, (float) screenW, (float) screenH });
+    if (isBoxScreen()) paintBoxScreen (g, { 0.0f, 0.0f, (float) screenW, (float) screenH });
+    else paintScreen (g, { 0.0f, 0.0f, (float) screenW, (float) screenH });
     if (! kiosk) paintPanel (g, { 0.0f, (float) screenH, (float) screenW, (float) panelH });
 }
 
@@ -385,6 +386,251 @@ void BoxView::paintScreen (juce::Graphics& g, juce::Rectangle<float> area)
         paintKnobCell (g, juce::Rectangle<float> (14.0f + (k % 6) * 129.0f, 94.0f + (k / 6) * 118.0f, 129.0f, 118.0f).reduced (4.0f), k);
 
     paintBottom (g, { 14.0f, 336.0f, 772.0f, 136.0f });
+}
+
+juce::String BoxView::loadedName() const
+{
+    const auto& data = box.getData();
+    const int page = box.getPage();
+    if (box.isSceneMode() && data.loadedScene >= 0) return box.presetName (-1, data.loadedScene);
+    if (data.loadedPreset[(size_t) page] >= 0)
+    {
+        const auto n = box.presetName (page, data.loadedPreset[(size_t) page]);
+        if (n.isNotEmpty()) return n;
+    }
+    if (data.loadedScene >= 0) return box.presetName (-1, data.loadedScene);
+    return {};
+}
+
+void BoxView::paintBoxScreen (juce::Graphics& g, juce::Rectangle<float> area)
+{
+    const auto& P = pal();
+    const int page = box.getPage();
+    const auto col = pageColour (page);
+    const auto& data = box.getData();
+    auto& audio = box.getAudio();
+
+    g.setColour (P.screen);
+    g.fillRect (area);
+
+    // top: what plays, which preset, tempo
+    g.setColour (col);
+    g.setFont (font (34.0f, true));
+    g.drawText (instrumentName (page).toUpperCase(), juce::Rectangle<float> (24.0f, 6.0f, 200.0f, 56.0f), juce::Justification::centredLeft);
+    const auto name = loadedName();
+    g.setColour (name.isEmpty() ? P.dim : P.text);
+    g.setFont (font (26.0f, true));
+    g.drawFittedText (name.isEmpty() ? juce::String ("-") : name, juce::Rectangle<int> (220, 6, 380, 56), juce::Justification::centred, 1, 0.7f);
+    {
+        const float cy = 34.0f, x = 652.0f;
+        juce::Path p;
+        if (audio.isPlaying()) p.addTriangle (x, cy - 11.0f, x, cy + 11.0f, x + 19.0f, cy);
+        else p.addRectangle (x, cy - 9.0f, 18.0f, 18.0f);
+        g.setColour (audio.isPlaying() ? C::stepOn : P.dim);
+        g.fillPath (p);
+        g.setColour (P.text);
+        g.setFont (font (30.0f, true));
+        g.drawText (juce::String (juce::roundToInt (data.globals[GTempo])), juce::Rectangle<float> (676.0f, 10.0f, 70.0f, 48.0f), juce::Justification::centredRight);
+        g.setFont (font (13.0f));
+        g.setColour (P.dim);
+        g.drawText ("BPM", juce::Rectangle<float> (750.0f, 22.0f, 40.0f, 24.0f), juce::Justification::centredLeft);
+    }
+
+    // a thin line of what is switched on
+    juce::StringArray on;
+    if (box.isShiftHeld()) on.add ("SHIFT");
+    if (box.isStepView()) on.add ("STEPS");
+    if (audio.isRecording() && page < NumInstruments && page != Arp) on.add ("REC");
+    if (box.isLatched() && page == Arp) on.add ("HOLD");
+    if (audio.sceneWaiting.load()) on.add ("NEXT BAR");
+    if (page < NumInstruments && data.muted[(size_t) page]) on.add ("MUTED");
+    if (page == Drums) on.add (drumPadName (data.selectedDrum).toUpperCase());
+    g.setFont (font (14.0f, true));
+    g.setColour (P.dim);
+    g.drawText (on.joinIntoString ("   "), juce::Rectangle<float> (24.0f, 62.0f, 752.0f, 22.0f), juce::Justification::centredLeft);
+
+    // the middle: presets / scenes while choosing, else the sound itself
+    auto mid = juce::Rectangle<float> (16.0f, 90.0f, 768.0f, 300.0f);
+    if (box.isShiftHeld() || box.isSceneMode()) paintSlotGrid (g, mid);
+    else paintScope (g, mid);
+
+    // a knob was turned: its name, a big number and a bar
+    const bool recent = box.lastKnobPage() == page && box.lastKnobSlot() >= 0
+                        && juce::Time::getMillisecondCounter() - box.lastKnobTime() < 1600;
+    if (recent && ! box.isSceneMode())
+    {
+        const int knob = box.lastKnobSlot() % numKnobs;
+        const bool stepKnob = page == Bass && box.isStepView() && box.lastKnobSlot() < numKnobs && knob >= 1 && knob <= 3;
+        const auto v = stepKnob ? box.knobView (knob) : box.slotView (page, box.lastKnobSlot());
+        if (v.used)
+        {
+            auto card = juce::Rectangle<float> (120.0f, 120.0f, 560.0f, 230.0f);
+            g.setColour (P.cell.withAlpha (0.97f));
+            g.fillRoundedRectangle (card, 16.0f);
+            g.setColour (col.withAlpha (0.6f));
+            g.drawRoundedRectangle (card, 16.0f, 2.0f);
+            auto in = card.reduced (28.0f, 18.0f);
+            g.setColour (P.dim);
+            g.setFont (font (22.0f));
+            g.drawText (v.name + "   (knob " + juce::String (knob + 1) + (box.lastKnobSlot() >= numKnobs ? " + Shift" : "") + ")",
+                        in.removeFromTop (34.0f), juce::Justification::centredLeft);
+            g.setColour (P.text);
+            g.setFont (font (76.0f, true));
+            g.drawFittedText (v.value, in.removeFromTop (100.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.6f);
+            auto bar = in.removeFromBottom (22.0f);
+            g.setColour (P.faint);
+            g.fillRoundedRectangle (bar, 11.0f);
+            g.setColour (v.global ? P.dim : col);
+            g.fillRoundedRectangle (bar.withWidth (juce::jmax (22.0f, bar.getWidth() * juce::jlimit (0.0f, 1.0f, v.fraction))), 11.0f);
+        }
+    }
+
+    paintStrip (g, { 16.0f, 400.0f, 768.0f, 66.0f });
+
+    const auto flash = box.getFlash();
+    if (flash.isNotEmpty() && ! recent)
+    {
+        g.setFont (font (20.0f, true));
+        const float w = juce::jmin (740.0f, 60.0f + flash.length() * 10.5f);
+        auto f = juce::Rectangle<float> (400.0f - w * 0.5f, 100.0f, w, 46.0f);
+        g.setColour (P.cell.withAlpha (0.97f));
+        g.fillRoundedRectangle (f, 23.0f);
+        g.setColour (col);
+        g.drawRoundedRectangle (f, 23.0f, 2.0f);
+        g.setColour (P.text);
+        g.drawFittedText (flash, f.reduced (16.0f, 2.0f).toNearestInt(), juce::Justification::centred, 1, 0.7f);
+    }
+}
+
+void BoxView::paintScope (juce::Graphics& g, juce::Rectangle<float> r)
+{
+    const auto& P = pal();
+    auto& audio = box.getAudio();
+    g.setColour (P.cell);
+    g.fillRoundedRectangle (r, 14.0f);
+    g.setColour (P.faint);
+    g.drawHorizontalLine ((int) r.getCentreY(), r.getX() + 12.0f, r.getRight() - 12.0f);
+
+    // the last ~40 ms of sound, started where the wave goes up through zero, so it stands still
+    constexpr int n = BoxAudio::spectrumSize, shown = 420;
+    std::array<float, n> x {};
+    const int w = audio.spectrumWrite.load (std::memory_order_relaxed);
+    for (int i = 0; i < n; ++i) x[(size_t) i] = audio.spectrumRing[(size_t) ((w + i) % n)].load (std::memory_order_relaxed);
+    int start = n - shown - 1;
+    for (int i = n - shown - 2; i > 40; --i)
+        if (x[(size_t) i] <= 0.0f && x[(size_t) i + 1] > 0.0f) { start = i; break; }
+    float peakAbs = 0.02f;
+    for (int i = 0; i < shown; ++i) peakAbs = juce::jmax (peakAbs, std::abs (x[(size_t) (start + i)]));
+    const float gain = 0.42f * r.getHeight() / peakAbs;
+
+    juce::Path wave;
+    for (int i = 0; i < shown; ++i)
+    {
+        const float px = r.getX() + 14.0f + (r.getWidth() - 28.0f) * (float) i / (shown - 1);
+        const float py = r.getCentreY() - x[(size_t) (start + i)] * gain;
+        if (i == 0) wave.startNewSubPath (px, py); else wave.lineTo (px, py);
+    }
+    const auto col = pageColour (box.getPage());
+    g.setColour (col.withAlpha (0.25f));
+    g.strokePath (wave, juce::PathStrokeType (7.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.setColour (col);
+    g.strokePath (wave, juce::PathStrokeType (2.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    // the level, as a thin bar on the right
+    const float pk = juce::jlimit (0.0f, 1.0f, audio.peak.load());
+    auto meter = juce::Rectangle<float> (r.getRight() - 12.0f, r.getY() + 14.0f, 4.0f, r.getHeight() - 28.0f);
+    g.setColour (P.faint);
+    g.fillRoundedRectangle (meter, 2.0f);
+    g.setColour (pk > 0.9f ? C::rec : col);
+    g.fillRoundedRectangle (meter.withTrimmedTop (meter.getHeight() * (1.0f - pk)), 2.0f);
+}
+
+void BoxView::paintSlotGrid (juce::Graphics& g, juce::Rectangle<float> r)
+{
+    const auto& P = pal();
+    const bool scenes = box.isSceneMode();
+    const int page = box.getPage();
+    const auto& data = box.getData();
+    const auto col = scenes ? juce::Colour (0xfff0c94a) : pageColour (page);
+    const int loaded = scenes ? data.loadedScene : data.loadedPreset[(size_t) page];
+
+    g.setColour (P.text);
+    g.setFont (font (18.0f, true));
+    auto head = r.removeFromTop (30.0f);
+    g.drawText (scenes ? juce::String ("Scenes: pad = play it, Rec + pad = save")
+                       : "Presets " + instrumentName (page) + ": pad = load, Rec + pad = save",
+                head, juce::Justification::centredLeft);
+    if (linkInfo && ! scenes)
+    {
+        g.setFont (font (14.0f));
+        g.setColour (P.dim);
+        g.drawText (linkInfo(), head, juce::Justification::centredRight);
+    }
+    const float cw = r.getWidth() / 8.0f, ch = (r.getHeight() - 6.0f) / 2.0f;
+    for (int i = 0; i < numPresetSlots; ++i)
+    {
+        auto c = juce::Rectangle<float> (r.getX() + (i % 8) * cw, r.getY() + 6.0f + (i / 8) * ch, cw, ch).reduced (4.0f);
+        const auto n = box.presetName (scenes ? -1 : page, i);
+        const bool isLoaded = i == loaded;
+        g.setColour (isLoaded ? col : n.isNotEmpty() ? P.cell.interpolatedWith (col, 0.18f) : P.cell);
+        g.fillRoundedRectangle (c, 10.0f);
+        g.setColour (isLoaded ? juce::Colours::black.withAlpha (0.6f) : P.dim);
+        g.setFont (font (14.0f, true));
+        g.drawText (juce::String (i + 1), c.reduced (9.0f, 6.0f), juce::Justification::topLeft);
+        g.setColour (isLoaded ? juce::Colours::black : n.isNotEmpty() ? P.text : P.faint);
+        g.setFont (font (16.0f, n.isNotEmpty()));
+        g.drawFittedText (n.isNotEmpty() ? n : juce::String ("empty"), c.reduced (8.0f, 10.0f).toNearestInt(), juce::Justification::centredBottom, 3, 0.75f);
+    }
+}
+
+void BoxView::paintStrip (juce::Graphics& g, juce::Rectangle<float> r)
+{
+    const auto& P = pal();
+    const int page = box.getPage();
+    const auto col = pageColour (page);
+    const auto& data = box.getData();
+    auto& audio = box.getAudio();
+
+    if (page == PageFx)
+    {
+        juce::StringArray held;
+        const uint32_t bits = audio.perfHeld.load();
+        for (int p = 0; p < NumPerf; ++p) if ((bits >> p) & 1u) held.add (perfName (p));
+        g.setColour (held.isEmpty() ? P.dim : col);
+        g.setFont (font (22.0f, held.size() > 0));
+        g.drawFittedText (held.isEmpty() ? juce::String ("hold a pad for an effect") : held.joinIntoString ("  +  "),
+                          r.toNearestInt(), juce::Justification::centred, 1, 0.7f);
+        return;
+    }
+
+    int len = 16, cur = -1;
+    auto stepColour = [&] (int s) -> juce::Colour
+    {
+        if (page == Drums)
+        {
+            const int v = data.inst[Drums].drumSteps[(size_t) data.selectedDrum][(size_t) s];
+            return v == 0 ? P.faint : v >= 120 ? col.brighter (0.3f) : col;
+        }
+        if (page == Bass)
+        {
+            const auto& st = data.inst[Bass].bassSteps[(size_t) s];
+            return st.note < 0 ? P.faint : st.accent ? C::stepAcc : col;
+        }
+        const auto st = data.inst[Arp].arpSteps[(size_t) s];
+        return st == StepOn ? C::stepOn : st == StepTie ? C::stepTie : st == StepAccent ? C::stepAcc : P.faint;
+    };
+    if (page == Drums) { len = data.drumLength(); cur = audio.isPlaying() ? audio.drumStep.load() : -1; }
+    else if (page == Bass) { len = data.bassLength(); cur = audio.isPlaying() ? audio.bassStep.load() : -1; }
+    else { len = juce::roundToInt (data.inst[Arp].values[slot::ALength]); cur = audio.arpStep.load(); }
+    len = juce::jlimit (1, maxSteps, len);
+    const float w = r.getWidth() / len;
+    for (int s = 0; s < len; ++s)
+    {
+        auto b = r.withX (r.getX() + s * w).withWidth (w).reduced (len > 32 ? 0.6f : 2.0f, 10.0f);
+        g.setColour (stepColour (s));
+        g.fillRoundedRectangle (b, 3.0f);
+        if (s == cur) { g.setColour (P.text); g.drawRoundedRectangle (b.expanded (1.0f, 4.0f), 3.0f, 2.0f); }
+    }
 }
 
 void BoxView::paintKnobCell (juce::Graphics& g, juce::Rectangle<float> r, int knob)
@@ -668,12 +914,14 @@ void BoxView::mouseDown (const juce::MouseEvent& e)
         m.addItem (1, "Sound card and MIDI...");
         m.addItem (2, "Full screen (F11)");
         m.addItem (4, "Light screen", true, box.isLightScreen());
+        if (! kiosk) m.addItem (5, "Show the box screen (5\")", true, boxPreview);
         m.addItem (3, "Open the presets folder");
         m.showMenuAsync (juce::PopupMenu::Options(), [this] (int r)
         {
             if (r == 1 && onSettings) onSettings();
             if (r == 2 && onToggleFullScreen) onToggleFullScreen();
             if (r == 4) box.setLightScreen (! box.isLightScreen());
+            if (r == 5) setBoxScreen (! boxPreview);
             if (r == 3)
             {
                 auto dir = box.getDataDirectory().getChildFile ("Presets");
@@ -686,8 +934,8 @@ void BoxView::mouseDown (const juce::MouseEvent& e)
 
     // the screen: the page names switch the page, the drum chip picks the drum
     for (int i = 0; i < NumPages; ++i)
-        if (tabArea (i).contains (p)) { box.setPage (i); return; }
-    if (box.getPage() == Drums && juce::Rectangle<float> (14.0f, 64.0f, 772.0f, 26.0f).contains (p))
+        if (! isBoxScreen() && tabArea (i).contains (p)) { box.setPage (i); return; }
+    if (! isBoxScreen() && box.getPage() == Drums && juce::Rectangle<float> (14.0f, 64.0f, 772.0f, 26.0f).contains (p))
     {
         juce::PopupMenu m;
         for (int d = 0; d < numPads; ++d) m.addItem (d + 1, drumPadName (d), true, d == box.selectedDrum());

@@ -145,7 +145,7 @@ float BoxAudio::hashNoise (int64_t k, int salt) noexcept
 void BoxAudio::flashDrum (int note)
 {
     for (int p = 0; p < numPads; ++p)
-        if (drumPadNote (p) == note) { drumFlash.fetch_or (1u << p); return; }
+        if (drumPadNote (p) == note) { drumFlash.fetch_or (1u << p); drumFlashLink.fetch_or (1u << p); return; }
 }
 
 void BoxAudio::scheduleOff (int instrument, int note, double offPpq)
@@ -363,6 +363,12 @@ void BoxAudio::tick (double from, double to)
 
 void BoxAudio::render (float* left, float* right, int numSamples)
 {
+    if (mirror.load())   // linked to a box: the box plays
+    {
+        juce::FloatVectorOperations::clear (left, numSamples);
+        juce::FloatVectorOperations::clear (right, numSamples);
+        return;
+    }
     for (int pos = 0; pos < numSamples; pos += maxChunk)
     {
         const int n = juce::jmin (maxChunk, numSamples - pos);

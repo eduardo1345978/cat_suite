@@ -12,6 +12,29 @@ The same program runs in two places:
 - **In the box** (Raspberry Pi 5 + HiFiBerry + 5" screen + Pico controller): `Cat-Box --kiosk` shows
   only the 800 x 480 screen, full screen; the real knobs, pads and buttons do the rest.
 
+## The box screen (5")
+
+Kept simple, the box is played with its hands: the page and the preset's name at the top, the tempo,
+and a big **oscilloscope** of what you hear. Turn a knob and a card shows its name, a **big number**
+and a **bar**. Hold **Shift** (presets) or press **Scene** and the screen shows the 16 slots with their
+names. At the bottom: the steps of the page (or the effects held on the FX page).
+On the PC: right-click > *Show the box screen (5")* shows the same screen.
+
+## The PC app and the box together
+
+`Cat-Box.exe` on the PC is a full app on its own (it plays by itself), and it can **connect to the box**
+over your home network (WiFi or cable; the box needs to be on the same network):
+
+- The panel on the right finds boxes on the network (*Connect to Cat Box*), or type the box's address
+  (the box shows it at the top right while you hold **Shift**: *PC link: 192.168.1.23*).
+- Connected, the PC's knobs, pads, buttons and keyboard **play the box**; the PC's screen shows what the
+  box does, and the PC itself stays silent. *Disconnect* and the PC plays by itself again.
+- **Presets**: every preset and scene with its name. *Load*, *Name* (give it a name, it is shown on the
+  box), *PC > Box* and *Box > PC* copy a preset between them.
+
+Technically: the box (`Cat-Box --kiosk`, or `--box` in a window) answers on TCP port 50650 and announces
+itself on UDP port 50651.
+
 ## Build
 
 - PC: double-click **build_catbox.bat** (builds only Cat Box, runs its self test, starts it).
