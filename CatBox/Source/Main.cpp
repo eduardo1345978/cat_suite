@@ -251,7 +251,7 @@ public:
                 press (BtnOctUp);
                 check (box.enginePageName() == "Osc I" && box.knobView (3).name == "Saw", "Oct + goes to the next knob page", box.enginePageName() + " / " + box.knobView (3).name);
                 const auto saw0 = box.knobView (3).value;
-                box.turnKnob (3, -30.0f);
+                box.turnKnob (3, 30.0f);
                 check (box.knobView (3).value != saw0 && box.engineTitle().endsWith ("*"), "a knob changes the Glide sound (marked *)", saw0 + " > " + box.knobView (3).value);
                 box.resetKnob (3);
                 check (std::abs (engine::get (box.getData().inst[Arp].glide, "l1_saw") - 0.8f) < 0.001f, "double-click puts a Glide knob back", {});
