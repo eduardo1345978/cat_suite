@@ -568,7 +568,7 @@ void BoxController::padUp (int pad)
     BoxEvent e;
     e.type = inst == PageFx ? BoxEvent::PerfOff : inst == PageOrbit ? BoxEvent::OrbitOff : inst == Arp ? BoxEvent::ArpOff : BoxEvent::BassOff;
     e.a = note;
-    if (inst == PageFx || inst == Arp || inst == Bass) audio.post (e);
+    if (inst == PageFx || inst == PageOrbit || inst == Arp || inst == Bass) audio.post (e);
 }
 
 //==============================================================================
