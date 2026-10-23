@@ -90,7 +90,7 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
       easy to find with buttons; big Cats = pages, small = sounds / effects; as many pages as needed, switched with
       Instr hold + knob; each Cat can be switched off in settings; Pi gets fewer voices, PC full. Order: Cats now.
       - [x] Engine system + Sound button (V) + GLIDE engine (all Glide-Cat sounds, 12 knob pages, Init) on Arp and Bass
-      - [ ] Chords page: 16 pads = 16 chords (presets AND own: pad + knob chord type), voice-leading knob, strum
+      - [x] Chords page: 16 pads = 16 chords (presets AND own: pad + knob chord type), voice-leading knob, strum
             (direction + speed), chords feed Arp / Choir / Glide / own chord sound; play it like ORCHID
             (one hand picks the chord type, pads / keys the root); NO Markov generator
       - [ ] Orbit page with animation (his favourite) - planets play the notes you hold
