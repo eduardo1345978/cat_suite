@@ -318,6 +318,7 @@ public:
                 {
                     LinkPanel panel (pc, client);
                     panel.setSize (LinkPanel::panelWidth, 900);
+                    panel.showPage (Arp);
                     check (panel.rowText (2) == "Night Pluck", "the PC panel lists the box's preset", panel.rowText (2));
                     const auto img = panel.createComponentSnapshot (panel.getLocalBounds());
                     check (img.isValid(), "the PC panel draws", {});

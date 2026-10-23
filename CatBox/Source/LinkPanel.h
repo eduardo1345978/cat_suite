@@ -21,6 +21,9 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
+    /** Shows the presets of a page (0..3) or the scenes (-1). */
+    void showPage (int pg) { pageBox.setSelectedItemIndex (pg < 0 ? NumPages : pg, juce::sendNotificationSync); }
+
     /** For the self test: what row i shows. */
     juce::String rowText (int i) const;
 
