@@ -274,11 +274,13 @@ void BoxController::publish (bool atBar)
 
 int BoxController::arpPadNote (int pad) const
 {
+    if (juce::roundToInt (data.inst[Arp].values[slot::AKeys]) == LayoutPiano) return pianoPadNote (pad, 48 + 12 * padOct[Arp].load());
     return scaleNote (key.load(), scale.load(), pad, 48 + 12 * padOct[Arp].load());
 }
 
 int BoxController::bassPadNote (int pad) const
 {
+    if (juce::roundToInt (data.inst[Bass].values[slot::BKeys]) == LayoutPiano) return pianoPadNote (pad, 36 + 12 * padOct[Bass].load());
     return scaleNote (key.load(), scale.load(), pad, 36 + 12 * padOct[Bass].load());
 }
 
@@ -379,6 +381,7 @@ void BoxController::padDown (int pad, int velocity)
             e.type = BoxEvent::ArpOn;
             e.a = arpPadNote (pad);
             e.b = velocity;
+            if (e.a < 0) return;   // a piano gap (no black key there)
             padHeldInst[(size_t) pad] = Arp;
             padHeldNote[(size_t) pad] = e.a;
             audio.post (e);
@@ -387,6 +390,7 @@ void BoxController::padDown (int pad, int velocity)
             e.type = BoxEvent::BassOn;
             e.a = bassPadNote (pad);
             e.b = velocity;
+            if (e.a < 0) return;
             padHeldInst[(size_t) pad] = Bass;
             padHeldNote[(size_t) pad] = e.a;
             lastBassNote = e.a;

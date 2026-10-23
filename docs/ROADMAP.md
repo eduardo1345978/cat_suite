@@ -82,6 +82,7 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
       big number / bar, preset & scene grid with names (Shift / Scene), step strip
 - [x] PC app that connects to the box (user asked 23 Oct): network link (TCP 50650, discovery UDP 50651), PC plays the
       box and mirrors its screen, preset library with names: load, rename, copy PC <-> box
+- [x] Piano pads on Arp and Bass (user asked 23 Oct): bottom row white keys, top row black keys; drums unchanged; Shift + knob 8 = Piano / Scale
 - [ ] NEXT hardware: get it running on the Pi 5 (user HAS: Pi 5 8 GB, 27 W supply, micro SD, HDMI monitor,
       keyboard + mouse, a USB sound card; wants HiFiBerry DAC later) - walk him through setup_pi.sh
 - [ ] SOUND DESIGN (most important next software):

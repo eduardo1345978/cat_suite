@@ -163,8 +163,8 @@ public:
             box.buttonUp (BtnShift);
             box.setPage (Arp);
             shiftPress (BtnSteps);   // release the held notes
-            box.padDown (3, 100);    // degree 4 of C minor = F
-            box.padUp (3);
+            box.padDown (11, 100);   // the piano pads: bottom row C D E F -> F
+            box.padUp (11);
             bool moved = false;
             for (int i = 0; i < 400 && ! moved; ++i)
             {
@@ -172,6 +172,13 @@ public:
                 moved = audio.bassNoteNow.load() == 41;   // C2 + 5
             }
             check (moved, "Follow arp moves the bass line to the arp's chord", {});
+
+            // pads like a piano on Arp and Bass (bottom row white keys, top row black keys), drums as before
+            check (box.arpPadNote (8) == 48 && box.arpPadNote (11) == 53 && box.arpPadNote (15) == 60, "Arp pads: the bottom row is C D E F G A B C", {});
+            check (box.arpPadNote (0) == 49 && box.arpPadNote (2) < 0 && box.arpPadNote (6) < 0 && box.arpPadNote (3) == 54,
+                   "Arp pads: the top row is the black keys (C# D# - F# ...)", {});
+            check (box.bassPadNote (8) == 36, "Bass pads start on C", noteName (box.bassPadNote (8)));
+            check (drumPadNote (0) == 36 && drumPadNote (1) == 38, "Drum pads stay drums", {});
 
             // Chaos: new sound settings on the page, the pattern stays; Shift + Chaos takes them back
             box.setPage (Bass);

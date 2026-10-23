@@ -69,6 +69,7 @@ Table buildTable()
     a[slot::AVolume]      = percent ("Volume", 0.85f);
     a[slot::ASound]       = choice ("Sound", arpSoundNames(), 2);
     a[slot::AArpOn]       = choice ("Arp", { "On", "Off (plain synth)" }, 0);
+    a[slot::AKeys]        = choice ("Pads", { "Piano", "Scale" }, 0);
     a[slot::AEcho]        = percent ("Echo", 0.25f);
     a[slot::AChorus]      = percent ("Chorus", 0.0f);
     a[slot::ADrive]       = percent ("Drive", 0.0f);
@@ -90,6 +91,7 @@ Table buildTable()
     b[slot::BWave]      = choice ("Wave", { "Saw", "Square" }, 0);
     b[slot::BSwing]     = percent ("Swing", 0.0f);
     b[slot::BFollow]    = choice ("Follow arp", { "Off", "On" }, 0);
+    b[slot::BKeys]      = choice ("Pads", { "Piano", "Scale" }, 0);
 
     auto& f = t[PageFx];
     f[slot::FReverb]     = percent ("Reverb", 0.6f);
@@ -178,6 +180,15 @@ int drumStepsFromChoice (float c)
 {
     const int i = juce::jlimit (0, 2, juce::roundToInt (c));
     return i == 0 ? 16 : i == 1 ? 32 : 64;
+}
+
+int pianoPadNote (int pad, int lowC)
+{
+    static const int white[8] = { 0, 2, 4, 5, 7, 9, 11, 12 };
+    static const int black[8] = { 1, 3, -1, 6, 8, 10, -1, 13 };   // between white key i and i + 1
+    if (pad < 0 || pad >= numPads) return -1;
+    const int off = pad >= 8 ? white[pad - 8] : black[pad];
+    return off < 0 ? -1 : juce::jlimit (0, 127, lowC + off);
 }
 
 int drumPadNote (int pad)

@@ -1,6 +1,7 @@
 #include "BoxView.h"
 #include "MasterFx.h"
 #include <cmath>
+#include <algorithm>
 
 namespace catbox
 {
@@ -222,20 +223,26 @@ juce::Colour BoxView::padColour (int pad, bool& lit, bool& outlined, bool& thick
             lit = lvl > 0.3f;
             return off.interpolatedWith (col, 0.22f + 0.78f * lvl);
         }
-        case Arp:
-        {
-            const int note = box.arpPadNote (pad);
-            const uint64_t bits = note < 64 ? audio.arpNotesLo.load() : audio.arpNotesHi.load();
-            lit = pressed || ((bits >> (note & 63)) & 1u) != 0;
-            const bool root = pad % (int) scaleIntervals (juce::roundToInt (data.globals[GScale])).size() == 0;
-            return lit ? col : off.interpolatedWith (col, root ? 0.38f : 0.16f);
-        }
         default:
         {
-            const int note = box.bassPadNote (pad) + 12 * juce::roundToInt (data.inst[Bass].values[slot::BOctave]);
-            lit = pressed || audio.bassNoteNow.load() == note;
-            const bool root = pad % (int) scaleIntervals (juce::roundToInt (data.globals[GScale])).size() == 0;
-            return lit ? col : off.interpolatedWith (col, root ? 0.38f : 0.16f);
+            const bool isArp = page == Arp;
+            const int padNote = isArp ? box.arpPadNote (pad) : box.bassPadNote (pad);
+            if (padNote < 0) return off.withMultipliedBrightness (0.55f);   // a piano gap
+            if (isArp)
+            {
+                const uint64_t bits = padNote < 64 ? audio.arpNotesLo.load() : audio.arpNotesHi.load();
+                lit = pressed || ((bits >> (padNote & 63)) & 1u) != 0;
+            }
+            else lit = pressed || audio.bassNoteNow.load() == padNote + 12 * juce::roundToInt (data.inst[Bass].values[slot::BOctave]);
+            if (lit) return col;
+            const bool piano = juce::roundToInt (data.inst[(size_t) page].values[isArp ? slot::AKeys : slot::BKeys]) == LayoutPiano;
+            const int pc = ((padNote - juce::roundToInt (data.globals[GKey])) % 12 + 12) % 12;
+            const auto& iv = scaleIntervals (juce::roundToInt (data.globals[GScale]));
+            const bool inKey = std::find (iv.begin(), iv.end(), pc) != iv.end();
+            if (piano)   // white keys light, black keys dark; the key's notes a little brighter, its root brightest
+                return (pad >= 8 ? juce::Colour (0xff5a5f6b) : juce::Colour (0xff1c1f26)).interpolatedWith (col, pc == 0 ? 0.6f : inKey ? 0.28f : 0.0f);
+            const bool root = pad % (int) iv.size() == 0;
+            return off.interpolatedWith (col, root ? 0.38f : 0.16f);
         }
     }
 }
@@ -261,8 +268,8 @@ juce::String BoxView::padLabel (int pad) const
         return noteName (s.note) + (s.slide ? " ~" : "") + (s.accent ? " !" : "");
     }
     if (page == Drums) return drumPadName (pad);
-    if (page == Arp) return noteName (box.arpPadNote (pad));
-    return noteName (box.bassPadNote (pad));
+    const int n = page == Arp ? box.arpPadNote (pad) : box.bassPadNote (pad);
+    return n < 0 ? juce::String() : noteName (n);
 }
 
 juce::String BoxView::presetTitle() const

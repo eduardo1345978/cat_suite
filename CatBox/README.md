@@ -47,7 +47,7 @@ itself on UDP port 50651.
 | | What it does |
 |---|---|
 | **12 knobs** | the sound of the page on screen; with **Shift** held a second layer (key, scale, effects, master) |
-| **16 pads** (2 rows of 8) | Drums: play the drums (the last one hit is the *selected drum*) · Arp: notes of the scale · Bass: notes of the scale · FX: performance effects while held |
+| **16 pads** (2 rows of 8) | Drums: play the drums (the last one hit is the *selected drum*) · Arp and Bass: **like a piano** - the bottom row is the white keys C D E F G A B C, the top row the black keys above them (C# D# - F# G# A# - C#); the key's notes glow a little, its root most (Shift + knob 8: *Pads* = Piano or Scale) · FX: performance effects while held |
 | **Play** | start / stop · **Shift + Play** = tap tempo |
 | **Steps** | the pads become 16 steps (per page). Drums: steps of the selected drum (tap: on > accent > off) · Arp: on > rest > tie > accent · Bass: tap an empty step = set it, tap a set step = pick it, tap again = clear; knobs 2 / 3 / 4 edit the picked step's note / slide / accent · **Shift + Steps** = clear (all drums or the selected one in Steps, the bass line, held arp notes, the FX page) |
 | **Shift** | second knob layer; **Shift + pad** = load preset, **Shift + Rec + pad** = save preset |
@@ -60,7 +60,7 @@ itself on UDP port 50651.
 Performance pads (FX page, held = on): Repeat 1/4, 1/8, 1/16, 1/32 · Sweep down, Sweep up, Tape stop,
 Reverse · Kill drums, Kill arp, Kill bass, Crush · Wash, Riser, Repeat 1/2, Echo throw.
 
-Computer keyboard: pads `1 2 3 4 5 6 7 8 / Q W E R T Y U I` (Z works as Y), Space = Play, B = Steps,
+Computer keyboard: pads `1 2 3 4 5 6 7 8 / Q W E R T Y U I` (Z works as Y) - on Arp and Bass the Q row plays the white keys and the number row the black keys, Space = Play, B = Steps,
 Shift = Shift, N = Scene, Tab = Instr, `,` `.` = Oct - / Oct +, Enter = Rec, C = Chaos, F11 = full screen.
 Right-click = sound card and MIDI, light screen, presets folder.
 

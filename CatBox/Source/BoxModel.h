@@ -45,11 +45,11 @@ namespace slot
     // Arp
     constexpr int ADivision = 1, AMode = 2, AOctaves = 3, AGate = 4, ASwing = 5, ALength = 6, ARatchet = 7,
                   AProbability = 8, AAccent = 9, AFilter = 10, AVolume = 11,
-                  ASound = 14, AEcho = 15, AChorus = 16, ADrive = 17, AArpOn = 18;
+                  ASound = 14, AEcho = 15, AChorus = 16, ADrive = 17, AArpOn = 18, AKeys = 19;
     // Bass
     constexpr int BSound = 1, BCutoff = 2, BResonance = 3, BEnvMod = 4, BDecay = 5, BLength = 6, BAccent = 7,
                   BDrive = 8, BSlide = 9, BOctave = 10, BVolume = 11,
-                  BEcho = 14, BChorus = 15, BWave = 16, BSwing = 17, BFollow = 18;
+                  BEcho = 14, BChorus = 15, BWave = 16, BSwing = 17, BFollow = 18, BKeys = 19;
     // FX page
     constexpr int FReverb = 1, FSize = 2, FDelay = 3, FPump = 4, FDjFilter = 5, FTape = 6, FVinyl = 7,
                   FCrush = 8, FGlue = 9, FWidth = 10, FPumpTarget = 11,
@@ -91,6 +91,12 @@ double arpDivisionPpq (int index);
 enum ArpMode { ModeUp = 0, ModeDown, ModeUpDown, ModeDownUp, ModeAsPlayed, ModeRandom, ModeConverge, ModeChord, NumArpModes };
 /** Drum pattern length choice -> steps (16, 32, 64). */
 int drumStepsFromChoice (float choice);
+
+/** Pads laid out like a piano (two rows of 8): the bottom row is the white keys C D E F G A B C,
+    the top row the black keys right above them (C# D# - F# G# A# - C#). -1 = a pad with no key. */
+int pianoPadNote (int pad, int lowC);
+/** Arp / Bass pad layouts: 0 = Piano, 1 = Scale (the notes of the key, in order). */
+enum PadLayout { LayoutPiano = 0, LayoutScale };
 
 /** The drum sound each pad plays (General MIDI notes, read by hub::DrumKit). */
 int drumPadNote (int pad);
