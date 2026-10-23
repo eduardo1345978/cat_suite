@@ -45,9 +45,9 @@ public:
             box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (16, 106, 127));
             box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (16, 106, 0));
             check (box.getPage() == Arp, "Instr button goes to the Arp page", juce::String (box.getPage()));
-            press (BtnInstrument);
-            check (box.getPage() == PageChords, "after Bass comes the Chords page", juce::String (box.getPage()));
             press (BtnInstrument); press (BtnInstrument);
+            check (box.getPage() == PageChords, "after Bass comes the Chords page", juce::String (box.getPage()));
+            press (BtnInstrument);
             check (box.getPage() == PageFx, "the fifth page is FX", juce::String (box.getPage()));
             press (BtnInstrument);
             check (box.getPage() == Drums, "pages go round", {});
