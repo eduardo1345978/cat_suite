@@ -83,6 +83,25 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
 - [x] PC app that connects to the box (user asked 23 Oct): network link (TCP 50650, discovery UDP 50651), PC plays the
       box and mirrors its screen, preset library with names: load, rename, copy PC <-> box
 - [x] Piano pads on Arp and Bass (user asked 23 Oct): bottom row white keys, top row black keys; drums unchanged; Shift + knob 8 = Piano / Scale
+- [x] Polish (23 Oct): knob rings + value on hover, double-click = default, Chaos hold bar, F1 help, pad velocity
+      by click height, window remembers its place, plain pad colours on Arp/Bass; hold Instr + turn a knob = flip pages
+- Cat Suite in the box (questionnaire 6, 23 Oct): Teenage Engineering style, NOT cat-branded, professional (no meows):
+      pages pick ENGINES, engines have factory presets that can be edited or started from Init; lots of features but
+      easy to find with buttons; big Cats = pages, small = sounds / effects; as many pages as needed, switched with
+      Instr hold + knob; each Cat can be switched off in settings; Pi gets fewer voices, PC full. Order: Cats now.
+      - [x] Engine system + Sound button (V) + GLIDE engine (all Glide-Cat sounds, 12 knob pages, Init) on Arp and Bass
+      - [ ] Chords page: 16 pads = 16 chords (presets AND own: pad + knob chord type), voice-leading knob, strum
+            (direction + speed), chords feed Arp / Choir / Glide / own chord sound; play it like ORCHID
+            (one hand picks the chord type, pads / keys the root); NO Markov generator
+      - [ ] Orbit page with animation (his favourite) - planets play the notes you hold
+      - [ ] Choir engine (Sing-Cat) as an engine with presets; no meows, no Talk-Cat
+      - [ ] Effects TE style, as many as possible: echo with freeze / duck / ping-pong / tape wobble / shimmer,
+            phaser, tremolo, tone, warmth, prism, shimmer/bloom rooms, ensemble
+      - [ ] Arp: Bounce as an arp mode, Euclidean rhythms, pattern length as you set it (no Patt-Cat page)
+      - [ ] Drums: Drum-Cat groove only (swing, human timing); Bass-Cat: Follow arp is enough
+      - [ ] Joystick: bend (curves, LFO) + more targets; microtuning if it fits
+      - [ ] Engines also: piano, nylon guitar, strings, e-piano, chip / glass bells (Cat Hub instruments)
+      - Life-Cat: no. Talk-Cat: no. Patt-Cat page: no.
 - [ ] NEXT hardware: get it running on the Pi 5 (user HAS: Pi 5 8 GB, 27 W supply, micro SD, HDMI monitor,
       keyboard + mouse, a USB sound card; wants HiFiBerry DAC later) - walk him through setup_pi.sh
 - [ ] SOUND DESIGN (most important next software):
