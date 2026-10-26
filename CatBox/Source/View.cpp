@@ -556,6 +556,13 @@ void View::drawSeq (juce::Graphics& g, juce::Rectangle<int> r)
                 if (held) { g.setColour (accent); g.drawRoundedRectangle (c, 2.0f, 2.0f); }
                 if (step == playing) { g.setColour (accent.withAlpha (0.6f)); g.fillRoundedRectangle (c.withHeight (2.0f).withY (c.getBottom() - 2.0f), 1.0f); }
             }
+            if (l == 0)   // steps with recorded knob moves: a small mark above the grid
+                for (int s2 = 0; s2 < 16; ++s2)
+                    if (barIdx * 16 + s2 < pat.length && pat.hasLocks (barIdx * 16 + s2))
+                    {
+                        g.setColour (accent);
+                        g.fillEllipse (juce::Rectangle<float> (4.0f, 4.0f).withCentre ({ r.getX() + nameW + (s2 + 0.5f) * cw, (float) r.getY() - 1.0f }));
+                    }
         }
         return;
     }
@@ -587,6 +594,7 @@ void View::drawSeq (juce::Graphics& g, juce::Rectangle<int> r)
         g.setColour (dim);
         g.fillRect (bars.withTrimmedTop (4).withHeight (3).withWidth (juce::jmin (in.getWidth(), juce::roundToInt (in.getWidth() * st.len / 100.0f))));
         juce::String marks;
+        if (pat.hasLocks (step)) marks << "KNOB ";
         if (st.slide) marks << "SLIDE ";
         if (st.accent) marks << "ACC ";
         if (st.chance < 100) marks << st.chance << "% ";

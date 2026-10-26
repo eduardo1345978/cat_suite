@@ -267,6 +267,7 @@ void Controller::buttonDown (int b)
                             {
                                 clipSteps[(size_t) i] = pat.steps[(size_t) (b0 + i)];
                                 for (int l = 0; l < numLanes; ++l) clipDrums[(size_t) l][(size_t) i] = pat.drums[(size_t) l][(size_t) (b0 + i)];
+                                clipLocks[(size_t) i] = pat.locks[(size_t) (b0 + i)];
                             }
                             hasClip = true;
                             setFlash ("Bar " + juce::String (bar[(size_t) t] + 1) + " copied (Shift + Next = paste)");
@@ -278,6 +279,7 @@ void Controller::buttonDown (int b)
                             {
                                 pat.steps[(size_t) (b0 + i)] = clipSteps[(size_t) i];
                                 for (int l = 0; l < numLanes; ++l) pat.drums[(size_t) l][(size_t) (b0 + i)] = clipDrums[(size_t) l][(size_t) i];
+                                pat.locks[(size_t) (b0 + i)] = clipLocks[(size_t) i];
                             }
                             changed();
                             setFlash ("Pasted into bar " + juce::String (bar[(size_t) t] + 1));
@@ -414,6 +416,7 @@ void Controller::loadSound (int t, int engine, int preset)
     pushUndo ("Sound", true);
     auto& tr = project.tracks[(size_t) t];
     const bool wasDrums = tr.isDrums();
+    if (tr.engine != engine) for (auto& ls : tr.pat.locks) ls = {};   // recorded knob moves belong to the old engine
     loadEnginePreset (tr, engine, preset);
     if (wasDrums != tr.isDrums()) lane[(size_t) t] = 0;
     presetIdx[(size_t) t] = preset;
@@ -942,7 +945,26 @@ void Controller::changeTarget (const Target& t, float amount, bool fraction)
     auto& m = project.m;
     switch (t.kind)
     {
-        case KParam: pushUndo ("Sound edit", true); cur().params[(size_t) t.index] = v; edited[(size_t) track.load()] = true; break;
+        case KParam:
+            if (audio.isRecording() && audio.isPlaying())   // recording: the knob move goes into the step that plays now
+            {
+                const int st = audio.stepNow[(size_t) track.load()].load();
+                if (st >= 0)
+                {
+                    pushUndo ("Knob recording", true);
+                    // continue from what the step already has (turning again moves on from there)
+                    float from = cur().params[(size_t) t.index];
+                    for (const auto& l : cur().pat.locks[(size_t) st]) if (l.param == t.index) from = l.value;
+                    const auto* d = targetDef (t);
+                    const float nv = d->stepped() ? d->clamp (from + (v - cur().params[(size_t) t.index]))
+                                                  : d->fromNorm (d->toNorm (from) + (d->toNorm (v) - d->toNorm (cur().params[(size_t) t.index])));
+                    cur().pat.setLock (st, t.index, nv);
+                    changed();
+                    setFlash ("Recorded on step " + juce::String (st + 1) + ": " + d->name + " " + d->format (nv));
+                    return;
+                }
+            }
+            pushUndo ("Sound edit", true); cur().params[(size_t) t.index] = v; edited[(size_t) track.load()] = true; break;
         case KFx:    cur().fx[(size_t) t.index] = v; break;
         case KMix:
         {
@@ -1205,6 +1227,7 @@ void Controller::seqKnob (int slot, float clicks)
                 const int len = pat.length;
                 auto rot = [len, d] (auto& arr) { auto copy = arr; for (int i = 0; i < len; ++i) arr[(size_t) (((i + d) % len + len) % len)] = copy[(size_t) i]; };
                 rot (pat.steps);
+                rot (pat.locks);
                 for (auto& l : pat.drums) rot (l);
             }
             break;

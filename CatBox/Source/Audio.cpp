@@ -221,6 +221,23 @@ void Audio::runSequencer (int t, double from, double to)
         double at = t0;
         if (s % 2 == 1) at += live.m.swing * stepLen * 0.5;
         at = juce::jmax (from, at);
+        // recorded knob moves: this step's values on top of the sound (and back on a step without them)
+        if (pat.hasLocks (s))
+        {
+            auto values = tr.params;
+            const auto& def = engineDef (tr.engine);
+            for (const auto& l : pat.locks[(size_t) s])
+                if (l.param >= 0 && l.param < (int) def.params.size()) values[(size_t) l.param] = l.value;
+            rt.applied = values;
+            rt.engine->setParams (values.data());
+            rt.locked = true;
+        }
+        else if (rt.locked)
+        {
+            rt.applied = tr.params;
+            rt.engine->setParams (tr.params.data());
+            rt.locked = false;
+        }
         auto skipped = [&rt, s, t0] (int note)
         {
             for (int i = 0; i < rt.numSkips; ++i)

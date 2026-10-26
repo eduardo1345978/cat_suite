@@ -193,6 +193,18 @@ public:
             int notes = 0;
             for (const auto& s : box.getProject().tracks[7].pat.steps) { notes += s.count(); slid = slid || s.slide; accent = accent || (s.has (55) && s.accent); }
             check (notes == 2 && slid && accent, "Rec writes notes (legato = slide, hard = accent)", juce::String (notes));
+            {
+                box.selectTrack (1);   // the acid line: turn the cutoff while it records
+                box.setMode (ModeSound);
+                const float cut0 = box.getProject().tracks[1].params[1];
+                renderSeconds (audio, 0.2, nullptr);
+                box.turnKnob (1, 30.0f);
+                int locked = 0;
+                for (int i = 0; i < maxSteps; ++i) locked += box.getProject().tracks[1].pat.hasLocks (i) ? 1 : 0;
+                check (locked == 1 && box.getProject().tracks[1].params[1] == cut0, "Rec + a knob: the move is recorded into the step (the sound itself stays)", box.flashText());
+                const auto st = renderSeconds (audio, 2.0, nullptr);
+                check (st.finite && st.peak <= 1.0f, "the recorded knob move plays", {});
+            }
             press (BtnRec);
 
             // ---- note FX on a track: arp, chords, orbit (keys held)

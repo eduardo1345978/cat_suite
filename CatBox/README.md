@@ -54,7 +54,7 @@ Everything can be touched: tracks, modes, pages, knobs (drag), Play.
 | **◀ Prev / Next ▶** | pages (see each mode) · **Shift + ◀ ▶** = pad octave |
 | **Shift** | the second layer of knobs and the Shift combinations |
 | **Scene** | the pads: 1-8 = scenes (recall at the next bar while playing), **Rec + pad** = save; 9-16 = mute tracks |
-| **Rec** | record what you play into the steps while it runs (drums: the hit; notes: length, legato = slide, hard = accent) · **Shift + Rec** = clear the track's pattern |
+| **Rec** | record what you play into the steps while it runs (drums: the hit; notes: length, legato = slide, hard = accent); **turn a sound knob while it records and the move is written into the step that plays** (up to 4 knobs per step, shown as KNOB / a dot in SEQ) · **Shift + Rec** = clear the track's pattern |
 | **Play** | start / stop · **Shift + Play** = tap tempo |
 | **Chaos** | hold 0.6 s: new random sound settings from a random factory sound of the engine (volume stays) · **Shift + Chaos** = **Undo** (up to 40 steps: steps, recording, cleared patterns, scenes, sounds, knob edits) |
 

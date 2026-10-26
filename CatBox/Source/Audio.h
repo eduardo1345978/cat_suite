@@ -100,6 +100,7 @@ private:
         std::array<float, maxParams> applied {};
         std::array<float, numFxParams> fxApplied {};
         int fxType = -1, fxKey = -1, fxScale = -1;
+        bool locked = false;   // a step's recorded knob moves are on
         NoteFx fx;
         std::array<Queued, 128> queue {};
         int numQueued = 0;

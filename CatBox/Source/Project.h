@@ -46,18 +46,33 @@ enum Rate { Rate8 = 0, Rate16, Rate32, Rate16T, NumRates };
 inline double rateBeats (int r) { static const double b[] = { 0.5, 0.25, 0.125, 1.0 / 6.0 }; return b[juce::jlimit (0, NumRates - 1, r)]; }
 inline const char* rateName (int r) { static const char* n[] = { "1/8", "1/16", "1/32", "1/16 T" }; return n[juce::jlimit (0, NumRates - 1, r)]; }
 
+/** A knob turned while recording: on this step the sound parameter has this value. */
+struct Lock { int16_t param = -1; float value = 0.0f; };
+constexpr int locksPerStep = 4;
+
 struct Pattern
 {
     int length = 16;          // steps
     int rate = Rate16;
     std::array<Step, maxSteps> steps {};
     std::array<std::array<uint8_t, maxSteps>, numLanes> drums {};   // velocity, 0 = off
+    std::array<std::array<Lock, locksPerStep>, maxSteps> locks {};   // recorded knob moves
+
+    bool hasLocks (int step) const { for (const auto& l : locks[(size_t) step]) if (l.param >= 0) return true; return false; }
+    void setLock (int step, int param, float value)
+    {
+        auto& ls = locks[(size_t) step];
+        for (auto& l : ls) if (l.param == param) { l.value = value; return; }
+        for (auto& l : ls) if (l.param < 0) { l.param = (int16_t) param; l.value = value; return; }
+        ls[0] = { (int16_t) param, value };   // full: the oldest goes
+    }
 
     void clear() { const int l = length, r = rate; *this = Pattern(); length = l; rate = r; }
     bool empty() const
     {
         for (const auto& s : steps) if (s.on()) return false;
         for (const auto& lane : drums) for (auto v : lane) if (v > 0) return false;
+        for (int i = 0; i < maxSteps; ++i) if (hasLocks (i)) return false;
         return true;
     }
 };

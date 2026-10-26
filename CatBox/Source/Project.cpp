@@ -151,6 +151,11 @@ juce::var patternToVar (const Pattern& p)
         lanes.add (s.trimCharactersAtEnd ("0"));
     }
     o->setProperty ("drums", lanes);
+    juce::Array<juce::var> locks;
+    for (int i = 0; i < maxSteps; ++i)
+        for (const auto& l : p.locks[(size_t) i])
+            if (l.param >= 0) locks.add (juce::Array<juce::var> { i, (int) l.param, l.value });
+    if (! locks.isEmpty()) o->setProperty ("locks", locks);
     return juce::var (o);
 }
 
@@ -158,6 +163,13 @@ void patternFromVar (const juce::var& v, Pattern& p)
 {
     p = Pattern();
     if (! v.isObject()) return;
+    if (auto* a = v["locks"].getArray())
+        for (const auto& l : *a)
+            if (auto* x = l.getArray(); x != nullptr && x->size() == 3)
+            {
+                const int i = (int) (*x)[0], param = (int) (*x)[1];
+                if (i >= 0 && i < maxSteps && param >= 0 && param < maxParams) p.setLock (i, param, (float) (*x)[2]);
+            }
     p.length = juce::jlimit (1, maxSteps, (int) v.getProperty ("length", 16));
     p.rate = juce::jlimit (0, NumRates - 1, (int) v.getProperty ("rate", (int) Rate16));
     if (auto* a = v["steps"].getArray())
