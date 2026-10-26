@@ -286,8 +286,8 @@ void Controller::buttonDown (int b)
                 break;
             }
             if (mode.load() == ModeBrowse) { saveUserSound(); break; }
-            audio.post ({ audio.isRecording() ? Event::RecOff : Event::RecOn, 0, 0, 0.0f });
-            setFlash (audio.isRecording() ? "Rec off" : (audio.isPlaying() ? "Rec: play and it is written into the steps" : "Rec armed: press Play"));
+            audio.setRecording (! audio.isRecording());
+            setFlash (! audio.isRecording() ? "Rec off" : (audio.isPlaying() ? "Rec: play and it is written into the steps" : "Rec armed: press Play"));
             break;
         case BtnPlay:
             if (sh) { tapTempo(); break; }
@@ -617,7 +617,8 @@ void Controller::loadScenes()
 {
     const auto f = dataDir.getChildFile ("scenes.json");
     if (! f.existsAsFile()) return;
-    if (auto* a = juce::JSON::parse (f).getArray())
+    const auto parsed = juce::JSON::parse (f);
+    if (auto* a = parsed.getArray())
         for (int i = 0; i < juce::jmin (numScenes, a->size()); ++i)
             if ((*a)[i].isObject())
             {
@@ -1576,8 +1577,9 @@ void Controller::loadMidiMap()
 {
     const auto f = dataDir.getChildFile ("midimap2.json");
     std::vector<MidiCtl> list;
+    const auto parsed = f.existsAsFile() ? juce::JSON::parse (f) : juce::var();
     if (f.existsAsFile())
-        if (auto* a = juce::JSON::parse (f)["controls"].getArray())
+        if (auto* a = parsed["controls"].getArray())
             for (const auto& v : *a)
             {
                 MidiCtl c;

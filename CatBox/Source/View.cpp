@@ -465,7 +465,7 @@ void View::drawSeq (juce::Graphics& g, juce::Rectangle<int> r)
                 if (step >= pat.length) { g.setColour (bg); g.fillRect (c); continue; }
                 const int v = pat.drums[(size_t) l][(size_t) step];
                 const bool held = sel && box.isStepHeld (step);
-                g.setColour (v > 0 ? (v >= 120 ? text : text.withAlpha (0.35f + 0.5f * v / 127.0f)) : (s % 4 == 0 ? line.brighter (0.15f) : line));
+                g.setColour (v > 0 ? (v >= 120 ? accent : text.withAlpha (0.6f + 0.4f * v / 127.0f)) : (s % 4 == 0 ? line.brighter (0.05f) : line.darker (0.15f)));
                 g.fillRoundedRectangle (c, 2.0f);
                 if (held) { g.setColour (accent); g.drawRoundedRectangle (c, 2.0f, 2.0f); }
                 if (step == playing) { g.setColour (accent.withAlpha (0.6f)); g.fillRoundedRectangle (c.withHeight (2.0f).withY (c.getBottom() - 2.0f), 1.0f); }

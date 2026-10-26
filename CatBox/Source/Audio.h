@@ -54,6 +54,7 @@ public:
 
     bool isPlaying() const noexcept { return playing.load(); }
     bool isRecording() const noexcept { return recording.load(); }
+    void setRecording (bool r) noexcept { recording = r; }
     /** The PC linked to a box shows the box's transport. */
     void mirrorTransport (bool play, bool rec) { playing = play; recording = rec; }
     /** Linked: the PC itself stays silent. */

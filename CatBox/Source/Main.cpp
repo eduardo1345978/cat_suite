@@ -320,13 +320,17 @@ public:
                     const auto img = screen.snapshotScreen();
                     check (img.isValid() && img.getWidth() == View::screenW, juce::String ("the screen draws ") + modeName (m), {});
                     juce::PNGImageFormat png;
-                    if (auto os = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + "-screen" + juce::String (++shot) + ".png").createOutputStream())
+                    const auto pngFile = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + "-screen" + juce::String (++shot) + ".png");
+                    pngFile.deleteFile();
+                    if (auto os = pngFile.createOutputStream())
                         png.writeImageToStream (img, *os);
                 }
                 const auto panel = pc.createComponentSnapshot (pc.getLocalBounds());
                 check (panel.isValid(), "the PC panel draws", {});
                 juce::PNGImageFormat png;
-                if (auto os = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + "-panel.png").createOutputStream())
+                const auto panelFile = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + "-panel.png");
+                panelFile.deleteFile();
+                if (auto os = panelFile.createOutputStream())
                     png.writeImageToStream (panel, *os);
             }
         }
