@@ -276,8 +276,8 @@ public:
                 const float octaves = p[aEnvAmt] * fe * 7.0f + p[aKeyTrack] * (v.pitch - 60.0f) / 12.0f
                                     + p[aVelFilt] * (v.vel - 0.7f) * 3.0f + destSum (DestFilter) * 3.0f + mod * 2.0f;
                 const float cut = juce::jlimit (20.0f, sr * 0.45f, p[aCutoff] * std::exp2 (octaves));
-                if (ftype == 0) { v.ladder.set (cut, p[aReso], sr); v.ladder.drive = 1.0f + p[aFDrive] * 4.0f; }
-                else v.svf.set (cut, 0.5f + p[aReso] * 12.0f, sr);
+                if (ftype == 0) { v.ladder.rampTo (cut, p[aReso], sr, m); v.ladder.drive = 1.0f + p[aFDrive] * 4.0f; }
+                else v.svf.rampTo (cut, 0.5f + p[aReso] * 12.0f, sr, m);
                 v.hp.set (p[aHp], 0.7f, sr);
                 v.ampMod = 1.0f + destSum (DestAmp);
                 v.panNow = juce::jlimit (-1.0f, 1.0f, v.panBase + p[aPan] + destSum (DestPan));
@@ -357,6 +357,7 @@ private:
     {
         v.amp.set (p[aA], p[aD], p[aS], p[aR], sr);
         v.fenv.set (p[aFA], p[aFD], p[aFS], p[aFR], sr);
+        const bool sounding = v.amp.value > 0.001f;   // still ringing: keep the phases (a jump would click)
         v.amp.gateOn (true);
         v.fenv.gateOn (true);
         v.pitchEnv = 1.0f;
@@ -365,8 +366,11 @@ private:
         v.age = ++counter;
         const float spread = p[aSpread];
         v.panBase = spread * ((float) (counter % 5) / 2.0f - 1.0f) * 0.6f;
-        for (auto& o : v.osc1) o.phase = rng.uni();
-        for (auto& o : v.osc2) o.phase = rng.uni();
+        if (! sounding)
+        {
+            for (auto& o : v.osc1) o.phase = rng.uni();
+            for (auto& o : v.osc2) o.phase = rng.uni();
+        }
     }
 
     float lfoRate (int rateIdx, int syncIdx) const

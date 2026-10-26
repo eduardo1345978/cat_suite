@@ -88,9 +88,22 @@ struct Svf
         a2 = g * a1;
         a3 = g * a2;
     }
+    /** Like set(), but the cutoff moves there over n samples (no steps when an envelope sweeps it). */
+    float gInc = 0.0f;
+    int gLeft = 0;
+    void rampTo (float cutoffHz, float q, float sampleRate, int n) noexcept
+    {
+        cutoffHz = juce::jlimit (16.0f, sampleRate * 0.45f, cutoffHz);
+        const float target = std::tan (pi * cutoffHz / sampleRate);
+        k = 1.0f / juce::jmax (0.05f, q);
+        if (g <= 0.0f || n <= 1) { g = target; gLeft = 0; }
+        else { gInc = (target - g) / (float) n; gLeft = n; }
+        a1 = 1.0f / (1.0f + g * (g + k)); a2 = g * a1; a3 = g * a2;
+    }
     struct Out { float low, band, high; };
     inline Out process (float v0) noexcept
     {
+        if (gLeft > 0) { g += gInc; --gLeft; a1 = 1.0f / (1.0f + g * (g + k)); a2 = g * a1; a3 = g * a2; }
         const float v3 = v0 - ic2;
         const float v1 = a1 * ic1 + a2 * v3;
         const float v2 = ic2 + a2 * ic1 + a3 * v3;
@@ -113,8 +126,21 @@ struct Ladder
         g = wc / (1.0f + wc);
         res = juce::jlimit (0.0f, 1.05f, resonance) * 4.0f;
     }
+    float gInc = 0.0f;
+    int gLeft = 0;
+    /** Like set(), but the cutoff moves there over n samples. */
+    void rampTo (float cutoffHz, float resonance, float sampleRate, int n) noexcept
+    {
+        cutoffHz = juce::jlimit (16.0f, sampleRate * 0.42f, cutoffHz);
+        const float wc = std::tan (pi * cutoffHz / sampleRate);
+        const float target = wc / (1.0f + wc);
+        res = juce::jlimit (0.0f, 1.05f, resonance) * 4.0f;
+        if (g <= 0.0f || n <= 1) { g = target; gLeft = 0; }
+        else { gInc = (target - g) / (float) n; gLeft = n; }
+    }
     inline float process (float x) noexcept
     {
+        if (gLeft > 0) { g += gInc; --gLeft; }
         // the last output feeds back (one sample late, smoothed by the tanh): resonance up to self-oscillation
         const float g4 = g * g * g * g;
         const float sigma = last;

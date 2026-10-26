@@ -98,7 +98,7 @@ public:
         {
             pitch = (float) note;
             fenv = 1.0f;
-            attack = 0.0f;
+            if (amp < 0.01f) attack = 0.0f;   // still sounding: no restart from silence (it would click)
             if (accentNote) { accEnv = 1.0f; }
             ampEnv = 1.0f;
         }

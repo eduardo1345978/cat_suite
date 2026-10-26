@@ -123,7 +123,8 @@ struct DrumVoice
     bool active = false;
     float t = 0.0f;                      // seconds since the hit
     float vel = 1.0f, ph = 0.0f, ph2 = 0.0f, amp = 0.0f, noiseAmp = 0.0f, pan = 0.0f;
-    float hp = 0.0f, lp = 0.0f;
+    float hp = 0.0f, lp = 0.0f, last = 0.0f, choke = 1.0f;
+    bool choking = false;
     dsp::Svf bp, bp2;
     Metal metal;
 };
@@ -144,10 +145,21 @@ public:
     void noteOn (int note, float vel, bool, bool accent) override
     {
         const int pad = ((note - 36) % numPads + numPads) % numPads;
-        if (p[gChoke] > 0.5f && (pad == ClosedHat || pad == OpenHat))   // closed hat chokes the open one (and the other way)
-            voices[(size_t) (pad == ClosedHat ? OpenHat : ClosedHat)].active = false;
+        if (p[gChoke] > 0.5f && (pad == ClosedHat || pad == OpenHat))   // closed hat chokes the open one (and the other way), in a few ms
+        {
+            auto& o = voices[(size_t) (pad == ClosedHat ? OpenHat : ClosedHat)];
+            if (o.active) o.choking = true;
+        }
         auto& v = voices[(size_t) pad];
+        if (v.active)   // hit again while it still rings: the old sound fades out quickly instead of jumping to the new one
+        {
+            const float gl = std::sqrt (0.5f * (1.0f - v.pan)), gr = std::sqrt (0.5f * (1.0f + v.pan));
+            fadeL += v.last * gl;
+            fadeR += v.last * gr;
+        }
         v.active = true;
+        v.choking = false;
+        v.choke = 1.0f;
         v.t = 0.0f;
         v.vel = juce::jlimit (0.05f, 1.0f, vel) * (accent ? 1.25f : 1.0f);
         v.ph = v.ph2 = 0.0f;
@@ -172,6 +184,7 @@ public:
         const float drive = 1.0f + p[gDrive] * 5.0f;
         const float comp = p[gComp];
         const float compAtt = 1.0f - std::exp (-dt / 0.003f), compRel = 1.0f - std::exp (-dt / 0.12f);
+        const float fadeK = std::exp (-dt / 0.002f), chokeK = std::exp (-dt / 0.006f);
 
         for (int i = 0; i < n; ++i)
         {
@@ -179,10 +192,19 @@ public:
             for (auto& v : voices)
             {
                 if (! v.active) continue;
-                const float x = voice (v, model, dt);
+                float x = voice (v, model, dt);
+                if (v.choking)
+                {
+                    v.choke *= chokeK;
+                    x *= v.choke;
+                    if (v.choke < 0.001f) { v.active = false; v.choking = false; }
+                }
+                v.last = x;
                 const float gl = std::sqrt (0.5f * (1.0f - v.pan)), gr = std::sqrt (0.5f * (1.0f + v.pan));
                 l += x * gl; r += x * gr;
             }
+            l += fadeL; r += fadeR;
+            fadeL *= fadeK; fadeR *= fadeK;
             // lo-fi: 12 bits and half the sample rate
             if (model == MLofi)
             {
@@ -241,7 +263,7 @@ private:
                 if (model == M909) body = dsp::fastTanh (body * 1.8f) * 0.8f;   // the 909 kick is a bit squarer
                 // click: a short filtered noise / pulse transient (the tone knob)
                 v.lp += (noise - v.lp) * (model == MAcoustic ? 0.15f : 0.5f);
-                const float clk = (v.lp * 0.6f + (t < 0.0015f ? 1.0f : 0.0f)) * env (t, 0.006f) * click * (0.3f + tone * 1.4f);
+                const float clk = (v.lp * 0.6f + (t < 0.0015f ? std::sin (dsp::pi * t / 0.0015f) : 0.0f)) * env (t, 0.006f) * click * (0.3f + tone * 1.4f);
                 const float thump = model == MAcoustic ? v.lp * env (t, 0.04f) * 0.3f : 0.0f;
                 y = body * 1.1f + clk + thump;
                 break;
@@ -350,7 +372,7 @@ private:
             {
                 const float dec = 0.04f * decayMul; len = dec * 1.4f + 0.01f;
                 v.bp.set (2500.0f * tune, 2.0f, sr);
-                y = v.bp.process (noise).band * env (t, dec) * 3.0f + (t < 0.001f ? 0.6f : 0.0f) * tone;
+                y = v.bp.process (noise).band * env (t, dec) * 3.0f + (t < 0.001f ? 0.6f * std::sin (dsp::pi * t / 0.001f) : 0.0f) * tone;
                 break;
             }
             case Zap:
@@ -371,6 +393,7 @@ private:
     std::array<DrumVoice, numPads> voices;
     dsp::Rng rng;
     dsp::Smooth volume;
+    float fadeL = 0.0f, fadeR = 0.0f;
     float sr = 48000.0f, compEnv = 0.0f, lofiL = 0.0f, lofiR = 0.0f;
     int lofiCount = 0;
 };
