@@ -1,7 +1,7 @@
 #pragma once
 
 #include <juce_events/juce_events.h>
-#include "BoxController.h"
+#include "Controller.h"
 #include <memory>
 #include <vector>
 #include <algorithm>
@@ -13,16 +13,16 @@
     The box (Raspberry Pi) runs a LinkServer: it answers on TCP port 50650 and tells the network
     it is there (UDP broadcast on 50651). The PC app runs a LinkClient: it finds boxes, connects,
     and from then on its knobs, pads and buttons play the box; the PC screen mirrors the box and
-    presets can be copied, renamed and loaded from the PC.
+    the PC screen shows what the box does.
 
     Messages are small JSON objects with a "t" (type):
-      PC -> box: knob, button, pad, page, drum, load, rename, putPreset, getPreset, hello
-      box -> PC: state (everything that changes rarely), live (what plays now + the last 40 ms of sound), preset
+      PC -> box: knob, reset, button, pad, key, slider, joy, track, mode, hello
+      box -> PC: state (the project and the screen), live (what plays now + the last 20 ms of sound)
 */
 namespace catbox
 {
 constexpr int linkPort = 50650, discoveryPort = 50651;
-inline const char* const linkServiceId = "catbox-link-1";
+inline const char* const linkServiceId = "catbox-link-2";
 
 class LinkConnection : public juce::InterprocessConnection
 {
@@ -52,7 +52,7 @@ public:
 class LinkServer : private juce::InterprocessConnectionServer, private juce::Timer
 {
 public:
-    LinkServer (BoxController&, int port = linkPort, bool advertise = true, const juce::String& bindAddress = {});
+    LinkServer (Controller&, int port = linkPort, bool advertise = true, const juce::String& bindAddress = {});
     ~LinkServer() override;
 
     bool isListening() const noexcept { return listening; }
@@ -63,7 +63,7 @@ private:
     juce::InterprocessConnection* createConnectionObject() override;
     void timerCallback() override;
 
-    BoxController& box;
+    Controller& box;
     juce::CriticalSection lock;
     std::vector<std::unique_ptr<LinkConnection>> clients;
     std::unique_ptr<juce::NetworkServiceDiscovery::Advertiser> advertiser;
@@ -76,7 +76,7 @@ private:
 class LinkClient : private juce::Timer
 {
 public:
-    explicit LinkClient (BoxController&, bool listenForBoxes = true);
+    explicit LinkClient (Controller&, bool listenForBoxes = true);
     ~LinkClient() override;
 
     struct Found { juce::String name, address; int port = linkPort; };
@@ -97,7 +97,7 @@ private:
     void timerCallback() override;
     void lostConnection();
 
-    BoxController& box;
+    Controller& box;
     std::unique_ptr<LinkConnection> conn;
     std::unique_ptr<juce::NetworkServiceDiscovery::AvailableServiceList> services;
     juce::String host;

@@ -3,7 +3,7 @@
 namespace catbox
 {
 //==============================================================================
-LinkServer::LinkServer (BoxController& b, int port, bool advertise, const juce::String& bindAddress) : box (b)
+LinkServer::LinkServer (Controller& b, int port, bool advertise, const juce::String& bindAddress) : box (b)
 {
     listening = beginWaitingForSocket (port, bindAddress);
     if (listening && advertise)
@@ -77,7 +77,7 @@ void LinkServer::timerCallback()
 }
 
 //==============================================================================
-LinkClient::LinkClient (BoxController& b, bool listenForBoxes) : box (b)
+LinkClient::LinkClient (Controller& b, bool listenForBoxes) : box (b)
 {
     if (listenForBoxes)
     {

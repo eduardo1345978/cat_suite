@@ -1,22 +1,28 @@
-# Cat Box: the Cat Suite groovebox (Drums / Arp / Bass step sequencers) for the PC and the Raspberry Pi in the box.
+# Cat Box 2: the Cat Suite groovebox (8 tracks: engines, steps, note FX, mixer) for the PC and the Raspberry Pi in the box.
 juce_add_gui_app(CatBox
     PRODUCT_NAME "Cat-Box"
     COMPANY_NAME "Cat Suite"
     ICON_BIG     "${CMAKE_CURRENT_SOURCE_DIR}/../CatHub/Resources/icon.png"
     ICON_SMALL   "${CMAKE_CURRENT_SOURCE_DIR}/../CatHub/Resources/icon_small.png"
-    VERSION      1.0.0)
+    VERSION      2.0.0)
 
 target_sources(CatBox PRIVATE
     Source/Main.cpp
-    Source/BoxModel.cpp
-    Source/ArpEngine.cpp
-    Source/BoxAudio.cpp
-    Source/BoxController.cpp
-    Source/BoxView.cpp
-    Source/MasterFx.cpp
+    Source/Params.cpp
+    Source/Engine.cpp
+    Source/EngineAnalog.cpp
+    Source/EngineAcid.cpp
+    Source/EngineDrums.cpp
+    Source/EngineKeys.cpp
+    Source/EngineGlide.cpp
+    Source/NoteFx.cpp
+    Source/Project.cpp
+    Source/MixFx.cpp
+    Source/Audio.cpp
+    Source/Controller.cpp
+    Source/View.cpp
     Source/BoxLink.cpp
     Source/LinkPanel.cpp
-    Source/Engines.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatSounds.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../GlideCat/Source/GlideSynth.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../GlideCat/Source/GlideFX.cpp

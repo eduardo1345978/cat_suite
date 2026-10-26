@@ -1,5 +1,5 @@
-// Cat Box: the Cat Suite groovebox (drums, arp, bass) - on the PC as an app, on the
-// Raspberry Pi inside the box as the whole instrument.
+// Cat Box 2: the Cat Suite groovebox (8 tracks, 5 sound engines, steps, note FX, mixer) - on the
+// PC as an app, on the Raspberry Pi inside the box as the whole instrument.
 //
 //   Cat-Box                     window with the screen + a clickable front panel
 //   Cat-Box --kiosk             only the 800 x 480 screen, full screen (the Pi in the box)
@@ -8,8 +8,8 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <juce_audio_utils/juce_audio_utils.h>
-#include "BoxController.h"
-#include "BoxView.h"
+#include "Controller.h"
+#include "View.h"
 #include "BoxLink.h"
 #include "LinkPanel.h"
 #include <cmath>
@@ -18,7 +18,8 @@
 namespace catbox
 {
 //==============================================================================
-/** Offline check of the whole box: the controller map, every instrument, Rec, presets, memory. */
+/** Offline check of the whole box: controls, every engine and sound, the sequencer, Rec, note FX,
+    mixer, scenes, MIDI, the screen, the link and memory. Exit code 0 = all fine. */
 class SelfTest
 {
 public:
@@ -27,571 +28,371 @@ public:
         const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
                             .getChildFile ("catbox-selftest-" + juce::String (juce::Random::getSystemRandom().nextInt (1 << 30)));
         {
-            BoxController box (dir);
+            Controller box (dir);
             auto& audio = box.getAudio();
             audio.prepare (sr, block);
             auto press = [&box] (int b) { box.buttonDown (b); box.buttonUp (b); };
-            auto tap = [&box] (int pad) { box.padDown (pad, 100); box.padUp (pad); };
             auto shiftPress = [&box, &press] (int b) { box.buttonDown (BtnShift); press (b); box.buttonUp (BtnShift); };
-            auto soloOnly = [&box] (int inst) { for (int j = 0; j < NumInstruments; ++j) box.setMuted (j, inst >= 0 && j != inst); };
+            auto soloOnly = [&box] (int t) { for (int j = 0; j < numTracks; ++j) { box.setSolo (j, j == t); box.setMute (j, false); } };
+            auto noSolo = [&box] { for (int j = 0; j < numTracks; ++j) box.setSolo (j, false); };
+            const auto& p = box.getProject();
 
-            // the hardware MIDI map: knob 1 (tempo) five clicks right and back, then the Instr button
-            const float tempo0 = box.getData().globals[GTempo];
-            box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (16, 20, 5));
-            check (std::abs (box.getData().globals[GTempo] - (tempo0 + 5.0f)) < 0.01f, "knob CC 20 turns the tempo",
-                   juce::String (box.getData().globals[GTempo]));
-            box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (16, 20, 123));
-            check (std::abs (box.getData().globals[GTempo] - tempo0) < 0.01f, "knob turns back (two's complement)", {});
-            box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (16, 106, 127));
-            box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (16, 106, 0));
-            check (box.getPage() == Arp, "Instr button goes to the Arp page", juce::String (box.getPage()));
-            press (BtnInstrument); press (BtnInstrument);
-            check (box.getPage() == PageChords, "after Bass comes the Chords page", juce::String (box.getPage()));
-            press (BtnInstrument);
-            check (box.getPage() == PageOrbit, "then the Orbit page", juce::String (box.getPage()));
-            press (BtnInstrument);
-            check (box.getPage() == PageFx, "the sixth page is FX", juce::String (box.getPage()));
-            press (BtnInstrument);
-            check (box.getPage() == Drums, "pages go round", {});
-            box.buttonDown (BtnInstrument);
-            box.turnKnob (4, 2.0f);
-            check (box.getPage() == Bass, "Instr held + a knob flips through the pages", juce::String (box.getPage()));
-            box.turnKnob (4, -3.0f);
-            box.buttonUp (BtnInstrument);
-            check (box.getPage() == PageFx && std::abs (box.getData().globals[GTempo] - tempo0) < 0.01f,
-                   "turning back goes round, and letting go of Instr stays there", juce::String (box.getPage()));
-            press (BtnInstrument);
-            check (box.getPage() == Drums, "a plain Instr press still goes to the next page", {});
+            // ---- the box's hardware on MIDI channel 16
+            box.setMode (ModeProject);
+            const float tempo0 = p.m.tempo;
+            box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (controllerChannel, firstKnobCC, 5));
+            check (std::abs (p.m.tempo - (tempo0 + 5.0f)) < 0.01f, "encoder 1 (CC 20) turns the tempo on the PROJECT page", juce::String (p.m.tempo));
+            box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (controllerChannel, firstKnobCC, 123));
+            check (std::abs (p.m.tempo - tempo0) < 0.01f, "and back (two's complement)", {});
+            box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (controllerChannel, firstButtonCC + BtnSeq, 127));
+            box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (controllerChannel, firstButtonCC + BtnSeq, 0));
+            check (box.getMode() == ModeSeq, "the Seq button (CC 111) opens SEQ", modeName (box.getMode()));
+            box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (controllerChannel, firstButtonCC + BtnTrack1 + 2, 127));
+            box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (controllerChannel, firstButtonCC + BtnTrack1 + 2, 0));
+            check (box.getTrack() == 2, "Track 3 button picks track 3", {});
+            box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (controllerChannel, sliderCC, 10));
+            check (p.m.djFilter < 0.2f, "the slider moves the DJ filter", juce::String (p.m.djFilter));
+            box.setSlider (0.5f);
 
-            // Steps is per page: Steps on the drums does not turn the Arp pads into steps
-            press (BtnSteps);
-            box.setPage (Arp);
-            check (! box.isStepView(), "Steps on Drums leaves the Arp pads playing", {});
+            // ---- modes: Sound, Sound again = browser, pages with Prev / Next
+            box.selectTrack (3);
+            press (BtnSound);
+            check (box.getMode() == ModeSound, "Sound shows the sound", {});
+            const int pages = box.numPagesNow();
+            press (BtnNext);
+            check (box.pageIndex() == 1 % pages, "Next = the next knob page", box.pageName());
+            press (BtnPrev);
+            check (box.pageIndex() == 0, "Prev = back", {});
+            for (int k = 0; k < numKnobs; ++k) check (box.knob (k).used && box.knob (k).name.isNotEmpty(), "Analog page 1: knob " + juce::String (k + 1) + " = " + box.knob (k).name, box.knob (k).value);
+            box.buttonDown (BtnShift);
+            check (box.knob (0).used && box.knob (0).name != "Osc 1", "Shift: 12 more knobs", box.knob (0).name);
+            box.buttonUp (BtnShift);
+            press (BtnSound);
+            check (box.getMode() == ModeBrowse, "Sound again = the browser", {});
 
-            // the arp sounds at once, even for a short tap while it runs
-            box.setPage (Drums);
-            press (BtnPlay);
-            soloOnly (Arp);
-            renderSeconds (audio, 0.31, nullptr);
-            box.setPage (Arp);
-            box.padDown (0, 100);
-            const auto shortTap = renderSeconds (audio, 0.04, nullptr);
-            box.padUp (0);
-            renderSeconds (audio, 0.5, nullptr);
-            check (shortTap.rms > 0.002f, "a short tap on an Arp pad sounds at once", "rms " + juce::String (shortTap.rms, 4));
-
-            // Arp: Rec = Hold, then a chord on the pads (notes 36.. on channel 16)
-            press (BtnRec);
-            check (box.isLatched(), "Rec holds the arp", {});
-            for (int pad : { 0, 2, 4 })
+            // ---- the browser: every engine, every sound plays clean
+            int sounds = 0, quiet = 0;
+            juce::StringArray quietNames;
+            soloOnly (3);
+            for (int e = 0; e < NumEngineTypes; ++e)
             {
-                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::noteOn (16, 36 + pad, (juce::uint8) 100));
-                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::noteOff (16, 36 + pad));
+                const auto& d = engineDef (e);
+                for (int i = 0; i < (int) d.presets.size(); ++i)
+                {
+                    box.loadSound (3, e, i);
+                    renderSeconds (audio, 0.02, nullptr);
+                    if (d.drums) { for (int pad : { 0, 1, 3 }) { box.padDown (pad, 110); box.padUp (pad); } }
+                    else { box.keyDown (60, 100); box.keyDown (64, 90); }
+                    const auto st = renderSeconds (audio, 0.9, nullptr);
+                    box.keyUp (60); box.keyUp (64);
+                    renderSeconds (audio, 0.15, nullptr);
+                    ++sounds;
+                    if (! (st.finite && st.peak <= 1.0f)) check (false, d.name + " / " + d.presets[(size_t) i].name + " stays clean", "peak " + juce::String (st.peak));
+                    if (st.rms < 0.004f) { ++quiet; quietNames.add (d.presets[(size_t) i].name); }
+                }
             }
-            for (int snd : { arpSoundSupersaw, arpSoundAcid })
+            check (sounds > 150, juce::String (sounds) + " factory sounds", {});
+            check (quiet <= 3, "every sound is heard (slow pads may start quiet)", juce::String (quiet) + " quiet: " + quietNames.joinIntoString (", "));
+
+            // browse with knob 3: the sound changes and is heard right away (a preview while stopped)
+            box.setMode (ModeBrowse);
+            box.turnKnob (0, (float) EngineAcid - box.knob (0).norm * (float) (NumEngineTypes - 1));
+            check (box.getProject().tracks[3].engine == EngineAcid, "knob 1 in the browser picks the engine", box.knob (0).value);
+            const auto name0 = box.presetName (3);
+            box.turnKnob (2, 2.0f);
+            check (box.presetName (3) != name0, "knob 3 picks the next sound", name0 + " > " + box.presetName (3));
+            const auto pre = renderSeconds (audio, 0.5, nullptr);
+            check (pre.rms > 0.005f, "a new sound is heard at once (preview)", "rms " + juce::String (pre.rms, 4));
+            press (BtnRec);   // in the browser: save as a User sound
+            check (box.browseCategories().contains ("User"), "Rec in the browser saves a User sound", box.flashText());
+            press (BtnSound);
+
+            // ---- SEQ: tap a step, hold a step + key, hold + knob; drums
+            box.selectTrack (6);   // the pluck, empty pattern
+            box.setMode (ModeSeq);
+            box.keyDown (62, 100); box.keyUp (62);
+            box.padDown (2, 100); box.padUp (2);
+            check (p.tracks[6].pat.steps[2].notes[0] == 62, "a tap on pad 3 puts the last note on step 3", juce::String (p.tracks[6].pat.steps[2].notes[0]));
+            box.padDown (5, 100);
+            box.keyDown (67, 90); box.keyUp (67);
+            box.keyDown (71, 90); box.keyUp (71);
+            box.turnKnob (1, -10.0f);
+            box.turnKnob (3, 1.0f);
+            box.padUp (5);
+            const auto& st5 = p.tracks[6].pat.steps[5];
+            check (st5.has (67) && st5.has (71) && st5.vel < 90 && st5.slide, "hold a step: keys = notes (a chord), knobs = velocity, slide", juce::String (st5.count()));
+            box.padDown (2, 100); box.padUp (2);
+            check (! p.tracks[6].pat.steps[2].on(), "a tap on a set step clears it", {});
+            box.turnKnob (0, 16.0f);
+            check (p.tracks[6].pat.length == 32, "nothing held: knob 1 = the pattern length", juce::String (p.tracks[6].pat.length));
+            press (BtnNext);
+            check (box.seqBar() == 1, "Next = bar 2", {});
+            box.padDown (0, 100); box.padUp (0);
+            check (p.tracks[6].pat.steps[16].on(), "pads are the steps of bar 2", {});
+            press (BtnPrev);
+            box.selectTrack (5);   // 909 drums, empty
+            box.buttonDown (BtnShift); box.padDown (3, 100); box.padUp (3); box.buttonUp (BtnShift);
+            check (box.seqLane() == 3, "Shift + pad picks the drum (closed hat)", juce::String (box.seqLane()));
+            for (int s : { 0, 2, 4, 6, 8, 10, 12, 14 }) { box.padDown (s, 100); box.padUp (s); }
+            int hats = 0;
+            for (auto v : p.tracks[5].pat.drums[3]) hats += v > 0 ? 1 : 0;
+            check (hats == 8, "eight hat steps", juce::String (hats));
+            press (BtnPlay);
+            soloOnly (5);
+            const auto drums = renderSeconds (audio, 2.0, nullptr);
+            check (drums.rms > 0.01f && drums.finite && drums.peak <= 1.0f, "the drum steps play", "rms " + juce::String (drums.rms, 4));
+            soloOnly (6);
+            const auto pluck = renderSeconds (audio, 4.5, nullptr);
+            check (pluck.rms > 0.003f, "the melodic steps play", "rms " + juce::String (pluck.rms, 4));
+            noSolo();
+
+            // ---- every track of the default song, then all together
+            for (int t = 0; t < 2; ++t)
             {
-                box.buttonDown (BtnShift);
-                box.turnKnob (slot::ASound - numKnobs, (float) (snd - juce::roundToInt (box.getData().inst[Arp].values[slot::ASound])));
-                box.buttonUp (BtnShift);
+                soloOnly (t);
                 const auto st = renderSeconds (audio, 2.0, nullptr);
-                check (st.rms > 0.005f && st.finite && st.peak <= 1.0f, juce::String ("Arp sound ") + arpSoundNames()[snd] + " plays",
+                check (st.rms > 0.01f && st.finite && st.peak <= 1.0f, "track " + juce::String (t + 1) + " (" + engineDef (p.tracks[(size_t) t].engine).name + ") plays its pattern",
                        "rms " + juce::String (st.rms, 4));
             }
-            box.buttonDown (BtnShift);
-            box.turnKnob (slot::ASound - numKnobs, (float) (2 - juce::roundToInt (box.getData().inst[Arp].values[slot::ASound])));
-            box.buttonUp (BtnShift);
-
-            // Bass steps: tap an empty step, raise its note with knob 2, slide with knob 3
-            box.setPage (Bass);
-            press (BtnSteps);
-            tap (1);
-            const int n0 = box.getData().inst[Bass].bassSteps[1].note;
-            check (n0 >= 0 && box.selectedBassStep() == 1, "tapping an empty bass step sets it", noteName (n0));
-            box.turnKnob (1, 2.0f);
-            const int n1 = box.getData().inst[Bass].bassSteps[1].note;
-            check (n1 > n0, "knob 2 moves the step's note up the scale", noteName (n0) + " -> " + noteName (n1));
-            box.turnKnob (2, 1.0f);
-            check (box.getData().inst[Bass].bassSteps[1].slide, "knob 3 sets the slide", {});
-            tap (1);
-            check (box.getData().inst[Bass].bassSteps[1].note < 0, "tapping the picked step clears it", {});
-            tap (1);
-            press (BtnSteps);
-
-            // Drums steps: the kick gets step 3, then an accent
-            box.setPage (Drums);
-            if (! box.isStepView()) press (BtnSteps);
-            tap (2);
-            check (box.getData().inst[Drums].drumSteps[0][2] == 100, "a drum step goes on", {});
-            tap (2);
-            check (box.getData().inst[Drums].drumSteps[0][2] == 127, "tapped again it is an accent", {});
-            press (BtnSteps);
-
-            // each instrument on its own must be heard
-            for (int i = 0; i < NumInstruments; ++i)
-            {
-                soloOnly (i);
-                const auto st = renderSeconds (audio, 4.0, nullptr);
-                check (st.rms > 0.005f, instrumentName (i) + " plays", "rms " + juce::String (st.rms, 4));
-                check (st.finite && st.peak <= 1.0f, instrumentName (i) + " stays clean", "peak " + juce::String (st.peak, 3));
-            }
-            soloOnly (-1);
-
-            // the whole box, written to the wav
-            juce::AudioBuffer<float> song (2, (int) (sr * 16.0));
-            const auto all = renderSeconds (audio, 16.0, &song);
-            check (all.rms > 0.02f && all.finite && all.peak <= 1.0f, "all three together",
-                   "rms " + juce::String (all.rms, 4) + " peak " + juce::String (all.peak, 3));
+            noSolo();
+            juce::AudioBuffer<float> song (2, (int) (sr * 12.0));
+            for (int t : { 2, 4 }) { box.selectTrack (t); box.keyDown (60, 90); box.keyDown (63, 80); box.keyDown (67, 80); }
+            const auto all = renderSeconds (audio, 12.0, &song);
+            for (int n : { 60, 63, 67 }) box.keyUp (n);
+            check (all.rms > 0.03f && all.finite && all.peak <= 1.0f, "everything together", "rms " + juce::String (all.rms, 4) + " peak " + juce::String (all.peak, 3));
             writeWav (wavOut, song);
 
-            // FX page: every knob up, every performance pad held - all clean
-            box.setPage (PageFx);
-            for (int k = 1; k <= 10; ++k) box.turnKnob (k, 30.0f);
-            const auto fxAll = renderSeconds (audio, 2.0, nullptr);
-            check (fxAll.rms > 0.01f && fxAll.finite && fxAll.peak <= 1.0f, "every FX knob turned up stays clean",
-                   "rms " + juce::String (fxAll.rms, 4) + " peak " + juce::String (fxAll.peak, 3));
-            shiftPress (BtnSteps);   // Shift + Steps on the FX page = FX back to the start
-            check (std::abs (box.getData().fx[slot::FDjFilter] - 0.5f) < 0.001f, "Shift + Steps resets the FX page", {});
-            for (int p = 0; p < NumPerf; ++p)
-            {
-                box.padDown (p, 100);
-                const auto st = renderSeconds (audio, 1.0, nullptr);
-                box.padUp (p);
-                renderSeconds (audio, 0.1, nullptr);
-                const bool mayBeQuiet = p == PerfTapeStop || p == PerfKillDrums || p == PerfKillArp || p == PerfKillBass;
-                check (st.finite && st.peak <= 1.0f && (mayBeQuiet || st.rms > 0.005f), juce::String ("pad ") + perfName (p),
-                       "rms " + juce::String (st.rms, 4));
-            }
-            soloOnly (Drums);
-            box.padDown (PerfKillDrums, 100);
-            renderSeconds (audio, 0.2, nullptr);
-            const auto killed = renderSeconds (audio, 1.0, nullptr);
-            box.padUp (PerfKillDrums);
-            check (killed.rms < 0.02f, "Kill drums silences the drums (the reverb tail may ring)", "rms " + juce::String (killed.rms, 4));
-            soloOnly (-1);
-
-            // the bass follows the arp: hold F (C minor) and the line moves up a fourth
-            box.setPage (Bass);
-            box.buttonDown (BtnShift);
-            box.turnKnob (slot::BFollow - numKnobs, 1.0f);
-            box.buttonUp (BtnShift);
-            box.setPage (Arp);
-            shiftPress (BtnSteps);   // release the held notes
-            box.padDown (11, 100);   // the piano pads: bottom row C D E F -> F
-            box.padUp (11);
-            bool moved = false;
-            for (int i = 0; i < 400 && ! moved; ++i)
-            {
-                renderSeconds (audio, 0.01, nullptr);
-                moved = audio.bassNoteNow.load() == 41;   // C2 + 5
-            }
-            check (moved, "Follow arp moves the bass line to the arp's chord", {});
-
-            // pads like a piano on Arp and Bass (bottom row white keys, top row black keys), drums as before
-            check (box.arpPadNote (8) == 48 && box.arpPadNote (11) == 53 && box.arpPadNote (15) == 60, "Arp pads: the bottom row is C D E F G A B C", {});
-            check (box.arpPadNote (0) == 49 && box.arpPadNote (2) < 0 && box.arpPadNote (6) < 0 && box.arpPadNote (3) == 54,
-                   "Arp pads: the top row is the black keys (C# D# - F# ...)", {});
-            check (box.bassPadNote (8) == 36, "Bass pads start on C", noteName (box.bassPadNote (8)));
-            check (drumPadNote (0) == 36 && drumPadNote (1) == 38, "Drum pads stay drums", {});
-
-            // Chaos: new sound settings on the page, the pattern stays; Shift + Chaos takes them back
-            box.setPage (Bass);
-            const auto bassBefore = box.getData().inst[Bass];
-            press (BtnChaos);
+            // ---- Rec: a drum and a legato line written while it plays
+            box.selectTrack (5);
+            box.setMode (ModeSound);
+            press (BtnRec);
+            check (audio.isRecording(), "Rec records", {});
+            renderSeconds (audio, 0.05, nullptr);
+            box.padDown (1, 115); box.padUp (1);
+            renderSeconds (audio, 0.1, nullptr);
             box.pump();
-            check (box.getData().inst[Bass].values == bassBefore.values, "a quick tap on Chaos does nothing", {});
+            int snares = 0;
+            for (auto v : box.getProject().tracks[5].pat.drums[1]) snares += v > 0 ? 1 : 0;
+            check (snares == 1, "Rec writes a played drum into the steps", juce::String (snares));
+            box.selectTrack (7);
+            clearAnd (box, 7);
+            box.keyDown (48, 100);
+            renderSeconds (audio, 0.25, nullptr);
+            box.keyDown (55, 127);
+            renderSeconds (audio, 0.1, nullptr);
+            box.keyUp (48); box.keyUp (55);
+            renderSeconds (audio, 0.05, nullptr);
+            box.pump();
+            bool slid = false, accent = false;
+            int notes = 0;
+            for (const auto& s : box.getProject().tracks[7].pat.steps) { notes += s.count(); slid = slid || s.slide; accent = accent || (s.has (55) && s.accent); }
+            check (notes == 2 && slid && accent, "Rec writes notes (legato = slide, hard = accent)", juce::String (notes));
+            press (BtnRec);
+
+            // ---- note FX on a track: arp, chords, orbit (keys held)
+            box.selectTrack (3);
+            box.loadSound (3, EngineAnalog, 0);
+            soloOnly (3);
+            press (BtnPlay);   // stop: the note FX run by themselves too
+            box.setMode (ModeFx);
+            for (int fx = FxArp; fx < NumNoteFx; ++fx)
+            {
+                while (box.getProject().tracks[3].fxType != fx) press (BtnNext);
+                box.keyDown (60, 100); box.keyDown (63, 100); box.keyDown (67, 100);
+                const auto st = renderSeconds (audio, 2.0, nullptr);
+                for (int n : { 60, 63, 67 }) box.keyUp (n);
+                renderSeconds (audio, 0.6, nullptr);
+                check (st.rms > 0.004f && st.finite, "note FX " + noteFxNames()[fx] + " plays", "rms " + juce::String (st.rms, 4));
+                for (int k = 0; k < numKnobs; ++k) if (! box.knob (k).used && fx != FxOrbit) {}
+            }
+            press (BtnNext);
+            check (box.getProject().tracks[3].fxType == FxOff, "and Off again", {});
+            noSolo();
+
+            // ---- MIX: mute and solo on the pads
+            box.setMode (ModeMix);
+            box.padDown (0, 100); box.padUp (0);
+            check (box.getProject().tracks[0].mute, "MIX: pad 1 mutes track 1", {});
+            box.padDown (0, 100); box.padUp (0);
+            box.padDown (9, 100); box.padUp (9);
+            check (box.getProject().tracks[1].solo, "MIX: pad 10 solos track 2", {});
+            box.padDown (9, 100); box.padUp (9);
+            box.turnKnob (0, -100.0f);
+            check (box.getProject().tracks[0].volume < 0.01f, "MIX: knob 1 = track 1 volume", {});
+            box.resetKnob (0);
+            check (std::abs (box.getProject().tracks[0].volume - 0.75f) < 0.01f, "double-click = back to the start", juce::String (box.getProject().tracks[0].volume));
+
+            // ---- every master and send knob up, then the DJ filter both ways: clean
+            press (BtnPlay);
+            box.setMode (ModeMix);
+            for (int pg = 0; pg < 2; ++pg)
+            {
+                for (int k = 8; k < 12; ++k) box.turnKnob (k, 100.0f);
+                box.buttonDown (BtnShift);
+                for (int k = 0; k < 12; ++k) box.turnKnob (k, 100.0f);
+                box.buttonUp (BtnShift);
+                for (int k = 0; k < 8; ++k) box.turnKnob (k, 100.0f);
+                press (BtnNext);
+            }
+            const auto loud = renderSeconds (audio, 3.0, nullptr);
+            check (loud.rms > 0.02f && loud.finite && loud.peak <= 1.0f, "every mix and send knob up stays clean", "rms " + juce::String (loud.rms, 4) + " peak " + juce::String (loud.peak, 3));
+            for (float f : { 0.0f, 0.2f, 0.8f, 1.0f })
+            {
+                box.setSlider (f);
+                const auto st = renderSeconds (audio, 0.6, nullptr);
+                check (st.finite && st.peak <= 1.0f, "DJ filter at " + juce::String (f, 1), "rms " + juce::String (st.rms, 4));
+            }
+            box.setSlider (0.5f);
+
+            // ---- scenes: save, change, recall at the next bar
+            press (BtnScene);
+            box.buttonDown (BtnRec); box.padDown (2, 100); box.padUp (2); box.buttonUp (BtnRec);
+            check (box.sceneExists (2), "Scene + Rec + pad saves a scene", {});
+            const auto kick0 = box.getProject().tracks[0].pat.drums[0];
+            box.clearPattern (0);
+            box.padDown (2, 100); box.padUp (2);
+            check (box.getProject().tracks[0].pat.drums[0] == kick0, "the scene comes back", {});
+            check (audio.sceneWaiting.load(), "while playing it waits for the next bar", {});
+            renderSeconds (audio, 2.4, nullptr);
+            check (! audio.sceneWaiting.load(), "and then it plays", {});
+            press (BtnScene);
+
+            // ---- Chaos (hold) and Shift + Chaos (back)
+            box.selectTrack (1);
+            box.setMode (ModeSound);
+            const auto before = box.getProject().tracks[1].params;
             box.buttonDown (BtnChaos);
-            juce::Thread::sleep (300);
-            const float half = box.chaosHoldProgress();
-            check (half > 0.3f && half < 0.95f, "holding Chaos fills the bar on the screen", juce::String (half, 2));
-            juce::Thread::sleep (350);
-            box.pump();
             box.buttonUp (BtnChaos);
-            check (box.getData().inst[Bass].values != bassBefore.values, "holding Chaos changes the bass sound", {});
-            check (box.getData().inst[Bass].bassSteps == bassBefore.bassSteps, "Chaos keeps the bass line", {});
-            check (box.getData().inst[Bass].values[slot::BVolume] == bassBefore.values[slot::BVolume]
-                   && box.getData().globals[GTempo] == tempo0, "Chaos keeps volume and tempo", {});
-            const auto chaosSound = renderSeconds (audio, 2.0, nullptr);
-            check (chaosSound.finite && chaosSound.peak <= 1.0f, "the chaos sound stays clean", "peak " + juce::String (chaosSound.peak, 3));
+            box.pump();
+            check (box.getProject().tracks[1].params == before, "a quick tap on Chaos does nothing", {});
+            box.chaos();
+            check (box.getProject().tracks[1].params != before, "Chaos: new sound settings", box.presetName (1));
+            const auto ch = renderSeconds (audio, 1.0, nullptr);
+            check (ch.finite && ch.peak <= 1.0f, "the chaos sound is clean", {});
             shiftPress (BtnChaos);
-            check (box.getData().inst[Bass].values == bassBefore.values, "Shift + Chaos takes it back", {});
-            box.turnKnob (slot::BCutoff, 20.0f);
-            check (box.getData().inst[Bass].values[slot::BCutoff] != paramDesc (Bass, slot::BCutoff).def, "the cutoff knob moved", {});
-            box.resetKnob (slot::BCutoff);
-            check (box.getData().inst[Bass].values[slot::BCutoff] == paramDesc (Bass, slot::BCutoff).def, "double-click puts a knob back to its start", {});
-            box.setPage (PageFx);
-            for (int i = 0; i < 20; ++i) { box.chaos(); renderSeconds (audio, 0.15, nullptr); }
-            const auto fxChaos = renderSeconds (audio, 1.0, nullptr);
-            check (fxChaos.finite && fxChaos.peak <= 1.0f && fxChaos.rms > 0.005f, "20 x Chaos on the FX page stays clean",
-                   "rms " + juce::String (fxChaos.rms, 4));
-            box.setPage (Arp);
+            check (box.getProject().tracks[1].params == before, "Shift + Chaos takes it back", {});
 
-            // the Glide engine: Sound = Glide, the Sound button opens its knob pages
+            // ---- MIDI learn: a keyboard's knob, button and pad
             {
-                box.setPage (Arp);
-                const int arpSound0 = juce::roundToInt (box.getData().inst[Arp].values[slot::ASound]);
-                box.buttonDown (BtnShift);
-                box.turnKnob (slot::ASound - numKnobs, 30.0f);
-                box.buttonUp (BtnShift);
-                check (box.isGlide (Arp), "the Arp's Sound can be the Glide engine", box.engineTitle());
-                press (BtnSound);
-                check (box.isSoundMode() && box.knobView (1).name == "Preset", "Sound: the knobs edit the engine", box.knobView (1).name);
-                soloOnly (Arp);
-                box.turnKnob (1, -500.0f);
-                const int numSounds = engine::glideSoundNames().size();
-                int broken = 0, quiet = 0;
-                juce::String quietNames;
-                for (int i = 0; i < numSounds; ++i)
-                {
-                    if (i > 0) box.turnKnob (1, 1.0f);
-                    box.padDown (8, 100);
-                    const auto r = renderSeconds (audio, 0.3, nullptr);
-                    box.padUp (8);
-                    renderSeconds (audio, 0.05, nullptr);
-                    if (! r.finite || r.peak > 1.0f) ++broken;
-                    if (r.rms < 0.001f) { ++quiet; quietNames << engine::glideSoundNames()[i] << " "; }
-                }
-                check (box.getData().inst[Arp].glide.sound == numSounds - 1, "the Preset knob steps through every Glide sound", juce::String (numSounds));
-                check (broken == 0 && quiet <= 8, "every Glide sound plays and stays clean (slow pads may be quiet in 0.3 s)", juce::String (broken) + " broken, quiet: " + quietNames);
-                press (BtnOctUp);
-                check (box.enginePageName() == "Osc I" && box.knobView (3).name == "Saw", "Oct + goes to the next knob page", box.enginePageName() + " / " + box.knobView (3).name);
-                const auto saw0 = box.knobView (3).value;
-                box.turnKnob (3, 30.0f);
-                check (box.knobView (3).value != saw0 && box.engineTitle().endsWith ("*"), "a knob changes the Glide sound (marked *)", saw0 + " > " + box.knobView (3).value);
-                box.resetKnob (3);
-                check (std::abs (engine::get (box.getData().inst[Arp].glide, "l1_saw") - 0.8f) < 0.001f, "double-click puts a Glide knob back", {});
-                const int sound0 = box.getData().inst[Arp].glide.sound;
-                box.savePreset (Arp, 13);
-                press (BtnOctDown);
-                box.turnKnob (1, -5.0f);
-                check (box.getData().inst[Arp].glide.sound != sound0, "the Preset knob loads another Glide sound", {});
-                check (box.loadPreset (Arp, 13) && box.getData().inst[Arp].glide.sound == sound0 && box.isGlide (Arp),
-                       "a page preset keeps its Glide sound", juce::String (box.getData().inst[Arp].glide.sound));
-                const auto glideSound = renderSeconds (audio, 0.5, nullptr);
-                check (glideSound.finite, "the Glide engine runs clean after loading a preset", {});
-
-                // Bass with the Glide engine (knob 1 in Sound mode = the engine)
-                box.setPage (Bass);
-                box.turnKnob (0, 30.0f);
-                check (box.isGlide (Bass), "the Bass can play the Glide engine", box.engineTitle());
-                soloOnly (Bass);
-                const auto glideBass = renderSeconds (audio, 1.5, nullptr);
-                check (glideBass.finite && glideBass.rms > 0.003f && glideBass.peak <= 1.0f, "the bass line plays on the Glide engine",
-                       "rms " + juce::String (glideBass.rms, 4));
-                box.turnKnob (0, -30.0f);
-                check (! box.isGlide (Bass), "and back to the Acid", {});
-                box.setPage (Arp);
-                box.turnKnob (0, (float) (arpSound0 - arpSoundGlide));
-                press (BtnSound);
-                check (! box.isSoundMode() && juce::roundToInt (box.getData().inst[Arp].values[slot::ASound]) == arpSound0, "Sound off, the Arp sound is back", {});
-                soloOnly (-1);
-            }
-
-            // the Chords page: one pad = one chord on the Arp's sound; Orchid: type on top, root below; edit; presets; a keyboard
-            {
-                box.setPage (PageChords);
-                soloOnly (Arp);
-                check (box.chordPadLabel (8).isNotEmpty() && box.chordPadLabel (0) != box.chordPadLabel (8), "the chord pads have chord names",
-                       box.chordPadLabel (8) + " / " + box.chordPadLabel (0));
-                box.padDown (8, 100);
-                check (box.chordPadSounding (8) && box.chordNow().isNotEmpty(), "a chord pad plays a chord", box.chordNow());
-                const auto chordSound = renderSeconds (audio, 0.6, nullptr);
-                box.padUp (8);
-                renderSeconds (audio, 0.1, nullptr);
-                check (chordSound.finite && chordSound.rms > 0.002f && ! box.chordPadSounding (8), "the chord sounds on the Arp and stops", "rms " + juce::String (chordSound.rms, 4));
-                box.turnKnob (slot::CStrum, 30.0f);
-                box.padDown (11, 110);
-                const auto strum = renderSeconds (audio, 0.4, nullptr);
-                box.padUp (11);
-                check (strum.finite && strum.rms > 0.002f, "a strummed chord plays", {});
-                box.turnKnob (slot::CPlay, 1.0f);
-                check (box.isOrchid() && box.chordPadLabel (1) == "Min", "Orchid: the top row picks the chord type", box.chordPadLabel (1));
-                box.padDown (1, 100);
-                box.padDown (12, 100);
-                const auto orchid = box.chordNow();
-                check (orchid.upToFirstOccurrenceOf (" ", false, false).endsWith ("m"), "Orchid: Min held + a root = a minor chord", orchid);
-                box.padUp (12); box.padUp (1);
-                box.turnKnob (slot::CPlay, -1.0f);
-                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::noteOn (1, 62, (juce::uint8) 100));
-                const auto keyChord = box.chordNow();
-                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::noteOff (1, 62));
-                check (keyChord.startsWith ("D"), "a MIDI keyboard on the Chords page plays a chord on each key", keyChord);
-                press (BtnSteps);
-                box.padDown (0, 100); box.padUp (0);
-                const auto before = box.chordPadLabel (0);
-                box.turnKnob (2, 2.0f);
-                check (box.selectedChord() == 0 && box.chordPadLabel (0) != before, "Steps: knob 3 changes the picked chord's type", before + " > " + box.chordPadLabel (0));
-                box.savePreset (PageChords, 3);
-                box.turnKnob (2, 3.0f);
-                check (box.loadPreset (PageChords, 3) && box.getData().chords[0].type != 0, "a Chords preset keeps the chords", box.chordPadLabel (0));
-                press (BtnSteps);
-                soloOnly (-1);
-                box.setPage (Arp);
-            }
-
-            // the Orbit page: every held note is a planet that plays when it crosses a line
-            {
-                box.setPage (PageOrbit);
-                soloOnly (Arp);
-                auto countPlanets = [&audio]
-                {
-                    int n = 0;
-                    for (const auto& pv : audio.planetView) n += pv.active.load() ? 1 : 0;
-                    return n;
-                };
-                const int hits0 = audio.orbitHits.load();
-                for (int pad : { 0, 2, 4 }) box.padDown (pad, 100);
-                const auto orbitSound = renderSeconds (audio, 2.5, nullptr);
-                check (countPlanets() == 3, "each held note is a planet", juce::String (countPlanets()));
-                check (orbitSound.finite && orbitSound.peak <= 1.0f && orbitSound.rms > 0.002f && audio.orbitHits.load() - hits0 >= 3,
-                       "the planets play notes on the Arp's sound", juce::String (audio.orbitHits.load() - hits0) + " notes, rms " + juce::String (orbitSound.rms, 4));
-                for (int pad : { 0, 2, 4 }) box.padUp (pad);
-                renderSeconds (audio, 0.1, nullptr);
-                check (countPlanets() == 0, "let go: the planets leave", {});
-                press (BtnRec);
-                box.padDown (7, 100); box.padUp (7);
-                const int hits1 = audio.orbitHits.load();
-                renderSeconds (audio, 2.5, nullptr);
-                check (box.isOrbitHeld() && countPlanets() == 1 && audio.orbitHits.load() > hits1, "Rec = Hold: the planet keeps turning and playing",
-                       juce::String (audio.orbitHits.load() - hits1));
-                const auto sys0 = box.knobView (slot::OSystem).value;
-                box.turnKnob (slot::OSystem, 3.0f);
-                check (box.knobView (slot::OSystem).value != sys0, "the System knob loads another planet system", sys0 + " > " + box.knobView (slot::OSystem).value);
-                press (BtnSteps);
-                box.padDown (2, 100); box.padUp (2);
-                const float mass0 = box.getData().planets[2].mass;
-                box.turnKnob (1, 10.0f);
-                check (box.selectedPlanet() == 2 && box.getData().planets[2].mass != mass0, "Steps: pad = planet, knob 2 = its mass",
-                       juce::String (mass0) + " > " + juce::String (box.getData().planets[2].mass));
-                press (BtnSteps);
-                const auto saved = box.getData().planets;
-                box.savePreset (PageOrbit, 2);
-                box.turnKnob (slot::OSystem, 2.0f);
-                check (box.loadPreset (PageOrbit, 2) && box.getData().planets[2].mass == saved[2].mass, "an Orbit preset keeps its planets", {});
-                box.buttonDown (BtnShift);
-                box.turnKnob (slot::OPlaysOn - numKnobs, 1.0f);
-                box.buttonUp (BtnShift);
-                soloOnly (Bass);
-                const auto onBass = renderSeconds (audio, 2.5, nullptr);
-                check (onBass.finite && onBass.rms > 0.002f, "the planets can play the Bass sound", "rms " + juce::String (onBass.rms, 4));
-                box.buttonDown (BtnShift);
-                box.turnKnob (slot::OPlaysOn - numKnobs, -1.0f);
-                box.buttonUp (BtnShift);
-                press (BtnRec);
-                renderSeconds (audio, 0.1, nullptr);
-                check (! box.isOrbitHeld() && countPlanets() == 0, "Hold off: the planet leaves", juce::String (countPlanets()));
-                soloOnly (-1);
-                box.setPage (Arp);
-            }
-
-            // MIDI learn: a keyboard's knob, button and pad are learned once, then they play the box
-            {
-                box.setPage (Drums);
+                box.setMode (ModeProject);
                 box.startLearn();
-                check (box.isLearning() && box.learnPrompt().startsWith ("Knob 1"), "MIDI learn asks for knob 1 first", box.learnPrompt());
+                check (box.isLearning() && box.learnPrompt() == "Knob 1", "MIDI learn asks for knob 1 first", box.learnPrompt());
                 for (int v : { 60, 62, 64, 66 }) box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (1, 70, v));
-                juce::Thread::sleep (400);
-                box.pump();
-                check (box.learnStep() == 1 && box.learnLast().contains ("CC 70") && box.learnLast().contains ("fader"),
-                       "a knob that was moved is learned (as a knob / fader)", box.learnLast());
+                wait (450);
+                check (box.learnStep() == 1 && box.learnLast().contains ("CC 70"), "a knob that was moved is learned", box.learnLast());
                 for (int i = 1; i < numKnobs; ++i) box.learnSkip();
                 check (box.learnPrompt() == "Play button", "then the buttons", box.learnPrompt());
                 box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (1, 80, 127));
                 box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (1, 80, 0));
-                check (box.learnStep() == numKnobs + 1, "a button is learned (letting it go is not the next one)", box.learnLast());
-                for (int i = 0; i < 9; ++i) box.learnSkip();
-                check (box.learnPrompt() == "Pad 1", "then the pads", box.learnPrompt());
-                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::noteOn (10, 36, (juce::uint8) 100));
                 box.learnDone();
-                check (! box.isLearning() && box.numLearned() == 3, "Done: three controls learned", juce::String (box.numLearned()));
-
-                const float t0 = box.getData().globals[GTempo];
+                check (! box.isLearning() && box.numLearned() == 2, "Done: two controls learned", juce::String (box.numLearned()));
+                const float t0 = box.getProject().m.tempo;
                 box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (1, 70, 100));
-                const float t1 = box.getData().globals[GTempo];
-                check (t1 > t0 + 30.0f, "the learned knob turns the tempo (absolute: by how far it moved)", juce::String (t0) + " > " + juce::String (t1));
-                box.turnKnob (0, t0 - t1);
+                check (box.getProject().m.tempo > t0 + 20.0f, "the learned knob turns the tempo", juce::String (box.getProject().m.tempo));
                 const bool playing0 = audio.isPlaying();
                 box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (1, 80, 127));
                 box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (1, 80, 0));
+                renderSeconds (audio, 0.02, nullptr);
                 check (audio.isPlaying() != playing0, "the learned button is Play", {});
-                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (1, 80, 127));
-                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (1, 80, 0));
-                box.pickDrum (5);
-                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::noteOn (10, 36, (juce::uint8) 100));
-                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::noteOff (10, 36));
-                check (box.selectedDrum() == 0 && audio.isPlaying() == playing0, "the learned pad is pad 1", juce::String (box.selectedDrum()));
-                check (box.getDataDirectory().getChildFile ("midimap.json").existsAsFile(), "the keyboard is remembered", {});
                 box.forgetMidiMap();
-                check (box.numLearned() == 0, "and can be forgotten", {});
-                box.setPage (Arp);
+                check (box.numLearned() == 0, "and it can be forgotten", {});
+                box.setMaster ([t0] (Master& m) { m.tempo = t0; });
             }
 
-            // presets: save to pad 5, change the sound, load pad 5 back
-            box.savePreset (Arp, 4);
-            check (box.presetFile (Arp, 4).existsAsFile(), "preset file written", {});
-            const float mode = box.getData().inst[Arp].values[slot::AMode];
-            box.turnKnob (slot::AMode, 3.0f);
-            check (box.getData().inst[Arp].values[slot::AMode] != mode, "knob changes the arp mode", {});
-            check (box.loadPreset (Arp, 4) && box.getData().inst[Arp].values[slot::AMode] == mode, "preset loads back", {});
-            check (! box.loadPreset (Arp, 9), "empty preset pad is refused", {});
-            box.buttonDown (BtnShift); press (BtnRec);
-            tap (11);
-            box.buttonUp (BtnShift);
-            check (box.presetExists (Arp, 11), "Shift + Rec + pad saves a preset", {});
-            check (box.isLatched(), "Shift + Rec does not touch Hold", {});
-
-            // scenes: Scene, Rec + pad saves everything; change things; recall waits for the bar
-            press (BtnScene);
-            press (BtnRec);
-            tap (6);
-            check (box.sceneExists (6), "Scene + Rec + pad saves a scene", {});
-            const auto drums0 = box.getData().inst[Drums].drumSteps;
-            box.setPage (Drums);
-            shiftPress (BtnSteps);   // clear all drums
-            check (box.getData().inst[Drums].drumSteps != drums0, "the drums were cleared", {});
-            tap (6);
-            check (box.getData().inst[Drums].drumSteps == drums0 && box.getData().loadedScene == 6, "the scene comes back", {});
-            check (audio.sceneWaiting.load(), "while playing it waits for the next bar", {});
-            renderSeconds (audio, 2.3, nullptr);
-            check (! audio.sceneWaiting.load(), "and then it plays", {});
-            press (BtnScene);
-
-            // Rec on the drum page: a pad played while it runs is written into its steps
-            box.setPage (Drums);
-            press (BtnRec);
-            check (audio.isRecording(), "Rec arms recording", {});
-            box.padDown (2, 115); box.padUp (2);
-            renderSeconds (audio, 0.2, nullptr);
-            box.pump();
-            int clapSteps = 0;
-            for (auto v : box.getData().inst[Drums].drumSteps[2]) if (v > 0) ++clapSteps;
-            check (clapSteps == 1, "Rec writes a played drum into the steps", juce::String (clapSteps));
-
-            // Rec on the bass page: two pads held together = a slide
-            box.setPage (Bass);
-            shiftPress (BtnSteps);   // clear the line
-            box.padDown (0, 100);
-            renderSeconds (audio, 0.3, nullptr);
-            box.padDown (4, 120);
-            renderSeconds (audio, 0.1, nullptr);
-            box.padUp (0); box.padUp (4);
-            box.pump();
-            bool slid = false, accented = false;
-            for (const auto& st : box.getData().inst[Bass].bassSteps)
-            {
-                slid = slid || st.slide;
-                accented = accented || (st.note == box.bassPadNote (4) && st.accent);
-            }
-            check (slid && accented, "Rec writes the bass line (legato = slide, hard = accent)", {});
-            box.setPage (Drums);
-            press (BtnRec);
+            // ---- the keyboard's keys play the track; pads like a piano
+            check (box.padNote (3, 8) == 48 && box.padNote (3, 15) == 60 && box.padNote (3, 0) == 49 && box.padNote (3, 2) < 0,
+                   "pads: bottom row C D E F G A B C, top row the black keys", juce::String (box.padNote (3, 8)));
+            check (box.padNote (0, 0) == 36 && box.padNote (0, 1) == 37, "drum pads: 1 kick, 2 snare ...", {});
 
             box.saveState();
 
-            // the box screen and the PC panel draw without trouble (also right after a knob turn)
+            // ---- the screen in every mode, and the PC panel
             {
-                BoxView screen (box, true);
-                screen.setSize (BoxView::screenW, BoxView::screenH);
-                box.setPage (Bass);
-                box.turnKnob (2, 2.0f);
-                const auto shot = screen.createComponentSnapshot (screen.getLocalBounds());
-                check (shot.isValid() && shot.getWidth() == BoxView::screenW, "the 5\" box screen draws (knob card shown)", {});
-                box.buttonDown (BtnShift);
-                const auto grid = screen.createComponentSnapshot (screen.getLocalBounds());
-                box.buttonUp (BtnShift);
-                check (grid.isValid(), "the box screen draws the preset grid", {});
+                View screen (box, true);
+                screen.setSize (View::screenW, View::screenH);
+                View pc (box, false);
+                pc.setSize (View::panelW, View::panelH);
+                int shot = 0;
+                for (int m : { ModeSound, ModeBrowse, ModeSeq, ModeFx, ModeMix, ModeProject })
+                {
+                    box.selectTrack (m == ModeSeq ? 0 : 1);
+                    box.setMode (m);
+                    const auto img = screen.snapshotScreen();
+                    check (img.isValid() && img.getWidth() == View::screenW, juce::String ("the screen draws ") + modeName (m), {});
+                    juce::PNGImageFormat png;
+                    if (auto os = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + "-screen" + juce::String (++shot) + ".png").createOutputStream())
+                        png.writeImageToStream (img, *os);
+                }
+                const auto panel = pc.createComponentSnapshot (pc.getLocalBounds());
+                check (panel.isValid(), "the PC panel draws", {});
                 juce::PNGImageFormat png;
-                if (auto os = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + "-screen.png").createOutputStream())
-                    png.writeImageToStream (shot, *os);
+                if (auto os = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + "-panel.png").createOutputStream())
+                    png.writeImageToStream (panel, *os);
             }
         }
 
-        // the link: a box and a PC app talk over the network (here: on this computer)
+        // ---- the link: a box and a PC app talk over the network (here: on this computer)
         {
             const auto dirA = dir.getSiblingFile (dir.getFileName() + "-box"), dirB = dir.getSiblingFile (dir.getFileName() + "-pc");
             {
-                BoxController boxA (dirA), pc (dirB);
+                Controller boxA (dirA), pc (dirB);
                 boxA.getAudio().prepare (sr, block);
                 pc.getAudio().prepare (sr, block);
                 const int port = 50700 + juce::Random::getSystemRandom().nextInt (200);
                 LinkServer server (boxA, port, false, "127.0.0.1");
                 check (server.isListening(), "the box listens for a PC", "port " + juce::String (port));
                 LinkClient client (pc, false);
-                const bool connected = client.connect ("127.0.0.1", port);
-                check (connected && pc.isRemote(), "the PC app connects to the box", {});
+                check (client.connect ("127.0.0.1", port) && pc.isRemote(), "the PC app connects to the box", {});
                 wait (600);
-
-                const float t0 = boxA.getData().globals[GTempo];
+                boxA.setMode (ModeProject);
+                wait (300);
+                const float t0 = boxA.getProject().m.tempo;
                 pc.turnKnob (0, 3.0f);
                 wait (500);
-                check (std::abs (boxA.getData().globals[GTempo] - (t0 + 3.0f)) < 0.01f, "a knob on the PC turns the box",
-                       juce::String (boxA.getData().globals[GTempo]));
-                check (std::abs (pc.getData().globals[GTempo] - (t0 + 3.0f)) < 0.01f, "the PC shows what the box has", {});
-
-                pc.buttonDown (BtnInstrument); pc.buttonUp (BtnInstrument);
+                check (std::abs (boxA.getProject().m.tempo - (t0 + 3.0f)) < 0.01f, "a knob on the PC turns the box", juce::String (boxA.getProject().m.tempo));
+                check (std::abs (pc.getProject().m.tempo - (t0 + 3.0f)) < 0.01f, "the PC shows what the box has", juce::String (pc.getProject().m.tempo));
+                pc.buttonDown (BtnTrack1 + 4); pc.buttonUp (BtnTrack1 + 4);
                 wait (400);
-                check (boxA.getPage() == Arp && pc.getPage() == Arp, "a button on the PC presses it on the box", {});
-
-                boxA.savePreset (Arp, 2);
-                wait (500);
-                check (pc.presetName (Arp, 2) == "Arp 3", "the PC sees the box's presets", pc.presetName (Arp, 2));
-                pc.renamePreset (Arp, 2, "Night Pluck");
-                wait (500);
-                check (boxA.presetName (Arp, 2) == "Night Pluck" && pc.presetName (Arp, 2) == "Night Pluck",
-                       "a preset renamed on the PC is renamed on the box", boxA.presetName (Arp, 2));
-                bool copied = false;
-                client.requestPreset (Arp, 2, [&] (const juce::var& json) { copied = pc.storeLocalPresetJson (Arp, 2, json); });
-                wait (500);
-                check (copied && pc.localPresetName (Arp, 2) == "Night Pluck", "a preset copies from the box to the PC", {});
-                {
-                    LinkPanel panel (pc, client);
-                    panel.setSize (LinkPanel::panelWidth, 900);
-                    panel.showPage (Arp);
-                    check (panel.rowText (2) == "Night Pluck", "the PC panel lists the box's preset", panel.rowText (2));
-                    const auto img = panel.createComponentSnapshot (panel.getLocalBounds());
-                    check (img.isValid(), "the PC panel draws", {});
-                }
-
+                check (boxA.getTrack() == 4 && pc.getTrack() == 4, "a button on the PC presses it on the box", juce::String (boxA.getTrack()));
                 pc.buttonDown (BtnPlay); pc.buttonUp (BtnPlay);
                 for (int i = 0; i < 10; ++i) { renderSeconds (boxA.getAudio(), 0.05, nullptr); wait (50); }
                 check (pc.getAudio().isPlaying(), "the PC shows that the box plays", {});
                 const auto silent = renderSeconds (pc.getAudio(), 0.3, nullptr);
-                check (silent.rms == 0.0f, "linked, the PC itself stays silent (the box plays)", {});
-
+                check (silent.rms == 0.0f, "linked, the PC itself stays silent", {});
                 client.disconnect();
                 check (! pc.isRemote(), "after Disconnect the PC plays by itself again", {});
             }
             dirA.deleteRecursively();
             dirB.deleteRecursively();
         }
+
+        // ---- after a restart everything is there
         {
-            BoxController again (dir);
-            int clapSteps = 0;
-            for (auto v : again.getData().inst[Drums].drumSteps[2]) if (v > 0) ++clapSteps;
-            int bassNotes = 0;
-            for (const auto& st : again.getData().inst[Bass].bassSteps) if (st.note >= 0) ++bassNotes;
-            check (clapSteps == 1, "after a restart: the recorded drum", juce::String (clapSteps));
-            check (again.getData().loadedScene == 6, "after a restart: the scene number", juce::String (again.getData().loadedScene));
-            check (again.getData().inst[Drums].drumSteps[0][2] == 127, "after a restart: the drum steps", {});
-            check (bassNotes == 2, "after a restart: the recorded bass line", juce::String (bassNotes));
+            Controller again (dir);
+            int snares = 0;
+            for (auto v : again.getProject().tracks[5].pat.drums[1]) snares += v > 0 ? 1 : 0;
+            check (snares == 1, "after a restart: the recorded drum", juce::String (snares));
+            check (again.getProject().tracks[6].pat.length == 32 && again.getProject().tracks[6].pat.steps[5].has (71), "after a restart: the steps", {});
+            check (again.sceneExists (2), "after a restart: the scene", {});
+            check (again.getProject().tracks[3].engine == EngineAnalog, "after a restart: the sounds", {});
         }
         dir.deleteRecursively();
 
         const auto report = wavOut.withFileExtension ("txt");
         report.replaceWithText (log.joinIntoString ("\n") + "\n");
         std::printf ("%s\n", log.joinIntoString ("\n").toRawUTF8());
+        std::printf ("%d checks, %d failed\n", log.size(), failures);
         return failures == 0 ? 0 : 1;
     }
 
 private:
     struct Stats { float rms = 0.0f, peak = 0.0f; bool finite = true; };
 
-    /** Lets the message loop run (network messages, timers). */
-    static void wait (int ms)
-    {
-        juce::MessageManager::getInstance()->runDispatchLoopUntil (ms);
-    }
+    static void clearAnd (Controller& box, int t) { box.clearPattern (t); }
 
-    Stats renderSeconds (BoxAudio& audio, double seconds, juce::AudioBuffer<float>* keep)
+    static void wait (int ms) { juce::MessageManager::getInstance()->runDispatchLoopUntil (ms); }
+
+    Stats renderSeconds (Audio& audio, double seconds, juce::AudioBuffer<float>* keep)
     {
         Stats st;
         const int total = (int) (sr * seconds);
@@ -647,7 +448,7 @@ private:
 class AppContent : public juce::Component
 {
 public:
-    AppContent (BoxView* v, LinkPanel* p) : view (v), panel (p)
+    AppContent (View* v, LinkPanel* p) : view (v), panel (p)
     {
         addAndMakeVisible (view.get());
         if (panel != nullptr) addAndMakeVisible (panel.get());
@@ -658,22 +459,22 @@ public:
         if (panel != nullptr) panel->setBounds (r.removeFromRight (LinkPanel::panelWidth));
         view->setBounds (r);
     }
-    BoxView& getView() { return *view; }
+    View& getView() { return *view; }
     LinkPanel* getPanel() { return panel.get(); }
 
 private:
-    std::unique_ptr<BoxView> view;
+    std::unique_ptr<View> view;
     std::unique_ptr<LinkPanel> panel;
 };
 
 class MainWindow : public juce::DocumentWindow
 {
 public:
-    MainWindow (BoxController& box, juce::AudioDeviceManager& dm, bool kiosk, LinkClient* link, std::function<juce::String()> info)
+    MainWindow (Controller& box, juce::AudioDeviceManager& dm, bool kiosk, LinkClient* link, std::function<juce::String()> info)
         : DocumentWindow ("Cat Box", juce::Colour (0xff0b0d12), kiosk ? 0 : DocumentWindow::allButtons),
           deviceManager (dm)
     {
-        auto* view = new BoxView (box, kiosk);
+        auto* view = new View (box, kiosk);
         view->onSettings = [this] { showSettings(); };
         view->onToggleFullScreen = [this] { setFullScreen (! isFullScreen()); };
         view->linkInfo = std::move (info);
@@ -687,7 +488,7 @@ public:
             setResizable (false, false);
             setFullScreen (true);
             if (auto* d = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
-                setBounds (d->totalArea);
+                setBounds (d->logicalBounds);
         }
         else
         {
@@ -735,7 +536,7 @@ class CatBoxApplication : public juce::JUCEApplication, private juce::Timer
 {
 public:
     const juce::String getApplicationName() override    { return "Cat-Box"; }
-    const juce::String getApplicationVersion() override { return "1.0.0"; }
+    const juce::String getApplicationVersion() override { return "2.0.0"; }
     bool moreThanOneInstanceAllowed() override          { return true; }
 
     void initialise (const juce::String& commandLine) override
@@ -759,7 +560,7 @@ public:
             dataDir = juce::File::getCurrentWorkingDirectory().getChildFile (args[at + 1].unquoted());
         dataDir.createDirectory();
 
-        box = std::make_unique<BoxController> (dataDir);
+        box = std::make_unique<Controller> (dataDir);
         startAudio (dataDir);
         std::function<juce::String()> info;
         if (isBox)
@@ -835,7 +636,7 @@ private:
     void timerCallback() override { enableMidiInputs(); }
 
     juce::AudioDeviceManager deviceManager;
-    std::unique_ptr<BoxController> box;
+    std::unique_ptr<Controller> box;
     std::unique_ptr<LinkServer> server;   // the box
     std::unique_ptr<LinkClient> link;     // the PC app
     std::unique_ptr<MainWindow> window;

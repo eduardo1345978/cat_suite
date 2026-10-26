@@ -6,58 +6,31 @@
 namespace catbox
 {
 /**
-    The PC app's side panel: find the box on the network and connect to it, and the preset
-    library - every preset and scene with its name, on this PC and on the box: load, rename,
-    and copy between them.
+    The PC app's side panel: find the box on the network and connect to it. Connected, the PC's
+    knobs, buttons, pads and keys play the box and its screen shows the box.
 */
 class LinkPanel : public juce::Component, private juce::Timer
 {
 public:
-    LinkPanel (BoxController&, LinkClient&);
+    LinkPanel (Controller&, LinkClient&);
     ~LinkPanel() override;
 
-    static constexpr int panelWidth = 340;
+    static constexpr int panelWidth = 300;
 
     void paint (juce::Graphics&) override;
     void resized() override;
-
-    /** Shows the presets of a page (0..3) or the scenes (-1). */
-    void showPage (int pg) { pageBox.setSelectedItemIndex (pg < 0 ? NumPages : pg, juce::sendNotificationSync); }
-
-    /** For the self test: what row i shows. */
-    juce::String rowText (int i) const;
+    juce::String statusText() const { return status.getText(); }
 
 private:
-    struct Row : public juce::Component
-    {
-        explicit Row (LinkPanel&, int index);
-        void resized() override;
-        void paint (juce::Graphics&) override;
-        void refresh();
-        LinkPanel& owner;
-        const int index;
-        juce::Label boxName, pcName;
-        juce::TextButton load { "Load" }, rename { "Name" }, toBox { "PC > Box" }, toPc { "Box > PC" };
-    };
-
-    void timerCallback() override;
+    void timerCallback() override { refresh(); }
     void refresh();
-    int page() const;   // -1 = scenes
-    void askName (int index);
-    void copyToBox (int index);
-    void copyToPc (int index);
 
-    BoxController& box;
+    Controller& box;
     LinkClient& link;
-    juce::Label title, status, foundLabel, presetsLabel;
+    juce::Label title, status, foundLabel, info;
     juce::OwnedArray<juce::TextButton> foundButtons;
     juce::TextEditor address;
     juce::TextButton connectButton { "Connect" }, disconnectButton { "Disconnect" };
-    juce::ComboBox pageBox;
-    juce::Component rows;
-    juce::Viewport rowsView;
-    juce::OwnedArray<Row> rowItems;
-    std::unique_ptr<juce::AlertWindow> nameWindow;
     juce::String lastFoundKey;
 };
 } // namespace catbox

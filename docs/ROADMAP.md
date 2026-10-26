@@ -118,6 +118,18 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
       big readable font, subtle animation; likes OP-1, OP-XY, SP-404, MPC, Volca. Wants a MOCKUP first (done:
       Claude Design canvas "Cat Box 2 nákres": SOUND, SOUND+Shift, sound browser, SEQ, NOTE FX, MIX, PROJECT, panel with
       8 track buttons + SOUND/SEQ/NOTE FX/MIX/PROJECT + ◀ ▶ + SHIFT/SCENE/REC/PLAY/CHAOS, joystick, slider).
+- [x] 26 Oct: CAT BOX 2 built (user: "less colourful, clearer, go"): new program from scratch (old Drums/Arp/Bass
+      pages gone). 8 equal tracks, engines Analog (64 params, 39 sounds), Acid (303 model, 24 params incl. accent "wow",
+      soft attack, Tube/Fuzz/Rat, 17 sounds), Drums (16 synthesized drums, 808/909/Lo-fi/Acoustic, tune/decay/tone/level
+      per drum, 15 kits), Keys (piano, e-piano, nylon, pads, strings, bell, chip, pluck + filter/drive/tremolo/chorus,
+      25 sounds), Glide (all 164 Glide-Cat params, 67 sounds) = 163 sounds; browser (engine / category / sound, heard at
+      once, User sounds); note FX Arp (euclid, ratchet, chance, bounce ...), Chords (in key, voicing, strum), Orbit; SEQ
+      (16-step bars up to 64, hold step + key/knobs, chords per step, slide/accent/chance/nudge, all 16 drum lanes on
+      screen); Rec; MIX (vol/pan/2 sends/mute/solo, reverb + tempo delay, glue/tape/width, DJ filter on the slider);
+      PROJECT page; scenes at the bar; Chaos + undo; MIDI learn; 12 knobs always on screen; grey look, one accent.
+      Hardware map: 12 encoders CC 20-31, 20 buttons CC 102-121, slider CC 8, joystick CC 16/17 (Pico firmware TODO).
+- [ ] Cat Box 2 next: FM, Sampler (melody + drums, mic), Wavetable, Physical, Choir, Granular engines; more sounds
+      (hundreds); ask the user how the new drums / arp / acid feel
 - [ ] NEXT hardware: get it running on the Pi 5 (user HAS: Pi 5 8 GB, 27 W supply, micro SD, HDMI monitor,
       keyboard + mouse, a USB sound card; wants HiFiBerry DAC later) - walk him through setup_pi.sh
 - [ ] SOUND DESIGN (most important next software):
