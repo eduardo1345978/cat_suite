@@ -353,7 +353,7 @@ void View::drawScope (juce::Graphics& g, juce::Rectangle<int> r)
 void View::drawSound (juce::Graphics& g, juce::Rectangle<int> r)
 {
     const auto& tr = box.getProject().tracks[(size_t) box.getTrack()];
-    if (tr.engine == EngineSampler) { drawSampler (g, r); return; }
+    if (tr.engine == EngineSampler || tr.engine == EngineGranular) { drawSampler (g, r); return; }
     const auto& d = engineDef (tr.engine);
     // an envelope picture when the page has one, else the sound itself
     auto findEnv = [&d] (const char* a, const char* dd, const char* s, const char* rr, int& ia, int& id, int& is, int& ir)
@@ -424,8 +424,8 @@ void View::drawSampler (juce::Graphics& g, juce::Rectangle<int> r)
         return;
     }
     const auto& tr = box.getProject().tracks[(size_t) box.getTrack()];
-    const auto& d = engineDef (EngineSampler);
-    auto par = [&] (const char* id) { return tr.params[(size_t) d.index (id)]; };
+    const auto& d = engineDef (tr.engine);
+    auto par = [&] (const char* id) { const int i = d.index (id); return i >= 0 ? tr.params[(size_t) i] : 0.0f; };
     const int slot = juce::roundToInt (par ("sample"));
     const Sample* smp = SampleBank::get().at (slot);
     text1 (g, "SAMPLE  " + SampleBank::get().name (slot) + (smp != nullptr ? "   " + juce::String ((float) smp->length() / (float) smp->sampleRate, 1) + " s" : juce::String()),
@@ -447,6 +447,16 @@ void View::drawSampler (juce::Graphics& g, juce::Rectangle<int> r)
         float lo = 0.0f, hi = 0.0f;
         for (int i = i0; i < i1; i += juce::jmax (1, (i1 - i0) / 64)) { const float v = 0.5f * (smp->l[(size_t) i] + smp->r[(size_t) i]); lo = juce::jmin (lo, v); hi = juce::jmax (hi, v); }
         g.drawVerticalLine (in.getX() + x, mid - hi * h, mid - lo * h + 1.0f);
+    }
+    if (tr.engine == EngineGranular)   // where the grains come from
+    {
+        const float pos = par ("pos"), spray = par ("spray");
+        const float x0 = in.getX() + w * juce::jmax (0.0f, pos - spray * 0.5f), x1 = in.getX() + w * juce::jmin (1.0f, pos + spray * 0.5f + 0.004f);
+        g.setColour (accent.withAlpha (0.25f));
+        g.fillRect (juce::Rectangle<float> (x0, (float) in.getY(), juce::jmax (2.0f, x1 - x0), (float) in.getHeight()));
+        g.setColour (accent);
+        g.drawVerticalLine ((int) (in.getX() + w * pos), (float) in.getY(), (float) in.getBottom());
+        return;
     }
     // start / end (outside dimmed), loop start, slices
     const float st = par ("start"), en = par ("end");

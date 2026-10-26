@@ -363,6 +363,16 @@ public:
                     if (auto os = pngFile.createOutputStream())
                         png.writeImageToStream (img, *os);
                 }
+                {
+                    box.selectTrack (7);   // the sampler (Break Chop): its waveform and slices
+                    box.setMode (ModeSound);
+                    const auto img = screen.snapshotScreen();
+                    const auto pngFile = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + "-screen7.png");
+                    pngFile.deleteFile();
+                    juce::PNGImageFormat png;
+                    if (auto os = pngFile.createOutputStream()) png.writeImageToStream (img, *os);
+                    check (img.isValid(), "the screen draws the sampler", {});
+                }
                 const auto panel = pc.createComponentSnapshot (pc.getLocalBounds());
                 check (panel.isValid(), "the PC panel draws", {});
                 juce::PNGImageFormat png;
