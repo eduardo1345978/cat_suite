@@ -106,6 +106,18 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
       (M-Audio Oxygen Pro Mini: 32 keys, 8 pads x 2 banks, 4 knobs, 4 faders, transport). Done: MIDI learn wizard
       (knobs 1-12, buttons, 16 pads, knob bank), absolute knobs move by delta (no jumps), touch buttons on the 5" screen.
       No Pico controller, no encoders / FSR pads to buy now.
+- CAT BOX 2 (questionnaire 7, 26 Oct): user unhappy: hard to use, too few sounds, cheap / boring sounds, Shift confusing,
+      unclear screen, drums "totally don't work", arp broken and not adjustable, acid doesn't sound like acid, slow,
+      not professional. Wants: big rebuild of controls + sounds (keep the rest), SOUND DESIGN first (like OP-1),
+      knobs = sound by default, Sound button = everything about sound, Shift = 2nd page of sound, tempo / key / master
+      on a PROJECT page, 2 knob pages max, all 12 knob labels always on screen, page switching with own ◀ ▶ buttons,
+      HUNDREDS of presets in categories, heard while browsing, ALL engines (analog, FM, wavetable, sampler for melody +
+      drums, physical piano/guitar, drum synth 808/909, sample kits "few but good", granular, Glide, Choir, proper Acid
+      with MEGA customization), 8 equal tracks each picking an engine, Arp / Chords / Orbit as NOTE FX on any track,
+      steps + live rec, one loop + scenes, separate MIXER page, send FX (reverb, delay) + master, clean minimal TE look,
+      big readable font, subtle animation; likes OP-1, OP-XY, SP-404, MPC, Volca. Wants a MOCKUP first (done:
+      Claude Design canvas "Cat Box 2 nákres": SOUND, SOUND+Shift, sound browser, SEQ, NOTE FX, MIX, PROJECT, panel with
+      8 track buttons + SOUND/SEQ/NOTE FX/MIX/PROJECT + ◀ ▶ + SHIFT/SCENE/REC/PLAY/CHAOS, joystick, slider).
 - [ ] NEXT hardware: get it running on the Pi 5 (user HAS: Pi 5 8 GB, 27 W supply, micro SD, HDMI monitor,
       keyboard + mouse, a USB sound card; wants HiFiBerry DAC later) - walk him through setup_pi.sh
 - [ ] SOUND DESIGN (most important next software):
