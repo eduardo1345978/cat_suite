@@ -29,7 +29,8 @@ public:
         const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
                             .getChildFile ("catbox-selftest-" + juce::String (juce::Random::getSystemRandom().nextInt (1 << 30)));
         {
-            Controller box (dir);
+            auto boxOwner = std::make_unique<Controller> (dir);   // on the heap: a Controller is big (Windows has a 1 MB stack)
+            Controller& box = *boxOwner;
             auto& audio = box.getAudio();
             audio.prepare (sr, block);
             auto press = [&box] (int b) { box.buttonDown (b); box.buttonUp (b); };
@@ -414,7 +415,9 @@ public:
         {
             const auto dirA = dir.getSiblingFile (dir.getFileName() + "-box"), dirB = dir.getSiblingFile (dir.getFileName() + "-pc");
             {
-                Controller boxA (dirA), pc (dirB);
+                auto boxAOwner = std::make_unique<Controller> (dirA), pcOwner = std::make_unique<Controller> (dirB);
+                Controller& boxA = *boxAOwner;
+                Controller& pc = *pcOwner;
                 boxA.getAudio().prepare (sr, block);
                 pc.getAudio().prepare (sr, block);
                 const int port = 50700 + juce::Random::getSystemRandom().nextInt (200);
@@ -447,7 +450,8 @@ public:
 
         // ---- after a restart everything is there
         {
-            Controller again (dir);
+            auto againOwner = std::make_unique<Controller> (dir);
+            Controller& again = *againOwner;
             int snares = 0;
             for (auto v : again.getProject().tracks[5].pat.drums[1]) snares += v > 0 ? 1 : 0;
             check (snares == 1, "after a restart: the recorded drum", juce::String (snares));
