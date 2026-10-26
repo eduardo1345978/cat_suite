@@ -94,6 +94,19 @@ EngineDef makeDrumsDef()
     add ("Breakbeat", "Acoustic", { { "model", 3 }, { "snare_tone", 0.7f }, { "snare_decay", 0.55f }, { "comp", 0.7f }, { "drive", 0.3f } });
     add ("Jazz Brushes", "Acoustic", { { "model", 3 }, { "kick_level", 0.6f }, { "snare_tone", 0.85f }, { "snare_decay", 0.7f }, { "ride_level", 0.9f }, { "drive", 0.0f }, { "comp", 0.1f } });
     add ("Percussion", "Acoustic", { { "model", 3 }, { "conga_level", 0.9f }, { "shaker_level", 0.8f }, { "cow_level", 0.7f }, { "rim_level", 0.9f } });
+    add ("Trap Rattle", "808", { { "kick_decay", 0.95f }, { "kick_tune", -4 }, { "snare_tune", 4 }, { "snare_decay", 0.35f }, { "clap_level", 0.9f }, { "chh_decay", 0.2f }, { "chh_tune", 3 }, { "ohh_decay", 0.35f }, { "drive", 0.3f }, { "comp", 0.4f } });
+    add ("Dub Echo Kit", "808", { { "kick_decay", 0.7f }, { "snare_decay", 0.7f }, { "rim_level", 1.0f }, { "chh_tone", 0.3f }, { "drive", 0.1f }, { "spread", 0.8f } });
+    add ("Disco", "808", { { "kick_decay", 0.4f }, { "kick_tone", 0.6f }, { "clap_level", 0.95f }, { "ohh_decay", 0.6f }, { "conga_level", 0.8f }, { "cow_level", 0.6f } });
+    add ("Reggaeton", "808", { { "kick_decay", 0.6f }, { "snare_tune", 5 }, { "snare_decay", 0.3f }, { "rim_level", 0.9f }, { "chh_decay", 0.25f }, { "drive", 0.25f } });
+    add ("Techno Rumble", "909", { { "model", 1 }, { "kick_decay", 0.8f }, { "kick_tone", 0.8f }, { "kick_tune", -2 }, { "drive", 0.7f }, { "comp", 0.7f }, { "ride_level", 0.6f }, { "volume", -5 } });
+    add ("Minimal Click", "909", { { "model", 1 }, { "kick_decay", 0.3f }, { "kick_tone", 0.9f }, { "rim_level", 0.9f }, { "snap_level", 0.9f }, { "chh_decay", 0.15f }, { "shaker_level", 0.7f } });
+    add ("UK Garage", "909", { { "model", 1 }, { "kick_decay", 0.4f }, { "snare_tune", 3 }, { "snare_tone", 0.7f }, { "rim_level", 0.9f }, { "shaker_level", 0.8f }, { "comp", 0.5f } });
+    add ("Drum & Bass", "Acoustic", { { "model", 3 }, { "kick_tune", 2 }, { "kick_decay", 0.35f }, { "snare_tune", 4 }, { "snare_tone", 0.8f }, { "ride_level", 0.8f }, { "comp", 0.75f }, { "drive", 0.35f } });
+    add ("Hip Hop Dusty", "Lo-fi", { { "model", 2 }, { "kick_decay", 0.55f }, { "kick_tone", 0.3f }, { "snare_decay", 0.65f }, { "chh_tone", 0.2f }, { "drive", 0.45f }, { "comp", 0.65f } });
+    add ("Footwork", "808", { { "kick_decay", 0.85f }, { "kick_tune", -1 }, { "clap_decay", 0.3f }, { "chh_decay", 0.12f }, { "snap_level", 0.9f }, { "drive", 0.3f } });
+    add ("Afro Percussion", "Acoustic", { { "model", 3 }, { "conga_level", 1.0f }, { "conga_tune", -2 }, { "ltom_level", 0.9f }, { "mtom_level", 0.9f }, { "htom_level", 0.9f }, { "shaker_level", 0.9f }, { "cow_level", 0.8f }, { "rim_level", 0.8f } });
+    add ("Soft Ambient", "Acoustic", { { "model", 3 }, { "kick_level", 0.55f }, { "kick_decay", 0.5f }, { "snare_tone", 0.9f }, { "snare_level", 0.6f }, { "chh_level", 0.5f }, { "ride_level", 0.7f }, { "drive", 0.0f }, { "comp", 0.15f }, { "spread", 0.9f } });
+    add ("Industrial Metal", "Lo-fi", { { "model", 2 }, { "kick_tone", 1.0f }, { "snare_tone", 1.0f }, { "cow_tune", -7 }, { "zap_level", 0.9f }, { "drive", 1.0f }, { "comp", 0.9f }, { "volume", -7 } });
     return e;
 }
 
