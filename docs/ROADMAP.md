@@ -128,8 +128,11 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
       screen); Rec; MIX (vol/pan/2 sends/mute/solo, reverb + tempo delay, glue/tape/width, DJ filter on the slider);
       PROJECT page; scenes at the bar; Chaos + undo; MIDI learn; 12 knobs always on screen; grey look, one accent.
       Hardware map: 12 encoders CC 20-31, 20 buttons CC 102-121, slider CC 8, joystick CC 16/17 (Pico firmware TODO).
-- [ ] Cat Box 2 next: FM, Sampler (melody + drums, mic), Wavetable, Physical, Choir, Granular engines; more sounds
-      (hundreds); ask the user how the new drums / arp / acid feel
+- [x] 26 Oct (user: "work until the credit runs out"): clicks fixed (drums fade on retrigger / choke, smooth
+      transients, Analog keeps phase on retrigger + per-sample filter sweep, Acid no gap); new engines FM (29 sounds),
+      Wavetable (22), Choir = Sing-Cat (67), Sampler (mic recording, Keys / Chop / One shot, 8 starter samples rendered
+      by the box, 16 sounds), Granular (12) = 311 sounds; Glide Octave knob; Pico firmware + wiring (CatBox/pico)
+- [ ] Ask the user how the new drums / arp / acid / FM / sampler feel; physical-model guitar? more kits
 - [ ] NEXT hardware: get it running on the Pi 5 (user HAS: Pi 5 8 GB, 27 W supply, micro SD, HDMI monitor,
       keyboard + mouse, a USB sound card; wants HiFiBerry DAC later) - walk him through setup_pi.sh
 - [ ] SOUND DESIGN (most important next software):

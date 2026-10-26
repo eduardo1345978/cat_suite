@@ -60,7 +60,7 @@ struct EngineDef
     std::vector<int> presetsIn (const juce::String& category) const;
 };
 
-enum EngineType { EngineAnalog = 0, EngineAcid, EngineDrums, EngineKeys, EngineGlide, EngineFM, EngineWavetable, EngineChoir, EngineSampler, NumEngineTypes };
+enum EngineType { EngineAnalog = 0, EngineAcid, EngineDrums, EngineKeys, EngineGlide, EngineFM, EngineWavetable, EngineChoir, EngineSampler, EngineGranular, NumEngineTypes };
 const EngineDef& engineDef (int type);
 juce::StringArray engineNames();
 

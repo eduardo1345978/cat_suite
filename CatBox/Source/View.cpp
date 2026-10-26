@@ -35,8 +35,8 @@ void text1 (juce::Graphics& g, const juce::String& s, juce::Rectangle<int> r, fl
 
 const char* shortEngine (int e)
 {
-    static const char* n[] = { "ANLG", "ACID", "DRUM", "KEYS", "GLDE", "FM", "WAVE", "CHOR", "SMPL" };
-    return n[juce::jlimit (0, 8, e)];
+    static const char* n[] = { "ANLG", "ACID", "DRUM", "KEYS", "GLDE", "FM", "WAVE", "CHOR", "SMPL", "GRAN" };
+    return n[juce::jlimit (0, 9, e)];
 }
 
 const int modeOrder[] = { ModeSound, ModeSeq, ModeFx, ModeMix, ModeProject };

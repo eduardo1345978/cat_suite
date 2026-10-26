@@ -12,6 +12,7 @@ EngineDef makeFMDef();
 EngineDef makeWavetableDef();
 EngineDef makeChoirDef();
 EngineDef makeSamplerDef();
+EngineDef makeGranularDef();
 
 juce::String ParamDef::format (float v) const
 {
@@ -92,7 +93,7 @@ std::vector<int> EngineDef::presetsIn (const juce::String& category) const
 
 const EngineDef& engineDef (int type)
 {
-    static const std::array<EngineDef, NumEngineTypes> all { makeAnalogDef(), makeAcidDef(), makeDrumsDef(), makeKeysDef(), makeGlideDef(), makeFMDef(), makeWavetableDef(), makeChoirDef(), makeSamplerDef() };
+    static const std::array<EngineDef, NumEngineTypes> all { makeAnalogDef(), makeAcidDef(), makeDrumsDef(), makeKeysDef(), makeGlideDef(), makeFMDef(), makeWavetableDef(), makeChoirDef(), makeSamplerDef(), makeGranularDef() };
     return all[(size_t) juce::jlimit (0, NumEngineTypes - 1, type)];
 }
 

@@ -6,13 +6,18 @@ in one key. Nothing is generated: you play it in or tap it into the steps.
 
 | Engine | What it is | Factory sounds |
 |---|---|---|
-| **Analog** | 2 oscillators (saw, square + PWM, triangle, sine, noise), sub, unison 4, sync, FM, ring, ladder / state-variable filter, 2 envelopes, pitch envelope, 2 LFOs (tempo-synced), poly / mono / legato, drive, crush, EQ, chorus, width | 39 (bass, lead, pad, pluck, keys, brass, strings, FX) |
+| **Analog** | 2 oscillators (saw, square + PWM, triangle, sine, noise), sub, unison 4, sync, FM, ring, ladder / state-variable filter, 2 envelopes, pitch envelope, 2 LFOs (tempo-synced), poly / mono / legato, drive, crush, EQ, chorus, width | 39 |
 | **Acid** | a TB-303 model: curved saw / shaped square, diode-ladder filter with the high-pass in its resonance loop, decay, accent with the "wow" of repeated accents, slide, soft attack, Tube / Fuzz / Rat distortion and every hidden trim pot on a knob | 17 |
 | **Drums** | 16 synthesized drums (kick, snare, clap, hats, toms, rim, cowbell, crash, ride, shaker, conga, snap, zap); kit model 808 / 909 / Lo-fi / Acoustic; tune, decay, tone, level per drum; drive, bus compressor, hat choke, stereo spread | 15 kits |
 | **Keys** | piano (stiff-string partials), FM e-piano, nylon guitar (Karplus-Strong), pads, strings, glass bell, chip, pluck + filter, drive, tremolo, chorus, EQ | 25 |
 | **Glide** | Glide-Cat's synth: two layers, voices that glide from chord to chord, expression, modulators, matrix, its own effects | 67 |
+| **FM** | 4 sine operators, 8 algorithms, feedback, separate carrier / modulator envelopes, brightness, key scaling: DX e-pianos, bells, mallets, basses, organs, brass | 29 |
+| **Wavetable** | 8 morphing tables (basic shapes, pulse, vowels, harmonic sweep, digital sync, organ, growl, glass), position with envelope and LFO, warp, unison 7, filter | 22 |
+| **Choir** | Sing-Cat's choir: physically modelled singers and cats (glottis + vocal tract each), vowels, styles, rooms; up to 16 singers | 67 |
+| **Sampler** | your samples: **record one with a microphone** (Rec on a Sampler track's SOUND page) or put WAVs in the `samples` folder; Keys (across the keyboard, loop forward / ping-pong), Chop (2-16 slices on the pads), One shot; envelope, filter, crush, reverse. 8 starter samples are made by the box itself the first time | 16 |
+| **Granular** | clouds of grains from any sample: position and travel, grain size, density, scatter, pitch scatter, reverse grains, freeze | 12 |
 
-**163 factory sounds**, in categories, heard the moment you pick them.
+**311 factory sounds**, in categories, heard the moment you pick them.
 **Note FX** (any track): **Arp** (rate, order incl. bounce / random / chord, octaves, gate, swing,
 euclidean steps / hits / rotate, ratchet, chance, accents, hold), **Chords** (one key = one chord in
 the key and scale: triad ... 11th, sus, power; voicing, inversion, strum, bass note) and **Orbit**
@@ -82,6 +87,9 @@ knobs, pads, buttons and keys play the box, the PC's screen shows the box, and t
 The box answers on TCP 50650 and announces itself on UDP 50651.
 
 ## The hardware (Raspberry Pi Pico, USB MIDI, channel 16)
+
+The firmware and the wiring are in `CatBox/pico` (Arduino IDE, about 10 minutes to put on the Pico).
+
 
 | Control | MIDI |
 |---|---|

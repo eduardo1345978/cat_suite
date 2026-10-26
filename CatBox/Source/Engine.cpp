@@ -11,6 +11,7 @@ std::unique_ptr<Engine> makeFMEngine();
 std::unique_ptr<Engine> makeWavetableEngine();
 std::unique_ptr<Engine> makeChoirEngine();
 std::unique_ptr<Engine> makeSamplerEngine();
+std::unique_ptr<Engine> makeGranularEngine();
 
 std::unique_ptr<Engine> makeEngine (int type)
 {
@@ -24,6 +25,7 @@ std::unique_ptr<Engine> makeEngine (int type)
         case EngineWavetable: return makeWavetableEngine();
         case EngineChoir: return makeChoirEngine();
         case EngineSampler: return makeSamplerEngine();
+        case EngineGranular: return makeGranularEngine();
         default:          return makeAnalogEngine();
     }
 }

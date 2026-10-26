@@ -19,6 +19,7 @@ target_sources(CatBox PRIVATE
     Source/EngineWavetable.cpp
     Source/EngineChoir.cpp
     Source/EngineSampler.cpp
+    Source/EngineGranular.cpp
     Source/Samples.cpp
     Source/NoteFx.cpp
     Source/Project.cpp
