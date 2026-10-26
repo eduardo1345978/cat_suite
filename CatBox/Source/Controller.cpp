@@ -257,7 +257,34 @@ void Controller::buttonDown (int b)
                     break;
                 }
                 case ModeSeq:
-                    if (sh && cur().isDrums()) { lane[(size_t) t] = (lane[(size_t) t] + dir + numLanes) % numLanes; break; }
+                    if (sh)   // Shift + Prev = copy this bar, Shift + Next = paste it here
+                    {
+                        const int b0 = bar[(size_t) t] * 16;
+                        auto& pat = cur().pat;
+                        if (dir < 0)
+                        {
+                            for (int i = 0; i < 16; ++i)
+                            {
+                                clipSteps[(size_t) i] = pat.steps[(size_t) (b0 + i)];
+                                for (int l = 0; l < numLanes; ++l) clipDrums[(size_t) l][(size_t) i] = pat.drums[(size_t) l][(size_t) (b0 + i)];
+                            }
+                            hasClip = true;
+                            setFlash ("Bar " + juce::String (bar[(size_t) t] + 1) + " copied (Shift + Next = paste)");
+                        }
+                        else if (hasClip)
+                        {
+                            pushUndo ("Paste");
+                            for (int i = 0; i < 16; ++i)
+                            {
+                                pat.steps[(size_t) (b0 + i)] = clipSteps[(size_t) i];
+                                for (int l = 0; l < numLanes; ++l) pat.drums[(size_t) l][(size_t) (b0 + i)] = clipDrums[(size_t) l][(size_t) i];
+                            }
+                            changed();
+                            setFlash ("Pasted into bar " + juce::String (bar[(size_t) t] + 1));
+                        }
+                        else setFlash ("Nothing copied yet (Shift + Prev = copy the bar)");
+                        break;
+                    }
                     {
                         const int bars = juce::jmax (1, (cur().pat.length + 15) / 16);
                         bar[(size_t) t] = (bar[(size_t) t] + dir + bars) % bars;
@@ -1046,8 +1073,8 @@ juce::String Controller::hint() const
         case ModeSound:   if (cur().engine == EngineSampler) return "Rec: record a sample (microphone) | knob 1: the sample | Play: Keys / Chop / One shot";
                           return "Knobs: the sound | Prev / Next: pages | Shift: 12 more | Sound: browse sounds";
         case ModeBrowse:  return "Knob 1 engine | 2 category | 3 sound | Prev / Next: next sound | Rec: save as User | Sound: back";
-        case ModeSeq:     return cur().isDrums() ? "Pad = step of the drum | hold a step + knob = edit | Shift + pad: pick drum | Prev / Next: bar"
-                                                 : "Pad = step | hold a step + key / knobs = edit | Prev / Next: bar | Shift + Rec: clear";
+        case ModeSeq:     return cur().isDrums() ? "Pad = step of the drum | hold a step + knob = edit | Shift + pad: pick drum | Prev / Next: bar | Shift + Prev / Next: copy / paste"
+                                                 : "Pad = step | hold a step + key / knobs = edit | Prev / Next: bar | Shift + Prev / Next: copy / paste bar";
         case ModeFx:      return "Prev / Next: Off / Arp / Chords / Orbit | Shift + Prev / Next: presets | play the keys";
         case ModeMix:     return "Knobs: levels (Shift: pan) | Prev / Next: sends | pads 1-8 mute, 9-16 solo";
         case ModeProject: return "Tempo, swing, key, scale, click, master | Shift: glue, tape, width, reverb, delay";

@@ -47,7 +47,7 @@ Everything can be touched: tracks, modes, pages, knobs (drag), Play.
 |---|---|
 | **Track 1-8** | pick the track (everything on screen is about it) · **Shift + Track** = mute |
 | **Sound** | the knobs edit the sound (◀ ▶ = its pages: e.g. Analog OSC / FILTER / ENV / LFO / FX) · **Sound again** = the **browser**: knob 1 engine, knob 2 category, knob 3 sound, ◀ ▶ = next / previous sound, **Rec** = save as a *User* sound · **Shift + Sound** = Init |
-| **Seq** | the pads are the 16 steps of a bar (◀ ▶ = bar). Tap = step on / off. **Hold a step** and play keys (notes, a chord) or turn knobs: note, velocity, length, slide, accent, chance, nudge, notes 2-4. Nothing held: length, rate, swing, transpose (in the scale), rotate, all velocities / lengths, octave. Drums: all 16 drums on screen at once; **Shift + pad** (or knob 8) picks the drum |
+| **Seq** | the pads are the 16 steps of a bar (◀ ▶ = bar). Tap = step on / off. **Hold a step** and play keys (notes, a chord) or turn knobs: note, velocity, length, slide, accent, chance, nudge, notes 2-4. Nothing held: length, rate, swing, transpose (in the scale), rotate, all velocities / lengths, octave. Drums: all 16 drums on screen at once; **Shift + pad** (or knob 8) picks the drum. **Shift + ◀** copies the bar, **Shift + ▶** pastes it |
 | **Note FX** | ◀ ▶ = Off / Arp / Chords / Orbit, the knobs edit it, **Shift + ◀ ▶** = its presets |
 | **Mix** | knobs 1-8 = volumes (Shift: pan), 9-12 = master, glue, tape, width; ◀ ▶ = SENDS (reverb and delay per track, reverb / delay settings). Pads 1-8 = mute, 9-16 = solo · **Shift + Mix** = unmute all |
 | **Project** | tempo, swing, key, scale, click, master volume, DJ filter, pads (piano / scale), pad octave; Shift: glue, tape, width, reverb, delay |

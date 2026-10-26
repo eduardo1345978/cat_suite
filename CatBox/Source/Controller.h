@@ -222,6 +222,9 @@ private:
         juce::uint32 at = 0;
     };
     std::vector<std::unique_ptr<UndoState>> undoStack;
+    std::array<Step, 16> clipSteps {};
+    std::array<std::array<uint8_t, 16>, numLanes> clipDrums {};
+    bool hasClip = false;
     /** Remembers the state before a change. Changes of the same kind within a few seconds are one step. */
     void pushUndo (const juce::String& what, bool merge = false);
     juce::Array<double> taps;

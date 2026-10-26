@@ -131,6 +131,11 @@ public:
             box.padDown (0, 100); box.padUp (0);
             check (p.tracks[6].pat.steps[16].on(), "pads are the steps of bar 2", {});
             press (BtnPrev);
+            box.buttonDown (BtnShift); press (BtnPrev); box.buttonUp (BtnShift);   // copy bar 1
+            press (BtnNext);
+            box.buttonDown (BtnShift); press (BtnNext); box.buttonUp (BtnShift);   // paste into bar 2
+            check (p.tracks[6].pat.steps[21].has (67) && ! p.tracks[6].pat.steps[16].on(), "Shift + Prev / Next: copy bar 1, paste into bar 2", {});
+            press (BtnPrev);
             box.selectTrack (5);   // 909 drums, empty
             box.buttonDown (BtnShift); box.padDown (3, 100); box.padUp (3); box.buttonUp (BtnShift);
             check (box.seqLane() == 3, "Shift + pad picks the drum (closed hat)", juce::String (box.seqLane()));
