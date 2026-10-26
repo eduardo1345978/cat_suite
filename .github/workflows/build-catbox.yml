@@ -91,7 +91,10 @@ jobs:
         shell: pwsh
         run: |
           $t = Start-Process "build\CatBox\CatBox_artefacts\Release\Cat-Box.exe" -ArgumentList '--selftest', "`"$PWD\catbox-test.wav`"" -Wait -PassThru
-          if (Test-Path catbox-test.txt) { Get-Content catbox-test.txt }
+          if (Test-Path catbox-test.txt) {
+            Get-Content catbox-test.txt
+            Get-Content catbox-test.txt | Where-Object { $_ -like 'FAIL*' } | Select-Object -First 9 | ForEach-Object { Write-Output "::error::$_" }
+          } else { Write-Output "::error::no self test report (crashed?) exit code $($t.ExitCode)" }
           if ($t.ExitCode -ne 0) { throw "Cat Box self test failed (exit code $($t.ExitCode))" }
 
       - name: Keep the Windows build
