@@ -268,6 +268,7 @@ void Controller::buttonDown (int b)
                                 clipSteps[(size_t) i] = pat.steps[(size_t) (b0 + i)];
                                 for (int l = 0; l < numLanes; ++l) clipDrums[(size_t) l][(size_t) i] = pat.drums[(size_t) l][(size_t) (b0 + i)];
                                 clipLocks[(size_t) i] = pat.locks[(size_t) (b0 + i)];
+                                for (int l = 0; l < numLanes; ++l) clipRolls[(size_t) l][(size_t) i] = pat.rolls[(size_t) l][(size_t) (b0 + i)];
                             }
                             hasClip = true;
                             setFlash ("Bar " + juce::String (bar[(size_t) t] + 1) + " copied (Shift + Next = paste)");
@@ -280,6 +281,7 @@ void Controller::buttonDown (int b)
                                 pat.steps[(size_t) (b0 + i)] = clipSteps[(size_t) i];
                                 for (int l = 0; l < numLanes; ++l) pat.drums[(size_t) l][(size_t) (b0 + i)] = clipDrums[(size_t) l][(size_t) i];
                                 pat.locks[(size_t) (b0 + i)] = clipLocks[(size_t) i];
+                                for (int l = 0; l < numLanes; ++l) pat.rolls[(size_t) l][(size_t) (b0 + i)] = clipRolls[(size_t) l][(size_t) i];
                             }
                             changed();
                             setFlash ("Pasted into bar " + juce::String (bar[(size_t) t] + 1));
@@ -1179,6 +1181,7 @@ void Controller::seqKnob (int slot, float clicks)
             {
                 auto& v = pat.drums[(size_t) lane[(size_t) t]][(size_t) s];
                 if (slot == 0 || slot == 1) v = (uint8_t) juce::jlimit (v > 0 ? 1 : 0, 127, (int) v + d * 4);
+                if (slot == 2) { auto& rl = pat.rolls[(size_t) lane[(size_t) t]][(size_t) s]; rl = (uint8_t) juce::jlimit (1, 4, juce::jmax (1, (int) rl) + d); }
                 continue;
             }
             auto& st = pat.steps[(size_t) s];
@@ -1194,6 +1197,7 @@ void Controller::seqKnob (int slot, float clicks)
                 case 4:  if (d != 0) st.accent = d > 0; break;
                 case 5:  st.chance = (uint8_t) juce::jlimit (0, 100, (int) st.chance + d * 5); break;
                 case 6:  st.nudge = (int8_t) juce::jlimit (-50, 50, (int) st.nudge + d * 2); break;
+                case 10: st.ratchet = (uint8_t) juce::jlimit (1, 4, (int) st.ratchet + d); break;
                 case 7: case 8: case 9:
                 {
                     auto& n = st.notes[(size_t) (slot - 6)];
@@ -1229,6 +1233,7 @@ void Controller::seqKnob (int slot, float clicks)
                 rot (pat.steps);
                 rot (pat.locks);
                 for (auto& l : pat.drums) rot (l);
+                for (auto& l : pat.rolls) rot (l);
             }
             break;
         case 5:   // all velocities
@@ -1258,13 +1263,19 @@ KnobView Controller::seqKnobView (int slot) const
         const int s = heldSteps[0];
         if (tr.isDrums())
         {
+            if (slot == 2)
+            {
+                const int rl = juce::jmax (1, (int) pat.rolls[(size_t) lane[(size_t) t]][(size_t) s]);
+                v.used = true; v.name = "Roll"; v.value = rl > 1 ? juce::String (rl) + " hits" : juce::String ("off"); v.norm = (rl - 1) / 3.0f;
+                return v;
+            }
             if (slot > 1) return v;
             const int vel = pat.drums[(size_t) lane[(size_t) t]][(size_t) s];
             v.used = true; v.name = "Velocity"; v.value = vel > 0 ? juce::String (vel) + (vel >= 120 ? " accent" : "") : juce::String ("off"); v.norm = vel / 127.0f;
             return v;
         }
         const auto& st = pat.steps[(size_t) s];
-        v.used = slot <= 9;
+        v.used = slot <= 10;
         switch (slot)
         {
             case 0: v.name = "Note"; v.value = st.on() ? music::noteName (st.notes[0]) : juce::String ("off"); v.norm = st.on() ? st.notes[0] / 127.0f : 0.0f; break;
@@ -1274,6 +1285,7 @@ KnobView Controller::seqKnobView (int slot) const
             case 4: v.name = "Accent"; v.value = st.accent ? "On" : "Off"; v.norm = st.accent ? 1.0f : 0.0f; break;
             case 5: v.name = "Chance"; v.value = juce::String ((int) st.chance) + "%"; v.norm = st.chance / 100.0f; break;
             case 6: v.name = "Nudge"; v.value = juce::String ((int) st.nudge) + "%"; v.norm = 0.5f + st.nudge / 100.0f; v.bipolar = true; break;
+            case 10: v.name = "Ratchet"; v.value = st.ratchet > 1 ? juce::String ((int) st.ratchet) + " x" : juce::String ("off"); v.norm = (st.ratchet - 1) / 3.0f; break;
             case 7: case 8: case 9:
             {
                 const int n = st.notes[(size_t) (slot - 6)];

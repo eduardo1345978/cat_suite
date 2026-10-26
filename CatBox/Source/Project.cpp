@@ -140,6 +140,7 @@ juce::var patternToVar (const Pattern& p)
         if (s.accent) so->setProperty ("a", true);
         if (s.chance < 100) so->setProperty ("c", (int) s.chance);
         if (s.nudge != 0) so->setProperty ("u", (int) s.nudge);
+        if (s.ratchet > 1) so->setProperty ("r", (int) s.ratchet);
         steps.add (juce::var (so));
     }
     o->setProperty ("steps", steps);
@@ -151,6 +152,15 @@ juce::var patternToVar (const Pattern& p)
         lanes.add (s.trimCharactersAtEnd ("0"));
     }
     o->setProperty ("drums", lanes);
+    juce::Array<juce::var> rolls;
+    bool anyRoll = false;
+    for (const auto& lane : p.rolls)
+    {
+        juce::String s;
+        for (int i = 0; i < maxSteps; ++i) { s << juce::String (juce::jlimit (0, 4, (int) lane[(size_t) i])); anyRoll = anyRoll || lane[(size_t) i] > 1; }
+        rolls.add (s.trimCharactersAtEnd ("0"));
+    }
+    if (anyRoll) o->setProperty ("rolls", rolls);
     juce::Array<juce::var> locks;
     for (int i = 0; i < maxSteps; ++i)
         for (const auto& l : p.locks[(size_t) i])
@@ -186,6 +196,13 @@ void patternFromVar (const juce::var& v, Pattern& p)
             s.accent = (bool) sv.getProperty ("a", false);
             s.chance = (uint8_t) juce::jlimit (0, 100, (int) sv.getProperty ("c", 100));
             s.nudge = (int8_t) juce::jlimit (-50, 50, (int) sv.getProperty ("u", 0));
+            s.ratchet = (uint8_t) juce::jlimit (1, 4, (int) sv.getProperty ("r", 1));
+        }
+    if (auto* rl = v["rolls"].getArray())
+        for (int l = 0; l < juce::jmin (numLanes, rl->size()); ++l)
+        {
+            const auto s = (*rl)[l].toString();
+            for (int i = 0; i < juce::jmin (maxSteps, s.length()); ++i) p.rolls[(size_t) l][(size_t) i] = (uint8_t) juce::jlimit (0, 4, (int) (s[i] - '0'));
         }
     if (auto* lanes = v["drums"].getArray())
         for (int l = 0; l < juce::jmin (numLanes, lanes->size()); ++l)

@@ -29,6 +29,7 @@ struct Step
     bool slide = false, accent = false;
     uint8_t chance = 100;     // %
     int8_t nudge = 0;         // % of a step, -50 .. 50
+    uint8_t ratchet = 1;      // the step's notes 1-4 times (a roll)
 
     bool on() const noexcept { return notes[0] >= 0; }
     int count() const noexcept { int n = 0; for (auto x : notes) n += x >= 0 ? 1 : 0; return n; }
@@ -57,6 +58,7 @@ struct Pattern
     std::array<Step, maxSteps> steps {};
     std::array<std::array<uint8_t, maxSteps>, numLanes> drums {};   // velocity, 0 = off
     std::array<std::array<Lock, locksPerStep>, maxSteps> locks {};   // recorded knob moves
+    std::array<std::array<uint8_t, maxSteps>, numLanes> rolls {};    // drum hits 1-4 times in the step (0 = 1)
 
     bool hasLocks (int step) const { for (const auto& l : locks[(size_t) step]) if (l.param >= 0) return true; return false; }
     void setLock (int step, int param, float value)

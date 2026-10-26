@@ -225,6 +225,7 @@ private:
     std::array<Step, 16> clipSteps {};
     std::array<std::array<uint8_t, 16>, numLanes> clipDrums {};
     std::array<std::array<Lock, locksPerStep>, 16> clipLocks {};
+    std::array<std::array<uint8_t, 16>, numLanes> clipRolls {};
     bool hasClip = false;
     /** Remembers the state before a change. Changes of the same kind within a few seconds are one step. */
     void pushUndo (const juce::String& what, bool merge = false);

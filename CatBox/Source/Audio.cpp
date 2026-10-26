@@ -254,8 +254,13 @@ void Audio::runSequencer (int t, double from, double to)
             {
                 const int v = pat.drums[(size_t) lane][(size_t) s];
                 if (v <= 0 || skipped (36 + lane)) continue;
-                queueNote (rt, at, 36 + lane, (float) v / 127.0f, true, false, v >= 120);
-                queueNote (rt, at + stepLen * 0.5, 36 + lane, 0.0f, false, false, false);
+                const int roll = juce::jlimit (1, 4, (int) pat.rolls[(size_t) lane][(size_t) s]);
+                for (int k = 0; k < roll; ++k)   // a roll: the hits share the step, a little softer each
+                {
+                    const double tk = at + stepLen * k / roll;
+                    queueNote (rt, tk, 36 + lane, (float) v / 127.0f * (1.0f - 0.12f * (float) k), true, false, v >= 120 && k == 0);
+                    queueNote (rt, tk + stepLen * 0.5 / roll, 36 + lane, 0.0f, false, false, false);
+                }
             }
         }
         else
@@ -265,13 +270,20 @@ void Audio::runSequencer (int t, double from, double to)
             {
                 const double on = juce::jmax (from, at + st.nudge * 0.01 * stepLen);
                 const bool slideIn = rt.lastSlideNote >= 0;
+                const int ratchet = juce::jlimit (1, 4, (int) st.ratchet);
                 for (auto n : st.notes)
                 {
                     if (n < 0 || skipped (n)) continue;
-                    queueNote (rt, on, n, (float) st.vel / 127.0f * (st.accent ? 1.0f : 0.85f), true, slideIn, st.accent);
-                    // a slide holds the note into the next step (the next note glides in)
-                    const double len = st.slide ? stepLen * 1.02 : juce::jmax (0.01, stepLen * st.len * 0.01);
-                    queueNote (rt, on + len, n, 0.0f, false, false, false);
+                    for (int k = 0; k < ratchet; ++k)
+                    {
+                        const double onK = on + stepLen * k / ratchet;
+                        queueNote (rt, onK, n, (float) st.vel / 127.0f * (st.accent ? 1.0f : 0.85f) * (1.0f - 0.1f * (float) k), true, slideIn && k == 0, st.accent && k == 0);
+                        // a slide holds the note into the next step (the next note glides in)
+                        double len = st.slide && k == ratchet - 1 ? stepLen * 1.02 / ratchet : juce::jmax (0.01, stepLen * st.len * 0.01);
+                        if (ratchet > 1) len = juce::jmin (len, stepLen / ratchet * 0.85);
+                        if (st.slide && k == ratchet - 1) len = stepLen * (1.02 - (double) k / ratchet);
+                        queueNote (rt, onK + len, n, 0.0f, false, false, false);
+                    }
                 }
                 rt.lastSlideNote = st.slide ? st.notes[0] : -1;
             }

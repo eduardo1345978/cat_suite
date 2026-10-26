@@ -598,6 +598,7 @@ void View::drawSeq (juce::Graphics& g, juce::Rectangle<int> r)
         if (st.slide) marks << "SLIDE ";
         if (st.accent) marks << "ACC ";
         if (st.chance < 100) marks << st.chance << "% ";
+        if (st.ratchet > 1) marks << "x" << (int) st.ratchet << " ";
         text1 (g, marks, in, 11.0f, accent, juce::Justification::centredLeft, true);
     }
 }

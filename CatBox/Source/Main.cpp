@@ -144,6 +144,8 @@ public:
             int hats = 0;
             for (auto v : p.tracks[5].pat.drums[3]) hats += v > 0 ? 1 : 0;
             check (hats == 8, "eight hat steps", juce::String (hats));
+            box.padDown (14, 100); box.turnKnob (2, 2.0f); box.padUp (14);
+            check (p.tracks[5].pat.rolls[3][14] == 3 && p.tracks[5].pat.drums[3][14] > 0, "hold a drum step + knob 3 = a roll (3 hits)", juce::String ((int) p.tracks[5].pat.rolls[3][14]));
             press (BtnPlay);
             soloOnly (5);
             const auto drums = renderSeconds (audio, 2.0, nullptr);
