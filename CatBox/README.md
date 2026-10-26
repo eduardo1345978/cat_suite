@@ -39,6 +39,20 @@ over your home network (WiFi or cable; the box needs to be on the same network):
 Technically: the box (`Cat-Box --kiosk`, or `--box` in a window) answers on TCP port 50650 and announces
 itself on UDP port 50651.
 
+## Playing it with a MIDI keyboard (no buttons on the box)
+
+The box can be just a box: a Raspberry Pi, the 5" screen and the sound. Plug in any USB MIDI keyboard
+(e.g. an M-Audio Oxygen Pro Mini) and teach it to the box once:
+- Touch **MIDI** on the screen (on the PC: right-click > *Learn a MIDI keyboard / controller*). The screen asks for
+  one control after another: knobs 1-12 (turn a knob or move a fader), then the buttons (Play, Shift, Instr, Rec,
+  Steps, Scene, Sound, Oct -, Oct +, Chaos), the 16 pads (switch the keyboard's pad bank for pads 9-16) and a
+  **knob bank** button (the keyboard's knobs 1-8 become knobs 5-12). **Skip** what your keyboard doesn't have,
+  **Done** whenever you like. It is remembered (`midimap.json`); right-click > *Forget the MIDI keyboard* starts over.
+- Knobs and faders that send their position move the box's knob by as much as you move them (no jumps);
+  endless encoders work too. The keys play the page on screen (chords on the Chords page, planets on Orbit).
+- The bottom of the 5" screen has **touch buttons** for everything the keyboard lacks: Play, Steps, Shift
+  (touch = on / off), Scene, Instr, Oct - / Oct +, Rec, Chaos (hold), Sound and MIDI.
+
 ## Build
 
 - PC: double-click **build_catbox.bat** (builds only Cat Box, runs its self test, starts it).

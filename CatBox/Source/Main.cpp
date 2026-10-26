@@ -383,6 +383,48 @@ public:
                 box.setPage (Arp);
             }
 
+            // MIDI learn: a keyboard's knob, button and pad are learned once, then they play the box
+            {
+                box.setPage (Drums);
+                box.startLearn();
+                check (box.isLearning() && box.learnPrompt().startsWith ("Knob 1"), "MIDI learn asks for knob 1 first", box.learnPrompt());
+                for (int v : { 60, 62, 64, 66 }) box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (1, 70, v));
+                juce::Thread::sleep (400);
+                box.pump();
+                check (box.learnStep() == 1 && box.learnLast().contains ("CC 70") && box.learnLast().contains ("fader"),
+                       "a knob that was moved is learned (as a knob / fader)", box.learnLast());
+                for (int i = 1; i < numKnobs; ++i) box.learnSkip();
+                check (box.learnPrompt() == "Play button", "then the buttons", box.learnPrompt());
+                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (1, 80, 127));
+                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (1, 80, 0));
+                check (box.learnStep() == numKnobs + 1, "a button is learned (letting it go is not the next one)", box.learnLast());
+                for (int i = 0; i < 9; ++i) box.learnSkip();
+                check (box.learnPrompt() == "Pad 1", "then the pads", box.learnPrompt());
+                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::noteOn (10, 36, (juce::uint8) 100));
+                box.learnDone();
+                check (! box.isLearning() && box.numLearned() == 3, "Done: three controls learned", juce::String (box.numLearned()));
+
+                const float t0 = box.getData().globals[GTempo];
+                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (1, 70, 100));
+                const float t1 = box.getData().globals[GTempo];
+                check (t1 > t0 + 30.0f, "the learned knob turns the tempo (absolute: by how far it moved)", juce::String (t0) + " > " + juce::String (t1));
+                box.turnKnob (0, t0 - t1);
+                const bool playing0 = audio.isPlaying();
+                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (1, 80, 127));
+                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (1, 80, 0));
+                check (audio.isPlaying() != playing0, "the learned button is Play", {});
+                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (1, 80, 127));
+                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (1, 80, 0));
+                box.pickDrum (5);
+                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::noteOn (10, 36, (juce::uint8) 100));
+                box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::noteOff (10, 36));
+                check (box.selectedDrum() == 0 && audio.isPlaying() == playing0, "the learned pad is pad 1", juce::String (box.selectedDrum()));
+                check (box.getDataDirectory().getChildFile ("midimap.json").existsAsFile(), "the keyboard is remembered", {});
+                box.forgetMidiMap();
+                check (box.numLearned() == 0, "and can be forgotten", {});
+                box.setPage (Arp);
+            }
+
             // presets: save to pad 5, change the sound, load pad 5 back
             box.savePreset (Arp, 4);
             check (box.presetFile (Arp, 4).existsAsFile(), "preset file written", {});

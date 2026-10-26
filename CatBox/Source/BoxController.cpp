@@ -17,6 +17,7 @@ BoxController::BoxController (juce::File dataDirectory) : dataDir (std::move (da
     syncAtomics();
     lastBassNote = scaleNote (key.load(), scale.load(), 0, 36);
     rescanNames();
+    loadMidiMap();
     publish();
     startTimerHz (30);
 }
@@ -833,6 +834,16 @@ void BoxController::tapTempo()
 //==============================================================================
 void BoxController::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage& m)
 {
+    if (isLearning())   // learning a controller: the message names the control, it does not play
+    {
+        if (m.isController())
+            runOnMessageThread ([this, ch = m.getChannel(), n = m.getControllerNumber(), v = m.getControllerValue()] { learnInput (ch, n, false, v); });
+        else if (m.isNoteOn())
+            runOnMessageThread ([this, ch = m.getChannel(), n = m.getNoteNumber(), v = (int) m.getVelocity()] { learnInput (ch, n, true, v); });
+        return;
+    }
+    if (handleMapped (m)) return;
+
     if (m.getChannel() == controllerChannel)
     {
         if (m.isNoteOn() && m.getNoteNumber() >= firstPadNote && m.getNoteNumber() < firstPadNote + numPads)
@@ -1102,6 +1113,7 @@ void BoxController::saveState()
 
 void BoxController::timerCallback()
 {
+    if (learnCollecting && juce::Time::getMillisecondCounter() - learnStartedAt >= 350) finishLearnCandidate();
     bool got = false;
     RecordedNote r;
     while (audio.popRecorded (r))
@@ -1814,6 +1826,280 @@ void BoxController::editPlanet (int knob, int clicks)
     data.loadedPreset[PageOrbit] = -1;
     publish();
     markDirty();
+}
+
+//==============================================================================
+// MIDI learn
+juce::String BoxController::targetName (int t)
+{
+    static const char* buttons[NumButtons] = { "Play", "Steps", "Shift", "Scene", "Instr", "Oct -", "Oct +", "Rec", "Chaos", "Sound" };
+    if (t >= LearnKnob0 && t < LearnKnob0 + numKnobs) return "Knob " + juce::String (t - LearnKnob0 + 1);
+    if (t >= LearnButton0 && t < LearnButton0 + NumButtons) return juce::String (buttons[t - LearnButton0]) + " button";
+    if (t >= LearnPad0 && t < LearnPad0 + numPads) return "Pad " + juce::String (t - LearnPad0 + 1);
+    if (t == LearnKnobBank) return "Knob bank (knobs 1-8 become 5-12)";
+    return {};
+}
+
+void BoxController::startLearn()
+{
+    learnTargets.clear();
+    for (int k = 0; k < numKnobs; ++k) learnTargets.push_back (LearnKnob0 + k);
+    for (int b : { BtnPlay, BtnShift, BtnInstrument, BtnRec, BtnSteps, BtnScene, BtnSound, BtnOctDown, BtnOctUp, BtnChaos })
+        learnTargets.push_back (LearnButton0 + b);
+    for (int p = 0; p < numPads; ++p) learnTargets.push_back (LearnPad0 + p);
+    learnTargets.push_back (LearnKnobBank);
+    learnCollecting = false;
+    learnLastText = {};
+    learnIndex = 0;
+}
+
+void BoxController::learnSkip()
+{
+    if (! isLearning()) return;
+    learnCollecting = false;
+    learnLastText = "Skipped: " + targetName (learnTargets[(size_t) learnIndex.load()]);
+    if (learnIndex.load() + 1 >= (int) learnTargets.size()) { learnDone(); return; }
+    learnIndex = learnIndex.load() + 1;
+}
+
+void BoxController::learnDone()
+{
+    if (! isLearning()) return;
+    learnIndex = -1;
+    learnCollecting = false;
+    saveMidiMap();
+    setFlash ("MIDI controller: " + juce::String (numLearned()) + " controls learned");
+}
+
+void BoxController::forgetMidiMap()
+{
+    {
+        const juce::SpinLock::ScopedLockType lock (midiMapLock);
+        midiMap.clear();
+    }
+    knobBank = false;
+    saveMidiMap();
+    setFlash ("The MIDI controller is forgotten");
+}
+
+int BoxController::numLearned() const
+{
+    const juce::SpinLock::ScopedLockType lock (midiMapLock);
+    return (int) midiMap.size();
+}
+
+juce::String BoxController::learnPrompt() const
+{
+    const int i = learnIndex.load();
+    if (i < 0 || i >= (int) learnTargets.size()) return {};
+    const int t = learnTargets[(size_t) i];
+    if (t >= LearnKnob0 && t < LearnKnob0 + numKnobs)
+    {
+        const auto v = slotView (page.load(), t - LearnKnob0);
+        return targetName (t) + (v.used ? "  (" + v.name + " on this page)" : juce::String());
+    }
+    return targetName (t);
+}
+
+juce::String BoxController::learnHint() const
+{
+    const int i = learnIndex.load();
+    if (i < 0 || i >= (int) learnTargets.size()) return {};
+    const int t = learnTargets[(size_t) i];
+    if (t < LearnButton0) return "Turn a knob or move a fader on your keyboard";
+    if (t >= LearnPad0 && t < LearnPad0 + numPads) return "Hit a pad (switch the pad bank for pads 9-16)";
+    return "Press a button on your keyboard";
+}
+
+void BoxController::learnInput (int ch, int num, bool note, int value)
+{
+    const int i = learnIndex.load();
+    if (i < 0 || i >= (int) learnTargets.size()) return;
+    const int t = learnTargets[(size_t) i];
+    const auto now = juce::Time::getMillisecondCounter();
+    // the control learned a moment ago is still moving or being let go: not the next one
+    if (now < learnQuietUntil && ch == learnIgnoreCh && num == learnIgnoreNum && note == learnIgnoreNote) return;
+
+    if (learnCollecting)
+    {
+        if (ch == learnCandidate.ch && num == learnCandidate.num && note == learnCandidate.note) learnValues.add (value);
+        return;
+    }
+    const bool knob = t < LearnButton0;
+    if (knob && note) return;                    // a key pressed by accident: a knob must be a knob
+    if (! knob && ! note && value == 0) return;  // a button let go
+    learnCandidate = {};
+    learnCandidate.ch = ch;
+    learnCandidate.num = num;
+    learnCandidate.note = note;
+    learnCandidate.target = t;
+    learnValues.clearQuick();
+    learnValues.add (value);
+    if (knob) { learnCollecting = true; learnStartedAt = now; }   // watch it move for a moment: absolute or relative?
+    else finishLearnCandidate();
+}
+
+void BoxController::finishLearnCandidate()
+{
+    learnCollecting = false;
+    const int i = learnIndex.load();
+    if (i < 0 || i >= (int) learnTargets.size()) return;
+    auto c = learnCandidate;
+    if (c.target < LearnButton0)
+    {
+        // relative encoders send the same small steps (1, 2 / 127, 126 ...); knobs and faders send their position
+        juce::Array<int> distinct;
+        bool small = true;
+        for (int v : learnValues)
+        {
+            distinct.addIfNotAlreadyThere (v);
+            small = small && ((v >= 1 && v <= 15) || (v >= 113 && v <= 127));
+        }
+        c.relative = small && distinct.size() <= 3 && learnValues.size() >= 2;
+        c.last = c.relative ? -1 : learnValues.getLast();
+    }
+    {
+        const juce::SpinLock::ScopedLockType lock (midiMapLock);
+        midiMap.erase (std::remove_if (midiMap.begin(), midiMap.end(), [&c] (const MidiCtl& m)
+                       { return (m.ch == c.ch && m.num == c.num && m.note == c.note) || m.target == c.target; }), midiMap.end());
+        midiMap.push_back (c);
+    }
+    learnIgnoreCh = c.ch;
+    learnIgnoreNum = c.num;
+    learnIgnoreNote = c.note;
+    learnQuietUntil = juce::Time::getMillisecondCounter() + 700;
+    learnLastText = targetName (c.target) + " = " + (c.note ? "note " : "CC ") + juce::String (c.num) + ", channel " + juce::String (c.ch)
+                  + (c.target < LearnButton0 ? (c.relative ? " (endless)" : " (knob / fader)") : juce::String());
+    if (i + 1 >= (int) learnTargets.size()) learnDone();
+    else learnIndex = i + 1;
+}
+
+bool BoxController::handleMapped (const juce::MidiMessage& m)
+{
+    const bool isNote = m.isNoteOnOrOff();
+    if (! isNote && ! m.isController()) return false;
+    const int ch = m.getChannel(), num = isNote ? m.getNoteNumber() : m.getControllerNumber();
+    const int value = isNote ? (m.isNoteOn() ? (int) m.getVelocity() : 0) : m.getControllerValue();
+
+    int target = -1, delta = 0;
+    bool relative = false, first = false;
+    {
+        const juce::SpinLock::ScopedLockType lock (midiMapLock);
+        for (auto& c : midiMap)
+            if (c.ch == ch && c.num == num && c.note == isNote)
+            {
+                target = c.target;
+                relative = c.relative;
+                first = c.last < 0;
+                delta = first ? 0 : value - c.last;
+                c.last = value;
+                break;
+            }
+    }
+    if (target < 0) return false;
+
+    if (target < LearnButton0)
+    {
+        int k = target - LearnKnob0;
+        if (knobBank.load() && k < 8) k += 4;
+        if (relative)
+        {
+            const int clicks = value == 0 || value == 64 ? 0 : (value < 64 ? value : value - 128);
+            runOnMessageThread ([this, k, clicks] { turnKnob (k, (float) clicks); });
+        }
+        else if (! first && delta != 0)
+            runOnMessageThread ([this, k, delta] { turnKnobBy (k, (float) delta / 127.0f); });
+        return true;
+    }
+    const bool down = value > 0;
+    if (target >= LearnPad0 && target < LearnPad0 + numPads)
+    {
+        const int p = target - LearnPad0;
+        down ? padDown (p, juce::jmax (1, value)) : padUp (p);
+        return true;
+    }
+    if (target == LearnKnobBank)
+    {
+        if (down) runOnMessageThread ([this]
+        {
+            knobBank = ! knobBank.load();
+            setFlash (knobBank.load() ? "Keyboard knobs = knobs 5-12" : "Keyboard knobs = knobs 1-8");
+        });
+        return true;
+    }
+    const int b = target - LearnButton0;
+    if (b == BtnShift) shift = down;   // right away: a pad may follow immediately
+    if (b == BtnRec && (shift.load() || sceneMode.load())) rec = down;
+    runOnMessageThread ([this, b, down] { down ? buttonDown (b) : buttonUp (b); });
+    return true;
+}
+
+void BoxController::turnKnobBy (int knob, float fraction)
+{
+    if (knob < 0 || knob >= numKnobs || fraction == 0.0f) return;
+    const int pg = page.load();
+    const int s = knob + (shift.load() ? numKnobs : 0);
+    float span = 24.0f;   // steps of a bass step / chord / planet
+    if (isSoundMode())
+    {
+        const auto id = engineId (s);
+        const int i = glidecat::paramIndex (id);
+        if (i >= 0)
+        {
+            const auto& p = glidecat::params()[(size_t) i];
+            span = p.type == glidecat::ParamInfo::Float ? 100.0f : p.hi - p.lo + 1.0f;
+        }
+        else if (id == "@preset") span = (float) engine::glideSoundNames().size();
+        else if (id == "@motion") span = (float) engine::glideMotionNames().size();
+        else if (id == "@sound") span = (float) paramDesc (pg, pg == Arp ? slot::ASound : slot::BSound).choices.size();
+    }
+    else if (const bool stepEdit = isStepView() && ! shift.load() && knob >= 1 && (pg == Bass || pg == PageChords || pg == PageOrbit); ! stepEdit)
+    {
+        const auto& d = paramDesc (pg, s);
+        span = d.kind == Kind::Percent ? 100.0f : d.max - d.min + 1.0f;
+    }
+    turnKnob (knob, fraction * span);
+}
+
+void BoxController::loadMidiMap()
+{
+    const auto f = dataDir.getChildFile ("midimap.json");
+    std::vector<MidiCtl> list;
+    if (f.existsAsFile())
+        if (auto* a = juce::JSON::parse (f)["controls"].getArray())
+            for (const auto& v : *a)
+            {
+                MidiCtl c;
+                c.ch = juce::jlimit (1, 16, (int) v.getProperty ("ch", 1));
+                c.num = juce::jlimit (0, 127, (int) v.getProperty ("num", 0));
+                c.note = (bool) v.getProperty ("note", false);
+                c.target = (int) v.getProperty ("target", -1);
+                c.relative = (bool) v.getProperty ("relative", false);
+                if (targetName (c.target).isNotEmpty()) list.push_back (c);
+            }
+    const juce::SpinLock::ScopedLockType lock (midiMapLock);
+    midiMap = std::move (list);
+}
+
+void BoxController::saveMidiMap() const
+{
+    juce::Array<juce::var> a;
+    {
+        const juce::SpinLock::ScopedLockType lock (midiMapLock);
+        for (const auto& c : midiMap)
+        {
+            auto* o = new juce::DynamicObject();
+            o->setProperty ("ch", c.ch);
+            o->setProperty ("num", c.num);
+            o->setProperty ("note", c.note);
+            o->setProperty ("target", c.target);
+            o->setProperty ("relative", c.relative);
+            a.add (juce::var (o));
+        }
+    }
+    auto* root = new juce::DynamicObject();
+    root->setProperty ("controls", a);
+    dataDir.getChildFile ("midimap.json").replaceWithText (juce::JSON::toString (juce::var (root)));
 }
 
 } // namespace catbox

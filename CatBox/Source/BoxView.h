@@ -65,6 +65,11 @@ private:
     void paintScope (juce::Graphics&, juce::Rectangle<float>);
     void paintEngineGrid (juce::Graphics&, juce::Rectangle<float>);
     void paintOrbit (juce::Graphics&, juce::Rectangle<float>);
+    void paintTouchBar (juce::Graphics&);
+    void paintLearn (juce::Graphics&, juce::Rectangle<float>);
+    static constexpr int numTouch = NumButtons + 1;   // the buttons + MIDI learn
+    juce::Rectangle<float> touchArea (int i) const;
+    juce::Rectangle<float> learnButton (int i) const;
     void paintSlotGrid (juce::Graphics&, juce::Rectangle<float>);
     void paintStrip (juce::Graphics&, juce::Rectangle<float>);
     juce::String loadedName() const;

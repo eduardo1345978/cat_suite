@@ -71,6 +71,22 @@ public:
     juce::String chordPadLabel (int pad) const;                   // what a pad plays on the Chords page
     bool chordPadSounding (int pad) const noexcept { return pad >= 0 && pad < numPads && padChordCount[(size_t) pad] > 0; }
     int orchidHeldType() const noexcept { return orchidType.load(); }
+    // MIDI learn: any MIDI keyboard / controller plays the box (its knobs, buttons and pads are learned once)
+    void startLearn();
+    void learnSkip();
+    void learnDone();                       // keeps what was learned
+    void forgetMidiMap();
+    bool isLearning() const noexcept { return learnIndex.load() >= 0; }
+    juce::String learnPrompt() const;       // e.g. "Knob 3"
+    juce::String learnHint() const;         // what to do
+    int learnStep() const noexcept { return learnIndex.load(); }
+    int learnSteps() const noexcept { return (int) learnTargets.size(); }
+    juce::String learnLast() const { return learnLastText; }
+    int numLearned() const;
+    bool isKnobBank() const noexcept { return knobBank.load(); }
+    /** Turns a knob by a part of its whole range (an absolute knob or fader moved by delta / 127). */
+    void turnKnobBy (int knob, float fractionOfRange);
+
     // the Orbit page (held notes are planets)
     int orbitPadNote (int pad) const;
     int selectedPlanet() const noexcept { return planetSel; }
@@ -173,6 +189,27 @@ private:
     bool strumFlip = false;
     int chordSel = -1;
     int planetSel = 0;
+    // MIDI learn
+    enum { LearnKnob0 = 0, LearnButton0 = 100, LearnPad0 = 200, LearnKnobBank = 300 };
+    struct MidiCtl { int ch = 0, num = 0; bool note = false; int target = 0; bool relative = false; int last = -1; };
+    std::vector<MidiCtl> midiMap;
+    mutable juce::SpinLock midiMapLock;
+    std::vector<int> learnTargets;
+    std::atomic<int> learnIndex { -1 };
+    std::atomic<bool> knobBank { false };
+    MidiCtl learnCandidate;
+    juce::Array<int> learnValues;
+    bool learnCollecting = false;
+    juce::uint32 learnStartedAt = 0, learnQuietUntil = 0;
+    int learnIgnoreCh = -1, learnIgnoreNum = -1;
+    bool learnIgnoreNote = false;
+    juce::String learnLastText;
+    static juce::String targetName (int target);
+    void loadMidiMap();
+    void saveMidiMap() const;
+    bool handleMapped (const juce::MidiMessage&);
+    void learnInput (int ch, int num, bool note, int value);
+    void finishLearnCandidate();
     bool orbitLatch = false;
     void editPlanet (int knob, int clicks);
     juce::String chordNowName;

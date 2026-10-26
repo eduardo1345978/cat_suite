@@ -362,6 +362,7 @@ void BoxView::paint (juce::Graphics& g)
     else paintScreen (g, { 0.0f, 0.0f, (float) screenW, (float) screenH });
     if (! kiosk) paintPanel (g, { 0.0f, (float) screenH, (float) screenW, (float) panelH });
     if (helpShown) paintHelp (g, { 0.0f, 0.0f, (float) screenW, (float) screenH });
+    if (box.isLearning()) paintLearn (g, { 0.0f, 0.0f, (float) screenW, (float) screenH });
 }
 
 void BoxView::paintHelp (juce::Graphics& g, juce::Rectangle<float> area)
@@ -579,7 +580,7 @@ void BoxView::paintBoxScreen (juce::Graphics& g, juce::Rectangle<float> area)
     g.drawText (on.joinIntoString ("   "), juce::Rectangle<float> (24.0f, 62.0f, 752.0f, 22.0f), juce::Justification::centredLeft);
 
     // the middle: presets / scenes while choosing, else the sound itself
-    auto mid = juce::Rectangle<float> (16.0f, 90.0f, 768.0f, 300.0f);
+    auto mid = juce::Rectangle<float> (16.0f, 90.0f, 768.0f, 288.0f);
     if (box.isShiftHeld() && ! box.isSoundMode()) paintSlotGrid (g, mid);
     else if (box.isSceneMode()) paintSlotGrid (g, mid);
     else if (box.isSoundMode()) paintEngineGrid (g, mid);
@@ -617,7 +618,8 @@ void BoxView::paintBoxScreen (juce::Graphics& g, juce::Rectangle<float> area)
         }
     }
 
-    paintStrip (g, { 16.0f, 400.0f, 768.0f, 66.0f });
+    paintStrip (g, { 16.0f, 382.0f, 768.0f, 34.0f });
+    paintTouchBar (g);
 
     const auto flash = box.getFlash();
     if (flash.isNotEmpty() && ! recent)
@@ -633,6 +635,75 @@ void BoxView::paintBoxScreen (juce::Graphics& g, juce::Rectangle<float> area)
         g.drawFittedText (flash, f.reduced (16.0f, 2.0f).toNearestInt(), juce::Justification::centred, 1, 0.7f);
     }
     paintChaosBar (g, { 200.0f, 154.0f, 400.0f, 10.0f }, chaosProgress());
+}
+
+//==============================================================================
+// The box screen's touch buttons (the box has no buttons of its own: a MIDI keyboard and this bar)
+juce::Rectangle<float> BoxView::touchArea (int i) const
+{
+    const float w = 768.0f / (float) numTouch;
+    return juce::Rectangle<float> (16.0f + i * w, 422.0f, w, 52.0f).reduced (3.0f, 0.0f);
+}
+
+void BoxView::paintTouchBar (juce::Graphics& g)
+{
+    const auto& P = pal();
+    const auto col = pageColour (box.getPage());
+    for (int i = 0; i < numTouch; ++i)
+    {
+        auto r = touchArea (i);
+        const bool isMidi = i == NumButtons;
+        const bool held = ! isMidi && ((pressedButtons >> i) & 1u) != 0;
+        const bool lit = ! isMidi && (box.isButtonLit (i) || (i == BtnShift && mouseShiftLatched));
+        g.setColour (lit ? (i == BtnChaos ? juce::Colour (0xffe0508a) : col) : held ? P.faint.brighter (0.2f) : P.cell);
+        g.fillRoundedRectangle (r, 10.0f);
+        if (i == BtnChaos)
+            if (const float pr = chaosProgress(); pr > 0.0f)
+            {
+                g.setColour (juce::Colour (0xffe0508a));
+                g.fillRoundedRectangle (r.withWidth (r.getWidth() * pr), 10.0f);
+            }
+        g.setColour (lit ? juce::Colours::black : isMidi ? P.dim : P.text);
+        g.setFont (font (15.0f, true));
+        g.drawFittedText (isMidi ? juce::String ("MIDI") : box.buttonLabel (i), r.reduced (3.0f).toNearestInt(), juce::Justification::centred, 1, 0.7f);
+    }
+}
+
+void BoxView::paintLearn (juce::Graphics& g, juce::Rectangle<float> area)
+{
+    const auto& P = pal();
+    const auto col = pageColour (box.getPage());
+    g.setColour (P.screen.withAlpha (0.97f));
+    g.fillRect (area);
+    auto r = area.reduced (40.0f, 30.0f);
+    g.setColour (P.dim);
+    g.setFont (font (18.0f));
+    g.drawText ("Learning your MIDI keyboard   " + juce::String (box.learnStep() + 1) + " / " + juce::String (box.learnSteps()),
+                r.removeFromTop (30.0f), juce::Justification::centredLeft);
+    r.removeFromTop (20.0f);
+    g.setColour (col);
+    g.setFont (font (44.0f, true));
+    g.drawFittedText (box.learnPrompt(), r.removeFromTop (110.0f).toNearestInt(), juce::Justification::centredLeft, 2, 0.6f);
+    g.setColour (P.text);
+    g.setFont (font (22.0f));
+    g.drawText (box.learnHint(), r.removeFromTop (40.0f), juce::Justification::centredLeft);
+    g.setColour (P.dim);
+    g.setFont (font (16.0f));
+    g.drawText (box.learnLast(), r.removeFromTop (34.0f), juce::Justification::centredLeft);
+    for (int i = 0; i < 2; ++i)
+    {
+        const auto b = learnButton (i);
+        g.setColour (i == 1 ? col : P.cell);
+        g.fillRoundedRectangle (b, 12.0f);
+        g.setColour (i == 1 ? juce::Colours::black : P.text);
+        g.setFont (font (20.0f, true));
+        g.drawText (i == 0 ? "Skip" : "Done", b, juce::Justification::centred);
+    }
+}
+
+juce::Rectangle<float> BoxView::learnButton (int i) const
+{
+    return { i == 0 ? 220.0f : 420.0f, 388.0f, 160.0f, 64.0f };
 }
 
 void BoxView::paintEngineGrid (juce::Graphics& g, juce::Rectangle<float> r)
@@ -1209,10 +1280,18 @@ void BoxView::mouseDown (const juce::MouseEvent& e)
 {
     const auto p = toLogical (e.position);
     if (helpShown && ! e.mods.isPopupMenu()) { showHelp (false); return; }
+    if (box.isLearning() && ! e.mods.isPopupMenu())
+    {
+        if (learnButton (0).contains (p)) box.learnSkip();
+        else if (learnButton (1).contains (p)) box.learnDone();
+        return;
+    }
     if (e.mods.isPopupMenu())
     {
         juce::PopupMenu m;
         m.addItem (6, "Keys and controls (F1)");
+        m.addItem (7, "Learn a MIDI keyboard / controller...");
+        m.addItem (8, "Forget the MIDI keyboard", box.numLearned() > 0);
         m.addItem (1, "Sound card and MIDI...");
         m.addItem (2, "Full screen (F11)");
         m.addItem (4, "Light screen", true, box.isLightScreen());
@@ -1225,6 +1304,8 @@ void BoxView::mouseDown (const juce::MouseEvent& e)
             if (r == 4) box.setLightScreen (! box.isLightScreen());
             if (r == 5) setBoxScreen (! boxPreview);
             if (r == 6) showHelp (true);
+            if (r == 7) box.startLearn();
+            if (r == 8) box.forgetMidiMap();
             if (r == 3)
             {
                 auto dir = box.getDataDirectory().getChildFile ("Presets");
@@ -1234,6 +1315,24 @@ void BoxView::mouseDown (const juce::MouseEvent& e)
         });
         return;
     }
+
+    // the box screen's touch buttons
+    if (isBoxScreen())
+        for (int i = 0; i < numTouch; ++i)
+            if (touchArea (i).contains (p))
+            {
+                if (i == NumButtons) { box.startLearn(); return; }
+                if (i == BtnShift)   // a finger can't hold Shift while touching a pad: it toggles instead
+                {
+                    mouseShiftLatched = ! mouseShiftLatched;
+                    mouseShiftLatched ? box.buttonDown (BtnShift) : box.buttonUp (BtnShift);
+                    return;
+                }
+                drag = Drag::Button; dragIndex = i;
+                setButtonPressed (i, true);
+                box.buttonDown (i);
+                return;
+            }
 
     // the screen: the page names switch the page, the drum chip picks the drum
     for (int i = 0; i < NumPages; ++i)
@@ -1346,6 +1445,7 @@ bool BoxView::keyPressed (const juce::KeyPress& k)
     if (k.getKeyCode() == juce::KeyPress::F11Key) { if (onToggleFullScreen) onToggleFullScreen(); return true; }
     if (k.getKeyCode() == juce::KeyPress::F1Key) { showHelp (! helpShown); return true; }
     if (k.getKeyCode() == juce::KeyPress::escapeKey && helpShown) { showHelp (false); return true; }
+    if (k.getKeyCode() == juce::KeyPress::escapeKey && box.isLearning()) { box.learnDone(); return true; }
     return true;   // every other key is read in keyStateChanged (and Tab must not move the focus)
 }
 

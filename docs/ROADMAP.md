@@ -102,6 +102,10 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
       - [ ] Joystick: bend (curves, LFO) + more targets; microtuning if it fits
       - [ ] Engines also: piano, nylon guitar, strings, e-piano, chip / glass bells (Cat Hub instruments)
       - Life-Cat: no. Talk-Cat: no. Patt-Cat page: no.
+- [x] 26 Oct: user decided the box is just a box (Pi + screen + sound) played with his MIDI keyboard
+      (M-Audio Oxygen Pro Mini: 32 keys, 8 pads x 2 banks, 4 knobs, 4 faders, transport). Done: MIDI learn wizard
+      (knobs 1-12, buttons, 16 pads, knob bank), absolute knobs move by delta (no jumps), touch buttons on the 5" screen.
+      No Pico controller, no encoders / FSR pads to buy now.
 - [ ] NEXT hardware: get it running on the Pi 5 (user HAS: Pi 5 8 GB, 27 W supply, micro SD, HDMI monitor,
       keyboard + mouse, a USB sound card; wants HiFiBerry DAC later) - walk him through setup_pi.sh
 - [ ] SOUND DESIGN (most important next software):
