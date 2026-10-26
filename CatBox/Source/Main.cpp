@@ -272,6 +272,16 @@ public:
             check (ch.finite && ch.peak <= 1.0f, "the chaos sound is clean", {});
             shiftPress (BtnChaos);
             check (box.getProject().tracks[1].params == before, "Shift + Chaos takes it back", {});
+            {
+                const auto drums0 = box.getProject().tracks[0].pat.drums;
+                box.clearPattern (0);
+                box.selectTrack (0);
+                box.setMode (ModeSeq);
+                box.padDown (5, 100); box.padUp (5);
+                shiftPress (BtnChaos);
+                shiftPress (BtnChaos);
+                check (box.getProject().tracks[0].pat.drums == drums0, "Undo (Shift + Chaos) twice: the step, then the cleared pattern come back", box.flashText());
+            }
 
             // ---- the sampler: starter samples, recording one from the input, playing it, chops
             {

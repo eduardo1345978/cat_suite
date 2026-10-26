@@ -7,6 +7,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <vector>
 
 /**
     Cat Box 2: what the knobs, buttons, pads and keys do. Owns the project (message thread)
@@ -87,7 +88,8 @@ public:
     bool sceneExists (int s) const { return scenes[(size_t) juce::jlimit (0, numScenes - 1, s)] != nullptr; }
     void saveUserSound();
     void chaos();
-    void undoChaos();
+    void undo();   // Shift + Chaos: back one step (up to 40)
+    int undoSteps() const { return (int) undoStack.size(); }
     void tapTempo();
     void saveState();
     void pump();   // handles what the audio thread reported (the self test calls it; normally the timer does)
@@ -210,7 +212,18 @@ private:
     int lastNote = 60, lastVel = 100;
     juce::uint32 chaosDownAt = 0;
     bool chaosDone = false;
-    std::unique_ptr<Track> chaosUndo;
+    struct UndoState
+    {
+        Project project;
+        std::array<int, numTracks> presetIdx {};
+        std::array<bool, numTracks> edited {};
+        std::array<juce::String, numTracks> userName;
+        juce::String what;
+        juce::uint32 at = 0;
+    };
+    std::vector<std::unique_ptr<UndoState>> undoStack;
+    /** Remembers the state before a change. Changes of the same kind within a few seconds are one step. */
+    void pushUndo (const juce::String& what, bool merge = false);
     juce::Array<double> taps;
     juce::String flash;
     juce::uint32 flashUntil = 0;

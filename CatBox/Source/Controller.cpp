@@ -147,7 +147,7 @@ void Controller::pump()
 {
     RecNote r;
     bool any = false;
-    while (audio.popRec (r)) { applyRecNote (r); any = true; }
+    while (audio.popRec (r)) { if (! any) pushUndo ("Recording", true); applyRecNote (r); any = true; }
     if (any) { dirty = true; if (onChange) onChange(); }
 }
 
@@ -304,7 +304,7 @@ void Controller::buttonDown (int b)
             setPlaying (! audio.isPlaying());
             break;
         case BtnChaos:
-            if (sh) { undoChaos(); break; }
+            if (sh) { undo(); break; }
             chaosDownAt = juce::Time::getMillisecondCounter();
             chaosDone = false;
             break;
@@ -384,6 +384,7 @@ void Controller::tapTempo()
 void Controller::loadSound (int t, int engine, int preset)
 {
     t = juce::jlimit (0, numTracks - 1, t);
+    pushUndo ("Sound", true);
     auto& tr = project.tracks[(size_t) t];
     const bool wasDrums = tr.isDrums();
     loadEnginePreset (tr, engine, preset);
@@ -589,7 +590,7 @@ void Controller::chaos()
 {
     const int m = mode.load();
     auto& tr = cur();
-    chaosUndo = std::make_unique<Track> (tr);
+    pushUndo ("Chaos");
     juce::Random rng;
     if (m == ModeFx && tr.fxType != FxOff)
     {
@@ -620,12 +621,38 @@ void Controller::chaos()
     changed();
 }
 
-void Controller::undoChaos()
+void Controller::pushUndo (const juce::String& what, bool merge)
 {
-    if (chaosUndo == nullptr) { setFlash ("Nothing to take back"); return; }
-    std::swap (cur(), *chaosUndo);
-    cur().pat = chaosUndo->pat;   // the pattern is whatever it is now
-    setFlash ("Back (Shift + Chaos again = the chaos)");
+    if (isRemote()) return;
+    const auto now = juce::Time::getMillisecondCounter();
+    if (merge && ! undoStack.empty() && undoStack.back()->what == what && now - undoStack.back()->at < 3000)
+    {
+        undoStack.back()->at = now;   // still the same edit
+        return;
+    }
+    auto u = std::make_unique<UndoState>();
+    u->project = project;
+    u->presetIdx = presetIdx;
+    u->edited = edited;
+    u->userName = userName;
+    u->what = what;
+    u->at = now;
+    undoStack.push_back (std::move (u));
+    if (undoStack.size() > 40) undoStack.erase (undoStack.begin());
+}
+
+void Controller::undo()
+{
+    if (undoStack.empty()) { setFlash ("Nothing to take back"); return; }
+    auto u = std::move (undoStack.back());
+    undoStack.pop_back();
+    project = u->project;
+    presetIdx = u->presetIdx;
+    edited = u->edited;
+    userName = u->userName;
+    pagesClamp();
+    numHeldSteps = 0;
+    setFlash ("Undo: " + u->what + (undoStack.empty() ? juce::String() : "  (" + juce::String ((int) undoStack.size()) + " more)"));
     changed();
 }
 
@@ -633,6 +660,7 @@ void Controller::undoChaos()
 // Patterns, scenes
 void Controller::clearPattern (int t)
 {
+    pushUndo ("Clear pattern");
     project.tracks[(size_t) juce::jlimit (0, numTracks - 1, t)].pat.clear();
     changed();
 }
@@ -656,6 +684,7 @@ bool Controller::loadScene (int s)
 {
     s = juce::jlimit (0, numScenes - 1, s);
     if (scenes[(size_t) s] == nullptr) { setFlash ("Scene " + juce::String (s + 1) + " is empty (Rec + pad saves it)"); return false; }
+    pushUndo ("Scene " + juce::String (s + 1));
     const auto m = project.m;
     project = *scenes[(size_t) s];
     project.m.tempo = m.tempo;   // the tempo, key and master stay where they are
@@ -886,7 +915,7 @@ void Controller::changeTarget (const Target& t, float amount, bool fraction)
     auto& m = project.m;
     switch (t.kind)
     {
-        case KParam: cur().params[(size_t) t.index] = v; edited[(size_t) track.load()] = true; break;
+        case KParam: pushUndo ("Sound edit", true); cur().params[(size_t) t.index] = v; edited[(size_t) track.load()] = true; break;
         case KFx:    cur().fx[(size_t) t.index] = v; break;
         case KMix:
         {
@@ -1038,6 +1067,7 @@ int Controller::heldStepCount() const { return numHeldSteps; }
 
 void Controller::stepTap (int step)
 {
+    pushUndo ("Steps", true);
     auto& tr = cur();
     auto& pat = tr.pat;
     if (step >= pat.length) return;
@@ -1062,6 +1092,7 @@ void Controller::stepTap (int step)
 
 void Controller::stepKey (int note, int velocity)
 {
+    pushUndo ("Steps", true);
     auto& tr = cur();
     if (tr.isDrums())
     {
@@ -1081,6 +1112,7 @@ void Controller::stepKey (int note, int velocity)
 
 void Controller::seqKnob (int slot, float clicks)
 {
+    pushUndo ("Steps", true);
     auto& tr = cur();
     auto& pat = tr.pat;
     const int t = track.load();

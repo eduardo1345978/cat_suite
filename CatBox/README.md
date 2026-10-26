@@ -56,7 +56,7 @@ Everything can be touched: tracks, modes, pages, knobs (drag), Play.
 | **Scene** | the pads: 1-8 = scenes (recall at the next bar while playing), **Rec + pad** = save; 9-16 = mute tracks |
 | **Rec** | record what you play into the steps while it runs (drums: the hit; notes: length, legato = slide, hard = accent) · **Shift + Rec** = clear the track's pattern |
 | **Play** | start / stop · **Shift + Play** = tap tempo |
-| **Chaos** | hold 0.6 s: new random sound settings from a random factory sound of the engine (volume stays) · **Shift + Chaos** = back |
+| **Chaos** | hold 0.6 s: new random sound settings from a random factory sound of the engine (volume stays) · **Shift + Chaos** = **Undo** (up to 40 steps: steps, recording, cleared patterns, scenes, sounds, knob edits) |
 
 **Slider** = DJ filter (down = low-pass, middle = off, up = high-pass). **Joystick** = pitch bend (x) and mod (y).
 
