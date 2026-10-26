@@ -3,6 +3,7 @@
 #include <juce_core/juce_core.h>
 #include <array>
 #include <vector>
+#include <functional>
 
 /**
     Cat Box 2: what every engine can be told. An engine has a list of parameters, knob pages
@@ -19,6 +20,7 @@ struct ParamDef
     Unit unit = Pct;
     float lo = 0.0f, hi = 1.0f, def = 0.0f, skew = 1.0f;
     juce::StringArray choices;
+    std::function<juce::String (float)> formatFn;   // a text that changes while it runs (e.g. sample names)
 
     bool stepped() const noexcept { return unit == Choice || unit == Toggle || unit == Num || unit == Semi; }
     juce::String format (float value) const;
@@ -58,7 +60,7 @@ struct EngineDef
     std::vector<int> presetsIn (const juce::String& category) const;
 };
 
-enum EngineType { EngineAnalog = 0, EngineAcid, EngineDrums, EngineKeys, EngineGlide, NumEngineTypes };
+enum EngineType { EngineAnalog = 0, EngineAcid, EngineDrums, EngineKeys, EngineGlide, EngineFM, EngineWavetable, EngineChoir, EngineSampler, NumEngineTypes };
 const EngineDef& engineDef (int type);
 juce::StringArray engineNames();
 

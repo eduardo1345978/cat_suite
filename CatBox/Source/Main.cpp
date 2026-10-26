@@ -12,6 +12,7 @@
 #include "View.h"
 #include "BoxLink.h"
 #include "LinkPanel.h"
+#include "Samples.h"
 #include <cmath>
 #include <cstdio>
 
@@ -271,6 +272,43 @@ public:
             check (ch.finite && ch.peak <= 1.0f, "the chaos sound is clean", {});
             shiftPress (BtnChaos);
             check (box.getProject().tracks[1].params == before, "Shift + Chaos takes it back", {});
+
+            // ---- the sampler: starter samples, recording one from the input, playing it, chops
+            {
+                check (SampleBank::get().count() >= 8 && SampleBank::get().name (4) == "Break 120", "the starter samples are there",
+                       juce::String (SampleBank::get().count()) + ": " + SampleBank::get().name (0));
+                box.selectTrack (7);
+                box.loadSound (7, EngineSampler, 0);
+                box.setMode (ModeSound);
+                soloOnly (7);
+                if (audio.isPlaying()) press (BtnPlay);
+                press (BtnRec);
+                check (box.isSampling(), "Rec on a sampler track records a sample", box.flashText());
+                std::vector<float> in (480);
+                for (int b = 0; b < 100; ++b)   // one second of a 220 Hz tone with silence before it
+                {
+                    for (int i = 0; i < 480; ++i) in[(size_t) i] = b < 20 ? 0.0f : 0.5f * std::sin (6.2831853f * 220.0f * (float) (b * 480 + i) / 48000.0f);
+                    audio.feedInput (in.data(), in.data(), 480);
+                }
+                press (BtnRec);
+                const int slot = juce::roundToInt (box.getProject().tracks[7].params[(size_t) engineDef (EngineSampler).index ("sample")]);
+                const auto* smp = SampleBank::get().at (slot);
+                check (! box.isSampling() && smp != nullptr && smp->name.startsWith ("Rec") && smp->length() < 48000 * 0.95,
+                       "Rec again stops: the new sample is on the track (silence cut off)", smp != nullptr ? smp->name + " " + juce::String (smp->length()) : juce::String ("none"));
+                box.keyDown (67, 100);
+                const auto st = renderSeconds (audio, 0.5, nullptr);
+                box.keyUp (67);
+                renderSeconds (audio, 0.4, nullptr);
+                check (st.rms > 0.02f && st.finite && st.peak <= 1.0f, "the recorded sample plays on the keys", "rms " + juce::String (st.rms, 4));
+                const auto& sd = engineDef (EngineSampler);
+                int chop = 0;
+                for (size_t i = 0; i < sd.presets.size(); ++i) if (sd.presets[i].name == "Break Chop") chop = (int) i;
+                box.loadSound (7, EngineSampler, chop);
+                for (int pad = 0; pad < 16; pad += 5) { box.padDown (pad, 100); renderSeconds (audio, 0.05, nullptr); box.padUp (pad); }
+                const auto ch = renderSeconds (audio, 0.3, nullptr);
+                check (ch.finite && ch.peak <= 1.0f, "Break Chop: slices on the pads", "rms " + juce::String (ch.rms, 4));
+                noSolo();
+            }
 
             // ---- MIDI learn: a keyboard's knob, button and pad
             {
@@ -566,6 +604,24 @@ public:
 
         box = std::make_unique<Controller> (dataDir);
         startAudio (dataDir);
+        box->enableMicrophone = [this]
+        {
+            // the input is switched on only when a sample is recorded (no microphone open all the time)
+            if (auto* dev = deviceManager.getCurrentAudioDevice(); dev != nullptr && dev->getActiveInputChannels().countNumberOfSetBits() > 0) return true;
+            auto setup = deviceManager.getAudioDeviceSetup();
+            if (auto* type = deviceManager.getCurrentDeviceTypeObject())
+            {
+                const auto ins = type->getDeviceNames (true);
+                if (ins.isEmpty()) return false;
+                if (setup.inputDeviceName.isEmpty()) setup.inputDeviceName = ins[juce::jmax (0, type->getDefaultDeviceIndex (true))];
+            }
+            setup.useDefaultInputChannels = false;
+            setup.inputChannels.clear();
+            setup.inputChannels.setRange (0, 2, true);
+            const auto err = deviceManager.setAudioDeviceSetup (setup, true);
+            auto* dev = deviceManager.getCurrentAudioDevice();
+            return err.isEmpty() && dev != nullptr && dev->getActiveInputChannels().countNumberOfSetBits() > 0;
+        };
         std::function<juce::String()> info;
         if (isBox)
         {

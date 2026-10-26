@@ -147,6 +147,11 @@ public:
     void handleLinkMessage (const juce::var&, const std::function<void (const juce::var&)>& reply);
 
     std::function<void()> onChange;   // the screen repaints
+    /** The app switches the sound card's input on (returns false when there is none). */
+    std::function<bool()> enableMicrophone;
+    bool isSampling() const noexcept { return audio.capturing.load(); }
+    void startSampling();
+    void stopSampling();
 
 private:
     void timerCallback() override;

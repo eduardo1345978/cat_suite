@@ -1,5 +1,6 @@
 #include "Controller.h"
 #include "Music.h"
+#include "Samples.h"
 #include <cmath>
 
 namespace catbox
@@ -69,9 +70,13 @@ const std::vector<ParamDef>& mixDefs()
 } // namespace
 
 //==============================================================================
+juce::StringArray starterSampleNames();
+void makeStarterSamples (SampleBank&);
+
 Controller::Controller (const juce::File& dir) : dataDir (dir)
 {
     dataDir.createDirectory();
+    SampleBank::get().loadFolder (dataDir.getChildFile ("samples"), starterSampleNames(), [] (SampleBank& b) { makeStarterSamples (b); });
     for (int t = 0; t < numTracks; ++t) octave[(size_t) t] = 3;
     octave[1] = 2;
     project = Project::makeDefault();
@@ -286,6 +291,11 @@ void Controller::buttonDown (int b)
                 break;
             }
             if (mode.load() == ModeBrowse) { saveUserSound(); break; }
+            if (mode.load() == ModeSound && cur().engine == EngineSampler)   // a sampler track: Rec records a sample
+            {
+                isSampling() ? stopSampling() : startSampling();
+                break;
+            }
             audio.setRecording (! audio.isRecording());
             setFlash (! audio.isRecording() ? "Rec off" : (audio.isPlaying() ? "Rec: play and it is written into the steps" : "Rec armed: press Play"));
             break;
@@ -519,6 +529,60 @@ void Controller::saveUserSound()
     setFlash ("Saved: User / " + f.getFileNameWithoutExtension());
     if (mode.load() == ModeBrowse) browseSync();
     dirty = true;
+}
+
+void Controller::startSampling()
+{
+    if (isRemote()) return;
+    if (enableMicrophone && ! enableMicrophone())
+    {
+        setFlash ("No input: connect a microphone (right-click > Sound card)");
+        return;
+    }
+    audio.captureLength = 0;
+    audio.capturing = true;
+    setFlash ("Recording a sample... Rec = stop");
+}
+
+void Controller::stopSampling()
+{
+    audio.capturing = false;
+    const int len = audio.captureLength.load();
+    const auto& L = audio.captureL;
+    const auto& R = audio.captureR;
+    float peak = 0.0f;
+    for (int i = 0; i < len; ++i) peak = juce::jmax (peak, std::abs (L[(size_t) i]), std::abs (R[(size_t) i]));
+    if (len < 2000 || peak < 0.003f) { setFlash ("Nothing came in (is the microphone on?)"); return; }
+    // trim the silence before and after, normalise, short fades
+    const float thr = peak * 0.05f;
+    int a = 0, b = len - 1;
+    while (a < len && std::abs (L[(size_t) a]) < thr && std::abs (R[(size_t) a]) < thr) ++a;
+    while (b > a && std::abs (L[(size_t) b]) < thr && std::abs (R[(size_t) b]) < thr) --b;
+    a = juce::jmax (0, a - (int) (audio.getSampleRate() * 0.005));
+    b = juce::jmin (len - 1, b + (int) (audio.getSampleRate() * 0.2));
+    std::vector<float> l (L.begin() + a, L.begin() + b + 1), r (R.begin() + a, R.begin() + b + 1);
+    const float g = 0.9f / peak;
+    const int fade = juce::jmin ((int) l.size() / 4, 240);
+    for (size_t i = 0; i < l.size(); ++i)
+    {
+        float f = 1.0f;
+        if ((int) i < fade) f = (float) i / (float) fade;
+        if ((int) (l.size() - 1 - i) < fade) f = juce::jmin (f, (float) (l.size() - 1 - i) / (float) fade);
+        l[i] *= g * f; r[i] *= g * f;
+    }
+    auto& bank = SampleBank::get();
+    int n = 1;
+    while (bank.find ("Rec " + juce::String (n)) >= 0 || bank.folder().getChildFile ("Rec " + juce::String (n) + ".wav").existsAsFile()) ++n;
+    const int slot = bank.add ("Rec " + juce::String (n), std::move (l), std::move (r), audio.getSampleRate());
+    if (slot < 0) { setFlash ("The sample memory is full (64 samples)"); return; }
+    auto& tr = cur();
+    const auto& d = engineDef (EngineSampler);
+    tr.params[(size_t) d.index ("sample")] = (float) slot;
+    tr.params[(size_t) d.index ("start")] = 0.0f;
+    tr.params[(size_t) d.index ("end")] = 1.0f;
+    edited[(size_t) track.load()] = true;
+    changed();
+    setFlash ("Sample \"Rec " + juce::String (n) + "\" recorded: play it on the keys (C4 = as recorded)");
 }
 
 void Controller::chaos()
@@ -950,7 +1014,8 @@ juce::String Controller::hint() const
     if (sceneMode.load()) return "Pads 1-8: scenes (Rec + pad = save) | pads 9-16: mute | Scene: back";
     switch (mode.load())
     {
-        case ModeSound:   return "Knobs: the sound | Prev / Next: pages | Shift: 12 more | Sound: browse sounds";
+        case ModeSound:   if (cur().engine == EngineSampler) return "Rec: record a sample (microphone) | knob 1: the sample | Play: Keys / Chop / One shot";
+                          return "Knobs: the sound | Prev / Next: pages | Shift: 12 more | Sound: browse sounds";
         case ModeBrowse:  return "Knob 1 engine | 2 category | 3 sound | Prev / Next: next sound | Rec: save as User | Sound: back";
         case ModeSeq:     return cur().isDrums() ? "Pad = step of the drum | hold a step + knob = edit | Shift + pad: pick drum | Prev / Next: bar"
                                                  : "Pad = step | hold a step + key / knobs = edit | Prev / Next: bar | Shift + Rec: clear";

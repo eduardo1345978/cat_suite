@@ -40,6 +40,12 @@ void Audio::prepare (double sampleRate, int block)
 {
     sr = sampleRate > 0.0 ? sampleRate : 48000.0;
     maxBlock = juce::jmax (block, 64);
+    if (! capturing.load())
+    {
+        captureL.assign ((size_t) (sr * maxCaptureSeconds), 0.0f);
+        captureR.assign ((size_t) (sr * maxCaptureSeconds), 0.0f);
+        captureLength = 0;
+    }
     for (auto* v : { &tl, &tr_, &ml, &mr, &al, &ar, &bl, &br, &fa, &fb }) v->assign ((size_t) subBlock, 0.0f);
     for (auto& t : tracks)
     {
@@ -60,9 +66,24 @@ void Audio::audioDeviceAboutToStart (juce::AudioIODevice* d)
     prepare (d->getCurrentSampleRate(), d->getCurrentBufferSizeSamples());
 }
 
-void Audio::audioDeviceIOCallbackWithContext (const float* const*, int, float* const* out, int numOut, int n,
+void Audio::feedInput (const float* l, const float* r, int n)
+{
+    float pk = 0.0f;
+    for (int i = 0; i < n; ++i) pk = juce::jmax (pk, std::abs (l[i]), std::abs (r[i]));
+    inputLevel = juce::jmax (pk, inputLevel.load() * 0.9f);
+    if (! capturing.load()) return;
+    int at = captureLength.load();
+    const int room = (int) captureL.size() - at;
+    const int m = juce::jmin (n, room);
+    for (int i = 0; i < m; ++i) { captureL[(size_t) (at + i)] = l[i]; captureR[(size_t) (at + i)] = r[i]; }
+    captureLength = at + m;
+    if (m < n) capturing = false;   // full
+}
+
+void Audio::audioDeviceIOCallbackWithContext (const float* const* in, int numIn, float* const* out, int numOut, int n,
                                               const juce::AudioIODeviceCallbackContext&)
 {
+    if (numIn > 0 && in[0] != nullptr) feedInput (in[0], numIn > 1 && in[1] != nullptr ? in[1] : in[0], n);
     for (int c = 0; c < numOut; ++c) if (out[c] != nullptr) juce::FloatVectorOperations::clear (out[c], n);
     if (numOut < 1 || out[0] == nullptr) return;
     float* l = out[0];

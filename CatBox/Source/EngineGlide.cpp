@@ -53,6 +53,7 @@ EngineDef makeGlideDef()
     EngineDef e;
     e.name = "Glide";
     for (const auto& g : glidecat::params()) e.params.push_back (fromGlide (g));
+    e.params.push_back (defs::num ("octave", "Octave", -2, 2, 0));   // Cat Box's own: the whole sound up / down
     readOrder();   // built here (message thread), used on the audio thread
 
     auto page = [&e] (const char* name, std::initializer_list<const char*> ids)
@@ -63,8 +64,8 @@ EngineDef makeGlideDef()
         for (auto* id : ids) { if (i < 24) p.slot[(size_t) i] = e.index (id); ++i; }
         e.pages.push_back (p);
     };
-    page ("SOUND", { "voices", "volume", "l1_lpf", "l1_lpRes", "l1_attack", "l1_release", "glideMs", "swell", "brighten", "drift", "vibDepth", "roomMix",
-                     "ring", "panSpread", "l2_lpf", "l2_lpRes", "l2_attack", "l2_release", "curve", "swellTime", "wander", "vibRate", "vibDelay", "echoMix" });
+    page ("SOUND", { "voices", "volume", "l1_lpf", "l1_lpRes", "l1_attack", "l1_release", "glideMs", "swell", "brighten", "drift", "vibDepth", "octave",
+                     "ring", "panSpread", "l2_lpf", "l2_lpRes", "l2_attack", "l2_release", "curve", "swellTime", "wander", "vibRate", "roomMix", "echoMix" });
     page ("OSC", { "l1_on", "l1_feet", "l1_unison", "l1_saw", "l1_pulse", "l1_pw", "l1_pwmRate", "l1_pwm", "l1_sine", "l1_noise", "l1_detune", "l1_fine",
                    "l2_on", "l2_feet", "l2_unison", "l2_saw", "l2_pulse", "l2_pw", "l2_pwmRate", "l2_pwm", "l2_sine", "l2_noise", "l2_detune", "l2_fine" });
     page ("FILTER", { "l1_hpf", "l1_hpRes", "l1_lpf", "l1_lpRes", "l1_key", "l1_egDepth", "l1_egIL", "l1_egAL", "l1_egAtk", "l1_egDec", "l1_egRel", "l1_brill",
@@ -113,6 +114,7 @@ public:
                                     return i >= 0 ? r->v[i] : 0.0f;
                                 }, settings, fxSettings);
         settings.pilot = glidecat::Pilot::Off;   // nothing plays by itself
+        octave = 12 * juce::roundToInt (v[glidecat::params().size()]);
         synth.setSettings (settings);
     }
 
@@ -122,13 +124,21 @@ public:
 
     void noteOn (int note, float vel, bool, bool accent) override
     {
+        const int played = juce::jlimit (0, 127, note);
+        note = juce::jlimit (0, 127, note + octave);
+        mapped[(size_t) played] = (int8_t) note;   // its own note off, even when the octave changes meanwhile
         chordNotes.assign (1, { 1, note });
         chordVel.assign (1, juce::jlimit (0.01f, 1.0f, vel * (accent ? 1.2f : 1.0f)));
         synth.notesOn (chordNotes, chordVel);
         tail = (int) (sr * 10.0f);
     }
 
-    void noteOff (int note) override { synth.noteOff (1, note); }
+    void noteOff (int note) override
+    {
+        note = juce::jlimit (0, 127, note);
+        synth.noteOff (1, mapped[(size_t) note] >= 0 ? mapped[(size_t) note] : note);
+        mapped[(size_t) note] = -1;
+    }
     void allOff() override { synth.allNotesOff(); }
 
     void render (float* outL, float* outR, int n) override
@@ -155,7 +165,8 @@ private:
     std::vector<std::pair<int, int>> chordNotes;
     std::vector<float> chordVel;
     float sr = 48000.0f;
-    int tail = 0;
+    int tail = 0, octave = 0;
+    std::array<int8_t, 128> mapped = [] { std::array<int8_t, 128> a {}; a.fill (-1); return a; }();
     float bl[block] {}, br[block] {};
 };
 } // namespace

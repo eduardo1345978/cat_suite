@@ -1,5 +1,6 @@
 #include "View.h"
 #include "Music.h"
+#include "Samples.h"
 #include <cmath>
 
 namespace catbox
@@ -34,8 +35,8 @@ void text1 (juce::Graphics& g, const juce::String& s, juce::Rectangle<int> r, fl
 
 const char* shortEngine (int e)
 {
-    static const char* n[] = { "ANLG", "ACID", "DRUM", "KEYS", "GLDE" };
-    return n[juce::jlimit (0, 4, e)];
+    static const char* n[] = { "ANLG", "ACID", "DRUM", "KEYS", "GLDE", "FM", "WAVE", "CHOR", "SMPL" };
+    return n[juce::jlimit (0, 8, e)];
 }
 
 const int modeOrder[] = { ModeSound, ModeSeq, ModeFx, ModeMix, ModeProject };
@@ -352,6 +353,7 @@ void View::drawScope (juce::Graphics& g, juce::Rectangle<int> r)
 void View::drawSound (juce::Graphics& g, juce::Rectangle<int> r)
 {
     const auto& tr = box.getProject().tracks[(size_t) box.getTrack()];
+    if (tr.engine == EngineSampler) { drawSampler (g, r); return; }
     const auto& d = engineDef (tr.engine);
     // an envelope picture when the page has one, else the sound itself
     auto findEnv = [&d] (const char* a, const char* dd, const char* s, const char* rr, int& ia, int& id, int& is, int& ir)
@@ -394,6 +396,80 @@ void View::drawSound (juce::Graphics& g, juce::Rectangle<int> r)
     g.fillPath (fill);
     g.setColour (accent);
     g.strokePath (p, juce::PathStrokeType (2.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+
+void View::drawSampler (juce::Graphics& g, juce::Rectangle<int> r)
+{
+    g.setColour (panel);
+    g.fillRoundedRectangle (r.toFloat(), 8.0f);
+    auto in = r.reduced (14, 10);
+    auto& a = box.getAudio();
+    if (box.isSampling())
+    {
+        // recording: the input level and how long
+        const float secs = (float) a.captureLength.load() / (float) a.getSampleRate();
+        auto top = in.removeFromTop (40);
+        g.setColour (recRed);
+        g.fillEllipse (top.removeFromLeft (28).toFloat().withSizeKeepingCentre (18, 18));
+        text1 (g, "RECORDING  " + juce::String (secs, 1) + " s", top, 24.0f, text, juce::Justification::centredLeft, true);
+        in.removeFromTop (20);
+        auto meter = in.removeFromTop (26).toFloat();
+        g.setColour (line);
+        g.fillRoundedRectangle (meter, 4.0f);
+        const float lv = juce::jlimit (0.0f, 1.0f, std::sqrt (a.inputLevel.load()));
+        g.setColour (lv > 0.95f ? recRed : accent);
+        g.fillRoundedRectangle (meter.withWidth (meter.getWidth() * lv), 4.0f);
+        in.removeFromTop (14);
+        text1 (g, "Rec again = stop. Silence at the start and end is cut off.", in.removeFromTop (24), 15.0f, dim, juce::Justification::centredLeft);
+        return;
+    }
+    const auto& tr = box.getProject().tracks[(size_t) box.getTrack()];
+    const auto& d = engineDef (EngineSampler);
+    auto par = [&] (const char* id) { return tr.params[(size_t) d.index (id)]; };
+    const int slot = juce::roundToInt (par ("sample"));
+    const Sample* smp = SampleBank::get().at (slot);
+    text1 (g, "SAMPLE  " + SampleBank::get().name (slot) + (smp != nullptr ? "   " + juce::String ((float) smp->length() / (float) smp->sampleRate, 1) + " s" : juce::String()),
+           in.removeFromTop (18), 13.0f, dim, juce::Justification::centredLeft, true);
+    in.removeFromTop (6);
+    if (smp == nullptr || smp->length() == 0)
+    {
+        text1 (g, "No sample. Press Rec to record one with a microphone.", in, 18.0f, text, juce::Justification::centred, true);
+        return;
+    }
+    // the waveform (min / max per pixel)
+    const int w = in.getWidth();
+    const float mid = (float) in.getCentreY(), h = in.getHeight() * 0.48f;
+    const int len = smp->length();
+    g.setColour (text.withAlpha (0.75f));
+    for (int x = 0; x < w; ++x)
+    {
+        const int i0 = (int) ((juce::int64) x * len / w), i1 = juce::jmax (i0 + 1, (int) ((juce::int64) (x + 1) * len / w));
+        float lo = 0.0f, hi = 0.0f;
+        for (int i = i0; i < i1; i += juce::jmax (1, (i1 - i0) / 64)) { const float v = 0.5f * (smp->l[(size_t) i] + smp->r[(size_t) i]); lo = juce::jmin (lo, v); hi = juce::jmax (hi, v); }
+        g.drawVerticalLine (in.getX() + x, mid - hi * h, mid - lo * h + 1.0f);
+    }
+    // start / end (outside dimmed), loop start, slices
+    const float st = par ("start"), en = par ("end");
+    const float xs = in.getX() + w * st, xe = in.getX() + w * en;
+    g.setColour (bg.withAlpha (0.6f));
+    g.fillRect (juce::Rectangle<float> ((float) in.getX(), (float) in.getY(), xs - in.getX(), (float) in.getHeight()));
+    g.fillRect (juce::Rectangle<float> (xe, (float) in.getY(), (float) in.getRight() - xe, (float) in.getHeight()));
+    g.setColour (accent);
+    g.drawVerticalLine ((int) xs, (float) in.getY(), (float) in.getBottom());
+    g.drawVerticalLine ((int) xe, (float) in.getY(), (float) in.getBottom());
+    const int mode = juce::roundToInt (par ("mode"));
+    if (mode == 1)
+    {
+        const int slices = juce::roundToInt (par ("slices"));
+        g.setColour (accent.withAlpha (0.5f));
+        for (int k = 1; k < slices; ++k) g.drawVerticalLine ((int) (xs + (xe - xs) * k / slices), (float) in.getY(), (float) in.getBottom());
+    }
+    else if (juce::roundToInt (par ("loop")) > 0)
+    {
+        const float xl = xs + (xe - xs) * par ("loopstart");
+        g.setColour (text.withAlpha (0.6f));
+        for (int y = in.getY(); y < in.getBottom(); y += 8) g.drawVerticalLine ((int) xl, (float) y, (float) y + 4.0f);
+    }
 }
 
 void View::drawBrowser (juce::Graphics& g, juce::Rectangle<int> r)

@@ -51,6 +51,7 @@ private:
     void drawTracks (juce::Graphics&, juce::Rectangle<int>);
     void drawScope (juce::Graphics&, juce::Rectangle<int>);
     void drawSound (juce::Graphics&, juce::Rectangle<int>);
+    void drawSampler (juce::Graphics&, juce::Rectangle<int>);
     void drawBrowser (juce::Graphics&, juce::Rectangle<int>);
     void drawSeq (juce::Graphics&, juce::Rectangle<int>);
     void drawFx (juce::Graphics&, juce::Rectangle<int>);

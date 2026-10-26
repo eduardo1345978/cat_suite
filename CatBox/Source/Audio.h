@@ -67,6 +67,15 @@ public:
     std::atomic<float> peak { 0.0f };
     std::atomic<double> songBeats { 0.0 };                   // quarter notes since Play
     std::atomic<bool> sceneWaiting { false };
+    // ---- recording a sample from the input (a microphone)
+    static constexpr double maxCaptureSeconds = 30.0;
+    std::atomic<bool> capturing { false };
+    std::atomic<int> captureLength { 0 };
+    std::atomic<float> inputLevel { 0.0f };
+    std::vector<float> captureL, captureR;   // filled by the audio thread while capturing
+    double getSampleRate() const noexcept { return sr; }
+    /** The input (from the sound card, or the self test). */
+    void feedInput (const float* l, const float* r, int n);
     std::atomic<int> viewTrack { 0 };                        // whose planets / arp the screen shows
     struct PlanetView { std::atomic<bool> active { false }; std::atomic<int> note { 0 }; std::atomic<float> theta { 0 }, radius { 0 }, mass { 0 }; };
     std::array<PlanetView, orbitcat::maxBodies> planets;

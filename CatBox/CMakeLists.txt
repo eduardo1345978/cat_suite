@@ -15,6 +15,11 @@ target_sources(CatBox PRIVATE
     Source/EngineDrums.cpp
     Source/EngineKeys.cpp
     Source/EngineGlide.cpp
+    Source/EngineFM.cpp
+    Source/EngineWavetable.cpp
+    Source/EngineChoir.cpp
+    Source/EngineSampler.cpp
+    Source/Samples.cpp
     Source/NoteFx.cpp
     Source/Project.cpp
     Source/MixFx.cpp
@@ -27,13 +32,17 @@ target_sources(CatBox PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../GlideCat/Source/GlideSynth.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../GlideCat/Source/GlideFX.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../GlideCat/Source/GlideData.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../OrbitCat/Source/OrbitEngine.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../OrbitCat/Source/OrbitEngine.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../SingCat/Source/ChoirEngine.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../SingCat/Source/VoiceModel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../SingCat/Source/Lyrics.cpp)
 
 target_include_directories(CatBox PRIVATE
     Source
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source
     ${CMAKE_CURRENT_SOURCE_DIR}/../GlideCat/Source
-    ${CMAKE_CURRENT_SOURCE_DIR}/../OrbitCat/Source)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../OrbitCat/Source
+    ${CMAKE_CURRENT_SOURCE_DIR}/../SingCat/Source)
 
 target_compile_features(CatBox PRIVATE cxx_std_20)
 if(MSVC)

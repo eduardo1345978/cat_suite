@@ -8,9 +8,14 @@ EngineDef makeAcidDef();
 EngineDef makeDrumsDef();
 EngineDef makeKeysDef();
 EngineDef makeGlideDef();
+EngineDef makeFMDef();
+EngineDef makeWavetableDef();
+EngineDef makeChoirDef();
+EngineDef makeSamplerDef();
 
 juce::String ParamDef::format (float v) const
 {
+    if (formatFn) return formatFn (v);
     switch (unit)
     {
         case Choice: return choices[juce::jlimit (0, choices.size() - 1, juce::roundToInt (v))];
@@ -87,7 +92,7 @@ std::vector<int> EngineDef::presetsIn (const juce::String& category) const
 
 const EngineDef& engineDef (int type)
 {
-    static const std::array<EngineDef, NumEngineTypes> all { makeAnalogDef(), makeAcidDef(), makeDrumsDef(), makeKeysDef(), makeGlideDef() };
+    static const std::array<EngineDef, NumEngineTypes> all { makeAnalogDef(), makeAcidDef(), makeDrumsDef(), makeKeysDef(), makeGlideDef(), makeFMDef(), makeWavetableDef(), makeChoirDef(), makeSamplerDef() };
     return all[(size_t) juce::jlimit (0, NumEngineTypes - 1, type)];
 }
 
