@@ -488,7 +488,7 @@ public:
             setResizable (false, false);
             setFullScreen (true);
             if (auto* d = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
-                setBounds (d->logicalBounds);
+                setBounds (d->logicalBounds.toNearestInt());
         }
         else
         {
