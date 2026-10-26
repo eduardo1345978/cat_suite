@@ -123,6 +123,7 @@ void BoxAudio::setPlaying (bool p)
 {
     if (p == playing.load()) return;
     playing = p;
+    (p ? stopRequest : startRequest) = false;   // a quick stop + start before the next block: only the last counts
     (p ? startRequest : stopRequest) = true;
 }
 
