@@ -206,13 +206,16 @@ bool SampleBank::readInto (int slot, const juce::File& f)
     int start = 0;
     if (peak > 1.0e-5f)
     {
-        while (start < len - 1 && std::abs (L[start]) < peak * 0.003f && std::abs (R[start]) < peak * 0.003f) ++start;
-        start = juce::jmax (0, start - 64);
+        // where the sound really starts (above room noise and slow swells): play from there, so a key speaks at once
+        while (start < len - 1 && std::abs (L[start]) < peak * 0.06f && std::abs (R[start]) < peak * 0.06f) ++start;
+        start = juce::jmax (0, start - (int) (reader->sampleRate * 0.002));
     }
     const float gain = peak > 1.0e-5f ? 0.89f / peak : 1.0f;
     s->l.resize ((size_t) (len - start));
     s->r.resize ((size_t) (len - start));
     for (int i = start; i < len; ++i) { s->l[(size_t) (i - start)] = L[i] * gain; s->r[(size_t) (i - start)] = R[i] * gain; }
+    const int fadeIn = juce::jmin ((int) s->l.size(), (int) (reader->sampleRate * 0.002));   // no click where it was cut
+    for (int i = 0; i < fadeIn; ++i) { const float f = (float) i / (float) fadeIn; s->l[(size_t) i] *= f; s->r[(size_t) i] *= f; }
     findLoop (*s);
     slots[(size_t) slot].store (s.get(), std::memory_order_release);
     owned.push_back (std::move (s));

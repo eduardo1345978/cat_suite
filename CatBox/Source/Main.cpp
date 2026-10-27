@@ -545,6 +545,39 @@ public:
                         allPlay = allPlay && st.finite && st.rms > 0.003f;
                     }
                     check (allPlay, "a multi-sample plays from the bottom to the top", {});
+                    // how fast every library sound speaks: from the key to 10 % of its loudness
+                    {
+                        juce::String slow;
+                        float worst = 0.0f;
+                        for (int engine : { EngineSampler, EngineKit })
+                        {
+                            const auto& sd = engineDef (engine);
+                            for (size_t i = 0; i < sd.presets.size(); ++i)
+                            {
+                                if (sd.presets[i].samples.empty()) continue;
+                                float vals[maxParams];
+                                sd.applyPreset ((int) i, vals);
+                                for (size_t q = 0; q < sd.params.size(); ++q) if (sd.params[q].isSample) bank.ensureLoaded ((int) vals[q]);
+                                if (engine == EngineSampler && vals[sd.index ("multi")] > 0.5f) bank.buildZones ((int) vals[sd.index ("sample")]);
+                                auto eng = makeEngine (engine);
+                                eng->prepare (sr);
+                                eng->setParams (vals);
+                                const int key = engine == EngineKit ? 36 : 60;
+                                eng->noteOn (key, 0.9f, false, false);
+                                const int total = (int) (sr * 1.0);
+                                std::vector<float> L ((size_t) total, 0.0f), R ((size_t) total, 0.0f);
+                                for (int pos = 0; pos < total; pos += 64) eng->render (L.data() + pos, R.data() + pos, juce::jmin (64, total - pos));
+                                float pk = 0.0f;
+                                for (auto x : L) pk = juce::jmax (pk, std::abs (x));
+                                int at = 0;
+                                while (at < total && std::abs (L[(size_t) at]) < pk * 0.1f) ++at;
+                                const float ms = 1000.0f * (float) at / (float) sr;
+                                worst = juce::jmax (worst, ms);
+                                if (ms > 40.0f) slow << sd.presets[i].name << " " << juce::roundToInt (ms) << " ms; ";
+                            }
+                        }
+                        check (worst < 70.0f, "every library sound speaks quickly (the start of a recording is trimmed)", "worst " + juce::String (juce::roundToInt (worst)) + " ms; " + slow.substring (0, 700));
+                    }
                     // held for 8 s: the loop keeps it going, and the seam doesn't click
                     {
                         float vals[maxParams];
@@ -1022,6 +1055,19 @@ private:
             deviceManager.setAudioDeviceSetup (setup, true);
         }
 
+       #if JUCE_WINDOWS
+        // quick response: DirectSound is slow, a big buffer too (a key should sound at once)
+        if (deviceManager.getCurrentAudioDeviceType().containsIgnoreCase ("DirectSound"))
+            deviceManager.setCurrentAudioDeviceType ("Windows Audio", true);
+        if (auto* dev = deviceManager.getCurrentAudioDevice(); dev != nullptr && dev->getCurrentBufferSizeSamples() > 512)
+        {
+            int best = dev->getCurrentBufferSizeSamples();
+            for (int b : dev->getAvailableBufferSizes()) if (b >= 256 && b < best) best = b;
+            auto setup = deviceManager.getAudioDeviceSetup();
+            setup.bufferSize = best;
+            deviceManager.setAudioDeviceSetup (setup, true);
+        }
+       #endif
         deviceManager.addAudioCallback (&box->getAudio());
         enableMidiInputs();
         deviceManager.addMidiInputDeviceCallback ({}, box.get());
