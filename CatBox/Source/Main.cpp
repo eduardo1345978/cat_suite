@@ -120,9 +120,10 @@ public:
             box.keyDown (71, 90); box.keyUp (71);
             box.turnKnob (1, -10.0f);
             box.turnKnob (3, 1.0f);
+            box.buttonDown (BtnShift); box.turnKnob (0, 1.0f); box.turnKnob (0, -1.0f); box.buttonUp (BtnShift);
             box.padUp (5);
             const auto& st5 = p.tracks[6].pat.steps[5];
-            check (st5.has (67) && st5.has (71) && st5.vel < 90 && st5.slide, "hold a step: keys = notes (a chord), knobs = velocity, slide", juce::String (st5.count()));
+            check (st5.has (67) && st5.has (71) && st5.vel < 90 && st5.slide, "hold a step: keys = notes (a chord), knobs = velocity, slide, Shift + knob 1 = semitones", juce::String (st5.count()));
             box.padDown (2, 100); box.padUp (2);
             check (! p.tracks[6].pat.steps[2].on(), "a tap on a set step clears it", {});
             box.turnKnob (0, 16.0f);

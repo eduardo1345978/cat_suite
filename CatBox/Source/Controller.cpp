@@ -1171,8 +1171,9 @@ void Controller::seqKnob (int slot, float clicks)
     auto stepsOf = [&clicks] (float& a) { a += clicks; const int d = (int) a; a -= (float) d; return d; };
     const int d = stepsOf (acc[slot]);
 
-    if (numHeldSteps > 0)   // edit the held steps
+    if (numHeldSteps > 0)   // edit the held steps (with Shift the same knobs: knob 1 then moves by semitones)
     {
+        slot %= numKnobs;
         stepEdited = true;
         for (int i = 0; i < numHeldSteps; ++i)
         {
@@ -1260,6 +1261,7 @@ KnobView Controller::seqKnobView (int slot) const
     const int t = track.load();
     if (numHeldSteps > 0)
     {
+        slot %= numKnobs;
         const int s = heldSteps[0];
         if (tr.isDrums())
         {
