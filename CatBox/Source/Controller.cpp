@@ -106,13 +106,14 @@ Controller::Controller (const juce::File& dir) : dataDir (dir)
 {
     dataDir.createDirectory();
     SampleBank::get().loadFolder (dataDir.getChildFile ("samples"), starterSampleNames(), [] (SampleBank& b) { makeStarterSamples (b); });
+    SampleBank::get().addLibrary (SampleBank::findLibrary (dataDir));   // VSCO 2 CE, Dirt-Samples ... (read when used)
     resetToDefaults();
     heldSteps.fill (-1);
     loadState();
     loadScenes();
     loadMidiMap();
     loadLook();
-    audio.push (project);
+    prepareSamples(); audio.push (project);
     startTimerHz (30);
 }
 
@@ -180,7 +181,7 @@ void Controller::runOnMessageThread (std::function<void()> f)
 
 void Controller::changed (bool atBar)
 {
-    if (! isRemote()) audio.push (project, atBar);
+    if (! isRemote()) { prepareSamples(); audio.push (project, atBar); }
     dirty = true;
     if (onChange) onChange();
 }
@@ -500,6 +501,19 @@ void Controller::loadSound (int t, int engine, int preset)
         tr.mods.dropEngineTargets();              // and so does modulation of its knobs
     }
     loadEnginePreset (tr, engine, preset);
+    if (const auto& pd = engineDef (engine).presets; preset >= 0 && preset < (int) pd.size() && ! pd[(size_t) preset].samples.empty())
+    {
+        // a library sound: its samples must be there; a sampler plays it from the sample's own note
+        int missing = 0;
+        for (const auto& [id, name] : pd[(size_t) preset].samples) missing += SampleBank::get().find (name) < 0 ? 1 : 0;
+        if (missing > 0) setFlash (juce::String (missing) + " sample(s) of this sound are not here - get the libraries (README: get_libraries)");
+        if (engine == EngineSampler)
+        {
+            const auto& d = engineDef (engine);
+            const int note = SampleBank::noteFromName (SampleBank::get().name (juce::roundToInt (tr.params[(size_t) d.index ("sample")])));
+            if (note >= 0) tr.params[(size_t) d.index ("root")] = (float) note;
+        }
+    }
     if (const int chain = presetChain (engine, preset); chain >= 0)   // an FX Lab sound brings its effects
     {
         applyChainPreset (tr.mods, chain);
@@ -558,6 +572,8 @@ juce::StringArray Controller::browseCategories() const
     auto c = engineDef (browseEngine).categories();
     const auto dir = dataDir.getChildFile ("sounds").getChildFile (engineDef (browseEngine).name);
     if (dir.isDirectory() && ! dir.findChildFiles (juce::File::findFiles, false, "*.json").isEmpty()) c.add ("User");
+    if (browseEngine == EngineSampler || browseEngine == EngineGranular || browseEngine == EngineKit)
+        for (const auto& f : SampleBank::get().libraryFolders()) c.add ("LIB " + f);   // every sample of the libraries
     return c;
 }
 
@@ -567,6 +583,11 @@ juce::StringArray Controller::browsePresets() const
     if (cats.isEmpty()) return {};
     const auto cat = cats[juce::jlimit (0, cats.size() - 1, browseCat)];
     juce::StringArray out;
+    if (cat.startsWith ("LIB "))
+    {
+        for (int s : SampleBank::get().librarySlotsIn (cat.substring (4))) out.add (SampleBank::get().shortName (s));
+        return out;
+    }
     if (cat == "User")
     {
         auto files = dataDir.getChildFile ("sounds").getChildFile (engineDef (browseEngine).name).findChildFiles (juce::File::findFiles, false, "*.json");
@@ -608,6 +629,59 @@ void Controller::browseApply (bool preview)
     const auto list = browsePresets();
     browsePos = juce::jlimit (0, juce::jmax (0, list.size() - 1), browsePos);
     const int t = track.load();
+    if (cats[browseCat].startsWith ("LIB "))
+    {
+        auto& bank = SampleBank::get();
+        const auto slots = bank.librarySlotsIn (cats[browseCat].substring (4));
+        if (slots.empty()) return;
+        const int slot = slots[(size_t) juce::jlimit (0, (int) slots.size() - 1, browsePos)];
+        if (! bank.ensureLoaded (slot)) { setFlash ("Can't read " + bank.shortName (slot)); return; }
+        if (cur().engine != browseEngine)   // a fresh sound of the engine first
+        {
+            const auto& d = engineDef (browseEngine);
+            int init = 0;
+            for (size_t i = 0; i < d.presets.size(); ++i) if (d.presets[i].name == "Init") init = (int) i;
+            loadSound (t, browseEngine, init);
+        }
+        pushUndo ("Sample", true);
+        auto& tr = cur();
+        const auto& d = engineDef (tr.engine);
+        const auto folder = bank.folderOf (slot).toLowerCase();
+        if (tr.engine == EngineKit)
+        {
+            const int l = lane[(size_t) t];
+            tr.params[(size_t) (l * 6)] = (float) slot;
+            setFlash ("Pad " + juce::String (l + 1) + ": " + bank.shortName (slot) + "  (hit a pad to pick another)");
+            changed();
+            if (preview) audio.post ({ Event::NoteOn, (int8_t) t, (int16_t) (36 + l), 0.9f });
+            if (preview) audio.post ({ Event::NoteOff, (int8_t) t, (int16_t) (36 + l), 0.0f });
+            return;
+        }
+        tr.params[(size_t) d.index ("sample")] = (float) slot;
+        if (tr.engine == EngineSampler)
+        {
+            const int note = SampleBank::noteFromName (bank.name (slot));
+            tr.params[(size_t) d.index ("root")] = (float) (note >= 0 ? note : 60);
+            const auto* smp = bank.at (slot);
+            const bool sustained = folder.contains ("sus") || folder.contains ("vib") || folder.contains ("trem") || folder.contains ("organ")
+                                || folder.contains ("pad") || folder.contains ("drone") || folder.contains ("roll");
+            tr.params[(size_t) d.index ("mode")] = 0.0f;
+            tr.params[(size_t) d.index ("start")] = 0.0f;
+            tr.params[(size_t) d.index ("end")] = sustained ? 0.97f : 1.0f;
+            tr.params[(size_t) d.index ("loop")] = sustained ? 1.0f : 0.0f;
+            tr.params[(size_t) d.index ("loopstart")] = 0.4f;
+            tr.params[(size_t) d.index ("s")] = 1.0f;
+            tr.params[(size_t) d.index ("d")] = 4.0f;
+            tr.params[(size_t) d.index ("r")] = sustained ? 0.45f : juce::jlimit (0.05f, 2.0f, smp != nullptr ? (float) (smp->length() / smp->sampleRate) : 0.5f);
+        }
+        presetIdx[(size_t) t] = -1;
+        userName[(size_t) t] = bank.shortName (slot);
+        edited[(size_t) t] = false;
+        changed();
+        if (preview && ! audio.isPlaying())
+            audio.post ({ Event::Preview, (int8_t) t, (int16_t) (12 * (octave[(size_t) t].load() + 1) + project.m.key), 0.8f });
+        return;
+    }
     if (cats[browseCat] == "User")
     {
         const auto f = dataDir.getChildFile ("sounds").getChildFile (engineDef (browseEngine).name).getChildFile (list[browsePos] + ".json");
@@ -1814,7 +1888,7 @@ KnobView Controller::seqKnobView (int slot) const
         case 5: v.name = "All velocity"; v.value = "turn"; v.norm = 0.5f; v.bipolar = true; break;
         case 6: v.name = "All length"; v.value = "turn"; v.norm = 0.5f; v.bipolar = true; v.used = ! tr.isDrums(); break;
         case 7:
-            if (tr.isDrums()) { v.name = "Drum"; v.value = juce::String (lane[(size_t) t] + 1) + " " + engineDef (tr.engine).params[(size_t) lane[(size_t) t] * 4].name.upToFirstOccurrenceOf (" tune", false, false); v.norm = lane[(size_t) t] / 15.0f; }
+            if (tr.isDrums()) { v.name = "Drum"; v.value = juce::String (lane[(size_t) t] + 1) + " " + laneName (t, lane[(size_t) t]); v.norm = lane[(size_t) t] / 15.0f; }
             else { v.name = "Octave"; v.value = "turn"; v.norm = 0.5f; v.bipolar = true; }
             break;
         default: v.used = false; break;
@@ -2610,7 +2684,7 @@ void Controller::setRemoteSink (std::function<void (const juce::var&)> sink)
         project = Project::makeDefault();
         loadState();
         audio.mirrorTransport (false, false);
-        audio.push (project);
+        prepareSamples(); audio.push (project);
     }
     if (onChange) onChange();
 }
@@ -2934,6 +3008,30 @@ void Controller::saveLook() const
     o->setProperty ("trackColours", look.trackColours);
     o->setProperty ("hintLine", look.hintLine);
     dataDir.getChildFile ("look.json").replaceWithText (juce::JSON::toString (juce::var (o)));
+}
+
+juce::String Controller::laneName (int t, int l) const
+{
+    const auto& tr = project.tracks[(size_t) juce::jlimit (0, numTracks - 1, t)];
+    l = juce::jlimit (0, numLanes - 1, l);
+    if (tr.engine == EngineKit)
+    {
+        auto n = SampleBank::get().shortName (juce::roundToInt (tr.params[(size_t) (l * 6)]));
+        if (n.startsWith ("Kit ")) n = n.substring (4);
+        return n.length() > 14 ? n.substring (0, 13) + "." : n;
+    }
+    return engineDef (tr.engine).params[(size_t) l * 4].name.upToFirstOccurrenceOf (" tune", false, false);
+}
+
+void Controller::prepareSamples()
+{
+    auto& bank = SampleBank::get();
+    for (const auto& tr : project.tracks)
+    {
+        const auto& d = engineDef (tr.engine);
+        for (size_t i = 0; i < d.params.size(); ++i)
+            if (d.params[i].isSample) bank.ensureLoaded (juce::roundToInt (tr.params[i]));
+    }
 }
 
 } // namespace catbox

@@ -65,8 +65,8 @@ void text1 (juce::Graphics& g, const juce::String& s, juce::Rectangle<int> r, fl
 
 const char* shortEngine (int e)
 {
-    static const char* n[] = { "ANLG", "ACID", "DRUM", "KEYS", "GLDE", "FM", "WAVE", "CHOR", "SMPL", "GRAN" };
-    return n[juce::jlimit (0, 9, e)];
+    static const char* n[] = { "ANLG", "ACID", "DRUM", "KEYS", "GLDE", "FM", "WAVE", "CHOR", "SMPL", "GRAN", "KIT" };
+    return n[juce::jlimit (0, NumEngineTypes - 1, e)];
 }
 
 const int modeOrder[] = { ModeSound, ModeSeq, ModeFx, ModeMix, ModeProject };
@@ -606,7 +606,7 @@ void View::drawSeq (juce::Graphics& g, juce::Rectangle<int> r)
         {
             const float y = r.getY() + l * rowH;
             const bool sel = l == box.seqLane();
-            const auto name = d.params[(size_t) l * 4].name.upToFirstOccurrenceOf (" tune", false, false);
+            const auto name = box.laneName (box.getTrack(), l); juce::ignoreUnused (d);
             if (sel) { g.setColour (cell.brighter (0.1f)); g.fillRect (juce::Rectangle<float> ((float) r.getX(), y, (float) r.getWidth(), rowH)); }
             const float glow = laneGlow[(size_t) l];
             text1 (g, name, juce::Rectangle<float> ((float) r.getX() + 4, y, (float) nameW - 6, rowH).toNearestInt(), juce::jmin (13.0f, rowH),
@@ -1305,7 +1305,7 @@ void View::drawPanel (juce::Graphics& g)
         {
             const int n = box.padNote (box.getTrack(), p);
             const auto& tr = box.getProject().tracks[(size_t) box.getTrack()];
-            label = tr.isDrums() ? engineDef (tr.engine).params[(size_t) p * 4].name.upToFirstOccurrenceOf (" tune", false, false) : music::noteName (n);
+            label = tr.isDrums() ? box.laneName (box.getTrack(), p) : music::noteName (n);
             if (n < 0) label = {};
         }
         text1 (g, label, r.toNearestInt().reduced (8, 6), 13.0f, dim, juce::Justification::bottomLeft, true);

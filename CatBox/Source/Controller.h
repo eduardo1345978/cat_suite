@@ -158,6 +158,7 @@ public:
     int fxSlotNow() const { return fxSlot[(size_t) track.load()]; }
     int modSlotNow() const { return modSlot[(size_t) track.load()]; }
     juce::String destName (int track, int dest, bool shortForm = false) const;
+    juce::String laneName (int track, int lane) const;   // a drum lane: "Kick", or the Kit's sample
     juce::String modSlotText (int track, int slot) const;   // e.g. "LFO 1 > Cutoff +40%"
     /** The next knob you turn goes onto a macro (0-7) or the MY page (assignMy). */
     static constexpr int assignMy = 100;
@@ -199,6 +200,7 @@ public:
 private:
     void timerCallback() override;
     void changed (bool atBar = false);
+    void prepareSamples();   // the samples the tracks use are read (the library loads when used)
     void setFlash (const juce::String&);
     void sendRemote (juce::DynamicObject*);
     void runOnMessageThread (std::function<void()> f);

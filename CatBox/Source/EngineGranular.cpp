@@ -26,7 +26,8 @@ EngineDef makeGranularDef()
     EngineDef e;
     e.name = "Granular";
     auto sample = num ("sample", "Sample", 0, SampleBank::maxSamples - 1, 3);
-    sample.formatFn = [] (float v) { return SampleBank::get().name (juce::roundToInt (v)); };
+    sample.formatFn = [] (float v) { return SampleBank::get().shortName (juce::roundToInt (v)); };
+    sample.isSample = true;
     e.params = {
         sample, pct ("pos", "Position", 0.3f), bi ("scan", "Travel", 0.0f), sec ("size", "Grain size", 0.01f, 0.5f, 0.08f),
         num ("density", "Grains", 1, 40, 12), pct ("spray", "Scatter", 0.1f), semi ("pitchrand", "Pitch scatter", 0, 12, 0), pct ("reverse", "Reverse", 0.0f),

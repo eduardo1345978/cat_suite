@@ -92,8 +92,13 @@ juce::var soundToVar (const Track& t)
     for (size_t i = 0; i < d.params.size(); ++i)
         if (t.params[i] != d.params[i].def) vals->setProperty (d.params[i].id, t.params[i]);
     o->setProperty ("values", juce::var (vals));
-    if (t.engine == EngineSampler)   // the sample by name (its slot can change when files are added)
-        o->setProperty ("sampleName", SampleBank::get().name (juce::roundToInt (t.params[(size_t) d.index ("sample")])));
+    {
+        auto* smp = new juce::DynamicObject();   // samples by name (a slot can change when files are added)
+        for (size_t i = 0; i < d.params.size(); ++i)
+            if (d.params[i].isSample) smp->setProperty (d.params[i].id, SampleBank::get().name (juce::roundToInt (t.params[i])));
+        if (smp->getProperties().isEmpty()) delete smp;
+        else o->setProperty ("samples", juce::var (smp));
+    }
     o->setProperty ("fx", noteFxNames()[t.fxType]);
     juce::Array<juce::var> fx;
     for (auto v : t.fx) fx.add (v);
@@ -114,6 +119,10 @@ void soundFromVar (const juce::var& v, Track& t)
             if (const int i = d.index (prop.name.toString()); i >= 0) t.params[(size_t) i] = d.params[(size_t) i].clamp ((float) prop.value);
     if (e == EngineSampler && v.hasProperty ("sampleName"))
         if (const int slot = SampleBank::get().find (v["sampleName"].toString()); slot >= 0) t.params[(size_t) d.index ("sample")] = (float) slot;
+    if (auto* so = v["samples"].getDynamicObject())
+        for (const auto& prop : so->getProperties())
+            if (const int i = d.index (prop.name.toString()); i >= 0)
+                if (const int slot = SampleBank::get().find (prop.value.toString()); slot >= 0) t.params[(size_t) i] = (float) slot;
     if (v.hasProperty ("fx"))
     {
         t.fxType = juce::jmax (0, noteFxNames().indexOf (v["fx"].toString()));

@@ -24,6 +24,7 @@ target_sources(CatBox PRIVATE
     Source/Templates.cpp
     Source/TrackFx.cpp
     Source/PresetsExtra.cpp
+    Source/EngineKit.cpp
     Source/NoteFx.cpp
     Source/Project.cpp
     Source/MixFx.cpp

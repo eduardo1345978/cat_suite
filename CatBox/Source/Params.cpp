@@ -1,4 +1,5 @@
 #include "Params.h"
+#include "Samples.h"
 #include <cmath>
 
 namespace catbox
@@ -13,6 +14,7 @@ EngineDef makeWavetableDef();
 EngineDef makeChoirDef();
 EngineDef makeSamplerDef();
 EngineDef makeGranularDef();
+EngineDef makeKitDef();
 
 juce::String ParamDef::format (float v) const
 {
@@ -72,8 +74,12 @@ void EngineDef::applyPreset (int preset, float* v) const
 {
     defaults (v);
     if (presets.empty()) return;
-    for (const auto& [id, x] : presets[(size_t) juce::jlimit (0, (int) presets.size() - 1, preset)].values)
+    const auto& p = presets[(size_t) juce::jlimit (0, (int) presets.size() - 1, preset)];
+    for (const auto& [id, x] : p.values)
         if (const int i = index (id); i >= 0) v[i] = params[(size_t) i].clamp (x);
+    for (const auto& [id, name] : p.samples)
+        if (const int i = index (id); i >= 0)
+            if (const int slot = SampleBank::get().find (name); slot >= 0) v[i] = (float) slot;
 }
 
 juce::StringArray EngineDef::categories() const
@@ -95,7 +101,7 @@ const EngineDef& engineDef (int type)
 {
     static const std::array<EngineDef, NumEngineTypes> all = []
     {
-        std::array<EngineDef, NumEngineTypes> a { makeAnalogDef(), makeAcidDef(), makeDrumsDef(), makeKeysDef(), makeGlideDef(), makeFMDef(), makeWavetableDef(), makeChoirDef(), makeSamplerDef(), makeGranularDef() };
+        std::array<EngineDef, NumEngineTypes> a { makeAnalogDef(), makeAcidDef(), makeDrumsDef(), makeKeysDef(), makeGlideDef(), makeFMDef(), makeWavetableDef(), makeChoirDef(), makeSamplerDef(), makeGranularDef(), makeKitDef() };
         for (int i = 0; i < NumEngineTypes; ++i) addExtraPresets (a[(size_t) i], i);
         return a;
     }();

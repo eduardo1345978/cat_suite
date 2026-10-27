@@ -105,7 +105,7 @@ void SendReverb::process (const float* inL, const float* inR, float* outL, float
                     const float yb = -0.72f * b + dispR[(size_t) d]; dispR[(size_t) d] = b + 0.72f * yb; b = yb;
                 }
             }
-            if (type == 3) { a += shimFbL * 0.42f; b += shimFbR * 0.42f; }
+            if (type == 3) { a += shimFbL * 0.3f; b += shimFbR * 0.3f; }
             l[(size_t) i] = a; r[(size_t) i] = b;
         }
         reverb.processStereo (l.data(), r.data(), k);
@@ -115,8 +115,12 @@ void SendReverb::process (const float* inL, const float* inR, float* outL, float
             float a = l[(size_t) i], b = r[(size_t) i];
             if (type == 3)   // shimmer: the tail an octave up feeds back in
             {
-                shimFbL = dsp::fastTanh (shimL.process (a));
-                shimFbR = dsp::fastTanh (shimR.process (b));
+                // the octave up goes back in, darker and gently limited: it rises, never runs away
+                const float ua = shimL.process (a), ub = shimR.process (b);
+                shimLpL += (ua - shimLpL) * 0.25f; shimLpR += (ub - shimLpR) * 0.25f;
+                shimDcL += (shimLpL - shimDcL) * 0.002f; shimDcR += (shimLpR - shimDcR) * 0.002f;
+                shimFbL = 0.6f * dsp::fastTanh ((shimLpL - shimDcL) * 0.8f);
+                shimFbR = 0.6f * dsp::fastTanh ((shimLpR - shimDcR) * 0.8f);
             }
             if (type == 5 || type == 6 || type == 2) { a = toneL.process (a).low; b = toneR.process (b).low; }
             gain += dg;
@@ -164,7 +168,7 @@ void SendDelay::process (const float* inL, const float* inR, float* outL, float*
     switch (type)
     {
         case 1: lpK *= 0.7f; drive = 1.6f; break;                            // tape echo: darker, saturated
-        case 2: lpK *= 0.45f; hpK = 0.06f; fb = juce::jmin (1.02f, fb * 1.1f); drive = 1.3f; break;   // dub: can run away (the tanh holds it)
+        case 2: lpK *= 0.45f; hpK = 0.06f; fb = juce::jmin (0.97f, fb * 1.08f); drive = 1.3f; break;   // dub: long, dark repeats
         case 3: pp = 1.0f; break;                                            // ping-pong
         default: break;
     }

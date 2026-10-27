@@ -21,6 +21,7 @@ struct ParamDef
     float lo = 0.0f, hi = 1.0f, def = 0.0f, skew = 1.0f;
     juce::StringArray choices;
     std::function<juce::String (float)> formatFn;   // a text that changes while it runs (e.g. sample names)
+    bool isSample = false;                          // a slot of the SampleBank (saved by the sample's name)
 
     bool stepped() const noexcept { return unit == Choice || unit == Toggle || unit == Num || unit == Semi; }
     juce::String format (float value) const;
@@ -41,6 +42,7 @@ struct Preset
 {
     juce::String name, category;
     std::vector<std::pair<juce::String, float>> values;   // only what differs from the defaults
+    std::vector<std::pair<juce::String, juce::String>> samples;   // sample parameters by the sample's name (the library)
 };
 
 struct EngineDef
@@ -60,7 +62,7 @@ struct EngineDef
     std::vector<int> presetsIn (const juce::String& category) const;
 };
 
-enum EngineType { EngineAnalog = 0, EngineAcid, EngineDrums, EngineKeys, EngineGlide, EngineFM, EngineWavetable, EngineChoir, EngineSampler, EngineGranular, NumEngineTypes };
+enum EngineType { EngineAnalog = 0, EngineAcid, EngineDrums, EngineKeys, EngineGlide, EngineFM, EngineWavetable, EngineChoir, EngineSampler, EngineGranular, EngineKit, NumEngineTypes };
 const EngineDef& engineDef (int type);
 /** The "FX Lab" sounds and more, added to each engine. */
 void addExtraPresets (EngineDef&, int engine);

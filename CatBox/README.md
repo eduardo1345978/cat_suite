@@ -15,9 +15,11 @@ in one key. Nothing is generated: you play it in or tap it into the steps.
 | **Wavetable** | 8 morphing tables (basic shapes, pulse, vowels, harmonic sweep, digital sync, organ, growl, glass), position with envelope and LFO, warp, unison 7, filter | 22 |
 | **Choir** | Sing-Cat's choir: physically modelled singers and cats (glottis + vocal tract each), vowels, styles, rooms; up to 16 singers | 67 |
 | **Sampler** | your samples: **record one with a microphone** (Rec on a Sampler track's SOUND page) or put WAVs in the `samples` folder; Keys (across the keyboard, loop forward / ping-pong), Chop (2-16 slices on the pads), One shot; envelope, filter, crush, reverse. 8 starter samples are made by the box itself the first time | 16 |
-| **Granular** | clouds of grains from any sample: position and travel, grain size, density, scatter, pitch scatter, reverse grains, freeze | 12 |
+| **Granular** | clouds of grains from any sample: position and travel, grain size, density, scatter, pitch scatter, reverse grains, freeze | 12 + 12 library |
+| **Kit** | a drum kit of 16 samples, one per pad: sample, tune, level, pan, decay, tone per pad; drive, hat choke, stereo | 15 library kits |
 
-**324 factory sounds**, in categories, heard the moment you pick them.
+**499 factory sounds**, in categories, heard the moment you pick them. **FX Lab** sounds come with their own effect chains;
+**Library** sounds use the free sample libraries (below).
 **Note FX** (any track): **Arp** (rate, order incl. bounce / random / chord, octaves, gate, swing,
 euclidean steps / hits / rotate, ratchet, chance, accents, hold), **Chords** (one key = one chord in
 the key and scale: triad ... 11th, sus, power; voicing, inversion, strum, bass note) and **Orbit**
@@ -30,9 +32,46 @@ The same program runs in two places:
 - **In the box** (Raspberry Pi 5 + HiFiBerry + 5" screen + Pico): `Cat-Box --kiosk` shows only the
   800 x 480 screen, full screen. Keys and pads come from a MIDI keyboard (e.g. the M-Audio Oxygen Pro Mini).
 
+## Effects, macros, modulation (every track)
+
+On the SOUND pages, after the engine's own pages:
+- **FX**: 4 insert effects in a row (sound > 1 > 2 > 3 > 4 > mixer). Knob 1 = the slot, 2 = the effect, 3-10 = its knobs,
+  11 = on / bypass, 12 = its presets; Shift: the 4 effects at once, on / off, and **knob 9 = a whole chain** (25 chains:
+  Lo-fi, Dub, Big room, Wide pad, Trance gate, Talk box, Pumping, Glitch, Guitar amp, Shimmer up ...).
+  **22 effects**: Filter, Drive, Crusher, Delay, Chorus, Phaser, Flanger, Compressor, EQ, Tremolo / auto-pan, Trance gate,
+  Ring mod, Reverb, Width, Tape / lo-fi, Pitch shift, Resonator, Vowel, Stutter, Pump (sidechain), Transient, Amp & cabinet.
+- **MACRO**: 8 macro knobs (MENU > More > Assign to macro, then turn any knob: the macro moves it), the 2 LFOs; Shift: LFO shapes,
+  rates, tempo sync, restart, the note envelope, random.
+- **MOD**: 16 slots: source (LFO 1 / 2, envelope, velocity, note, mod wheel, random, bar, macro 1-8) > destination (any sound,
+  effect or mixer knob) > amount (+/-). Knobs 5-12: the amounts of slots 1-8 (Shift: 9-16). MENU > More > Random modulation.
+- **MY**: your own page: MENU > More > Add to MY knobs, then turn any knob (24 places).
+
+## Sends (MIX, ◀ ▶)
+
+- **SENDS**: knobs 1-8 = reverb per track (Shift: delay); reverb type and size, delay type and time.
+- **FX SEND**: a third send with any of the 22 effects (chorus, phaser, flanger, pitch shift ...): knobs 1-8 = how much of each track.
+- **RETURNS**: reverb types Hall, Room, Plate, Shimmer, Cloud, Spring, Dark with pre-delay, ducking (the tail ducks while you
+  play) and level; delay types Clean, Tape echo, Dub, Ping-pong, Multi-tap, Diffused, Reverse with wow, ducking and
+  *delay into reverb*.
+
+## Free sample libraries
+
+Run **get_libraries.bat** (PC; with git it uses git, else it downloads the zips) or `bash CatBox/pi/get_libraries.sh` (Pi), once.
+About 6 GB go into `CatBox/library`:
+- **VSCO 2 Community Edition** (CC0): strings (sections, solo violin, contrabass; sustain, tremolo, pizzicato, spiccato), harp,
+  horn, trumpet, trombone, tuba, flute, clarinet, oboe, bassoon, piccolo, upright piano, organ, glockenspiel, marimba,
+  xylophone, timpani, orchestral percussion.
+- **Dirt-Samples** (TidalCycles): about 220 folders of drums (808, 909, DrumTraks, DR-110, jazz, house, techno ...),
+  breaks, synths (juno, moog, hoover, rave ...), voices and noises.
+
+Cat Box finds the library by itself (also `CATBOX_LIBRARY=<folder>` or `<data>/library`). Only what is used is read into memory.
+Every sample is in the browser: **SOUND, Sound again**, engine Sampler / Granular / Kit, then the **LIB ...** categories (one per folder);
+on a Kit it goes onto the pad you hit last. A sampler sound plays from the sample's own note (read from its name).
+
 ## The screen
 
-Calm and readable: grey on black, one accent colour, big type. **A help line above the knobs** always says what the pads and knobs do right now; **Help** (MENU, F1 or a touch) explains the whole page.
+Calm and readable: grey on black, one accent colour, big type. **PROJECT, ▶ = LOOK**: 8 themes (Graphite, Paper, Midnight,
+Forest, Terminal, High contrast, Plum, Sand), 9 accent colours, big text, ring knobs, a colour per track, the help line on / off. **A help line above the knobs** always says what the pads and knobs do right now; **Help** (MENU, F1 or a touch) explains the whole page.
 - **Top:** the track number, its engine (and note FX), the **sound's name** (big; `*` = changed), tempo, bar.beat, Play and Rec.
 - **Under it:** the modes (SOUND, SEQ, NOTE FX, MIX, PROJECT) and the **pages** of the mode with ◀ ▶.
 - **Middle:** what the mode is about (the sound's waveform and envelope, the browser, the steps, the arp /
@@ -49,7 +88,7 @@ Everything can be touched: tracks, modes, pages, knobs (drag), Play.
 | **Sound** | the knobs edit the sound (◀ ▶ = its pages: e.g. Analog OSC / FILTER / ENV / LFO / FX) · **Sound again** = the **browser**: knob 1 engine, knob 2 category, knob 3 sound, ◀ ▶ = next / previous sound, **Rec** = save as a *User* sound · **Shift + Sound** = Init |
 | **Seq** | the pads are the 16 steps of a bar (◀ ▶ = bar). **Tap** an empty step = on and picked, tap the picked step = off. **The knobs change the picked step** (no holding): note, velocity, length, slide, accent, chance, nudge, notes 2-4, ratchet, semitone. **Stopped: play keys and they fill the steps one by one** (keys together = a chord). Drums: **hit a drum** (pad outside SEQ, or a key) to pick it, then tap its steps; knob 3 = roll. **Shift + knobs** = the whole pattern: length, rate, swing, transpose, rotate, all velocities / lengths, octave. **Shift + ◀** copies the bar, **Shift + ▶** pastes it |
 | **Note FX** | ◀ ▶ = Off / Arp / Chords / Orbit, the knobs edit it, **Shift + ◀ ▶** = its presets |
-| **Mix** | knobs 1-8 = volumes (Shift: pan), 9-12 = master, glue, tape, width; ◀ ▶ = SENDS (reverb and delay per track, reverb / delay settings). Pads 1-8 = mute, 9-16 = solo · **Shift + Mix** = unmute all |
+| **Mix** | knobs 1-8 = volumes (Shift: pan), 9-12 = master, glue, tape, width; ◀ ▶ = SENDS, FX SEND, RETURNS (see *Sends*). Pads 1-8 = mute, 9-16 = solo · **Shift + Mix** = unmute all |
 | **Project** | tempo, swing, key, scale, click, master volume, DJ filter, pads (piano / scale), pad octave; **knob 12 = Factory reset** (turn it all the way right: a fresh project, scenes cleared; your saved sounds, samples and MIDI keyboard stay; Undo brings it all back; on the PC also right-click > *Factory reset...*); Shift: glue, tape, width, reverb, delay |
 | **Project again = MENU** | 16 big buttons on the screen, the pads press them: **Save / Load project** (8 places), **New project**, **Clear track**, **Clear all** (red = press twice), **Copy track**, **Drum pattern** (15: house, techno, trap, hip hop, breakbeat, d&b, reggaeton, disco ...), **Bass line** (12, in the key and scale), Click, Pads piano / scale, Learn keyboard, **Help**, Tap tempo, Save sound, Undo, Close |
 | **◀ Prev / Next ▶** | pages (see each mode) · **Shift + ◀ ▶** = pad octave |

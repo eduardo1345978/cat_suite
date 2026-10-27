@@ -468,12 +468,74 @@ public:
                 }
                 check (sendsOk, "7 reverb types, 7 delay types and FX sends: clean", sendInfo);
                 box.setMaster ([] (Master& m) { m.revType = 3; m.delayType = 1; m.revDuck = 0.0f; m.delayDuck = 0.0f; m.delayToRev = 0.2f; m.delayFb = 0.45f; });
+                renderSeconds (audio, 4.0, nullptr);
+                const auto after = renderSeconds (audio, 2.0, nullptr);
+                check (after.rms > 0.05f, "the shimmer reverb with every send up doesn't run away", "rms " + juce::String (after.rms, 4));
                 // the look
                 auto lk = box.getLook();
                 lk.theme = 1; lk.accent = 4; lk.knobStyle = 1; lk.trackColours = true;
                 box.setLook (lk);
                 check (box.getDataDirectory().getChildFile ("look.json").existsAsFile(), "the look is remembered", {});
                 box.setMode (ModeSound);
+            }
+
+            // ---- the libraries (when they are there: CATBOX_LIBRARY or CatBox/library)
+            if (SampleBank::get().libraryFolders().size() > 0)
+            {
+                auto& bank = SampleBank::get();
+                const int folders = bank.libraryFolders().size();
+                check (folders > 100, "the libraries are indexed", juce::String (folders) + " folders, " + juce::String (bank.count()) + " samples");
+                auto presetOf = [] (int engine, const char* name) { const auto& d = engineDef (engine); for (size_t i = 0; i < d.presets.size(); ++i) if (d.presets[i].name == name) return (int) i; return 0; };
+                if (! audio.isPlaying()) press (BtnPlay);
+                // every library sound: its samples are found, read, and it plays clean
+                juce::String missing, levels;
+                int sounds = 0, silent = 0;
+                for (int engine : { EngineKit, EngineSampler, EngineGranular })
+                {
+                    const auto& d = engineDef (engine);
+                    for (size_t i = 0; i < d.presets.size(); ++i)
+                    {
+                        if (d.presets[i].samples.empty()) continue;
+                        for (const auto& [id, nm] : d.presets[i].samples) if (bank.find (nm) < 0) missing << d.presets[i].name << ": " << nm << "; ";
+                        const int t = engine == EngineKit ? 0 : 7;
+                        box.loadSound (t, engine, (int) i);
+                        ++sounds;
+                        if (engine != EngineKit)
+                        {
+                            audio.post ({ Event::NoteOn, (int8_t) t, 60, 0.9f });
+                            const auto st = renderSeconds (audio, 0.5, nullptr);
+                            audio.post ({ Event::NoteOff, (int8_t) t, 60, 0.0f });
+                            renderSeconds (audio, 0.1, nullptr);
+                            if (! st.finite || st.peak > 1.0f) missing << d.presets[i].name << " not clean; ";
+                            if (st.rms < 0.01f) ++silent;
+                        }
+                    }
+                }
+                check (missing.isEmpty() && silent < 3, juce::String (sounds) + " library sounds find their samples and play clean", missing.substring (0, 600) + juce::String (silent) + " quiet");
+                box.loadSound (0, EngineKit, presetOf (EngineKit, "TR-808"));
+                const auto kitSt = renderSeconds (audio, 1.0, nullptr);
+                check (kitSt.finite && kitSt.rms > 0.002f && box.laneName (0, 0).startsWith ("BD"), "Kit: the TR-808 plays the beat", box.laneName (0, 0) + " rms " + juce::String (kitSt.rms, 4));
+                box.loadSound (7, EngineSampler, presetOf (EngineSampler, "Violins"));
+                const auto& d = engineDef (EngineSampler);
+                check ((int) box.getProject().tracks[7].params[(size_t) d.index ("root")] == SampleBank::noteFromName (bank.name ((int) box.getProject().tracks[7].params[(size_t) d.index ("sample")])),
+                       "Sampler: Violins play from the sample's own note", bank.name ((int) box.getProject().tracks[7].params[(size_t) d.index ("sample")]));
+                // the browser lists the library folders and picks a sample from them
+                box.selectTrack (7);
+                box.setMode (ModeSound);
+                press (BtnSound);
+                const auto cats = box.browseCategories();
+                int libCat = -1;
+                for (int i = 0; i < cats.size(); ++i) if (cats[i].endsWith ("/Harp")) libCat = i;
+                check (libCat >= 0, "the browser has the library folders (Sampler)", juce::String (cats.size()) + " categories");
+                if (libCat >= 0)
+                {
+                    box.turnKnob (1, (float) (libCat - box.browseCategory()));
+                    box.turnKnob (2, 5.0f);
+                    check (box.presetName (7) == box.browsePresets()[box.browsePresetIndex()], "turning picks a sample of the folder", box.presetName (7));
+                }
+                box.setMode (ModeSound);
+                box.loadSound (0, EngineDrums, presetOf (EngineDrums, "808 Classic"));
+                box.loadSound (7, EngineSampler, presetOf (EngineSampler, "Break Chop"));
             }
 
             // ---- the MENU (Project twice): drum pattern, clear (press twice), save / load, help

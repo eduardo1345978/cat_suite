@@ -55,7 +55,7 @@ private:
     std::array<Diffuser, 8> diff;
     std::array<float, 24> dispL {}, dispR {};
     OctaveUp shimL, shimR;
-    float shimFbL = 0.0f, shimFbR = 0.0f, modPhase = 0.0f, gain = 0.0f;
+    float shimFbL = 0.0f, shimFbR = 0.0f, shimLpL = 0.0f, shimLpR = 0.0f, shimDcL = 0.0f, shimDcR = 0.0f, modPhase = 0.0f, gain = 0.0f;
     double sr = 48000.0;
 };
 

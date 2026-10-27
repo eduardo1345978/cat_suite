@@ -25,7 +25,15 @@ enum { ModeKeys = 0, ModeChop, ModeOneShot };
 }
 
 /** The starter samples (made by the box's own engines the first time) - always in these slots. */
-juce::StringArray starterSampleNames() { return { "Vox Ahh", "Piano C4", "Bell C5", "Warm Pad C3", "Break 120", "Kick 808", "Choir Ooh", "Pluck C4" }; }
+juce::StringArray starterSampleNames()
+{
+    juce::StringArray n { "Vox Ahh", "Piano C4", "Bell C5", "Warm Pad C3", "Break 120", "Kick 808", "Choir Ooh", "Pluck C4" };
+    // slots 8-23: one hit of each drum (the Kit engine starts with them)
+    for (const auto* d : { "Kick", "Snare", "Clap", "Closed hat", "Open hat", "Low tom", "Mid tom", "High tom",
+                           "Rim", "Cowbell", "Crash", "Ride", "Shaker", "Conga", "Snap", "Zap" })
+        n.add (juce::String ("Kit ") + d);
+    return n;
+}
 
 EngineDef makeSamplerDef()
 {
@@ -33,7 +41,8 @@ EngineDef makeSamplerDef()
     EngineDef e;
     e.name = "Sampler";
     auto sample = num ("sample", "Sample", 0, SampleBank::maxSamples - 1, 0);
-    sample.formatFn = [] (float v) { return SampleBank::get().name (juce::roundToInt (v)); };
+    sample.formatFn = [] (float v) { return SampleBank::get().shortName (juce::roundToInt (v)); };
+    sample.isSample = true;
     auto root = num ("root", "Root note", 0, 127, 60);
     root.formatFn = [] (float v) { return music::noteName (juce::roundToInt (v)); };
     e.params = {
@@ -345,7 +354,8 @@ void makeStarterSamples (SampleBank& bank)
             case 4: breakLoop (l, r); break;
             case 5: renderNotes (EngineDrums, "808 Trap", { 36 }, 1.5, 0.1, l, r); break;
             case 6: renderNotes (EngineChoir, "Cathedral Ooh", { 60 }, 4.0, 3.2, l, r); break;
-            default: renderNotes (EngineAnalog, "Pluck", { 60 }, 1.5, 0.3, l, r); break;
+            case 7: renderNotes (EngineAnalog, "Pluck", { 60 }, 1.5, 0.3, l, r); break;
+            default: renderNotes (EngineDrums, "909 Classic", { 36 + (i - 8) }, (i - 8) == 10 || (i - 8) == 11 ? 2.0 : 1.0, 0.05, l, r); break;
         }
         bank.add (names[i], std::move (l), std::move (r), rate, true);
     }
