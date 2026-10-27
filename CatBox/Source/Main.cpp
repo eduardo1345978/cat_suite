@@ -112,6 +112,15 @@ public:
             // ---- SEQ: tap a step, hold a step + key, hold + knob; drums
             box.selectTrack (6);   // the pluck, empty pattern
             box.setMode (ModeSeq);
+            if (audio.isPlaying()) press (BtnPlay);
+            box.keyDown (62, 100); box.keyUp (62);   // stopped: a key goes into step 1 (step input)
+            check (p.tracks[6].pat.steps[0].has (62) && box.selectedStep() == 0, "SEQ, stopped: a played key fills step 1", {});
+            box.keyDown (64, 100); box.keyDown (67, 100); box.keyUp (64); box.keyUp (67);
+            check (p.tracks[6].pat.steps[1].has (64) && p.tracks[6].pat.steps[1].has (67) && box.selectedStep() == 1, "the next keys (together) fill step 2 as a chord", {});
+            box.turnKnob (1, -8.0f);
+            check (p.tracks[6].pat.steps[1].vel < 100, "the knobs change the picked step (no holding)", juce::String ((int) p.tracks[6].pat.steps[1].vel));
+            box.padDown (1, 100); box.padUp (1);
+            check (! p.tracks[6].pat.steps[1].on(), "a tap on the picked step turns it off", {});
             box.keyDown (62, 100); box.keyUp (62);
             box.padDown (2, 100); box.padUp (2);
             check (p.tracks[6].pat.steps[2].notes[0] == 62, "a tap on pad 3 puts the last note on step 3", juce::String (p.tracks[6].pat.steps[2].notes[0]));
@@ -136,7 +145,7 @@ public:
             box.buttonDown (BtnShift); press (BtnPrev); box.buttonUp (BtnShift);   // copy bar 1
             press (BtnNext);
             box.buttonDown (BtnShift); press (BtnNext); box.buttonUp (BtnShift);   // paste into bar 2
-            check (p.tracks[6].pat.steps[21].has (67) && ! p.tracks[6].pat.steps[16].on(), "Shift + Prev / Next: copy bar 1, paste into bar 2", {});
+            check (p.tracks[6].pat.steps[21].has (67) && p.tracks[6].pat.steps[16].has (62), "Shift + Prev / Next: copy bar 1, paste into bar 2", {});
             press (BtnPrev);
             box.selectTrack (5);   // 909 drums, empty
             box.buttonDown (BtnShift); box.padDown (3, 100); box.padUp (3); box.buttonUp (BtnShift);
@@ -373,6 +382,48 @@ public:
                    "pads: bottom row C D E F G A B C, top row the black keys", juce::String (box.padNote (3, 8)));
             check (box.padNote (0, 0) == 36 && box.padNote (0, 1) == 37, "drum pads: 1 kick, 2 snare ...", {});
 
+            // ---- the MENU (Project twice): drum pattern, clear (press twice), save / load, help
+            {
+                box.selectTrack (5);
+                box.setMode (ModeProject);
+                press (BtnProject);
+                check (box.getMode() == ModeMenu && box.menuTiles()[6].label == "Drum pattern", "Project twice = the MENU", box.menuTitle());
+                box.padDown (6, 100); box.padUp (6);
+                check (box.menuTitle().startsWith ("DRUM PATTERN"), "pad 7: drum patterns", box.menuTitle());
+                box.padDown (0, 100); box.padUp (0);
+                check (box.getProject().tracks[5].pat.drums[0][4] > 0 && box.getProject().tracks[5].pat.drums[2][4] > 0, "pad 1: a house beat on the drum track", {});
+                box.padDown (15, 100); box.padUp (15);   // Back
+                check (box.menuTitle() == "MENU", "pad 16: back to the menu", box.menuTitle());
+                box.padDown (3, 100); box.padUp (3);
+                check (! box.getProject().tracks[5].pat.empty() && box.menuConfirming() == 3, "Clear track: the first press only asks", {});
+                box.padDown (3, 100); box.padUp (3);
+                check (box.getProject().tracks[5].pat.empty(), "the second press clears", {});
+                shiftPress (BtnChaos);   // undo the clear
+                shiftPress (BtnChaos);   // undo the drum pattern
+                check (box.getProject().tracks[5].pat.drums[0][4] == 0 || box.getProject().tracks[5].pat.drums[2][4] == 0, "Undo takes the drum pattern away again", {});
+                box.setMode (ModeMenu);
+                box.padDown (0, 100); box.padUp (0);   // Save project
+                box.padDown (2, 100); box.padUp (2);   // into place 3
+                check (box.projectExists (2), "Save project into place 3", {});
+                box.clearPattern (5);
+                box.padDown (1, 100); box.padUp (1);   // Load project
+                box.padDown (2, 100); box.padUp (2);
+                check (! box.getProject().tracks[5].pat.empty(), "Load project 3 brings it back", {});
+                box.setMode (ModeMenu);
+                box.padDown (11, 100); box.padUp (11);
+                check (box.isHelpShown() && box.helpLines().size() > 2, "Help shows how the page works", box.helpLines()[0]);
+                box.toggleHelp();
+                box.selectTrack (6);
+                box.setMode (ModeMenu);
+                box.padDown (7, 100); box.padUp (7);
+                box.padDown (3, 100); box.padUp (3);
+                int bassNotes = 0;
+                for (int i = 0; i < 16; ++i) bassNotes += box.getProject().tracks[6].pat.steps[(size_t) i].on() ? 1 : 0;
+                check (bassNotes > 6, "Bass line: an acid line on a melody track", juce::String (bassNotes));
+                shiftPress (BtnChaos);
+                box.setMode (ModeSound);
+            }
+
             // ---- factory reset: PROJECT knob 12 all the way right (undoable)
             {
                 box.setMode (ModeProject);
@@ -417,6 +468,20 @@ public:
                     if (auto os = pngFile.createOutputStream()) png.writeImageToStream (img, *os);
                     check (img.isValid(), "the screen draws the sampler", {});
                 }
+                for (int extra : { 8, 9 })   // the MENU, and the help on the SEQ page
+                {
+                    box.selectTrack (0);
+                    box.setMode (extra == 8 ? ModeMenu : ModeSeq);
+                    if (extra == 9) box.toggleHelp();
+                    const auto img = screen.snapshotScreen();
+                    if (extra == 9) box.toggleHelp();
+                    check (img.isValid(), extra == 8 ? "the screen draws the MENU" : "the screen draws the help", {});
+                    const auto pngFile = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + "-screen" + juce::String (extra) + ".png");
+                    pngFile.deleteFile();
+                    juce::PNGImageFormat png;
+                    if (auto os = pngFile.createOutputStream()) png.writeImageToStream (img, *os);
+                }
+                box.setMode (ModeMenu);
                 const auto panel = pc.createComponentSnapshot (pc.getLocalBounds());
                 check (panel.isValid(), "the PC panel draws", {});
                 juce::PNGImageFormat png;

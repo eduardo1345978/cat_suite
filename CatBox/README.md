@@ -32,7 +32,7 @@ The same program runs in two places:
 
 ## The screen
 
-Calm and readable: grey on black, one accent colour, big type.
+Calm and readable: grey on black, one accent colour, big type. **A help line above the knobs** always says what the pads and knobs do right now; **Help** (MENU, F1 or a touch) explains the whole page.
 - **Top:** the track number, its engine (and note FX), the **sound's name** (big; `*` = changed), tempo, bar.beat, Play and Rec.
 - **Under it:** the modes (SOUND, SEQ, NOTE FX, MIX, PROJECT) and the **pages** of the mode with ◀ ▶.
 - **Middle:** what the mode is about (the sound's waveform and envelope, the browser, the steps, the arp /
@@ -47,10 +47,11 @@ Everything can be touched: tracks, modes, pages, knobs (drag), Play.
 |---|---|
 | **Track 1-8** | pick the track (everything on screen is about it) · **Shift + Track** = mute |
 | **Sound** | the knobs edit the sound (◀ ▶ = its pages: e.g. Analog OSC / FILTER / ENV / LFO / FX) · **Sound again** = the **browser**: knob 1 engine, knob 2 category, knob 3 sound, ◀ ▶ = next / previous sound, **Rec** = save as a *User* sound · **Shift + Sound** = Init |
-| **Seq** | the pads are the 16 steps of a bar (◀ ▶ = bar). Tap = step on / off. **Hold a step** and play keys (notes, a chord) or turn knobs: note, velocity, length, slide, accent, chance, nudge, notes 2-4, ratchet (knob 11: the step 2-4 times). Drums: hold a step, knob 1 / 2 = velocity, knob 3 = roll (2-4 hits). Nothing held: length, rate, swing, transpose (in the scale), rotate, all velocities / lengths, octave. Drums: all 16 drums on screen at once; **Shift + pad** (or knob 8) picks the drum. **Shift + ◀** copies the bar, **Shift + ▶** pastes it |
+| **Seq** | the pads are the 16 steps of a bar (◀ ▶ = bar). **Tap** an empty step = on and picked, tap the picked step = off. **The knobs change the picked step** (no holding): note, velocity, length, slide, accent, chance, nudge, notes 2-4, ratchet, semitone. **Stopped: play keys and they fill the steps one by one** (keys together = a chord). Drums: **hit a drum** (pad outside SEQ, or a key) to pick it, then tap its steps; knob 3 = roll. **Shift + knobs** = the whole pattern: length, rate, swing, transpose, rotate, all velocities / lengths, octave. **Shift + ◀** copies the bar, **Shift + ▶** pastes it |
 | **Note FX** | ◀ ▶ = Off / Arp / Chords / Orbit, the knobs edit it, **Shift + ◀ ▶** = its presets |
 | **Mix** | knobs 1-8 = volumes (Shift: pan), 9-12 = master, glue, tape, width; ◀ ▶ = SENDS (reverb and delay per track, reverb / delay settings). Pads 1-8 = mute, 9-16 = solo · **Shift + Mix** = unmute all |
 | **Project** | tempo, swing, key, scale, click, master volume, DJ filter, pads (piano / scale), pad octave; **knob 12 = Factory reset** (turn it all the way right: a fresh project, scenes cleared; your saved sounds, samples and MIDI keyboard stay; Undo brings it all back; on the PC also right-click > *Factory reset...*); Shift: glue, tape, width, reverb, delay |
+| **Project again = MENU** | 16 big buttons on the screen, the pads press them: **Save / Load project** (8 places), **New project**, **Clear track**, **Clear all** (red = press twice), **Copy track**, **Drum pattern** (15: house, techno, trap, hip hop, breakbeat, d&b, reggaeton, disco ...), **Bass line** (12, in the key and scale), Click, Pads piano / scale, Learn keyboard, **Help**, Tap tempo, Save sound, Undo, Close |
 | **◀ Prev / Next ▶** | pages (see each mode) · **Shift + ◀ ▶** = pad octave |
 | **Shift** | the second layer of knobs and the Shift combinations |
 | **Scene** | the pads: 1-8 = scenes (recall at the next bar while playing), **Rec + pad** = save; 9-16 = mute tracks |

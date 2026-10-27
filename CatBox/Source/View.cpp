@@ -119,12 +119,16 @@ void View::drawScreen (juce::Graphics& g)
     auto tracks = r.removeFromBottom (32);
     auto knobs = r.removeFromBottom (134);
     knobArea = knobs;
+    // one line of help above the knobs: what the buttons do now
+    auto hintRow = r.removeFromBottom (20);
+    text1 (g, box.hint(), hintRow.reduced (12, 0), 12.5f, dim, juce::Justification::centredLeft);
+    menuHits.clearQuick();
     drawContent (g, r.reduced (10, 4));
     drawKnobs (g, knobs);
     drawTracks (g, tracks);
 
     if (box.isLearning()) drawLearn (g, juce::Rectangle<int> (0, 52, screenW, screenH - 52));
-    if (showHelp) drawHelp (g, juce::Rectangle<int> (0, 0, screenW, screenH));
+    if (box.isHelpShown()) drawHelp (g, juce::Rectangle<int> (0, 0, screenW, screenH));
 
     // a short message, on top of the content
     const auto f = box.flashText();
@@ -198,11 +202,11 @@ void View::drawTabs (juce::Graphics& g, juce::Rectangle<int> r)
     // modes (left)
     for (int mm : modeOrder)
     {
-        const juce::String name = mm == ModeSound && m == ModeBrowse ? "BROWSE" : modeName (mm);
+        const juce::String name = mm == ModeSound && m == ModeBrowse ? "BROWSE" : (mm == ModeProject && m == ModeMenu ? "MENU" : modeName (mm));
         g.setFont (font (14.0f, true));
         const int w = juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), name) + 18;
         auto cellR = r.removeFromLeft (w);
-        const bool on = mm == m || (mm == ModeSound && m == ModeBrowse);
+        const bool on = mm == m || (mm == ModeSound && m == ModeBrowse) || (mm == ModeProject && m == ModeMenu);
         if (on)
         {
             g.setColour (accent);
@@ -318,6 +322,7 @@ void View::drawContent (juce::Graphics& g, juce::Rectangle<int> r)
         case ModeFx:      drawFx (g, r); break;
         case ModeMix:     drawMix (g, r); break;
         case ModeProject: drawProject (g, r); break;
+        case ModeMenu:    drawMenu (g, r); break;
         default: break;
     }
 }
@@ -550,7 +555,7 @@ void View::drawSeq (juce::Graphics& g, juce::Rectangle<int> r)
                 auto c = juce::Rectangle<float> (r.getX() + nameW + s * cw, y, cw, rowH).reduced (1.5f, 1.5f);
                 if (step >= pat.length) { g.setColour (bg); g.fillRect (c); continue; }
                 const int v = pat.drums[(size_t) l][(size_t) step];
-                const bool held = sel && box.isStepHeld (step);
+                const bool held = sel && (box.isStepHeld (step) || step == box.selectedStep());
                 g.setColour (v > 0 ? (v >= 120 ? accent : text.withAlpha (0.6f + 0.4f * v / 127.0f)) : (s % 4 == 0 ? line.brighter (0.05f) : line.darker (0.15f)));
                 g.fillRoundedRectangle (c, 2.0f);
                 if (held) { g.setColour (accent); g.drawRoundedRectangle (c, 2.0f, 2.0f); }
@@ -574,7 +579,7 @@ void View::drawSeq (juce::Graphics& g, juce::Rectangle<int> r)
         auto c = juce::Rectangle<int> (r.getX() + (s % 8) * cw, r.getY() + (s / 8) * ch, cw, ch).reduced (3);
         if (step >= pat.length) { g.setColour (bg); g.fillRect (c); continue; }
         const auto& st = pat.steps[(size_t) step];
-        const bool held = box.isStepHeld (step);
+        const bool held = box.isStepHeld (step) || step == box.selectedStep();
         g.setColour (st.on() ? cell.brighter (0.25f) : cell);
         g.fillRoundedRectangle (c.toFloat(), 6.0f);
         if (step == playing) { g.setColour (accent); g.fillRoundedRectangle (c.toFloat().removeFromTop (4.0f), 2.0f); }
@@ -788,20 +793,50 @@ void View::drawHelp (juce::Graphics& g, juce::Rectangle<int> r)
 {
     g.setColour (bg.withAlpha (0.97f));
     g.fillRect (r);
-    auto in = r.reduced (28, 20);
-    text1 (g, "KEYS ON THE PC  (F1 closes)", in.removeFromTop (28), 18.0f, text, juce::Justification::centredLeft, true);
-    const char* lines[] = {
-        "1-8 / Q-I    the 16 pads (top row / bottom row)",
-        "Space        Play / Stop          Enter   Rec",
-        "Shift        Shift (hold)          Tab     next track (Shift + Tab: back)",
-        "F2  Sound (again: browse)   F3  Seq   F4  Note FX   F5  Mix   F6  Project",
-        "Left / Right Prev / Next page       N       Scenes      C (hold)  Chaos",
-        "Z / X        pad octave down / up",
-        "Mouse        drag or scroll a knob, double-click = back to the start",
-        "             click a pad high = hard, low = soft; click tracks, modes and pages on the screen",
-        "Right-click  sound card, MIDI, learn a keyboard, full screen",
+    auto in = r.reduced (28, 18);
+    text1 (g, "HELP  (touch, F1 or MENU > Help closes)", in.removeFromTop (24), 13.0f, dim, juce::Justification::centredLeft, true);
+    in.removeFromTop (6);
+    const auto lines = box.helpLines();
+    for (int i = 0; i < lines.size(); ++i)
+        text1 (g, lines[i], in.removeFromTop (i == 0 ? 34 : 27), i == 0 ? 20.0f : 16.0f, i == 0 ? text : text.withAlpha (0.85f), juce::Justification::centredLeft, i == 0);
+    if (kiosk) return;
+    in.removeFromTop (10);
+    g.setColour (line);
+    g.drawHorizontalLine (in.getY(), (float) in.getX(), (float) in.getRight());
+    in.removeFromTop (8);
+    const char* keys[] = {
+        "PC:  1-8 / Q-I pads   Space Play   Enter Rec   Shift   Tab next track   Left / Right Prev / Next",
+        "F2 Sound   F3 Seq   F4 Note FX   F5 Mix   F6 Project (twice: MENU)   N Scene   C (hold) Chaos   Z / X pad octave",
+        "Mouse: drag or scroll a knob, double-click = start value; right-click = sound card, MIDI, full screen",
     };
-    for (auto* l : lines) text1 (g, l, in.removeFromTop (30), 16.0f, dim, juce::Justification::centredLeft);
+    for (auto* l : keys) text1 (g, l, in.removeFromTop (22), 13.0f, dim, juce::Justification::centredLeft);
+}
+
+void View::drawMenu (juce::Graphics& g, juce::Rectangle<int> r)
+{
+    text1 (g, box.menuTitle(), r.removeFromTop (22), 14.0f, dim, juce::Justification::centredLeft, true);
+    r.removeFromTop (4);
+    const auto tiles = box.menuTiles();
+    const int confirm = box.menuConfirming();
+    // 2 rows of 8, like the pads (pads 1-8 on top)
+    const int cw = r.getWidth() / 8, ch = r.getHeight() / 2;
+    for (int i = 0; i < numPads; ++i)
+    {
+        auto c = juce::Rectangle<int> (r.getX() + (i % 8) * cw, r.getY() + (i / 8) * ch, cw, ch).reduced (3);
+        menuHits.add (c);
+        const auto& t = tiles[(size_t) i];
+        if (t.label.isEmpty()) { g.setColour (bg); g.fillRoundedRectangle (c.toFloat(), 6.0f); continue; }
+        const bool red = confirm == i;
+        g.setColour (red ? recRed : (t.on ? accent.withAlpha (0.35f) : cell.brighter (t.enabled ? 0.18f : 0.0f)));
+        g.fillRoundedRectangle (c.toFloat(), 6.0f);
+        auto in = c.reduced (7, 6);
+        text1 (g, juce::String (i + 1), in.removeFromTop (12), 10.0f, red ? text : faint, juce::Justification::topLeft);
+        g.setColour (t.enabled ? text : faint);
+        g.setFont (font (14.0f, true));
+        g.drawFittedText (red ? "Press again" : t.label, in.removeFromTop (40), juce::Justification::topLeft, 2, 0.85f);
+        if (t.detail.isNotEmpty() && ! red) text1 (g, t.detail, in, 10.5f, t.enabled ? dim : faint, juce::Justification::bottomLeft);
+        if (t.danger && ! red) { g.setColour (recRed.withAlpha (0.8f)); g.fillRect (c.removeFromBottom (3).reduced (8, 0)); }
+    }
 }
 
 //==============================================================================
@@ -928,6 +963,7 @@ void View::drawPanel (juce::Graphics& g)
     }
 
     // pads
+    const auto menuNow = box.getMode() == ModeMenu ? box.menuTiles() : std::array<Controller::MenuTile, numPads> {};
     for (int p = 0; p < numPads; ++p)
     {
         const auto r = padRect (p);
@@ -943,6 +979,7 @@ void View::drawPanel (juce::Graphics& g)
         if (box.isSceneMode()) label = p < 8 ? "Scene " + juce::String (p + 1) : "Mute " + juce::String (p - 7);
         else if (box.getMode() == ModeMix) label = p < 8 ? "Mute " + juce::String (p + 1) : "Solo " + juce::String (p - 7);
         else if (box.getMode() == ModeSeq) label = "Step " + juce::String (box.seqBar() * 16 + p + 1);
+        else if (box.getMode() == ModeMenu) label = menuNow[(size_t) p].label;
         else
         {
             const int n = box.padNote (box.getTrack(), p);
@@ -977,7 +1014,8 @@ bool View::screenTouch (juce::Point<float> sp, bool down)
         if (doneHit.contains (p)) { box.learnDone(); return true; }
         return true;
     }
-    if (showHelp) { showHelp = false; return true; }
+    if (box.isHelpShown()) { box.toggleHelp(); return true; }
+    for (int i = 0; i < menuHits.size(); ++i) if (menuHits[i].contains (p)) { box.menuPress (i); return true; }
     for (int i = 0; i < trackHits.size(); ++i) if (trackHits[i].contains (p)) { box.selectTrack (i); return true; }
     for (int i = 0; i < modeHits.size(); ++i)
         if (modeHits[i].contains (p))
@@ -1019,7 +1057,7 @@ void View::mouseDown (const juce::MouseEvent& e)
             if (r == 2) box.startLearn();
             if (r == 3) box.forgetMidiMap();
             if (r == 4 && onToggleFullScreen) onToggleFullScreen();
-            if (r == 5) showHelp = ! showHelp;
+            if (r == 5) box.toggleHelp();
             if (r == 6)
             {
                 juce::Component::SafePointer<View> safe (this);
@@ -1143,7 +1181,7 @@ bool View::keyPressed (const juce::KeyPress& k)
     const int code = k.getKeyCode();
     const auto mods = k.getModifiers();
     auto press = [this] (int b) { box.buttonDown (b); box.buttonUp (b); };
-    if (code == juce::KeyPress::F1Key) { showHelp = ! showHelp; return true; }
+    if (code == juce::KeyPress::F1Key) { box.toggleHelp(); return true; }
     if (code == juce::KeyPress::spaceKey) { press (BtnPlay); return true; }
     if (code == juce::KeyPress::returnKey) { press (BtnRec); return true; }
     if (code == juce::KeyPress::tabKey) { box.selectTrack ((box.getTrack() + (mods.isShiftDown() ? numTracks - 1 : 1)) % numTracks); return true; }
@@ -1155,7 +1193,7 @@ bool View::keyPressed (const juce::KeyPress& k)
     if (code == juce::KeyPress::F5Key) { press (BtnMix); return true; }
     if (code == juce::KeyPress::F6Key) { press (BtnProject); return true; }
     if (code == juce::KeyPress::F11Key && onToggleFullScreen) { onToggleFullScreen(); return true; }
-    if (code == juce::KeyPress::escapeKey) { showHelp = false; if (box.isLearning()) box.learnDone(); return true; }
+    if (code == juce::KeyPress::escapeKey) { if (box.isHelpShown()) box.toggleHelp(); if (box.isLearning()) box.learnDone(); return true; }
     const juce::juce_wchar ch = juce::CharacterFunctions::toUpperCase (k.getTextCharacter());
     if (ch == 'N') { press (BtnScene); return true; }
     if (ch == 'Z' || ch == 'X') { box.buttonDown (BtnShift); press (ch == 'Z' ? BtnPrev : BtnNext); box.buttonUp (BtnShift); return true; }

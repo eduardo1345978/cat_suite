@@ -20,7 +20,7 @@
 */
 namespace catbox
 {
-enum Mode { ModeSound = 0, ModeBrowse, ModeSeq, ModeFx, ModeMix, ModeProject, NumModes };
+enum Mode { ModeSound = 0, ModeBrowse, ModeSeq, ModeFx, ModeMix, ModeProject, ModeMenu, NumModes };
 enum Button
 {
     BtnTrack1 = 0, BtnTrack8 = 7,
@@ -127,6 +127,21 @@ public:
     int padOctave (int t) const { return octave[(size_t) juce::jlimit (0, numTracks - 1, t)].load(); }
     bool padsAsScale() const { return scalePads.load(); }
 
+    // ---- the MENU (Project pressed again): 16 tiles, one per pad
+    struct MenuTile { juce::String label, detail; bool enabled = true, danger = false, on = false; };
+    std::array<MenuTile, numPads> menuTiles() const;
+    juce::String menuTitle() const;
+    void menuPress (int tile);
+    int menuConfirming() const;                  // a tile waiting for its second press, or -1
+    // help
+    bool isHelpShown() const noexcept { return helpShown.load(); }
+    void toggleHelp() { helpShown = ! helpShown.load(); if (onChange) onChange(); }
+    juce::StringArray helpLines() const;         // for the mode on screen
+    int selectedStep() const { return selStep[(size_t) track.load()]; }
+    void saveProject (int slot);
+    bool loadProject (int slot);
+    bool projectExists (int slot) const;
+
     // ---- MIDI learn: any MIDI keyboard / controller plays the box
     void startLearn();
     void learnSkip();
@@ -201,6 +216,17 @@ private:
     std::atomic<bool> shift { false }, sceneMode { false }, scalePads { false };
     std::array<std::atomic<int>, numTracks> octave;
     std::array<int, numTracks> soundPage {}, fxPage {}, bar {}, lane {};
+    std::array<int, numTracks> selStep = [] { std::array<int, numTracks> a {}; a.fill (-1); return a; }();
+    int menuPage = 0, menuConfirm = -1;
+    juce::uint32 menuConfirmUntil = 0;
+    std::atomic<bool> helpShown { false };
+    int inputKeysDown = 0;          // step input (SEQ, stopped): keys down now
+    bool inputWritten = false;      // a note went into the selected step: the next key moves on
+    juce::var stateVar() const;
+    void applyStateVar (const juce::var&);
+    void stepInput (int note, int velocity);
+    void selectStep (int step);
+    int stepTargets (std::array<int, maxSteps>& out) const;   // the held steps, else the selected one
     int mixPage = 0, projectPage = 0;
     std::array<int, numTracks> presetIdx {};
     std::array<bool, numTracks> edited {};

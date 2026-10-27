@@ -1,6 +1,7 @@
 #include "Controller.h"
 #include "Music.h"
 #include "Samples.h"
+#include "Templates.h"
 #include <cmath>
 
 namespace catbox
@@ -14,7 +15,7 @@ const char* buttonName (int b)
 
 const char* modeName (int m)
 {
-    static const char* n[NumModes] = { "SOUND", "BROWSE", "SEQ", "NOTE FX", "MIX", "PROJECT" };
+    static const char* n[NumModes] = { "SOUND", "BROWSE", "SEQ", "NOTE FX", "MIX", "PROJECT", "MENU" };
     return n[juce::jlimit (0, NumModes - 1, m)];
 }
 
@@ -247,7 +248,11 @@ void Controller::buttonDown (int b)
             if (sh) { for (auto& t : project.tracks) { t.mute = false; t.solo = false; } changed(); setFlash ("Everything unmuted"); break; }
             setMode (ModeMix);
             break;
-        case BtnProject: setMode (ModeProject); break;
+        case BtnProject:
+            if (mode.load() == ModeMenu) { setMode (ModeProject); break; }
+            if (mode.load() == ModeProject) { menuPage = 0; setMode (ModeMenu); break; }
+            setMode (ModeProject);
+            break;
         case BtnPrev:
         case BtnNext:
         {
@@ -405,9 +410,12 @@ void Controller::selectTrack (int t)
 
 void Controller::setMode (int m)
 {
+    inputWritten = false;
+    menuConfirm = -1;
     if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "mode"); o->setProperty ("v", m); sendRemote (o); return; }
     mode = juce::jlimit (0, NumModes - 1, m);
     numHeldSteps = 0;
+    if (m == ModeMenu) menuPage = 0;
     if (m == ModeBrowse) browseSync();
     if (onChange) onChange();
 }
@@ -794,11 +802,8 @@ void Controller::loadScenes()
             }
 }
 
-void Controller::saveState()
+juce::var Controller::stateVar() const
 {
-    if (isRemote()) return;
-    dirty = false;
-    saveCountdown = 0;
     auto v = project.toVar();
     auto* ui = new juce::DynamicObject();
     juce::Array<juce::var> pi, ed, un, oc, sp;
@@ -809,18 +814,16 @@ void Controller::saveState()
     }
     ui->setProperty ("preset", pi); ui->setProperty ("edited", ed); ui->setProperty ("user", un);
     ui->setProperty ("octave", oc); ui->setProperty ("page", sp);
-    ui->setProperty ("track", track.load()); ui->setProperty ("mode", mode.load() == ModeBrowse ? (int) ModeSound : mode.load());
+    const int m = mode.load();
+    ui->setProperty ("track", track.load()); ui->setProperty ("mode", m == ModeBrowse || m == ModeMenu ? (int) ModeSound : m);
     ui->setProperty ("scalePads", scalePads.load());
     ui->setProperty ("scene", loadedScene);
     if (auto* o = v.getDynamicObject()) o->setProperty ("ui", juce::var (ui));
-    dataDir.getChildFile ("state2.json").replaceWithText (juce::JSON::toString (v));
+    return v;
 }
 
-void Controller::loadState()
+void Controller::applyStateVar (const juce::var& v)
 {
-    const auto f = dataDir.getChildFile ("state2.json");
-    if (! f.existsAsFile()) return;
-    const auto v = juce::JSON::parse (f);
     if (! v.isObject()) return;
     project.fromVar (v);
     const auto ui = v["ui"];
@@ -832,6 +835,7 @@ void Controller::loadState()
         if (auto* a = arr ("user"); a != nullptr && t < a->size()) userName[(size_t) t] = (*a)[t].toString();
         if (auto* a = arr ("octave"); a != nullptr && t < a->size()) octave[(size_t) t] = juce::jlimit (0, 7, (int) (*a)[t]);
         if (auto* a = arr ("page"); a != nullptr && t < a->size()) soundPage[(size_t) t] = (int) (*a)[t];
+        selStep[(size_t) t] = -1;
     }
     track = juce::jlimit (0, numTracks - 1, (int) ui.getProperty ("track", 0));
     audio.viewTrack = track.load();
@@ -839,6 +843,47 @@ void Controller::loadState()
     scalePads = (bool) ui.getProperty ("scalePads", false);
     loadedScene = (int) ui.getProperty ("scene", -1);
     pagesClamp();
+}
+
+void Controller::saveState()
+{
+    if (isRemote()) return;
+    dirty = false;
+    saveCountdown = 0;
+    dataDir.getChildFile ("state2.json").replaceWithText (juce::JSON::toString (stateVar()));
+}
+
+void Controller::loadState()
+{
+    const auto f = dataDir.getChildFile ("state2.json");
+    if (! f.existsAsFile()) return;
+    applyStateVar (juce::JSON::parse (f));
+}
+
+bool Controller::projectExists (int slot) const
+{
+    return dataDir.getChildFile ("projects").getChildFile ("project" + juce::String (slot + 1) + ".json").existsAsFile();
+}
+
+void Controller::saveProject (int slot)
+{
+    const auto f = dataDir.getChildFile ("projects").getChildFile ("project" + juce::String (slot + 1) + ".json");
+    f.getParentDirectory().createDirectory();
+    f.replaceWithText (juce::JSON::toString (stateVar()));
+    setFlash ("Project " + juce::String (slot + 1) + " saved");
+}
+
+bool Controller::loadProject (int slot)
+{
+    const auto f = dataDir.getChildFile ("projects").getChildFile ("project" + juce::String (slot + 1) + ".json");
+    if (! f.existsAsFile()) { setFlash ("Project " + juce::String (slot + 1) + " is empty"); return false; }
+    pushUndo ("Load project");
+    audio.post ({ Event::AllOff, 0, 0, 0.0f });
+    applyStateVar (juce::JSON::parse (f));
+    mode = ModeSound;
+    changed();
+    setFlash ("Project " + juce::String (slot + 1) + " loaded");
+    return true;
 }
 
 void Controller::pagesClamp()
@@ -1115,6 +1160,7 @@ juce::StringArray Controller::pageNames() const
         case ModeFx: for (const auto& s : noteFxNames()) n.add (s.toUpperCase()); break;
         case ModeMix: n.add ("LEVEL"); n.add ("SENDS"); break;
         case ModeProject: n.add ("PROJECT"); break;
+        case ModeMenu: n.add ("MENU"); break;
         default: break;
     }
     return n;
@@ -1148,11 +1194,13 @@ juce::String Controller::hint() const
         case ModeSound:   if (cur().engine == EngineSampler) return "Rec: record a sample (microphone) | knob 1: the sample | Play: Keys / Chop / One shot";
                           return "Knobs: the sound | Prev / Next: pages | Shift: 12 more | Sound: browse sounds";
         case ModeBrowse:  return "Knob 1 engine | 2 category | 3 sound | Prev / Next: next sound | Rec: save as User | Sound: back";
-        case ModeSeq:     return cur().isDrums() ? "Pad = step of the drum | hold a step + knob = edit | Shift + pad: pick drum | Prev / Next: bar | Shift + Prev / Next: copy / paste"
-                                                 : "Pad = step | hold a step + key / knobs = edit | Prev / Next: bar | Shift + Prev / Next: copy / paste bar";
+        case ModeSeq:     return cur().isDrums() ? "Hit a drum to pick it | pad = step on / off | knobs: the picked step | Shift + knobs: the pattern | Prev / Next: bar"
+                                                 : (audio.isPlaying() ? "Pad = step on / off | knobs: the picked step | Shift + knobs: the pattern | Rec: record what you play"
+                                                                       : "Play keys: they fill the steps one by one | pad = step on / off | knobs: the picked step | Shift + knobs: pattern");
         case ModeFx:      return "Prev / Next: Off / Arp / Chords / Orbit | Shift + Prev / Next: presets | play the keys";
         case ModeMix:     return "Knobs: levels (Shift: pan) | Prev / Next: sends | pads 1-8 mute, 9-16 solo";
-        case ModeProject: return "Tempo, swing, key, scale, click, master | Shift: glue, tape, width, reverb, delay";
+        case ModeProject: return "Tempo, key, scale ... | Project again = MENU (save, load, patterns, help)";
+        case ModeMenu:    return menuPage == 0 ? "A pad (or a touch) = do it | red = press again to be sure | Project = back" : "Pick with a pad | pad 16 = back";
         default: return {};
     }
 }
@@ -1167,28 +1215,74 @@ bool Controller::isStepHeld (int step) const
 
 int Controller::heldStepCount() const { return numHeldSteps; }
 
+int Controller::stepTargets (std::array<int, maxSteps>& out) const
+{
+    if (numHeldSteps > 0) { for (int i = 0; i < numHeldSteps; ++i) out[(size_t) i] = heldSteps[(size_t) i]; return numHeldSteps; }
+    const int s = selStep[(size_t) track.load()];
+    if (s >= 0 && s < cur().pat.length) { out[0] = s; return 1; }
+    return 0;
+}
+
+void Controller::selectStep (int step)
+{
+    selStep[(size_t) track.load()] = step;
+    inputWritten = false;   // step input continues from here
+}
+
 void Controller::stepTap (int step)
 {
+    // tap an empty step: on (and picked); tap a step that is on: picked; tap the picked one again: off
     pushUndo ("Steps", true);
     auto& tr = cur();
     auto& pat = tr.pat;
     if (step >= pat.length) return;
+    const int t = track.load();
     if (tr.isDrums())
     {
-        auto& v = pat.drums[(size_t) lane[(size_t) track.load()]][(size_t) step];
-        v = v > 0 ? 0 : (uint8_t) juce::jlimit (1, 127, lastVel);
+        auto& v = pat.drums[(size_t) lane[(size_t) t]][(size_t) step];
+        if (v == 0) { v = (uint8_t) juce::jlimit (1, 127, juce::jmax (90, lastVel)); selectStep (step); }
+        else if (selStep[(size_t) t] != step) selectStep (step);
+        else { v = 0; pat.rolls[(size_t) lane[(size_t) t]][(size_t) step] = 0; selectStep (-1); }
     }
     else
     {
         auto& st = pat.steps[(size_t) step];
-        if (st.on()) st.clear();
-        else
+        if (! st.on())
         {
+            st.clear();
             st.notes[0] = (int8_t) lastNote;
-            st.vel = (uint8_t) lastVel;
+            st.vel = (uint8_t) juce::jmax (90, lastVel);
             st.len = 75;
+            selectStep (step);
         }
+        else if (selStep[(size_t) t] != step) selectStep (step);
+        else { st.clear(); selectStep (-1); }
     }
+    changed();
+}
+
+void Controller::stepInput (int note, int velocity)
+{
+    // SEQ while stopped: every key goes into the next step (keys played together = a chord)
+    auto& tr = cur();
+    auto& pat = tr.pat;
+    const int t = track.load();
+    int cursor = selStep[(size_t) t];
+    if (cursor < 0 || cursor >= pat.length) { cursor = juce::jmin (bar[(size_t) t] * 16, pat.length - 1); inputWritten = false; }
+    if (inputKeysDown == 0 && inputWritten) cursor = (cursor + 1) % pat.length;
+    pushUndo ("Steps", true);
+    auto& st = pat.steps[(size_t) cursor];
+    if (inputKeysDown == 0)
+    {
+        st.clear();
+        st.notes[0] = (int8_t) note;
+        st.vel = (uint8_t) juce::jlimit (1, 127, velocity);
+        st.len = 75;
+    }
+    else st.add (note);
+    selStep[(size_t) t] = cursor;
+    bar[(size_t) t] = cursor / 16;
+    inputWritten = true;
     changed();
 }
 
@@ -1222,13 +1316,14 @@ void Controller::seqKnob (int slot, float clicks)
     auto stepsOf = [&clicks] (float& a) { a += clicks; const int d = (int) a; a -= (float) d; return d; };
     const int d = stepsOf (acc[slot]);
 
-    if (numHeldSteps > 0)   // edit the held steps (with Shift the same knobs: knob 1 then moves by semitones)
+    std::array<int, maxSteps> targets {};
+    const int numTargets = slot < numKnobs ? stepTargets (targets) : 0;
+    if (numTargets > 0)   // edit the picked (or held) steps; Shift = the whole pattern
     {
-        slot %= numKnobs;
-        stepEdited = true;
-        for (int i = 0; i < numHeldSteps; ++i)
+        if (numHeldSteps > 0) stepEdited = true;
+        for (int i = 0; i < numTargets; ++i)
         {
-            const int s = heldSteps[(size_t) i];
+            const int s = targets[(size_t) i];
             if (tr.isDrums())
             {
                 auto& v = pat.drums[(size_t) lane[(size_t) t]][(size_t) s];
@@ -1241,7 +1336,11 @@ void Controller::seqKnob (int slot, float clicks)
             switch (slot)
             {
                 case 0:  if (! st.on()) { st.notes[0] = (int8_t) lastNote; break; }
-                         for (auto& n : st.notes) if (n >= 0) n = (int8_t) (shift.load() ? juce::jlimit (0, 127, n + d) : music::moveInScale (n, project.m.key, project.m.scale, d));
+                         for (auto& n : st.notes) if (n >= 0) n = (int8_t) music::moveInScale (n, project.m.key, project.m.scale, d);
+                         lastNote = st.notes[0];
+                         break;
+                case 11: for (auto& n : st.notes) if (n >= 0) n = (int8_t) juce::jlimit (0, 127, n + d);   // semitones
+                         lastNote = st.notes[0];
                          break;
                 case 1:  st.vel = (uint8_t) juce::jlimit (1, 127, (int) st.vel + d * 3); break;
                 case 2:  st.len = (uint16_t) juce::jlimit (10, 1600, (int) st.len + d * (st.len >= 100 ? 25 : 5)); break;
@@ -1267,7 +1366,8 @@ void Controller::seqKnob (int slot, float clicks)
         changed();
         return;
     }
-    // nothing held: the whole pattern
+    // nothing picked (or Shift): the whole pattern
+    slot %= numKnobs;
     switch (slot)
     {
         case 0: pat.length = juce::jlimit (1, maxSteps, pat.length + d); bar[(size_t) t] = juce::jmin (bar[(size_t) t], (pat.length - 1) / 16); break;
@@ -1310,10 +1410,10 @@ KnobView Controller::seqKnobView (int slot) const
     const auto& tr = cur();
     const auto& pat = tr.pat;
     const int t = track.load();
-    if (numHeldSteps > 0)
+    std::array<int, maxSteps> targets {};
+    if (slot < numKnobs && stepTargets (targets) > 0)
     {
-        slot %= numKnobs;
-        const int s = heldSteps[0];
+        const int s = targets[0];
         if (tr.isDrums())
         {
             if (slot == 2)
@@ -1324,14 +1424,15 @@ KnobView Controller::seqKnobView (int slot) const
             }
             if (slot > 1) return v;
             const int vel = pat.drums[(size_t) lane[(size_t) t]][(size_t) s];
-            v.used = true; v.name = "Velocity"; v.value = vel > 0 ? juce::String (vel) + (vel >= 120 ? " accent" : "") : juce::String ("off"); v.norm = vel / 127.0f;
+            v.used = true; v.name = slot == 0 ? "Step " + juce::String (s + 1) : juce::String ("Velocity"); v.value = vel > 0 ? juce::String (vel) + (vel >= 120 ? " accent" : "") : juce::String ("off"); v.norm = vel / 127.0f;
             return v;
         }
         const auto& st = pat.steps[(size_t) s];
-        v.used = slot <= 10;
+        v.used = slot <= 11;
         switch (slot)
         {
-            case 0: v.name = "Note"; v.value = st.on() ? music::noteName (st.notes[0]) : juce::String ("off"); v.norm = st.on() ? st.notes[0] / 127.0f : 0.0f; break;
+            case 11: v.name = "Semitone"; v.value = st.on() ? music::noteName (st.notes[0]) : juce::String ("off"); v.norm = 0.5f; v.bipolar = true; break;
+            case 0: v.name = "Step " + juce::String (s + 1) + " note"; v.value = st.on() ? music::noteName (st.notes[0]) : juce::String ("off"); v.norm = st.on() ? st.notes[0] / 127.0f : 0.0f; break;
             case 1: v.name = "Velocity"; v.value = juce::String ((int) st.vel); v.norm = st.vel / 127.0f; break;
             case 2: v.name = "Length"; v.value = st.len >= 100 ? juce::String (st.len / 100.0f, 2) + " steps" : juce::String ((int) st.len) + "%"; v.norm = juce::jmin (1.0f, st.len / 400.0f); break;
             case 3: v.name = "Slide"; v.value = st.slide ? "On" : "Off"; v.norm = st.slide ? 1.0f : 0.0f; break;
@@ -1350,6 +1451,7 @@ KnobView Controller::seqKnobView (int slot) const
         return v;
     }
     v.used = true;
+    slot %= numKnobs;
     switch (slot)
     {
         case 0: v.name = "Length"; v.value = juce::String (pat.length) + " steps"; v.norm = pat.length / (float) maxSteps; break;
@@ -1413,6 +1515,7 @@ void Controller::padDown (int pad, int velocity)
         return;
     }
     const int m = mode.load();
+    if (m == ModeMenu && ! sceneMode.load()) { runOnMessageThread ([this, pad] { menuPress (pad); }); return; }
     if (sceneMode.load() || m == ModeSeq || m == ModeMix || shift.load())
     {
         runOnMessageThread ([this, pad, velocity] { if (! padDownMessageThread (pad, velocity)) padDown (pad, velocity); });
@@ -1423,6 +1526,7 @@ void Controller::padDown (int pad, int velocity)
     const int note = padNote (t, pad);
     if (note < 0) return;
     padHeld[(size_t) pad] = true;
+    if (project.tracks[(size_t) t].isDrums()) runOnMessageThread ([this, t, pad] { lane[(size_t) t] = pad; });
     audio.post ({ Event::NoteOn, (int8_t) t, (int16_t) note, juce::jlimit (1, 127, velocity) / 127.0f });
     lastVel = juce::jlimit (1, 127, velocity);
     if (! project.tracks[(size_t) t].isDrums()) lastNote = note;
@@ -1466,6 +1570,7 @@ void Controller::padUp (int pad)
         runOnMessageThread ([this, pad] { auto* o = new juce::DynamicObject(); o->setProperty ("t", "pad"); o->setProperty ("p", pad); o->setProperty ("down", false); sendRemote (o); });
         return;
     }
+    if (mode.load() == ModeMenu && ! sceneMode.load()) return;
     if (mode.load() == ModeSeq && ! sceneMode.load())
     {
         runOnMessageThread ([this, pad]
@@ -1501,14 +1606,19 @@ void Controller::keyDown (int note, int velocity)
     const int t = track.load();
     lastVel = juce::jlimit (1, 127, velocity);
     if (! project.tracks[(size_t) t].isDrums()) lastNote = juce::jlimit (0, 127, note);
+    if (project.tracks[(size_t) t].isDrums())   // hitting a drum picks it (SEQ shows and edits that drum)
+        runOnMessageThread ([this, t, note] { lane[(size_t) t] = ((note - 36) % numLanes + numLanes) % numLanes; if (onChange) onChange(); });
     if (mode.load() == ModeSeq && numHeldSteps > 0)
         runOnMessageThread ([this, note, velocity] { if (numHeldSteps > 0) stepKey (note, velocity); });
+    else if (mode.load() == ModeSeq && ! audio.isPlaying() && ! project.tracks[(size_t) t].isDrums())
+        runOnMessageThread ([this, note, velocity] { stepInput (note, velocity); ++inputKeysDown; });
     audio.post ({ Event::NoteOn, (int8_t) t, (int16_t) juce::jlimit (0, 127, note), juce::jlimit (1, 127, velocity) / 127.0f });
 }
 
 void Controller::keyUp (int note)
 {
     if (isRemote()) { runOnMessageThread ([this, note] { auto* o = new juce::DynamicObject(); o->setProperty ("t", "key"); o->setProperty ("n", note); o->setProperty ("down", false); sendRemote (o); }); return; }
+    runOnMessageThread ([this] { inputKeysDown = juce::jmax (0, inputKeysDown - 1); });
     // the note goes off on every track (the track may have changed while it was held)
     for (int t = 0; t < numTracks; ++t) audio.post ({ Event::NoteOff, (int8_t) t, (int16_t) juce::jlimit (0, 127, note), 0.0f });
 }
@@ -1581,6 +1691,224 @@ void Controller::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMe
     else if (m.isPitchWheel()) audio.post ({ Event::Bend, (int8_t) track.load(), 0, (m.getPitchWheelValue() - 8192) / 8192.0f * 2.0f });
     else if (m.isController() && m.getControllerNumber() == 1) audio.post ({ Event::Mod, (int8_t) track.load(), 0, m.getControllerValue() / 127.0f });
     else if (m.isAllNotesOff() || m.isAllSoundOff()) audio.post ({ Event::AllOff, 0, 0, 0.0f });
+}
+
+
+//==============================================================================
+// The MENU: 16 tiles (one per pad); red ones need a second press
+namespace
+{
+enum MenuMain { MSave = 0, MLoad, MNew, MClearTrack, MClearAll, MCopyTrack, MDrumPattern, MBassLine,
+                MClick, MPadsMode, MLearn, MHelp, MTap, MSaveSound, MUndo, MClose };
+enum MenuPage { PageMain = 0, PageSave, PageLoad, PageCopy, PageDrums, PageBass };
+}
+
+juce::String Controller::menuTitle() const
+{
+    switch (menuPage)
+    {
+        case PageSave:  return "SAVE THE PROJECT INTO";
+        case PageLoad:  return "LOAD A PROJECT";
+        case PageCopy:  return "COPY TRACK " + juce::String (track.load() + 1) + " TO";
+        case PageDrums: return "DRUM PATTERN FOR TRACK " + juce::String (track.load() + 1);
+        case PageBass:  return "BASS LINE FOR TRACK " + juce::String (track.load() + 1) + " (in " + music::keyName (project.m.key) + " " + music::scaleName (project.m.scale) + ")";
+        default:        return "MENU";
+    }
+}
+
+int Controller::menuConfirming() const
+{
+    return menuConfirm >= 0 && juce::Time::getMillisecondCounter() < menuConfirmUntil ? menuConfirm : -1;
+}
+
+std::array<Controller::MenuTile, numPads> Controller::menuTiles() const
+{
+    std::array<MenuTile, numPads> m;
+    auto back = [&m] { m[15] = { "Back", "", true, false, false }; };
+    switch (menuPage)
+    {
+        case PageSave:
+        case PageLoad:
+            for (int i = 0; i < 8; ++i)
+            {
+                const bool has = projectExists (i);
+                const auto f = dataDir.getChildFile ("projects").getChildFile ("project" + juce::String (i + 1) + ".json");
+                m[(size_t) i] = { "Project " + juce::String (i + 1), has ? f.getLastModificationTime().formatted ("%d.%m. %H:%M") : juce::String ("empty"),
+                                  menuPage == PageSave || has, menuPage == PageSave && has, false };
+            }
+            back();
+            return m;
+        case PageCopy:
+            for (int i = 0; i < numTracks; ++i)
+                m[(size_t) i] = { "Track " + juce::String (i + 1), engineDef (project.tracks[(size_t) i].engine).name, i != track.load(), true, false };
+            back();
+            return m;
+        case PageDrums:
+        {
+            const auto n = drumTemplateNames();
+            for (int i = 0; i < juce::jmin (15, n.size()); ++i) m[(size_t) i] = { n[i], "", true, false, false };
+            back();
+            return m;
+        }
+        case PageBass:
+        {
+            const auto n = bassTemplateNames();
+            for (int i = 0; i < juce::jmin (15, n.size()); ++i) m[(size_t) i] = { n[i], "", true, false, false };
+            back();
+            return m;
+        }
+        default: break;
+    }
+    const bool drums = cur().isDrums();
+    m[MSave] = { "Save project", "8 places", true, false, false };
+    m[MLoad] = { "Load project", "", true, false, false };
+    m[MNew] = { "New project", "all from the start", true, true, false };
+    m[MClearTrack] = { "Clear track", "the steps of track " + juce::String (track.load() + 1), true, true, false };
+    m[MClearAll] = { "Clear all", "the steps of all tracks", true, true, false };
+    m[MCopyTrack] = { "Copy track", "sound + steps to ...", true, false, false };
+    m[MDrumPattern] = { "Drum pattern", drums ? "house, trap, breaks ..." : "(on a drum track)", drums, false, false };
+    m[MBassLine] = { "Bass line", ! drums ? "acid, octaves, walking ..." : "(on a melody track)", ! drums, false, false };
+    m[MClick] = { "Click", project.m.metronome ? "on" : "off", true, false, project.m.metronome };
+    m[MPadsMode] = { "Pads", scalePads.load() ? "scale" : "piano", true, false, scalePads.load() };
+    m[MLearn] = { "Learn keyboard", juce::String (numLearned()) + " controls learned", true, false, false };
+    m[MHelp] = { "Help", "how it works", true, false, helpShown.load() };
+    m[MTap] = { "Tap tempo", juce::String (juce::roundToInt (project.m.tempo)) + " BPM", true, false, false };
+    m[MSaveSound] = { "Save sound", "as a User sound", true, false, false };
+    m[MUndo] = { "Undo", juce::String ((int) undoStack.size()) + " steps back", ! undoStack.empty(), false, false };
+    m[MClose] = { "Close", "", true, false, false };
+    return m;
+}
+
+void Controller::menuPress (int tile)
+{
+    if (tile < 0 || tile >= numPads) return;
+    const auto tiles = menuTiles();
+    const auto& t = tiles[(size_t) tile];
+    if (! t.enabled || t.label.isEmpty()) return;
+    if (t.danger && menuConfirming() != tile)   // dangerous: a second press within 3 s
+    {
+        menuConfirm = tile;
+        menuConfirmUntil = juce::Time::getMillisecondCounter() + 3000;
+        setFlash (t.label + ": press again to be sure");
+        return;
+    }
+    menuConfirm = -1;
+    if (menuPage != PageMain)
+    {
+        const int page = menuPage;
+        if (tile == 15) { menuPage = PageMain; if (onChange) onChange(); return; }
+        switch (page)
+        {
+            case PageSave: saveProject (tile); break;
+            case PageLoad: loadProject (tile); break;
+            case PageCopy:
+            {
+                pushUndo ("Copy track");
+                auto& to = project.tracks[(size_t) tile];
+                const auto mix = std::make_tuple (to.volume, to.pan, to.sendA, to.sendB, to.mute, to.solo);
+                to = cur();
+                std::tie (to.volume, to.pan, to.sendA, to.sendB, to.mute, to.solo) = mix;
+                presetIdx[(size_t) tile] = presetIdx[(size_t) track.load()];
+                userName[(size_t) tile] = userName[(size_t) track.load()];
+                edited[(size_t) tile] = edited[(size_t) track.load()];
+                changed();
+                setFlash ("Track " + juce::String (track.load() + 1) + " copied to track " + juce::String (tile + 1));
+                break;
+            }
+            case PageDrums:
+                pushUndo ("Drum pattern");
+                applyDrumTemplate (cur().pat, tile);
+                changed();
+                setFlash ("Drum pattern: " + t.label + " (change it in SEQ)");
+                if (! audio.isPlaying()) setPlaying (true);
+                return;
+            case PageBass:
+                pushUndo ("Bass line");
+                applyBassTemplate (cur().pat, tile, project.m.key, project.m.scale);
+                changed();
+                setFlash ("Bass line: " + t.label + " (change it in SEQ)");
+                if (! audio.isPlaying()) setPlaying (true);
+                return;
+            default: break;
+        }
+        menuPage = PageMain;
+        if (onChange) onChange();
+        return;
+    }
+    switch (tile)
+    {
+        case MSave:        menuPage = PageSave; break;
+        case MLoad:        menuPage = PageLoad; break;
+        case MNew:         factoryReset(); return;
+        case MClearTrack:  clearPattern (track.load()); setFlash ("Track " + juce::String (track.load() + 1) + " cleared"); break;
+        case MClearAll:    pushUndo ("Clear all"); for (auto& tr : project.tracks) tr.pat.clear(); changed(); setFlash ("All patterns cleared"); break;
+        case MCopyTrack:   menuPage = PageCopy; break;
+        case MDrumPattern: menuPage = PageDrums; break;
+        case MBassLine:    menuPage = PageBass; break;
+        case MClick:       project.m.metronome = ! project.m.metronome; changed(); break;
+        case MPadsMode:    scalePads = ! scalePads.load(); break;
+        case MLearn:       mode = ModeProject; startLearn(); return;
+        case MHelp:        toggleHelp(); break;
+        case MTap:         tapTempo(); break;
+        case MSaveSound:   saveUserSound(); break;
+        case MUndo:        undo(); break;
+        case MClose:       setMode (ModeProject); return;
+        default: break;
+    }
+    if (onChange) onChange();
+}
+
+juce::StringArray Controller::helpLines() const
+{
+    switch (mode.load())
+    {
+        case ModeSound: return {
+            "SOUND - the knobs change the sound of the track",
+            "Prev / Next: the sound's pages (e.g. OSC, FILTER, ENV)",
+            "Shift held: 12 more knobs",
+            "Sound again: the BROWSER - knob 1 engine, knob 2 category, knob 3 sound",
+            "Shift + Sound: start from a plain sound (Init)",
+            "Sampler track: Rec records a sample from the microphone" };
+        case ModeBrowse: return {
+            "BROWSER - every sound, heard the moment you pick it",
+            "Knob 1: engine   Knob 2: category   Knob 3: the sound",
+            "Prev / Next: the next / previous sound",
+            "Rec: save the sound as yours (category User)",
+            "Sound: back to the knobs" };
+        case ModeSeq: return {
+            "SEQ - the 16 pads are the 16 steps of a bar",
+            "Tap an empty step: on. Tap it again: off",
+            "The knobs change the picked step: note, velocity, length, slide, accent ...",
+            "Stopped: play keys and they fill the steps one by one",
+            "Drums: hit a drum (pad or key) to pick it, then tap its steps",
+            "Shift + knobs: the whole pattern (length, swing, transpose ...)",
+            "Prev / Next: bar 1-4   Shift + Prev / Next: copy / paste a bar",
+            "Rec + Play: record what you play   MENU: ready-made drum patterns and bass lines" };
+        case ModeFx: return {
+            "NOTE FX - what happens to the notes of the track",
+            "Prev / Next: Off / Arp / Chords / Orbit",
+            "Arp: hold keys, it plays them in a rhythm   Chords: one key = a chord",
+            "Orbit: every held key is a planet that plays when it crosses a line",
+            "Shift + Prev / Next: ready-made settings" };
+        case ModeMix: return {
+            "MIX - all 8 tracks",
+            "Knobs 1-8: volume (Shift: pan)   Knobs 9-12: master, glue, tape, width",
+            "Next: SENDS - reverb (knobs 1-8) and delay (Shift + knobs 1-8)",
+            "Pads 1-8: mute   Pads 9-16: solo" };
+        case ModeMenu: return {
+            "MENU - the 16 pads are the 16 buttons on the screen",
+            "Red buttons (new, clear) ask first: press them twice",
+            "Save / Load project: 8 places, the pad = the place",
+            "Drum pattern / Bass line: a ready start for the track, then change it in SEQ",
+            "Pad 16 or Project: back" };
+        case ModeProject: return {
+            "PROJECT - tempo, swing, key, scale, click, master",
+            "Project again: the MENU - save / load, new project, clear,",
+            "    copy a track, drum patterns, bass lines, help",
+            "The slider: DJ filter   The joystick: bend and modulation",
+            "Shift + Chaos: undo (40 steps)   Scene: 8 scenes on the pads" };
+        default: return {};
+    }
 }
 
 //==============================================================================

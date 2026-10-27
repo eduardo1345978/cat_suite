@@ -60,6 +60,7 @@ private:
     void drawScenes (juce::Graphics&, juce::Rectangle<int>);
     void drawLearn (juce::Graphics&, juce::Rectangle<int>);
     void drawHelp (juce::Graphics&, juce::Rectangle<int>);
+    void drawMenu (juce::Graphics&, juce::Rectangle<int>);
 
     // the PC panel (in panel coordinates)
     void drawPanel (juce::Graphics&);
@@ -81,7 +82,7 @@ private:
     juce::Point<float> offset;
 
     // the screen's touch areas (screen coordinates)
-    juce::Array<juce::Rectangle<int>> trackHits, modeHits, pageHits;
+    juce::Array<juce::Rectangle<int>> trackHits, modeHits, pageHits, menuHits;
     juce::Rectangle<int> playHit, learnHit, skipHit, doneHit, knobArea;
 
     enum DragKind { DragNone, DragKnob, DragSlider, DragJoy, DragPad, DragButton };
@@ -93,7 +94,6 @@ private:
     std::array<bool, NumButtons> keyButtonDown {};
     float sliderPos = 0.5f;
     juce::Point<float> joyPos;
-    bool showHelp = false;
 
     std::array<float, numTracks> meters {};
     std::array<float, numTracks> hitGlow {};

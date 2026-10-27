@@ -21,6 +21,7 @@ target_sources(CatBox PRIVATE
     Source/EngineSampler.cpp
     Source/EngineGranular.cpp
     Source/Samples.cpp
+    Source/Templates.cpp
     Source/NoteFx.cpp
     Source/Project.cpp
     Source/MixFx.cpp
