@@ -22,6 +22,13 @@ struct Sample
     int length() const noexcept { return (int) l.size(); }
 };
 
+/** A whole instrument from one folder: for every key the nearest recorded note, with up to 4 velocity layers. */
+struct ZoneMap
+{
+    struct Zone { std::array<int16_t, 4> slot { -1, -1, -1, -1 }; int8_t layers = 0; int8_t root = 60; };
+    std::array<Zone, 128> keys;
+};
+
 class SampleBank
 {
 public:
@@ -48,6 +55,9 @@ public:
         read the first time it is needed (ensureLoaded, message thread). Returns how many were found. */
     int addLibrary (const juce::File& root);
     bool ensureLoaded (int slot);
+    /** Multi-sample: reads every sample of the slot's folder and maps them over the keys (message thread). */
+    bool buildZones (int slot);
+    const ZoneMap* zonesFor (int slot) const noexcept { return slot >= 0 && slot < maxSamples ? zones[(size_t) slot].load (std::memory_order_acquire) : nullptr; }
     bool isLibrary (int slot) const noexcept { return slot >= firstLibrary && slot < firstLibrary + libraryCount; }
     juce::StringArray libraryFolders() const;     // the folders, sorted
     std::vector<int> librarySlotsIn (const juce::String& folder) const;
@@ -66,6 +76,8 @@ private:
     std::vector<juce::File> files;       // where a slot's sample comes from (library)
     int firstLibrary = -1, libraryCount = 0;
     std::array<std::atomic<const Sample*>, maxSamples> slots {};
+    std::array<std::atomic<const ZoneMap*>, maxSamples> zones {};
+    std::vector<std::unique_ptr<ZoneMap>> ownedZones;
     std::vector<std::unique_ptr<Sample>> owned;
     std::atomic<int> used { 0 };
 };

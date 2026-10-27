@@ -660,6 +660,8 @@ void Controller::browseApply (bool preview)
         tr.params[(size_t) d.index ("sample")] = (float) slot;
         if (tr.engine == EngineSampler)
         {
+            // a folder with many notes is an instrument: play all of it across the keys
+            tr.params[(size_t) d.index ("multi")] = bank.buildZones (slot) ? 1.0f : 0.0f;
             const int note = SampleBank::noteFromName (bank.name (slot));
             tr.params[(size_t) d.index ("root")] = (float) (note >= 0 ? note : 60);
             const auto* smp = bank.at (slot);
@@ -3031,6 +3033,8 @@ void Controller::prepareSamples()
         const auto& d = engineDef (tr.engine);
         for (size_t i = 0; i < d.params.size(); ++i)
             if (d.params[i].isSample) bank.ensureLoaded (juce::roundToInt (tr.params[i]));
+        if (tr.engine == EngineSampler && tr.params[(size_t) d.index ("multi")] > 0.5f)
+            bank.buildZones (juce::roundToInt (tr.params[(size_t) d.index ("sample")]));
     }
 }
 

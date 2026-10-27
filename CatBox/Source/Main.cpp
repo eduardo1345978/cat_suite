@@ -519,6 +519,23 @@ public:
                 const auto& d = engineDef (EngineSampler);
                 check ((int) box.getProject().tracks[7].params[(size_t) d.index ("root")] == SampleBank::noteFromName (bank.name ((int) box.getProject().tracks[7].params[(size_t) d.index ("sample")])),
                        "Sampler: Violins play from the sample's own note", bank.name ((int) box.getProject().tracks[7].params[(size_t) d.index ("sample")]));
+                {
+                    const int vs = (int) box.getProject().tracks[7].params[(size_t) d.index ("sample")];
+                    const auto* zm = bank.zonesFor (vs);
+                    check (zm != nullptr && zm->keys[48].root != zm->keys[84].root && zm->keys[60].layers >= 1,
+                           "Violins are a multi-sample: other notes, other recordings", zm != nullptr ? juce::String (zm->keys[48].root) + " / " + juce::String (zm->keys[84].root) : juce::String ("no zones"));
+                    // play low, middle and high: every one sounds
+                    bool allPlay = true;
+                    for (int note : { 43, 60, 79, 91 })
+                    {
+                        audio.post ({ Event::NoteOn, 7, (int16_t) note, 0.8f });
+                        const auto st = renderSeconds (audio, 0.6, nullptr);
+                        audio.post ({ Event::NoteOff, 7, (int16_t) note, 0.0f });
+                        renderSeconds (audio, 0.3, nullptr);
+                        allPlay = allPlay && st.finite && st.rms > 0.003f;
+                    }
+                    check (allPlay, "a multi-sample plays from the bottom to the top", {});
+                }
                 // the browser lists the library folders and picks a sample from them
                 box.selectTrack (7);
                 box.setMode (ModeSound);

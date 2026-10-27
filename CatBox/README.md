@@ -67,6 +67,8 @@ About 6 GB go into `CatBox/library`:
 Cat Box finds the library by itself (also `CATBOX_LIBRARY=<folder>` or `<data>/library`). Only what is used is read into memory.
 Every sample is in the browser: **SOUND, Sound again**, engine Sampler / Granular / Kit, then the **LIB ...** categories (one per folder);
 on a Kit it goes onto the pad you hit last. A sampler sound plays from the sample's own note (read from its name).
+**Multi-sample** (Sampler, FILTER page Shift, on by itself for instrument folders): the whole folder is one instrument -
+every key plays the nearest recorded note, and how hard you play picks the soft or loud recording (up to 4 layers).
 
 ## The screen
 

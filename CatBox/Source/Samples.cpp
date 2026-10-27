@@ -1,4 +1,5 @@
 #include "Samples.h"
+#include <map>
 #include <juce_audio_formats/juce_audio_formats.h>
 
 namespace catbox
@@ -45,6 +46,8 @@ int SampleBank::noteFromName (const juce::String& name)
         if (oct < -1 || oct > 9) continue;
         found = juce::jlimit (0, 127, (oct + 1) * 12 + semi);
     }
+    // VSCO names its notes one octave low (C3 = middle C, the Yamaha way)
+    if (found >= 0 && name.contains ("VSCO")) found = juce::jmin (127, found + 12);
     return found;
 }
 
@@ -252,4 +255,68 @@ void SampleBank::loadFolder (const juce::File& folder, const juce::StringArray& 
         readFile (f);
     }
 }
+namespace
+{
+/** How loud a take is, from its name: v1..v9, pp / p / mp / mf / f / ff / fff (0 = unknown). */
+int dynamicOf (const juce::String& name)
+{
+    int d = 0;
+    for (const auto& t : juce::StringArray::fromTokens (name.fromLastOccurrenceOf ("/", false, false).toLowerCase(), "_ -.", ""))
+    {
+        if (t.length() == 2 && t[0] == 'v' && juce::CharacterFunctions::isDigit (t[1])) d = 10 * (t[1] - '0');
+        static const char* dyn[] = { "ppp", "pp", "p", "mp", "mf", "f", "ff", "fff" };
+        for (int k = 0; k < 8; ++k) if (t == dyn[k]) d = 10 * (k + 1);
+    }
+    return d;
+}
+bool isLaterTake (const juce::String& name)
+{
+    const auto n = name.fromLastOccurrenceOf ("/", false, false).toLowerCase();
+    return n.contains ("rr2") || n.contains ("rr3") || n.contains ("rr4") || n.contains ("_2.") || n.endsWith ("_2") || n.endsWith ("_3") || n.endsWith ("_4");
+}
+} // namespace
+
+bool SampleBank::buildZones (int slot)
+{
+    if (slot < 0 || slot >= used.load()) return false;
+    if (zonesFor (slot) != nullptr) return true;
+    const auto folder = folderOf (slot);
+    if (folder.isEmpty()) return false;
+    // the notes of the folder, each with its takes from soft to loud (first round-robin only)
+    std::map<int, std::vector<std::pair<int, int>>> byNote;   // note -> (dynamic, slot)
+    const auto inFolder = librarySlotsIn (folder);
+    for (int s : inFolder)
+    {
+        const int note = noteFromName (names[(size_t) s]);
+        if (note < 0 || isLaterTake (names[(size_t) s])) continue;
+        byNote[note].push_back ({ dynamicOf (names[(size_t) s]), s });
+    }
+    if (byNote.size() < 3) return false;   // not an instrument across the keys
+    auto map = std::make_unique<ZoneMap>();
+    std::vector<int> notes;
+    for (auto& [n, takes] : byNote) { std::sort (takes.begin(), takes.end()); notes.push_back (n); }
+    for (int key = 0; key < 128; ++key)
+    {
+        int best = notes.front();
+        for (int n : notes) if (std::abs (n - key) < std::abs (best - key)) best = n;
+        const auto& takes = byNote[best];
+        auto& z = map->keys[(size_t) key];
+        z.root = (int8_t) best;
+        const int count = juce::jmin (4, (int) takes.size());
+        z.layers = (int8_t) count;
+        for (int k = 0; k < count; ++k)   // spread over the takes: softest ... loudest
+        {
+            const int idx = count == 1 ? 0 : (int) std::lround ((double) k * (double) (takes.size() - 1) / (double) (count - 1));
+            z.slot[(size_t) k] = (int16_t) takes[(size_t) idx].second;
+        }
+    }
+    // read what the map uses
+    for (const auto& z : map->keys)
+        for (int k = 0; k < z.layers; ++k) ensureLoaded (z.slot[(size_t) k]);
+    const ZoneMap* raw = map.get();
+    ownedZones.push_back (std::move (map));
+    for (int s : inFolder) zones[(size_t) s].store (raw, std::memory_order_release);
+    return true;
+}
+
 } // namespace catbox

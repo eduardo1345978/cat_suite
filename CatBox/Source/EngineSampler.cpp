@@ -19,6 +19,7 @@ enum
     sSample = 0, sMode, sRoot, sStart, sEnd, sLoop, sLoopStart, sTune, sFine, sReverse, sSlices, sVolume,
     sA, sD, sS, sR, sCutoff, sReso, sDrive, sCrush, sGlide, sVelAmp, sSpread, sWidth,
     sFType, sEnvAmt, sFA, sFD, sFS, sFR, sKeyTrack, sDown, sPitchEnv, sPitchDecay, sChoke, sHp,
+    sMulti,
     sCount
 };
 enum { ModeKeys = 0, ModeChop, ModeOneShot };
@@ -57,13 +58,14 @@ EngineDef makeSamplerDef()
         sec ("fa", "F attack", 0.001f, 8.0f, 0.005f), sec ("fd", "F decay", 0.01f, 8.0f, 0.4f), pct ("fs", "F sustain", 0.5f), sec ("fr", "F release", 0.01f, 8.0f, 0.3f),
         pct ("keytrack", "Key track", 0.0f), pct ("down", "Lo-fi", 0.0f), semi ("penv", "Pitch env", -24, 24, 0), sec ("pdecay", "Pitch decay", 0.005f, 1.0f, 0.05f),
         toggle ("choke", "Mono (choke)", false), hz ("hp", "Low cut", 20.0f, 2000.0f, 20.0f),
+        toggle ("multi", "Multi-sample", false),
     };
     jassert ((int) e.params.size() == sCount);
     e.pages = {
         page ("SAMPLE", { sSample, sMode, sRoot, sStart, sEnd, sLoop, sLoopStart, sTune, sFine, sReverse, sSlices, sVolume,
                           sA, sD, sS, sR, sCutoff, sReso, sDrive, sCrush, sGlide, sVelAmp, sSpread, sWidth }),
         page ("FILTER", { sFType, sCutoff, sReso, sEnvAmt, sFA, sFD, sFS, sFR, sKeyTrack, sDrive, sDown, sHp,
-                          sPitchEnv, sPitchDecay, sChoke, sCrush }),
+                          sPitchEnv, sPitchDecay, sChoke, sCrush, sMulti }),
     };
     using V = std::vector<std::pair<juce::String, float>>;
     auto add = [&e] (const char* name, const char* cat, V v) { e.presets.push_back ({ name, cat, std::move (v) }); };
@@ -109,8 +111,19 @@ public:
     void noteOn (int note, float vel, bool slide, bool) override
     {
         const Sample* smp = SampleBank::get().at (juce::roundToInt (p[sSample]));
-        if (smp == nullptr || smp->length() < 16) return;
         const int mode = juce::roundToInt (p[sMode]);
+        float zoneRoot = -1.0f;
+        if (p[sMulti] > 0.5f && mode == ModeKeys)   // the whole instrument: the nearest recorded note, the velocity picks the take
+            if (const auto* zm = SampleBank::get().zonesFor (juce::roundToInt (p[sSample])))
+            {
+                const auto& z = zm->keys[(size_t) juce::jlimit (0, 127, note + juce::roundToInt (p[sTune]))];
+                if (z.layers > 0)
+                {
+                    const int layer = juce::jlimit (0, z.layers - 1, (int) (vel * (float) z.layers));
+                    if (const auto* zs = SampleBank::get().at (z.slot[(size_t) layer])) { smp = zs; zoneRoot = (float) z.root; }
+                }
+            }
+        if (smp == nullptr || smp->length() < 16) return;
         const bool mono = p[sChoke] > 0.5f;
         Voice* v = nullptr;
         if (mono)
@@ -131,6 +144,7 @@ public:
         double a = juce::jlimit (0.0, 1.0, (double) p[sStart]) * len, b = juce::jlimit (0.0, 1.0, (double) p[sEnd]) * len;
         if (b < a + 16) b = juce::jmin ((double) len, a + 16.0);
         v->smp = smp;
+        v->root = zoneRoot;
         v->note = note;
         v->target = mode == ModeChop ? (float) (60 + p[sTune]) : (float) note;   // a slice plays at its own pitch (+ tune)
         if (! legato) v->pitch = v->target;
@@ -203,7 +217,7 @@ public:
                 {
                     v.pitch = glideK > 0.0f ? v.target + (v.pitch - v.target) * glideK : v.target;
                     v.pitchEnv *= pdk;
-                    const float root = mode == ModeChop ? 60.0f : p[sRoot];
+                    const float root = mode == ModeChop ? 60.0f : (v.root >= 0.0f ? v.root : p[sRoot]);
                     const double rate = std::exp2 ((v.pitch - root + (mode == ModeChop ? 0.0f : p[sTune]) + p[sFine] * 0.01f + bend + v.pitchEnv * p[sPitchEnv]) / 12.0)
                                       * s->sampleRate / sr;
                     const float a = v.amp.process();
@@ -268,7 +282,7 @@ private:
         bool active = false, gate = false, reverse = false;
         int note = 60;
         double pos = 0.0, from = 0.0, to = 0.0, dir = 1.0;
-        float vel = 0.8f, pitch = 60.0f, target = 60.0f, pitchEnv = 0.0f, pan = 0.0f, lastL = 0.0f, lastR = 0.0f;
+        float vel = 0.8f, pitch = 60.0f, target = 60.0f, pitchEnv = 0.0f, pan = 0.0f, lastL = 0.0f, lastR = 0.0f, root = -1.0f;
         uint64_t age = 0;
         dsp::Adsr amp, fenv;
         dsp::Svf fl, fr, hpl, hpr;
