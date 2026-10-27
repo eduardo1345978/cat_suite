@@ -93,7 +93,12 @@ std::vector<int> EngineDef::presetsIn (const juce::String& category) const
 
 const EngineDef& engineDef (int type)
 {
-    static const std::array<EngineDef, NumEngineTypes> all { makeAnalogDef(), makeAcidDef(), makeDrumsDef(), makeKeysDef(), makeGlideDef(), makeFMDef(), makeWavetableDef(), makeChoirDef(), makeSamplerDef(), makeGranularDef() };
+    static const std::array<EngineDef, NumEngineTypes> all = []
+    {
+        std::array<EngineDef, NumEngineTypes> a { makeAnalogDef(), makeAcidDef(), makeDrumsDef(), makeKeysDef(), makeGlideDef(), makeFMDef(), makeWavetableDef(), makeChoirDef(), makeSamplerDef(), makeGranularDef() };
+        for (int i = 0; i < NumEngineTypes; ++i) addExtraPresets (a[(size_t) i], i);
+        return a;
+    }();
     return all[(size_t) juce::jlimit (0, NumEngineTypes - 1, type)];
 }
 

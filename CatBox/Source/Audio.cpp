@@ -12,6 +12,7 @@ constexpr int subBlock = 32;
 void Audio::TrackRt::fxNoteOn (int note, float vel, bool slide, bool accent)
 {
     if (engine == nullptr) return;
+    if (modSet != nullptr) mod.noteOn (note, vel, *modSet);
     engine->noteOn (note, vel, slide, accent);
     hitBits |= trackDrums ? (1u << (((note - 36) % 16 + 16) % 16)) : 1u;
 }
@@ -46,17 +47,19 @@ void Audio::prepare (double sampleRate, int block)
         captureR.assign ((size_t) (sr * maxCaptureSeconds), 0.0f);
         captureLength = 0;
     }
-    for (auto* v : { &tl, &tr_, &ml, &mr, &al, &ar, &bl, &br, &fa, &fb }) v->assign ((size_t) subBlock, 0.0f);
+    for (auto* v : { &tl, &tr_, &ml, &mr, &al, &ar, &bl, &br, &fa, &fb, &cl, &cr }) v->assign ((size_t) subBlock, 0.0f);
     for (auto& t : tracks)
     {
         for (auto& e : t.engines) e->prepare (sr);
         t.fx.prepare (sr);
+        for (auto& i : t.ins) i.prepare (sr);
         t.engineType = -1;
         t.fxType = -1;
         t.numQueued = 0;
     }
     reverb.prepare (sr);
     delay.prepare (sr);
+    sendFx.prepare (sr);
     master.prepare (sr);
     for (int t = 0; t < numTracks; ++t) syncTrack (t);
 }
@@ -160,13 +163,19 @@ void Audio::syncTrack (int t)
         rt.engine = rt.engines[(size_t) juce::jlimit (0, NumEngineTypes - 1, tr.engine)].get();
         rt.engine->allOff();
         rt.applied.fill (std::numeric_limits<float>::quiet_NaN());
+        rt.locked = false;
         rt.trackDrums = engineDef (tr.engine).drums;
     }
-    if (std::memcmp (rt.applied.data(), tr.params.data(), sizeof (float) * (size_t) maxParams) != 0)
-    {
-        rt.applied = tr.params;
-        rt.engine->setParams (tr.params.data());
-    }
+    rt.modSet = &tr.mods.set;
+    rt.engineMods = rt.anyMods = false;
+    for (const auto& sl : tr.mods.slots)
+        if (sl.active())
+        {
+            rt.anyMods = true;
+            rt.engineMods = rt.engineMods || dest::isEngine (sl.dest);
+        }
+    if (! rt.locked) rt.base = tr.params;
+    refreshEngine (rt, tr, false);
     rt.engine->setTempo (live.m.tempo);
     if (rt.fxType != tr.fxType || rt.fxKey != live.m.key || rt.fxScale != live.m.scale
         || std::memcmp (rt.fxApplied.data(), tr.fx.data(), sizeof (float) * (size_t) numFxParams) != 0)
@@ -177,6 +186,46 @@ void Audio::syncTrack (int t)
         rt.fxScale = live.m.scale;
         rt.fxApplied = tr.fx;
         rt.fx.set (tr.fxType, tr.fx.data(), live.m.key, live.m.scale);
+    }
+}
+
+float Audio::modded (const TrackRt& rt, const Track& tr, int d, float value, const ParamDef& def) const
+{
+    bool any = false;
+    float n = 0.0f;
+    for (const auto& sl : tr.mods.slots)
+        if (sl.dest == d && sl.active())
+        {
+            if (! any) { n = def.toNorm (value); any = true; }
+            n += sl.amount * rt.mod.value[(size_t) juce::jlimit (0, NumModSources - 1, sl.source)];
+        }
+    return any ? def.fromNorm (n) : value;
+}
+
+void Audio::refreshEngine (TrackRt& rt, const Track& tr, bool force)
+{
+    if (rt.engine == nullptr) return;
+    if (! rt.engineMods)
+    {
+        if (force || std::memcmp (rt.applied.data(), rt.base.data(), sizeof (float) * (size_t) maxParams) != 0)
+        {
+            rt.applied = rt.base;
+            rt.engine->setParams (rt.applied.data());
+        }
+        return;
+    }
+    auto v = rt.base;
+    const auto& def = engineDef (tr.engine);
+    for (const auto& sl : tr.mods.slots)
+        if (sl.active() && dest::isEngine (sl.dest) && sl.dest < (int) def.params.size())
+        {
+            const auto& pd = def.params[(size_t) sl.dest];
+            v[(size_t) sl.dest] = pd.fromNorm (pd.toNorm (v[(size_t) sl.dest]) + sl.amount * rt.mod.value[(size_t) juce::jlimit (0, NumModSources - 1, sl.source)]);
+        }
+    if (force || std::memcmp (rt.applied.data(), v.data(), sizeof (float) * (size_t) maxParams) != 0)
+    {
+        rt.applied = v;
+        rt.engine->setParams (rt.applied.data());
     }
 }
 
@@ -224,19 +273,18 @@ void Audio::runSequencer (int t, double from, double to)
         // recorded knob moves: this step's values on top of the sound (and back on a step without them)
         if (pat.hasLocks (s))
         {
-            auto values = tr.params;
+            rt.base = tr.params;
             const auto& def = engineDef (tr.engine);
             for (const auto& l : pat.locks[(size_t) s])
-                if (l.param >= 0 && l.param < (int) def.params.size()) values[(size_t) l.param] = l.value;
-            rt.applied = values;
-            rt.engine->setParams (values.data());
+                if (l.param >= 0 && l.param < (int) def.params.size()) rt.base[(size_t) l.param] = l.value;
             rt.locked = true;
+            refreshEngine (rt, tr, false);
         }
         else if (rt.locked)
         {
-            rt.applied = tr.params;
-            rt.engine->setParams (tr.params.data());
+            rt.base = tr.params;
             rt.locked = false;
+            refreshEngine (rt, tr, false);
         }
         auto skipped = [&rt, s, t0] (int note)
         {
@@ -405,7 +453,7 @@ void Audio::handleEvents()
                 }
                 break;
             case Event::Bend:    if (rt.engine != nullptr) rt.engine->setBend (e.value); break;
-            case Event::Mod:     if (rt.engine != nullptr) rt.engine->setMod (e.value); break;
+            case Event::Mod:     rt.modWheel = e.value; if (rt.engine != nullptr) rt.engine->setMod (e.value); break;
             case Event::Preview:
             {
                 // a short phrase while browsing sounds (when it isn't playing)
@@ -461,6 +509,7 @@ void Audio::render (float* outL, float* outR, int n)
         std::fill (al.begin(), al.end(), 0.0f); std::fill (ar.begin(), ar.end(), 0.0f);
         std::fill (bl.begin(), bl.end(), 0.0f); std::fill (br.begin(), br.end(), 0.0f);
         std::fill (ml.begin(), ml.end(), 0.0f); std::fill (mr.begin(), mr.end(), 0.0f);
+        std::fill (cl.begin(), cl.end(), 0.0f); std::fill (cr.begin(), cr.end(), 0.0f);
 
         for (int t = 0; t < numTracks; ++t)
         {
@@ -470,13 +519,39 @@ void Audio::render (float* outL, float* outR, int n)
             runQueue (rt, to);
             rt.fx.advance (from, to, playing.load() ? playStart : 0.0, live.m.tempo, rt);
 
+            // modulation: the sources move, the engine follows (every 64 samples)
+            rt.mod.advance (m, sr, from, ppqPerSample, playing.load(), from - playStart, rt.modWheel, tr.mods.set, tr.mods.macros);
+            if (rt.engineMods && (++rt.modTick & 1) == 0) refreshEngine (rt, tr, false);
+
             std::fill (tl.begin(), tl.end(), 0.0f);
             std::fill (tr_.begin(), tr_.end(), 0.0f);
             rt.engine->render (tl.data(), tr_.data(), m);
 
+            // the insert effects, in order
+            for (int k = 0; k < numInserts; ++k)
+            {
+                const auto& in = tr.mods.inserts[(size_t) k];
+                if (in.type == InsOff || ! in.on) { if (rt.ins[(size_t) k].lastType != -1 && in.type == InsOff) rt.ins[(size_t) k].lastType = -1; continue; }
+                float pv[insertParams];
+                const auto& idef = insertDef (in.type);
+                for (int q = 0; q < insertParams; ++q)
+                    pv[q] = rt.anyMods && q < (int) idef.params.size() ? modded (rt, tr, dest::insert0 + k * insertParams + q, in.p[(size_t) q], idef.params[(size_t) q]) : in.p[(size_t) q];
+                rt.ins[(size_t) k].process (in.type, pv, tl.data(), tr_.data(), m, from, ppqPerSample, live.m.tempo);
+            }
+
+            float volume = tr.volume, panV = tr.pan, sendA = tr.sendA, sendB = tr.sendB, sendC = tr.sendC;
+            if (rt.anyMods)
+            {
+                static const ParamDef unit = defs::pct ("u", "u", 0.0f), bip = defs::bi ("b", "b", 0.0f);
+                volume = modded (rt, tr, dest::mix0, volume, unit);
+                panV = modded (rt, tr, dest::mix0 + 1, panV, bip);
+                sendA = modded (rt, tr, dest::mix0 + 2, sendA, unit);
+                sendB = modded (rt, tr, dest::mix0 + 3, sendB, unit);
+                sendC = modded (rt, tr, dest::mix0 + 4, sendC, unit);
+            }
             const bool audible = ! tr.mute && (! anySolo || tr.solo);
-            const float vol = audible ? tr.volume * tr.volume * 1.4f : 0.0f;   // a curve that feels even on the knob
-            const float pan = juce::jlimit (-1.0f, 1.0f, tr.pan);
+            const float vol = audible ? volume * volume * 1.4f : 0.0f;   // a curve that feels even on the knob
+            const float pan = juce::jlimit (-1.0f, 1.0f, panV);
             const float gl = vol * std::sqrt (0.5f * (1.0f - pan)) * 1.4142f, gr = vol * std::sqrt (0.5f * (1.0f + pan)) * 1.4142f;
             const float dgL = (gl - rt.gainL) / (float) m, dgR = (gr - rt.gainR) / (float) m;
             for (int i = 0; i < m; ++i)
@@ -484,15 +559,23 @@ void Audio::render (float* outL, float* outR, int n)
                 rt.gainL += dgL; rt.gainR += dgR;
                 const float a = tl[(size_t) i] * rt.gainL, b = tr_[(size_t) i] * rt.gainR;
                 ml[(size_t) i] += a; mr[(size_t) i] += b;
-                al[(size_t) i] += a * tr.sendA; ar[(size_t) i] += b * tr.sendA;
-                bl[(size_t) i] += a * tr.sendB; br[(size_t) i] += b * tr.sendB;
+                al[(size_t) i] += a * sendA; ar[(size_t) i] += b * sendA;
+                bl[(size_t) i] += a * sendB; br[(size_t) i] += b * sendB;
+                cl[(size_t) i] += a * sendC; cr[(size_t) i] += b * sendC;
                 trackPeak[t] = juce::jmax (trackPeak[t], std::abs (a), std::abs (b));
             }
             if (rt.hitBits != 0) { hits[(size_t) t].fetch_or (rt.hitBits); rt.hitBits = 0; }
         }
 
-        reverb.process (al.data(), ar.data(), ml.data(), mr.data(), m, live.m);
-        delay.process (bl.data(), br.data(), ml.data(), mr.data(), m, live.m);
+        // how loud the dry mix is: the sends can duck under it
+        {
+            float pk = 0.0f;
+            for (int i = 0; i < m; ++i) pk = juce::jmax (pk, std::abs (ml[(size_t) i]), std::abs (mr[(size_t) i]));
+            duckEnv = pk > duckEnv ? duckEnv + (pk - duckEnv) * 0.5f : duckEnv * 0.985f;
+        }
+        delay.process (bl.data(), br.data(), ml.data(), mr.data(), al.data(), ar.data(), m, live.m, duckEnv);
+        reverb.process (al.data(), ar.data(), ml.data(), mr.data(), m, live.m, duckEnv);
+        sendFx.process (cl.data(), cr.data(), ml.data(), mr.data(), m, live.m, from, ppqPerSample, duckEnv);
 
         // metronome: on every beat while playing
         if (live.m.metronome && playing.load())

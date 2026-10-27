@@ -62,6 +62,10 @@ struct EngineDef
 
 enum EngineType { EngineAnalog = 0, EngineAcid, EngineDrums, EngineKeys, EngineGlide, EngineFM, EngineWavetable, EngineChoir, EngineSampler, EngineGranular, NumEngineTypes };
 const EngineDef& engineDef (int type);
+/** The "FX Lab" sounds and more, added to each engine. */
+void addExtraPresets (EngineDef&, int engine);
+/** The FX chain a factory sound brings (-1 = none). */
+int presetChain (int engine, int preset);
 juce::StringArray engineNames();
 
 /** Helpers to write engine definitions. */

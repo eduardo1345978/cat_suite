@@ -61,6 +61,11 @@ private:
     void drawLearn (juce::Graphics&, juce::Rectangle<int>);
     void drawHelp (juce::Graphics&, juce::Rectangle<int>);
     void drawMenu (juce::Graphics&, juce::Rectangle<int>);
+    void drawChain (juce::Graphics&, juce::Rectangle<int>);
+    void drawMacros (juce::Graphics&, juce::Rectangle<int>);
+    void drawMods (juce::Graphics&, juce::Rectangle<int>);
+    void drawMy (juce::Graphics&, juce::Rectangle<int>);
+    void drawReturns (juce::Graphics&, juce::Rectangle<int>);
 
     // the PC panel (in panel coordinates)
     void drawPanel (juce::Graphics&);

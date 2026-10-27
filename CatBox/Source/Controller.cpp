@@ -23,7 +23,8 @@ namespace
 {
 // ---- the MIX and PROJECT knobs
 enum MasterId { MVolume = 0, MGlue, MTape, MWidth, MRevSize, MRevDamp, MDelayTime, MDelayFb, MRevLowCut, MRevWidth, MDelayTone, MPingPong,
-                MTempo, MSwing, MKey, MScale, MMetronome, MDj, MPads, MOctave, MReset, NumMasterIds };
+                MTempo, MSwing, MKey, MScale, MMetronome, MDj, MPads, MOctave, MReset,
+                MRevType, MRevPre, MRevDuck, MRevLevel, MDelayType, MDelayWow, MDelayDuck, MDelayToRev, MDelayLevel, MFxType, MFxLevel, MFxDuck, NumMasterIds };
 
 const std::vector<ParamDef>& masterDefs()
 {
@@ -39,7 +40,12 @@ const std::vector<ParamDef>& masterDefs()
             choice ("scale", "Scale", {}, 1), toggle ("metro", "Click", false), bi ("dj", "DJ filter", 0.0f),
             choice ("pads", "Pads", { "Piano", "Scale" }, 0), num ("oct", "Pad octave", 0, 7, 3),
             num ("reset", "Factory reset", 0, 100, 0),
+            choice ("revtype", "Reverb type", revTypeNames(), 0), pct ("revpre", "Pre-delay", 0.1f), pct ("revduck", "Reverb duck", 0.0f),
+            pct ("revlevel", "Reverb level", 0.8f), choice ("dtype", "Delay type", delayTypeNames(), 0), pct ("dwow", "Delay wow", 0.3f),
+            pct ("dduck", "Delay duck", 0.0f), pct ("d2rev", "Delay > reverb", 0.0f), pct ("dlevel", "Delay level", 0.8f),
+            choice ("fxtype", "FX send", insertNames(), InsChorus), pct ("fxlevel", "FX level", 0.8f), pct ("fxduck", "FX duck", 0.0f),
         };
+        v[MRevPre].formatFn = [] (float x) { return juce::String (juce::roundToInt (x * 250.0f)) + " ms"; };
         for (int s = 0; s < music::numScales; ++s) v[MScale].choices.add (music::scaleName (s));
         v[MScale].hi = (float) (music::numScales - 1);
         v[MSwing].hi = 0.75f;
@@ -69,7 +75,28 @@ const std::vector<ParamDef>& mixDefs()
     return d;
 }
 
+const std::vector<ParamDef>& lookDefs()
+{
+    static const std::vector<ParamDef> d = []
+    {
+        using namespace defs;
+        return std::vector<ParamDef> {
+            choice ("theme", "Theme", themeNames(), 0), choice ("accent", "Colour", accentNames(), 0),
+            choice ("text", "Text", { "Normal", "Big" }, 0), choice ("knobs", "Knobs", { "Bars", "Rings" }, 0),
+            toggle ("trackColours", "Track colours", false), toggle ("hint", "Help line", true) };
+    }();
+    return d;
+}
+
+const ParamDef& insTypeDef() { static const ParamDef d = defs::choice ("type", "Effect", insertNames(), 0); return d; }
+const ParamDef& insOnDef() { static const ParamDef d = defs::toggle ("on", "On", true); return d; }
+const ParamDef& fxSelDef() { static const ParamDef d = defs::num ("slot", "FX slot", 1, numInserts, 1); return d; }
+const ParamDef& modSelDef() { static const ParamDef d = defs::num ("mslot", "Mod slot", 1, numModSlots, 1); return d; }
+const ParamDef& modSourceDef() { static const ParamDef d = defs::choice ("src", "Source", modSourceNames(), 0); return d; }
 } // namespace
+
+juce::StringArray themeNames() { return { "Graphite", "Paper", "Midnight", "Forest", "Terminal", "High contrast", "Plum", "Sand" }; }
+juce::StringArray accentNames() { return { "Orange", "Yellow", "Green", "Cyan", "Blue", "Purple", "Pink", "Red", "White" }; }
 
 //==============================================================================
 juce::StringArray starterSampleNames();
@@ -84,6 +111,7 @@ Controller::Controller (const juce::File& dir) : dataDir (dir)
     loadState();
     loadScenes();
     loadMidiMap();
+    loadLook();
     audio.push (project);
     startTimerHz (30);
 }
@@ -115,6 +143,8 @@ void Controller::resetToDefaults()
         lane[(size_t) t] = 0;
     }
     mixPage = projectPage = 0;
+    fxSlot.fill (0); modSlot.fill (0); insPreset.fill (0);
+    assignPending = -1;
     scalePads = false;
     numHeldSteps = 0;
     loadedScene = -1;
@@ -249,6 +279,7 @@ void Controller::buttonDown (int b)
             setMode (ModeMix);
             break;
         case BtnProject:
+            if (assignPending >= 0) { assignPending = -1; setFlash ("Assign cancelled"); break; }
             if (mode.load() == ModeMenu) { setMode (ModeProject); break; }
             if (mode.load() == ModeProject) { menuPage = 0; setMode (ModeMenu); break; }
             setMode (ModeProject);
@@ -280,7 +311,7 @@ void Controller::buttonDown (int b)
             {
                 case ModeSound:
                 {
-                    const int n = (int) engineDef (cur().engine).pages.size();
+                    const int n = (int) engineDef (cur().engine).pages.size() + numSoundExtras;
                     soundPage[(size_t) t] = (soundPage[(size_t) t] + dir + n) % n;
                     break;
                 }
@@ -344,8 +375,8 @@ void Controller::buttonDown (int b)
                     changed();
                     break;
                 }
-                case ModeMix:     mixPage = (mixPage + dir + 2) % 2; break;
-                case ModeProject: projectPage = 0; break;
+                case ModeMix:     mixPage = (mixPage + dir + 4) % 4; break;
+                case ModeProject: projectPage = (projectPage + dir + 2) % 2; break;
                 default: break;
             }
             if (onChange) onChange();
@@ -463,13 +494,22 @@ void Controller::loadSound (int t, int engine, int preset)
     pushUndo ("Sound", true);
     auto& tr = project.tracks[(size_t) t];
     const bool wasDrums = tr.isDrums();
-    if (tr.engine != engine) for (auto& ls : tr.pat.locks) ls = {};   // recorded knob moves belong to the old engine
+    if (tr.engine != engine)
+    {
+        for (auto& ls : tr.pat.locks) ls = {};   // recorded knob moves belong to the old engine
+        tr.mods.dropEngineTargets();              // and so does modulation of its knobs
+    }
     loadEnginePreset (tr, engine, preset);
+    if (const int chain = presetChain (engine, preset); chain >= 0)   // an FX Lab sound brings its effects
+    {
+        applyChainPreset (tr.mods, chain);
+        for (auto& sl : tr.mods.slots) if (dest::isInsert (sl.dest)) sl = ModSlot();
+    }
     if (wasDrums != tr.isDrums()) lane[(size_t) t] = 0;
     presetIdx[(size_t) t] = preset;
     userName[(size_t) t] = {};
     edited[(size_t) t] = false;
-    soundPage[(size_t) t] = juce::jlimit (0, juce::jmax (0, (int) engineDef (engine).pages.size() - 1), soundPage[(size_t) t]);
+    soundPage[(size_t) t] = juce::jlimit (0, (int) engineDef (engine).pages.size() + numSoundExtras - 1, soundPage[(size_t) t]);
     changed();
 }
 
@@ -889,7 +929,7 @@ bool Controller::loadProject (int slot)
 void Controller::pagesClamp()
 {
     for (int t = 0; t < numTracks; ++t)
-        soundPage[(size_t) t] = juce::jlimit (0, juce::jmax (0, (int) engineDef (project.tracks[(size_t) t].engine).pages.size() - 1), soundPage[(size_t) t]);
+        soundPage[(size_t) t] = juce::jlimit (0, (int) engineDef (project.tracks[(size_t) t].engine).pages.size() + numSoundExtras - 1, soundPage[(size_t) t]);
 }
 
 //==============================================================================
@@ -902,6 +942,41 @@ Controller::Target Controller::targetFor (int slot) const
     {
         case ModeSound:
         {
+            const int t = track.load();
+            switch (soundExtraPage())
+            {
+                case ExtraFx:
+                    if (slot == 0) return { KFxSel, 0 };
+                    if (slot == 1) return { KInsType, fxSlot[(size_t) t] };
+                    if (slot >= 2 && slot < 10)
+                    {
+                        const int k = slot - 2;
+                        const auto& in = tr.mods.inserts[(size_t) fxSlot[(size_t) t]];
+                        return k < (int) insertDef (in.type).params.size() ? Target { KIns, fxSlot[(size_t) t] * insertParams + k } : Target {};
+                    }
+                    if (slot == 10) return tr.mods.inserts[(size_t) fxSlot[(size_t) t]].type != InsOff ? Target { KInsOn, fxSlot[(size_t) t] } : Target {};
+                    if (slot == 11) return tr.mods.inserts[(size_t) fxSlot[(size_t) t]].type != InsOff ? Target { KInsPreset, fxSlot[(size_t) t] } : Target {};
+                    if (slot >= 12 && slot < 16) return { KInsType, slot - 12 };
+                    if (slot >= 16 && slot < 20) return tr.mods.inserts[(size_t) (slot - 16)].type != InsOff ? Target { KInsOn, slot - 16 } : Target {};
+                    if (slot == 20) return { KChain, 0 };
+                    return {};
+                case ExtraMacro:
+                {
+                    if (slot < 8) return { KMacro, slot };
+                    static const int quick[4] = { MsLfo1Rate, MsLfo1Shape, MsLfo2Rate, MsLfo2Shape };
+                    if (slot < 12) return { KModSet, quick[slot - 8] };
+                    return { KModSet, slot - 12 };
+                }
+                case ExtraMod:
+                    if (slot == 0) return { KModSel, 0 };
+                    if (slot <= 3) return { KModField, slot - 1 };
+                    if (slot < 12) return { KModAmt, slot - 4 };
+                    if (slot < 20) return { KModAmt, slot - 12 + 8 };
+                    return {};
+                case ExtraMy:
+                    return destTarget (tr.mods.my[(size_t) slot]);
+                default: break;
+            }
             const auto& pages = engineDef (tr.engine).pages;
             if (pages.empty()) return {};
             const auto& pg = pages[(size_t) juce::jlimit (0, (int) pages.size() - 1, soundPage[(size_t) track.load()])];
@@ -920,19 +995,43 @@ Controller::Target Controller::targetFor (int slot) const
             return i >= 0 ? Target { KFx, i } : Target {};
         }
         case ModeMix:
-            if (mixPage == 0)
+            switch (mixPage)
             {
-                if (slot < 8) return { KMix, slot * 4 + 0 };
-                if (slot < 12) return { KMaster, MVolume + (slot - 8) };
-                if (slot < 20) return { KMix, (slot - 12) * 4 + 1 };
-                return {};
+                case 0:
+                    if (slot < 8) return { KMix, slot * 4 + 0 };
+                    if (slot < 12) return { KMaster, MVolume + (slot - 8) };
+                    if (slot < 20) return { KMix, (slot - 12) * 4 + 1 };
+                    return {};
+                case 1:   // SENDS: reverb (Shift: delay) per track
+                {
+                    static const int a[4] = { MRevType, MRevSize, MDelayType, MDelayTime }, b[4] = { MDelayFb, MDelayTone, MPingPong, MDelayToRev };
+                    if (slot < 8) return { KMix, slot * 4 + 2 };
+                    if (slot < 12) return { KMaster, a[slot - 8] };
+                    if (slot < 20) return { KMix, (slot - 12) * 4 + 3 };
+                    return { KMaster, b[slot - 20] };
+                }
+                case 2:   // FX SEND: any effect as a send
+                {
+                    const auto& d = insertDef (project.m.fxSend.type);
+                    if (slot < 8) return { KSendC, slot };
+                    if (slot == 8) return { KMaster, MFxType };
+                    if (slot == 9) return d.presets.empty() ? Target {} : Target { KSendFxPreset, 0 };
+                    if (slot == 10) return { KMaster, MFxLevel };
+                    if (slot == 11) return { KMaster, MFxDuck };
+                    if (slot < 20) return slot - 12 < (int) d.params.size() ? Target { KSendFx, slot - 12 } : Target {};
+                    return {};
+                }
+                default:  // RETURNS: the reverb and the delay in detail
+                {
+                    static const int a[24] = { MRevType, MRevSize, MRevDamp, MRevWidth, MRevLowCut, MRevPre, MRevDuck, MRevLevel,
+                                               MDelayType, MDelayTime, MDelayFb, MDelayTone,
+                                               MPingPong, MDelayWow, MDelayDuck, MDelayToRev, MDelayLevel, MFxLevel, MFxDuck, -1, -1, -1, -1, -1 };
+                    return a[slot] >= 0 ? Target { KMaster, a[slot] } : Target {};
+                }
             }
-            if (slot < 8) return { KMix, slot * 4 + 2 };
-            if (slot < 12) return { KMaster, MRevSize + (slot - 8) };
-            if (slot < 20) return { KMix, (slot - 12) * 4 + 3 };
-            return { KMaster, MRevLowCut + (slot - 20) };
         case ModeProject:
         {
+            if (projectPage == 1) return slot < (int) lookDefs().size() ? Target { KLook, slot } : Target {};
             static const int map[24] = { MTempo, MSwing, MKey, MScale, MMetronome, MVolume, MDj, MPads, MOctave, -1, -1, MReset,
                                          MGlue, MTape, MWidth, -1, MRevSize, MRevDamp, MDelayTime, MDelayFb, -1, -1, -1, -1 };
             return map[slot] >= 0 ? Target { KMaster, map[slot] } : Target {};
@@ -949,6 +1048,31 @@ const ParamDef* Controller::targetDef (const Target& t) const
         case KFx:    { const auto& d = noteFxDef (cur().fxType); return t.index < (int) d.params.size() ? &d.params[(size_t) t.index] : nullptr; }
         case KMaster: return &masterDefs()[(size_t) t.index];
         case KMix:    return &mixDefs()[(size_t) t.index];
+        case KIns:
+        {
+            const auto& d = insertDef (cur().mods.inserts[(size_t) (t.index / insertParams)].type);
+            const int k = t.index % insertParams;
+            return k < (int) d.params.size() ? &d.params[(size_t) k] : nullptr;
+        }
+        case KInsType: return &insTypeDef();
+        case KInsOn:   return &insOnDef();
+        case KFxSel:   return &fxSelDef();
+        case KMacro:   return &macroDef();
+        case KModSet:  return &modSetDefs()[(size_t) t.index];
+        case KModSel:  return &modSelDef();
+        case KModField: return t.index == 0 ? &modSourceDef() : t.index == 2 ? &modAmountDef() : nullptr;
+        case KModAmt:  return &modAmountDef();
+        case KLook:    return &lookDefs()[(size_t) t.index];
+        case KSendC:
+        {
+            static const std::array<ParamDef, numTracks> d = [] { std::array<ParamDef, numTracks> a; for (int i = 0; i < numTracks; ++i) { a[(size_t) i] = defs::pct ("sc", "", 0.0f); a[(size_t) i].name = "FX " + juce::String (i + 1); } return a; }();
+            return &d[(size_t) juce::jlimit (0, numTracks - 1, t.index)];
+        }
+        case KSendFx:
+        {
+            const auto& d = insertDef (project.m.fxSend.type);
+            return t.index < (int) d.params.size() ? &d.params[(size_t) t.index] : nullptr;
+        }
         default: return nullptr;
     }
 }
@@ -960,6 +1084,27 @@ float Controller::targetValue (const Target& t) const
     {
         case KParam: return cur().params[(size_t) t.index];
         case KFx:    return cur().fx[(size_t) t.index];
+        case KIns:   return cur().mods.inserts[(size_t) (t.index / insertParams)].p[(size_t) (t.index % insertParams)];
+        case KInsType: return (float) cur().mods.inserts[(size_t) t.index].type;
+        case KInsOn: return cur().mods.inserts[(size_t) t.index].on ? 1.0f : 0.0f;
+        case KFxSel: return (float) (fxSlot[(size_t) track.load()] + 1);
+        case KMacro: return cur().mods.macros[(size_t) t.index];
+        case KModSet: return cur().mods.set[(size_t) t.index];
+        case KModSel: return (float) (modSlot[(size_t) track.load()] + 1);
+        case KModField:
+        {
+            const auto& sl = cur().mods.slots[(size_t) modSlot[(size_t) track.load()]];
+            return t.index == 0 ? (float) sl.source : t.index == 2 ? sl.amount : (float) sl.dest;
+        }
+        case KModAmt: return cur().mods.slots[(size_t) t.index].amount;
+        case KSendC: return project.tracks[(size_t) t.index].sendC;
+        case KSendFx: return project.m.fxSend.p[(size_t) t.index];
+        case KLook:
+            switch (t.index)
+            {
+                case 0: return (float) look.theme; case 1: return (float) look.accent; case 2: return (float) look.textSize;
+                case 3: return (float) look.knobStyle; case 4: return look.trackColours ? 1.0f : 0.0f; default: return look.hintLine ? 1.0f : 0.0f;
+            }
         case KMix:
         {
             const auto& tr = project.tracks[(size_t) (t.index / 4)];
@@ -978,6 +1123,10 @@ float Controller::targetValue (const Target& t) const
                 case MPads: return scalePads.load() ? 1.0f : 0.0f;
                 case MOctave: return (float) octave[(size_t) track.load()].load();
                 case MReset: return resetProgress;
+                case MRevType: return (float) m.revType;   case MRevPre: return m.revPre;     case MRevDuck: return m.revDuck;   case MRevLevel: return m.revLevel;
+                case MDelayType: return (float) m.delayType; case MDelayWow: return m.delayWow; case MDelayDuck: return m.delayDuck;
+                case MDelayToRev: return m.delayToRev;     case MDelayLevel: return m.delayLevel;
+                case MFxType: return (float) m.fxSend.type; case MFxLevel: return m.fxLevel;  case MFxDuck: return m.fxDuck;
                 default: return 0.0f;
             }
         default: return 0.0f;
@@ -1011,6 +1160,82 @@ void Controller::changeTarget (const Target& t, float amount, bool fraction)
             browsePos = juce::jlimit (0, n - 1, browsePos + d);
         }
         browseApply (true);
+        return;
+    }
+    if (t.kind == KModField && t.index == 1)   // the destination: steps through everything a slot can move
+    {
+        static float acc = 0.0f;
+        acc += fraction ? amount * 40.0f : amount;
+        const int d = (int) acc;
+        if (d == 0) return;
+        acc -= (float) d;
+        std::vector<int> list { dest::none };
+        const auto& ed = engineDef (cur().engine);
+        for (int i = 0; i < (int) ed.params.size(); ++i) list.push_back (i);
+        for (int k = 0; k < numInserts; ++k)
+            for (int q = 0; q < (int) insertDef (cur().mods.inserts[(size_t) k].type).params.size(); ++q) list.push_back (dest::insert0 + k * insertParams + q);
+        for (int k = 0; k < 5; ++k) list.push_back (dest::mix0 + k);
+        auto& sl = cur().mods.slots[(size_t) modSlot[(size_t) track.load()]];
+        int pos = 0;
+        for (size_t i = 0; i < list.size(); ++i) if (list[i] == sl.dest) pos = (int) i;
+        pos = juce::jlimit (0, (int) list.size() - 1, pos + d);
+        pushUndo ("Modulation", true);
+        sl.dest = list[(size_t) pos];
+        if (sl.source == SrcNone && sl.dest != dest::none) sl.source = SrcLfo1;
+        if (sl.amount == 0.0f && sl.dest != dest::none) sl.amount = 0.25f;
+        changed();
+        return;
+    }
+    if (t.kind == KChain)
+    {
+        static float acc = 0.0f;
+        acc += fraction ? amount * 12.0f : amount;
+        const int d = (int) acc;
+        if (d == 0) return;
+        acc -= (float) d;
+        const int n = chainPresetNames().size();
+        chainIdx = ((chainIdx + d) % n + n) % n;
+        pushUndo ("FX chain", true);
+        applyChainPreset (cur().mods, chainIdx);
+        for (auto& sl : cur().mods.slots) if (dest::isInsert (sl.dest)) sl = ModSlot();
+        setFlash ("FX chain: " + chainPresetNames()[chainIdx]);
+        changed();
+        return;
+    }
+    if (t.kind == KSendFxPreset)
+    {
+        static float acc = 0.0f;
+        acc += fraction ? amount * 12.0f : amount;
+        const int d = (int) acc;
+        if (d == 0) return;
+        acc -= (float) d;
+        auto& in = project.m.fxSend;
+        const auto& idef = insertDef (in.type);
+        if (idef.presets.empty()) return;
+        const int np = (int) idef.presets.size();
+        sendFxPreset = ((sendFxPreset + d) % np + np) % np;
+        idef.applyPreset (sendFxPreset, in.p.data());
+        for (size_t i = 0; i < idef.params.size(); ++i) if (idef.params[i].id == "mix") in.p[i] = 1.0f;
+        setFlash ("FX send: " + idef.name + " - " + idef.presets[(size_t) sendFxPreset].name);
+        changed();
+        return;
+    }
+    if (t.kind == KInsPreset)
+    {
+        static float acc = 0.0f;
+        acc += fraction ? amount * 12.0f : amount;
+        const int d = (int) acc;
+        if (d == 0) return;
+        acc -= (float) d;
+        auto& in = cur().mods.inserts[(size_t) t.index];
+        const auto& idef = insertDef (in.type);
+        if (idef.presets.empty()) return;
+        auto& pi = insPreset[(size_t) track.load()];
+        pi = ((pi + d) % (int) idef.presets.size() + (int) idef.presets.size()) % (int) idef.presets.size();
+        pushUndo ("FX preset", true);
+        idef.applyPreset (pi, in.p.data());
+        setFlash (idef.name + ": " + idef.presets[(size_t) pi].name);
+        changed();
         return;
     }
     const auto* def = targetDef (t);
@@ -1056,6 +1281,48 @@ void Controller::changeTarget (const Target& t, float amount, bool fraction)
             }
             pushUndo ("Sound edit", true); cur().params[(size_t) t.index] = v; edited[(size_t) track.load()] = true; break;
         case KFx:    cur().fx[(size_t) t.index] = v; break;
+        case KIns:   pushUndo ("FX edit", true); cur().mods.inserts[(size_t) (t.index / insertParams)].p[(size_t) (t.index % insertParams)] = v; break;
+        case KInsType:
+        {
+            pushUndo ("FX", true);
+            auto& in = cur().mods.inserts[(size_t) t.index];
+            const int nt = juce::roundToInt (v);
+            if (nt == in.type) return;
+            in.type = nt;
+            in.on = true;
+            insertDef (nt).defaults (in.p.data());
+            for (auto& sl : cur().mods.slots)   // modulation of the old effect's knobs goes
+                if (dest::isInsert (sl.dest) && (sl.dest - dest::insert0) / insertParams == t.index) sl = ModSlot();
+            fxSlot[(size_t) track.load()] = t.index;
+            insPreset[(size_t) track.load()] = 0;
+            break;
+        }
+        case KInsOn: cur().mods.inserts[(size_t) t.index].on = v > 0.5f; break;
+        case KFxSel: fxSlot[(size_t) track.load()] = juce::jlimit (0, numInserts - 1, juce::roundToInt (v) - 1); insPreset[(size_t) track.load()] = 0; if (onChange) onChange(); return;
+        case KModSel: modSlot[(size_t) track.load()] = juce::jlimit (0, numModSlots - 1, juce::roundToInt (v) - 1); if (onChange) onChange(); return;
+        case KMacro: cur().mods.macros[(size_t) t.index] = v; break;
+        case KModSet: pushUndo ("Modulation", true); cur().mods.set[(size_t) t.index] = v; break;
+        case KModField:
+        {
+            pushUndo ("Modulation", true);
+            auto& sl = cur().mods.slots[(size_t) modSlot[(size_t) track.load()]];
+            if (t.index == 0) sl.source = juce::roundToInt (v); else sl.amount = v;
+            break;
+        }
+        case KModAmt: pushUndo ("Modulation", true); cur().mods.slots[(size_t) t.index].amount = v; break;
+        case KSendC: project.tracks[(size_t) t.index].sendC = v; break;
+        case KSendFx: project.m.fxSend.p[(size_t) t.index] = v; break;
+        case KLook:
+        {
+            auto l = look;
+            switch (t.index)
+            {
+                case 0: l.theme = juce::roundToInt (v); break; case 1: l.accent = juce::roundToInt (v); break; case 2: l.textSize = juce::roundToInt (v); break;
+                case 3: l.knobStyle = juce::roundToInt (v); break; case 4: l.trackColours = v > 0.5f; break; default: l.hintLine = v > 0.5f; break;
+            }
+            setLook (l);
+            return;
+        }
         case KMix:
         {
             auto& tr = project.tracks[(size_t) (t.index / 4)];
@@ -1074,6 +1341,24 @@ void Controller::changeTarget (const Target& t, float amount, bool fraction)
                 case MMetronome: m.metronome = v > 0.5f; break;
                 case MDj: m.djFilter = (v + 1.0f) * 0.5f; break;
                 case MPads: scalePads = v > 0.5f; break;
+                case MRevType: m.revType = juce::roundToInt (v); break;   case MRevPre: m.revPre = v; break;   case MRevDuck: m.revDuck = v; break;
+                case MRevLevel: m.revLevel = v; break;                    case MDelayType: m.delayType = juce::roundToInt (v); break;
+                case MDelayWow: m.delayWow = v; break;                    case MDelayDuck: m.delayDuck = v; break;
+                case MDelayToRev: m.delayToRev = v; break;                case MDelayLevel: m.delayLevel = v; break;
+                case MFxLevel: m.fxLevel = v; break;                      case MFxDuck: m.fxDuck = v; break;
+                case MFxType:
+                {
+                    const int nt = juce::roundToInt (v);
+                    if (nt == m.fxSend.type) return;
+                    m.fxSend.type = nt;
+                    m.fxSend.on = true;
+                    insertDef (nt).applyPreset (0, m.fxSend.p.data());
+                    // a send is all effect: the mix knob (if it has one) goes up
+                    const auto& d = insertDef (nt);
+                    for (size_t i = 0; i < d.params.size(); ++i) if (d.params[i].id == "mix") m.fxSend.p[i] = 1.0f;
+                    sendFxPreset = 0;
+                    break;
+                }
                 case MOctave: octave[(size_t) track.load()] = juce::roundToInt (v); break;
                 case MReset:
                     resetProgress = juce::jlimit (0.0f, 100.0f, resetProgress + (v - resetProgress) * 4.0f);   // 25 clicks all the way
@@ -1096,6 +1381,7 @@ void Controller::turnKnob (int k, float clicks)
     if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "knob"); o->setProperty ("k", k); o->setProperty ("c", clicks); sendRemote (o); return; }
     const int slot = k + (shift.load() ? numKnobs : 0);
     if (mode.load() == ModeSeq) { seqKnob (slot, clicks); return; }
+    if (assignPending >= 0 && tryAssign (targetFor (slot))) return;
     changeTarget (targetFor (slot), clicks, false);
 }
 
@@ -1105,6 +1391,7 @@ void Controller::turnKnobBy (int k, float fraction)
     if (isRemote()) { turnKnob (k, fraction * 100.0f); return; }
     const int slot = k + (shift.load() ? numKnobs : 0);
     if (mode.load() == ModeSeq) { seqKnob (slot, fraction * 48.0f); return; }
+    if (assignPending >= 0 && tryAssign (targetFor (slot))) return;
     changeTarget (targetFor (slot), fraction, true);
 }
 
@@ -1134,11 +1421,56 @@ KnobView Controller::knob (int k) const
         else { const auto l = browsePresets(); v.name = "Sound"; v.value = l[browsePos]; v.norm = l.size() > 1 ? (float) browsePos / (l.size() - 1) : 0.0f; }
         return v;
     }
+    if (t.kind == KModField && t.index == 1)
+    {
+        const auto& sl = cur().mods.slots[(size_t) modSlot[(size_t) track.load()]];
+        v.used = true; v.name = "Destination"; v.value = sl.dest == dest::none ? juce::String ("-") : destName (track.load(), sl.dest, true);
+        v.norm = sl.dest == dest::none ? 0.0f : 0.5f;
+        return v;
+    }
+    if (t.kind == KChain)
+    {
+        v.used = true; v.name = "Whole chain"; v.value = chainPresetNames()[chainIdx];
+        v.norm = (float) chainIdx / (float) juce::jmax (1, chainPresetNames().size() - 1);
+        return v;
+    }
+    if (t.kind == KSendFxPreset)
+    {
+        const auto& idef = insertDef (project.m.fxSend.type);
+        v.used = true; v.name = "FX preset";
+        v.value = idef.presets.empty() ? juce::String ("-") : idef.presets[(size_t) juce::jlimit (0, (int) idef.presets.size() - 1, sendFxPreset)].name;
+        v.norm = idef.presets.size() > 1 ? (float) sendFxPreset / (float) (idef.presets.size() - 1) : 0.0f;
+        return v;
+    }
+    if (t.kind == KInsPreset)
+    {
+        const auto& idef = insertDef (cur().mods.inserts[(size_t) t.index].type);
+        v.used = true; v.name = "Preset";
+        v.value = idef.presets.empty() ? juce::String ("-") : idef.presets[(size_t) juce::jlimit (0, (int) idef.presets.size() - 1, insPreset[(size_t) track.load()])].name;
+        v.norm = idef.presets.size() > 1 ? (float) insPreset[(size_t) track.load()] / (float) (idef.presets.size() - 1) : 0.0f;
+        return v;
+    }
     const auto* def = targetDef (t);
     if (def == nullptr) return v;
     const float val = targetValue (t);
     v.used = true;
     v.name = def->name;
+    if (t.kind == KInsType) v.name = "FX " + juce::String (t.index + 1);
+    if (t.kind == KInsOn) v.name = "FX " + juce::String (t.index + 1) + " on";
+    if (t.kind == KIns && soundExtraPage() == ExtraMy) v.name = destName (track.load(), dest::insert0 + t.index, true);
+    if (t.kind == KMacro)
+    {
+        v.name = "Macro " + juce::String (t.index + 1);
+        for (const auto& sl : cur().mods.slots)
+            if (sl.active() && sl.source == SrcMacro1 + t.index) { v.name = "M" + juce::String (t.index + 1) + " " + destName (track.load(), sl.dest, true); break; }
+    }
+    if (t.kind == KModAmt)
+    {
+        const auto& sl = cur().mods.slots[(size_t) t.index];
+        v.name = juce::String (t.index + 1) + " " + (sl.source == SrcNone || sl.dest == dest::none ? juce::String ("(empty)")
+                                                     : modSourceNames()[sl.source].removeCharacters (" ") + ">" + destName (track.load(), sl.dest, true));
+    }
+    if (t.kind == KModSel) { v.value = modSlotText (track.load(), modSlot[(size_t) track.load()]); }
     v.value = def->format (val);
     if (t.kind == KMaster && t.index == MTempo) v.value = juce::String (val, 1).trimCharactersAtEnd ("0").trimCharactersAtEnd (".") + " BPM";
     if (t.kind == KMaster && t.index == MReset) v.value = resetProgress > 0.0f ? juce::String (juce::roundToInt (resetProgress)) + "% keep turning" : juce::String ("turn right");
@@ -1154,12 +1486,12 @@ juce::StringArray Controller::pageNames() const
     juce::StringArray n;
     switch (mode.load())
     {
-        case ModeSound: for (const auto& p : engineDef (cur().engine).pages) n.add (p.name); break;
+        case ModeSound: for (const auto& p : engineDef (cur().engine).pages) n.add (p.name); n.add ("FX"); n.add ("MACRO"); n.add ("MOD"); n.add ("MY"); break;
         case ModeBrowse: n.add ("BROWSE"); break;
         case ModeSeq: { const int bars = juce::jmax (1, (cur().pat.length + 15) / 16); for (int b = 0; b < bars; ++b) n.add ("BAR " + juce::String (b + 1)); break; }
         case ModeFx: for (const auto& s : noteFxNames()) n.add (s.toUpperCase()); break;
-        case ModeMix: n.add ("LEVEL"); n.add ("SENDS"); break;
-        case ModeProject: n.add ("PROJECT"); break;
+        case ModeMix: n.add ("LEVEL"); n.add ("SENDS"); n.add ("FX SEND"); n.add ("RETURNS"); break;
+        case ModeProject: n.add ("PROJECT"); n.add ("LOOK"); break;
         case ModeMenu: n.add ("MENU"); break;
         default: break;
     }
@@ -1174,6 +1506,7 @@ int Controller::pageIndex() const
         case ModeSeq: return bar[(size_t) track.load()];
         case ModeFx: return cur().fxType;
         case ModeMix: return mixPage;
+        case ModeProject: return projectPage;
         default: return 0;
     }
 }
@@ -1189,6 +1522,18 @@ juce::String Controller::pageName() const
 juce::String Controller::hint() const
 {
     if (sceneMode.load()) return "Pads 1-8: scenes (Rec + pad = save) | pads 9-16: mute | Scene: back";
+    if (assignPending >= 0) return assignPending == assignMy ? "Turn the knob you want on your MY page (any page, any mode) | Project: cancel"
+                                                             : "Turn the knob macro " + juce::String (assignPending + 1) + " should move | Project: cancel";
+    if (mode.load() == ModeSound)
+        switch (soundExtraPage())
+        {
+            case ExtraFx:    return "Knob 1: FX slot 1-4 | 2: the effect | 3-10: its knobs | 11: on | 12: presets | Shift: 4 effects, on / off, whole chain";
+            case ExtraMacro: return "Knobs 1-8: macros (MENU > More > Assign) | 9-12: LFOs | Shift: LFO, envelope, random";
+            case ExtraMod:   return "Knob 1: slot | 2: source | 3: destination | 4: amount | 5-12: amounts 1-8 (Shift: 9-16)";
+            case ExtraMy:    return "Your own knobs | MENU > More > Add to MY knobs, then turn any knob";
+            default: break;
+        }
+    if (mode.load() == ModeProject && projectPage == 1) return "How the screen looks: theme, colour, text size, knobs, track colours";
     switch (mode.load())
     {
         case ModeSound:   if (cur().engine == EngineSampler) return "Rec: record a sample (microphone) | knob 1: the sample | Play: Keys / Chop / One shot";
@@ -1198,7 +1543,14 @@ juce::String Controller::hint() const
                                                  : (audio.isPlaying() ? "Pad = step on / off | knobs: the picked step | Shift + knobs: the pattern | Rec: record what you play"
                                                                        : "Play keys: they fill the steps one by one | pad = step on / off | knobs: the picked step | Shift + knobs: pattern");
         case ModeFx:      return "Prev / Next: Off / Arp / Chords / Orbit | Shift + Prev / Next: presets | play the keys";
-        case ModeMix:     return "Knobs: levels (Shift: pan) | Prev / Next: sends | pads 1-8 mute, 9-16 solo";
+        case ModeMix:
+            switch (mixPage)
+            {
+                case 1:  return "Knobs 1-8: reverb send (Shift: delay send) | 9-12: reverb / delay type and size, time | Next: FX send";
+                case 2:  return "Knobs 1-8: FX send per track | 9: the effect | 10: preset | 11: level | 12: duck | Shift: its knobs";
+                case 3:  return "Reverb: type, size, damp, width, low cut, pre-delay, duck, level | delay: type, time ... (Shift: more)";
+                default: return "Knobs: levels (Shift: pan) | Prev / Next: sends | pads 1-8 mute, 9-16 solo";
+            }
         case ModeProject: return "Tempo, key, scale ... | Project again = MENU (save, load, patterns, help)";
         case ModeMenu:    return menuPage == 0 ? "A pad (or a touch) = do it | red = press again to be sure | Project = back" : "Pick with a pad | pad 16 = back";
         default: return {};
@@ -1699,8 +2051,9 @@ void Controller::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMe
 namespace
 {
 enum MenuMain { MSave = 0, MLoad, MNew, MClearTrack, MClearAll, MCopyTrack, MDrumPattern, MBassLine,
-                MClick, MPadsMode, MLearn, MHelp, MTap, MSaveSound, MUndo, MClose };
-enum MenuPage { PageMain = 0, PageSave, PageLoad, PageCopy, PageDrums, PageBass };
+                MClick, MPadsMode, MLearn, MHelp, MTap, MSaveSound, MUndo, MMore };
+enum MenuMore { XPin = 0, XClearMy, XAssign, XClearMods, XRandomMods, XChain, XClearFx, XCopyFx, XLook, XTheme, XAccent, XText, XTrackColours, XInit, XClose };
+enum MenuPage { PageMain = 0, PageSave, PageLoad, PageCopy, PageDrums, PageBass, PageMore, PageMacro, PageChain, PageCopyFx };
 }
 
 juce::String Controller::menuTitle() const
@@ -1712,6 +2065,10 @@ juce::String Controller::menuTitle() const
         case PageCopy:  return "COPY TRACK " + juce::String (track.load() + 1) + " TO";
         case PageDrums: return "DRUM PATTERN FOR TRACK " + juce::String (track.load() + 1);
         case PageBass:  return "BASS LINE FOR TRACK " + juce::String (track.load() + 1) + " (in " + music::keyName (project.m.key) + " " + music::scaleName (project.m.scale) + ")";
+        case PageMore:  return "MORE - make it yours";
+        case PageMacro: return "WHICH MACRO? (then turn a knob)";
+        case PageChain: return "FX CHAIN FOR TRACK " + juce::String (track.load() + 1);
+        case PageCopyFx: return "COPY THE FX OF TRACK " + juce::String (track.load() + 1) + " TO";
         default:        return "MENU";
     }
 }
@@ -1757,6 +2114,52 @@ std::array<Controller::MenuTile, numPads> Controller::menuTiles() const
             back();
             return m;
         }
+        case PageMacro:
+            for (int i = 0; i < numMacros; ++i)
+            {
+                int used = 0;
+                for (const auto& sl : cur().mods.slots) used += sl.active() && sl.source == SrcMacro1 + i ? 1 : 0;
+                m[(size_t) i] = { "Macro " + juce::String (i + 1), used > 0 ? juce::String (used) + " linked" : juce::String ("free"), true, false, used > 0 };
+            }
+            back();
+            return m;
+        case PageChain:
+        {
+            const auto n = chainPresetNames();
+            for (int i = 0; i < juce::jmin (15, n.size()); ++i) m[(size_t) i] = { n[i], "", true, false, false };
+            back();
+            return m;
+        }
+        case PageCopyFx:
+            for (int i = 0; i < numTracks; ++i)
+                m[(size_t) i] = { "Track " + juce::String (i + 1), engineDef (project.tracks[(size_t) i].engine).name, i != track.load(), true, false };
+            back();
+            return m;
+        case PageMore:
+        {
+            const auto& md = cur().mods;
+            int myUsed = 0, modsUsed = 0, fxUsed = 0;
+            for (auto d : md.my) myUsed += d >= 0 ? 1 : 0;
+            for (const auto& sl : md.slots) modsUsed += sl.active() ? 1 : 0;
+            for (const auto& in : md.inserts) fxUsed += in.type != InsOff ? 1 : 0;
+            m[XPin] = { "Add to MY knobs", juce::String (myUsed) + " of 24", myUsed < numMyKnobs, false, assignPending == assignMy };
+            m[XClearMy] = { "Clear MY knobs", "", myUsed > 0, true, false };
+            m[XAssign] = { "Assign to macro", "a macro moves it", true, false, assignPending >= 0 && assignPending < numMacros };
+            m[XClearMods] = { "Clear modulation", juce::String (modsUsed) + " slots used", modsUsed > 0, true, false };
+            m[XRandomMods] = { "Random modulation", "LFOs on the sound", true, false, false };
+            m[XChain] = { "FX chain", "lo-fi, dub, space ...", true, false, false };
+            m[XClearFx] = { "Clear FX", juce::String (fxUsed) + " effects", fxUsed > 0, true, false };
+            m[XCopyFx] = { "Copy FX", "the chain to ...", fxUsed > 0, false, false };
+            m[XLook] = { "Look", "all the screen settings", true, false, false };
+            m[XTheme] = { "Theme", themeNames()[look.theme], true, false, false };
+            m[XAccent] = { "Colour", accentNames()[look.accent], true, false, false };
+            m[XText] = { "Text size", look.textSize == 0 ? "normal" : "big", true, false, look.textSize > 0 };
+            m[XTrackColours] = { "Track colours", look.trackColours ? "on" : "off", true, false, look.trackColours };
+            m[XInit] = { "Init track FX", "FX + mods + macros off", true, true, false };
+            m[XClose] = { "Close", "", true, false, false };
+            back();
+            return m;
+        }
         default: break;
     }
     const bool drums = cur().isDrums();
@@ -1775,7 +2178,7 @@ std::array<Controller::MenuTile, numPads> Controller::menuTiles() const
     m[MTap] = { "Tap tempo", juce::String (juce::roundToInt (project.m.tempo)) + " BPM", true, false, false };
     m[MSaveSound] = { "Save sound", "as a User sound", true, false, false };
     m[MUndo] = { "Undo", juce::String ((int) undoStack.size()) + " steps back", ! undoStack.empty(), false, false };
-    m[MClose] = { "Close", "", true, false, false };
+    m[MMore] = { "More", "FX, macros, MY knobs, look", true, false, false };
     return m;
 }
 
@@ -1822,6 +2225,43 @@ void Controller::menuPress (int tile)
                 setFlash ("Drum pattern: " + t.label + " (change it in SEQ)");
                 if (! audio.isPlaying()) setPlaying (true);
                 return;
+            case PageMacro:
+                startAssign (tile);
+                return;
+            case PageChain:
+                pushUndo ("FX chain");
+                applyChainPreset (cur().mods, tile);
+                for (auto& sl : cur().mods.slots) if (dest::isInsert (sl.dest)) sl = ModSlot();
+                fxSlot[(size_t) track.load()] = 0;
+                changed();
+                setFlash ("FX chain: " + t.label + " (SOUND > FX page)");
+                return;
+            case PageCopyFx:
+                pushUndo ("Copy FX");
+                project.tracks[(size_t) tile].mods.inserts = cur().mods.inserts;
+                changed();
+                setFlash ("FX of track " + juce::String (track.load() + 1) + " copied to track " + juce::String (tile + 1));
+                break;
+            case PageMore:
+                switch (tile)
+                {
+                    case XPin: startAssign (assignMy); return;
+                    case XClearMy: pushUndo ("MY knobs"); cur().mods.my.fill ((int16_t) dest::none); changed(); setFlash ("MY knobs cleared"); return;
+                    case XAssign: menuPage = PageMacro; if (onChange) onChange(); return;
+                    case XClearMods: pushUndo ("Modulation"); for (auto& sl : cur().mods.slots) sl = ModSlot(); cur().mods.macros.fill (0.0f); changed(); setFlash ("Modulation cleared"); return;
+                    case XRandomMods: randomModulation(); return;
+                    case XChain: menuPage = PageChain; if (onChange) onChange(); return;
+                    case XClearFx: pushUndo ("Clear FX"); for (auto& in : cur().mods.inserts) in = Insert(); for (auto& sl : cur().mods.slots) if (dest::isInsert (sl.dest)) sl = ModSlot(); changed(); setFlash ("FX cleared"); return;
+                    case XCopyFx: menuPage = PageCopyFx; if (onChange) onChange(); return;
+                    case XLook: projectPage = 1; setMode (ModeProject); return;
+                    case XTheme: { auto l = look; l.theme = (l.theme + 1) % themeNames().size(); setLook (l); return; }
+                    case XAccent: { auto l = look; l.accent = (l.accent + 1) % accentNames().size(); setLook (l); return; }
+                    case XText: { auto l = look; l.textSize = 1 - l.textSize; setLook (l); return; }
+                    case XTrackColours: { auto l = look; l.trackColours = ! l.trackColours; setLook (l); return; }
+                    case XInit: pushUndo ("Init track FX"); cur().mods = TrackMods(); fxSlot[(size_t) track.load()] = 0; modSlot[(size_t) track.load()] = 0; changed(); setFlash ("Track FX, macros and modulation: off"); return;
+                    case XClose: setMode (ModeProject); return;
+                    default: return;
+                }
             case PageBass:
                 pushUndo ("Bass line");
                 applyBassTemplate (cur().pat, tile, project.m.key, project.m.scale);
@@ -1852,7 +2292,7 @@ void Controller::menuPress (int tile)
         case MTap:         tapTempo(); break;
         case MSaveSound:   saveUserSound(); break;
         case MUndo:        undo(); break;
-        case MClose:       setMode (ModeProject); return;
+        case MMore:        menuPage = PageMore; break;
         default: break;
     }
     if (onChange) onChange();
@@ -2311,4 +2751,189 @@ void Controller::handleLinkMessage (const juce::var& m, const std::function<void
     else if (t == "reset!") factoryReset();
     else if (t == "hello")  reply (makeState());
 }
+//==============================================================================
+// Customization
+int Controller::soundExtraPage() const
+{
+    if (mode.load() != ModeSound) return -1;
+    const int n = (int) engineDef (cur().engine).pages.size();
+    const int p = soundPage[(size_t) track.load()];
+    return p >= n ? juce::jlimit (0, numSoundExtras - 1, p - n) : -1;
+}
+
+Controller::Target Controller::destTarget (int d) const
+{
+    if (dest::isEngine (d)) return d < (int) engineDef (cur().engine).params.size() ? Target { KParam, d } : Target {};
+    if (dest::isInsert (d))
+    {
+        const int k = d - dest::insert0;
+        return (k % insertParams) < (int) insertDef (cur().mods.inserts[(size_t) (k / insertParams)].type).params.size() ? Target { KIns, k } : Target {};
+    }
+    if (dest::isMix (d)) return d - dest::mix0 == 4 ? Target { KSendC, track.load() } : Target { KMix, track.load() * 4 + (d - dest::mix0) };
+    if (d >= dest::macro0 && d < dest::macro0 + numMacros) return { KMacro, d - dest::macro0 };
+    if (d >= dest::modSet0 && d < dest::modSet0 + numModSet) return { KModSet, d - dest::modSet0 };
+    return {};
+}
+
+int Controller::targetDest (const Target& t) const
+{
+    switch (t.kind)
+    {
+        case KParam: return t.index;
+        case KIns: return dest::insert0 + t.index;
+        case KMix: return t.index / 4 == track.load() ? dest::mix0 + t.index % 4 : -1;
+        case KSendC: return t.index == track.load() ? dest::mix0 + 4 : -1;
+        case KMacro: return dest::macro0 + t.index;
+        case KModSet: return dest::modSet0 + t.index;
+        default: return -1;
+    }
+}
+
+juce::String Controller::destName (int t, int d, bool shortForm) const
+{
+    const auto& tr = project.tracks[(size_t) juce::jlimit (0, numTracks - 1, t)];
+    if (dest::isEngine (d))
+    {
+        const auto& e = engineDef (tr.engine);
+        return d < (int) e.params.size() ? e.params[(size_t) d].name : juce::String ("?");
+    }
+    if (dest::isInsert (d))
+    {
+        const int k = d - dest::insert0, slot = k / insertParams, q = k % insertParams;
+        const auto& idef = insertDef (tr.mods.inserts[(size_t) slot].type);
+        const auto pn = q < (int) idef.params.size() ? idef.params[(size_t) q].name : juce::String ("?");
+        return shortForm ? juce::String (slot + 1) + " " + idef.shortName + " " + pn : "FX " + juce::String (slot + 1) + " " + idef.name + ": " + pn;
+    }
+    if (dest::isMix (d)) { static const char* n[] = { "Volume", "Pan", "Reverb send", "Delay send", "FX send" }; return n[d - dest::mix0]; }
+    if (d >= dest::macro0 && d < dest::macro0 + numMacros) return "Macro " + juce::String (d - dest::macro0 + 1);
+    if (d >= dest::modSet0 && d < dest::modSet0 + numModSet) return modSetDefs()[(size_t) (d - dest::modSet0)].name;
+    return "-";
+}
+
+juce::String Controller::modSlotText (int t, int slot) const
+{
+    const auto& sl = project.tracks[(size_t) juce::jlimit (0, numTracks - 1, t)].mods.slots[(size_t) juce::jlimit (0, numModSlots - 1, slot)];
+    if (sl.source == SrcNone || sl.dest == dest::none) return juce::String (slot + 1) + ": empty";
+    const int pct = juce::roundToInt (sl.amount * 100.0f);
+    return juce::String (slot + 1) + ": " + modSourceNames()[sl.source] + " > " + destName (t, sl.dest, true) + " " + (pct > 0 ? "+" : "") + juce::String (pct) + "%";
+}
+
+void Controller::startAssign (int what)
+{
+    assignPending = what;
+    menuPage = 0;
+    mode = ModeSound;   // back to the knobs: turn the one you mean
+    setFlash (what == assignMy ? "Turn any knob: it goes onto your MY page" : "Turn the knob macro " + juce::String (what + 1) + " should move");
+    if (onChange) onChange();
+}
+
+bool Controller::tryAssign (const Target& t)
+{
+    const int d = targetDest (t);
+    if (d < 0) { setFlash ("That knob can't go there - turn a sound, FX, macro or mix knob"); return true; }
+    auto& md = cur().mods;
+    if (assignPending == assignMy)
+    {
+        for (auto x : md.my) if (x == d) { setFlash (destName (track.load(), d) + " is already on MY page"); assignPending = -1; return true; }
+        for (auto& x : md.my)
+            if (x < 0)
+            {
+                pushUndo ("MY knobs");
+                x = (int16_t) d;
+                assignPending = -1;
+                changed();
+                setFlash (destName (track.load(), d) + " is on your MY page now");
+                return true;
+            }
+        setFlash ("MY page is full (24)");
+        assignPending = -1;
+        return true;
+    }
+    if (! (dest::isEngine (d) || dest::isInsert (d) || dest::isMix (d))) { setFlash ("A macro moves sound, FX or mix knobs"); return true; }
+    const int m = assignPending;
+    const int free = md.firstFreeSlot();
+    if (free < 0) { setFlash ("All 16 modulation slots are used (SOUND > MOD)"); assignPending = -1; return true; }
+    pushUndo ("Macro");
+    md.slots[(size_t) free] = { SrcMacro1 + m, d, 0.5f };
+    assignPending = -1;
+    changed();
+    setFlash ("Macro " + juce::String (m + 1) + " moves " + destName (track.load(), d) + " (amount: SOUND > MOD, slot " + juce::String (free + 1) + ")");
+    return true;
+}
+
+void Controller::randomModulation()
+{
+    pushUndo ("Random modulation");
+    auto& tr = cur();
+    auto& md = tr.mods;
+    const auto& e = engineDef (tr.engine);
+    juce::Random rng;
+    std::vector<int> candidates;
+    for (int i = 0; i < (int) e.params.size(); ++i)
+    {
+        const auto& p = e.params[(size_t) i];
+        if (p.stepped() || p.id == "volume" || p.id.endsWith ("_level") || p.unit == ParamDef::Sec) continue;
+        candidates.push_back (i);
+    }
+    if (candidates.empty()) return;
+    for (auto& sl : md.slots) if (sl.source == SrcLfo1 || sl.source == SrcLfo2 || sl.source == SrcRandom) sl = ModSlot();
+    const int count = 2 + rng.nextInt (2);
+    const int sources[] = { SrcLfo1, SrcLfo2, SrcRandom };
+    for (int k = 0; k < count; ++k)
+    {
+        const int free = md.firstFreeSlot();
+        if (free < 0) break;
+        const int d = candidates[(size_t) rng.nextInt ((int) candidates.size())];
+        md.slots[(size_t) free] = { sources[k % 3], d, (rng.nextBool() ? 1.0f : -1.0f) * (0.08f + rng.nextFloat() * 0.25f) };
+    }
+    static const int syncs[] = { 2, 3, 4, 10, 11, 0 };
+    md.set[MsLfo1Sync] = (float) syncs[rng.nextInt (6)];
+    md.set[MsLfo2Sync] = (float) syncs[rng.nextInt (6)];
+    md.set[MsLfo1Shape] = (float) rng.nextInt (7);
+    md.set[MsLfo2Shape] = (float) rng.nextInt (7);
+    md.set[MsRandRate] = 5.0f;
+    md.set[MsSmooth] = rng.nextFloat() * 0.8f;
+    mode = ModeSound;   // show it: the MOD page
+    soundPage[(size_t) track.load()] = (int) e.pages.size() + ExtraMod;
+    changed();
+    setFlash ("Random modulation: " + juce::String (count) + " knobs move (SOUND > MOD, Shift + Chaos = back)");
+}
+
+void Controller::setLook (const Look& l)
+{
+    look = l;
+    look.theme = juce::jlimit (0, themeNames().size() - 1, look.theme);
+    look.accent = juce::jlimit (0, accentNames().size() - 1, look.accent);
+    look.textSize = juce::jlimit (0, 1, look.textSize);
+    look.knobStyle = juce::jlimit (0, 1, look.knobStyle);
+    saveLook();
+    if (onChange) onChange();
+}
+
+void Controller::loadLook()
+{
+    const auto v = juce::JSON::parse (dataDir.getChildFile ("look.json"));
+    if (! v.isObject()) return;
+    Look l;
+    l.theme = (int) v.getProperty ("theme", 0);
+    l.accent = (int) v.getProperty ("accent", 0);
+    l.textSize = (int) v.getProperty ("textSize", 0);
+    l.knobStyle = (int) v.getProperty ("knobStyle", 0);
+    l.trackColours = (bool) v.getProperty ("trackColours", false);
+    l.hintLine = (bool) v.getProperty ("hintLine", true);
+    look = l;
+}
+
+void Controller::saveLook() const
+{
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("theme", look.theme);
+    o->setProperty ("accent", look.accent);
+    o->setProperty ("textSize", look.textSize);
+    o->setProperty ("knobStyle", look.knobStyle);
+    o->setProperty ("trackColours", look.trackColours);
+    o->setProperty ("hintLine", look.hintLine);
+    dataDir.getChildFile ("look.json").replaceWithText (juce::JSON::toString (juce::var (o)));
+}
+
 } // namespace catbox

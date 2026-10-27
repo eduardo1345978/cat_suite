@@ -2,6 +2,7 @@
 
 #include "Params.h"
 #include "NoteFx.h"
+#include "TrackFx.h"
 #include <juce_core/juce_core.h>
 #include <array>
 #include <cstdint>
@@ -85,8 +86,9 @@ struct Track
     std::array<float, maxParams> params {};
     int fxType = FxOff;
     std::array<float, numFxParams> fx {};
-    float volume = 0.75f, pan = 0.0f, sendA = 0.12f, sendB = 0.0f;
+    float volume = 0.75f, pan = 0.0f, sendA = 0.12f, sendB = 0.0f, sendC = 0.0f;   // C: the FX send
     bool mute = false, solo = false;
+    TrackMods mods;   // insert effects, macros, LFOs, modulation, MY knobs
     Pattern pat;
 
     bool isDrums() const { return engineDef (engine).drums; }
@@ -105,7 +107,17 @@ struct Master
     float delayFb = 0.4f, delayTone = 0.5f, delayPingPong = 1.0f;
     bool metronome = false;
     int countIn = 0;                      // bars of count-in before Rec (0 / 1)
+    // the sends, more: reverb type / pre-delay / ducking, delay type / wow / ducking / into the reverb, the FX send
+    int revType = 0;                      // revTypeNames()
+    float revPre = 0.1f, revDuck = 0.0f, revLevel = 0.8f;
+    int delayType = 0;                    // delayTypeNames()
+    float delayWow = 0.3f, delayDuck = 0.0f, delayToRev = 0.0f, delayLevel = 0.8f;
+    Insert fxSend = [] { Insert i; i.type = InsChorus; insertDef (InsChorus).applyPreset (1, i.p.data()); i.p[4] = 1.0f; return i; }();
+    float fxLevel = 0.8f, fxDuck = 0.0f;
 };
+
+juce::StringArray revTypeNames();
+juce::StringArray delayTypeNames();
 
 juce::StringArray delayNames();
 double delayBeats (int index);

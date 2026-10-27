@@ -47,6 +47,15 @@ struct KnobView
     bool bipolar = false;    // the ring starts in the middle
 };
 
+/** How the screen looks (the PROJECT page LOOK, the MENU). Kept for the box, not per project. */
+struct Look
+{
+    int theme = 0, accent = 0, textSize = 0, knobStyle = 0;
+    bool trackColours = false, hintLine = true;
+};
+juce::StringArray themeNames();
+juce::StringArray accentNames();
+
 class Controller : public juce::MidiInputCallback, private juce::Timer
 {
 public:
@@ -142,6 +151,22 @@ public:
     bool loadProject (int slot);
     bool projectExists (int slot) const;
 
+    // ---- customization: inserts, macros, modulation, MY knobs, the look
+    static constexpr int numSoundExtras = 4;      // the SOUND pages after the engine's: FX, MACRO, MOD, MY
+    enum SoundExtra { ExtraFx = 0, ExtraMacro, ExtraMod, ExtraMy };
+    int soundExtraPage() const;                    // -1 = an engine page
+    int fxSlotNow() const { return fxSlot[(size_t) track.load()]; }
+    int modSlotNow() const { return modSlot[(size_t) track.load()]; }
+    juce::String destName (int track, int dest, bool shortForm = false) const;
+    juce::String modSlotText (int track, int slot) const;   // e.g. "LFO 1 > Cutoff +40%"
+    /** The next knob you turn goes onto a macro (0-7) or the MY page (assignMy). */
+    static constexpr int assignMy = 100;
+    void startAssign (int what);
+    int assigning() const noexcept { return assignPending; }
+    void randomModulation();
+    const Look& getLook() const noexcept { return look; }
+    void setLook (const Look&);
+
     // ---- MIDI learn: any MIDI keyboard / controller plays the box
     void startLearn();
     void learnSkip();
@@ -182,7 +207,13 @@ private:
 
     // knob handling per mode
     struct Target { int kind = -1; int index = 0; };   // what a knob slot edits
-    enum Kind { KParam = 0, KFx, KMaster, KMix, KSeq, KBrowse };
+    enum Kind { KParam = 0, KFx, KMaster, KMix, KSeq, KBrowse, KIns, KInsType, KInsOn, KInsPreset, KFxSel, KMacro, KModSet,
+                KModSel, KModField, KModAmt, KLook, KSendC, KSendFx, KSendFxPreset, KChain };
+    Target destTarget (int dest) const;
+    int targetDest (const Target&) const;
+    bool tryAssign (const Target&);
+    void loadLook();
+    void saveLook() const;
     Target targetFor (int slot) const;
     float targetValue (const Target&) const;
     const ParamDef* targetDef (const Target&) const;
@@ -228,6 +259,10 @@ private:
     void selectStep (int step);
     int stepTargets (std::array<int, maxSteps>& out) const;   // the held steps, else the selected one
     int mixPage = 0, projectPage = 0;
+    std::array<int, numTracks> fxSlot {}, modSlot {}, insPreset {};
+    int sendFxPreset = 0, chainIdx = 0;
+    int assignPending = -1;
+    Look look;
     std::array<int, numTracks> presetIdx {};
     std::array<bool, numTracks> edited {};
     std::array<juce::String, numTracks> userName;     // a user sound's name (else the factory preset's)

@@ -3,6 +3,9 @@
 
 namespace catbox
 {
+juce::StringArray revTypeNames() { return { "Hall", "Room", "Plate", "Shimmer", "Cloud", "Spring", "Dark" }; }
+juce::StringArray delayTypeNames() { return { "Clean", "Tape echo", "Dub", "Ping-pong", "Multi-tap", "Diffused", "Reverse" }; }
+
 juce::StringArray delayNames() { return { "1/32", "1/16", "1/16 T", "1/8 T", "1/8", "1/8 .", "1/4 T", "1/4", "1/4 .", "1/2" }; }
 
 double delayBeats (int i)
@@ -95,6 +98,7 @@ juce::var soundToVar (const Track& t)
     juce::Array<juce::var> fx;
     for (auto v : t.fx) fx.add (v);
     o->setProperty ("fxValues", fx);
+    o->setProperty ("mods", modsToVar (t.mods, t.engine));
     return juce::var (o);
 }
 
@@ -117,6 +121,7 @@ void soundFromVar (const juce::var& v, Track& t)
         if (auto* a = v["fxValues"].getArray())
             for (int i = 0; i < juce::jmin (numFxParams, a->size()); ++i) t.fx[(size_t) i] = (float) (*a)[i];
     }
+    modsFromVar (v["mods"], t.mods, e);
 }
 
 juce::var patternToVar (const Pattern& p)
@@ -224,6 +229,18 @@ juce::var Project::toVar() const
     mo->setProperty ("delayTime", m.delayTime); mo->setProperty ("delayFb", m.delayFb); mo->setProperty ("delayTone", m.delayTone);
     mo->setProperty ("delayPingPong", m.delayPingPong);
     mo->setProperty ("metronome", m.metronome); mo->setProperty ("countIn", m.countIn);
+    mo->setProperty ("revType", m.revType); mo->setProperty ("revPre", m.revPre); mo->setProperty ("revDuck", m.revDuck); mo->setProperty ("revLevel", m.revLevel);
+    mo->setProperty ("delayType", m.delayType); mo->setProperty ("delayWow", m.delayWow); mo->setProperty ("delayDuck", m.delayDuck);
+    mo->setProperty ("delayToRev", m.delayToRev); mo->setProperty ("delayLevel", m.delayLevel);
+    mo->setProperty ("fxLevel", m.fxLevel); mo->setProperty ("fxDuck", m.fxDuck);
+    {
+        auto* fo = new juce::DynamicObject();
+        fo->setProperty ("type", insertDef (m.fxSend.type).name);
+        juce::Array<juce::var> pv;
+        for (auto x : m.fxSend.p) pv.add (x);
+        fo->setProperty ("p", pv);
+        mo->setProperty ("fxSend", juce::var (fo));
+    }
     o->setProperty ("master", juce::var (mo));
     juce::Array<juce::var> tr;
     for (const auto& t : tracks)
@@ -232,7 +249,7 @@ juce::var Project::toVar() const
         to->setProperty ("sound", soundToVar (t));
         to->setProperty ("pattern", patternToVar (t.pat));
         to->setProperty ("volume", t.volume); to->setProperty ("pan", t.pan);
-        to->setProperty ("sendA", t.sendA); to->setProperty ("sendB", t.sendB);
+        to->setProperty ("sendA", t.sendA); to->setProperty ("sendB", t.sendB); to->setProperty ("sendC", t.sendC);
         to->setProperty ("mute", t.mute); to->setProperty ("solo", t.solo);
         tr.add (juce::var (to));
     }
@@ -254,6 +271,20 @@ void Project::fromVar (const juce::var& v)
     m.delayTime = (int) mv.getProperty ("delayTime", d.delayTime); m.delayFb = f ("delayFb", d.delayFb); m.delayTone = f ("delayTone", d.delayTone);
     m.delayPingPong = f ("delayPingPong", d.delayPingPong);
     m.metronome = (bool) mv.getProperty ("metronome", false); m.countIn = (int) mv.getProperty ("countIn", 0);
+    m.revType = juce::jlimit (0, revTypeNames().size() - 1, (int) mv.getProperty ("revType", 0));
+    m.revPre = f ("revPre", d.revPre); m.revDuck = f ("revDuck", d.revDuck); m.revLevel = f ("revLevel", d.revLevel);
+    m.delayType = juce::jlimit (0, delayTypeNames().size() - 1, (int) mv.getProperty ("delayType", 0));
+    m.delayWow = f ("delayWow", d.delayWow); m.delayDuck = f ("delayDuck", d.delayDuck);
+    m.delayToRev = f ("delayToRev", d.delayToRev); m.delayLevel = f ("delayLevel", d.delayLevel);
+    m.fxLevel = f ("fxLevel", d.fxLevel); m.fxDuck = f ("fxDuck", d.fxDuck);
+    m.fxSend = d.fxSend;
+    if (const auto fv = mv["fxSend"]; fv.isObject())
+    {
+        m.fxSend.type = juce::jmax (0, insertNames().indexOf (fv["type"].toString()));
+        insertDef (m.fxSend.type).defaults (m.fxSend.p.data());
+        if (auto* pa = fv["p"].getArray())
+            for (int i = 0; i < juce::jmin (insertParams, pa->size()); ++i) m.fxSend.p[(size_t) i] = (float) (*pa)[i];
+    }
     if (auto* a = v["tracks"].getArray())
         for (int i = 0; i < juce::jmin (numTracks, a->size()); ++i)
         {
@@ -263,6 +294,7 @@ void Project::fromVar (const juce::var& v)
             patternFromVar (tv["pattern"], t.pat);
             t.volume = (float) tv.getProperty ("volume", 0.75f); t.pan = (float) tv.getProperty ("pan", 0.0f);
             t.sendA = (float) tv.getProperty ("sendA", 0.12f); t.sendB = (float) tv.getProperty ("sendB", 0.0f);
+            t.sendC = (float) tv.getProperty ("sendC", 0.0f);
             t.mute = (bool) tv.getProperty ("mute", false); t.solo = (bool) tv.getProperty ("solo", false);
         }
 }

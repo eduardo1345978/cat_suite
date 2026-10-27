@@ -97,7 +97,14 @@ private:
         std::array<std::unique_ptr<Engine>, NumEngineTypes> engines;
         Engine* engine = nullptr;
         int engineType = -1;
-        std::array<float, maxParams> applied {};
+        std::array<float, maxParams> applied {};   // what the engine has now
+        std::array<float, maxParams> base {};      // the sound (or a step's recorded knob moves) before modulation
+        std::array<InsertFx, numInserts> ins;
+        ModRuntime mod;
+        const std::array<float, numModSet>* modSet = nullptr;
+        bool engineMods = false, anyMods = false;
+        float modWheel = 0.0f;
+        int modTick = 0;
         std::array<float, numFxParams> fxApplied {};
         int fxType = -1, fxKey = -1, fxScale = -1;
         bool locked = false;   // a step's recorded knob moves are on
@@ -129,6 +136,9 @@ private:
     void applyIncoming (bool atBarBoundary);
     void handleEvents();
     void syncTrack (int t);
+    /** The engine gets base + modulation (only what changed). */
+    void refreshEngine (TrackRt&, const Track&, bool force);
+    float modded (const TrackRt&, const Track&, int dest, float value, const ParamDef&) const;
     void queueNote (TrackRt&, double ppq, int note, float vel, bool on, bool slide, bool accent);
     void runQueue (TrackRt&, double upTo);
     void runSequencer (int t, double from, double to);
@@ -157,9 +167,11 @@ private:
     std::atomic<bool> playing { false }, recording { false };
     bool wasPlaying = false, silent = false;
 
-    std::vector<float> tl, tr_, ml, mr, al, ar, bl, br, fa, fb;
+    std::vector<float> tl, tr_, ml, mr, al, ar, bl, br, fa, fb, cl, cr;
     SendReverb reverb;
     SendDelay delay;
+    SendFx sendFx;
+    float duckEnv = 0.0f;
     MasterBus master;
     float clickPhase = 0.0f, clickEnv = 0.0f, clickHz = 1000.0f;
     int scopeDecim = 0;

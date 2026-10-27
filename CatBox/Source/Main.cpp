@@ -256,7 +256,7 @@ public:
             // ---- every master and send knob up, then the DJ filter both ways: clean
             press (BtnPlay);
             box.setMode (ModeMix);
-            for (int pg = 0; pg < 2; ++pg)
+            for (int pg = 0; pg < 4; ++pg)
             {
                 for (int k = 8; k < 12; ++k) box.turnKnob (k, 100.0f);
                 box.buttonDown (BtnShift);
@@ -382,6 +382,100 @@ public:
                    "pads: bottom row C D E F G A B C, top row the black keys", juce::String (box.padNote (3, 8)));
             check (box.padNote (0, 0) == 36 && box.padNote (0, 1) == 37, "drum pads: 1 kick, 2 snare ...", {});
 
+            // ---- customization: every insert effect (knobs all up, all down), macros, MY knobs, modulation, sends
+            {
+                if (! audio.isPlaying()) press (BtnPlay);
+                box.setSlider (0.5f);
+                box.selectTrack (2);
+                box.setMode (ModeSound);
+                for (int i = 0; i < 30 && box.pageName() != "FX"; ++i) press (BtnNext);
+                check (box.pageName() == "FX" && box.soundExtraPage() == Controller::ExtraFx, "SOUND has an FX page", box.pageName());
+                int typesOk = 0;
+                juce::String bad;
+                for (int type = 1; type < NumInsertTypes; ++type)
+                {
+                    box.turnKnob (1, 1.0f);
+                    if (box.getProject().tracks[2].mods.inserts[0].type != type) { bad << "type " << type << " not set; "; continue; }
+                    bool ok = true;
+                    for (float dir : { 100.0f, -100.0f, 0.0f })
+                    {
+                        if (dir != 0.0f) for (int k = 2; k < 10; ++k) box.turnKnob (k, dir);
+                        else for (int k = 2; k < 10; ++k) box.resetKnob (k);
+                        const auto st = renderSeconds (audio, 0.5, nullptr);
+                        if (! st.finite || st.peak > 1.0f) { ok = false; bad << insertDef (type).name << " " << dir << " peak " << st.peak << "; "; }
+                    }
+                    typesOk += ok ? 1 : 0;
+                }
+                check (typesOk == NumInsertTypes - 1, juce::String (NumInsertTypes - 1) + " insert effects, every knob up and down: clean", bad);
+                // four in a chain
+                box.setMode (ModeMenu);
+                box.padDown (15, 100); box.padUp (15);   // More
+                check (box.menuTitle().startsWith ("MORE"), "MENU > More", box.menuTitle());
+                box.padDown (5, 100); box.padUp (5);     // FX chain
+                box.padDown (2, 100); box.padUp (2);     // Dub
+                const auto& ins = box.getProject().tracks[2].mods.inserts;
+                check (ins[0].type == InsFilter && ins[1].type == InsDelay && ins[2].type == InsReverb, "FX chain: Dub = filter > delay > reverb", {});
+                const auto chainSt = renderSeconds (audio, 1.0, nullptr);
+                check (chainSt.finite && chainSt.rms > 0.001f, "the chain plays", "rms " + juce::String (chainSt.rms, 4));
+                // a macro: More > Assign > macro 1, then turn a knob of the sound
+                box.setMode (ModeMenu);
+                box.padDown (15, 100); box.padUp (15);
+                box.padDown (2, 100); box.padUp (2);
+                box.padDown (0, 100); box.padUp (0);
+                check (box.assigning() == 0 && box.getMode() == ModeSound, "Assign to macro 1: back to the knobs", {});
+                for (int i = 0; i < 30 && box.soundExtraPage() != -1; ++i) press (BtnNext);
+                box.turnKnob (0, 3.0f);
+                const auto& md = box.getProject().tracks[2].mods;
+                check (md.slots[0].source == SrcMacro1 && md.slots[0].dest >= 0 && box.assigning() < 0, "a turned knob is linked to macro 1", box.modSlotText (2, 0));
+                // MY knobs: More > Add to MY knobs, then turn a knob
+                box.setMode (ModeMenu);
+                box.padDown (15, 100); box.padUp (15);
+                box.padDown (0, 100); box.padUp (0);
+                box.turnKnob (1, 1.0f);
+                check (md.my[0] >= 0, "Add to MY knobs: the turned knob is on MY page", box.destName (2, md.my[0]));
+                // random modulation and turning the macro: clean
+                box.setMode (ModeMenu);
+                box.padDown (15, 100); box.padUp (15);
+                box.padDown (4, 100); box.padUp (4);
+                check (md.anyActive(), "Random modulation puts LFOs on the sound", box.modSlotText (2, 1));
+                for (int i = 0; i < 30 && box.pageName() != "MACRO"; ++i) press (BtnNext);
+                box.turnKnob (0, 100.0f);
+                const auto modSt = renderSeconds (audio, 1.5, nullptr);
+                check (modSt.finite && modSt.peak <= 1.0f, "modulation + macro 1 all the way: clean", "rms " + juce::String (modSt.rms, 4));
+                // the MOD page: a slot by knobs
+                for (int i = 0; i < 30 && box.pageName() != "MOD"; ++i) press (BtnNext);
+                box.turnKnob (0, 5.0f);      // slot 6
+                box.turnKnob (1, 2.0f);      // source: LFO 2
+                box.turnKnob (2, 3.0f);      // destination: the 3rd
+                box.turnKnob (3, 20.0f);     // amount
+                const auto& s6 = md.slots[(size_t) box.modSlotNow()];
+                juce::String all;
+                for (int i = 0; i < 8; ++i) all << box.modSlotText (2, i) << " | ";
+                all << box.pageName() << " k1=" << box.knob (1).name << " " << box.knob (1).value << " k2=" << box.knob (2).name << " " << box.knob (2).value;
+                check (box.modSlotNow() == 5 && s6.source == SrcLfo2 && s6.dest >= 0 && s6.amount > 0.1f, "MOD page: slot, source, destination, amount", all);
+                // every reverb type, delay type and an FX send, with the sends up
+                for (int t = 0; t < numTracks; ++t) { box.setMaster ([] (Master&) {}); }
+                bool sendsOk = true;
+                juce::String sendInfo;
+                for (int k = 0; k < 7; ++k)
+                {
+                    box.setMaster ([k] (Master& m) { m.revType = k; m.delayType = k; m.revDuck = 0.5f; m.delayDuck = 0.5f; m.delayToRev = 0.5f; m.delayFb = 0.9f;
+                                                     m.fxSend.type = 1 + (k * 3) % (NumInsertTypes - 1); insertDef (m.fxSend.type).defaults (m.fxSend.p.data()); });
+                    for (int t = 0; t < numTracks; ++t)
+                        box.editPattern (t, [] (Pattern&) {});
+                    const auto st = renderSeconds (audio, 1.0, nullptr);
+                    if (! st.finite || st.peak > 1.0f || st.rms < 0.001f) { sendsOk = false; sendInfo << revTypeNames()[k] << "/" << delayTypeNames()[k] << " rms " << st.rms << "; "; }
+                }
+                check (sendsOk, "7 reverb types, 7 delay types and FX sends: clean", sendInfo);
+                box.setMaster ([] (Master& m) { m.revType = 3; m.delayType = 1; m.revDuck = 0.0f; m.delayDuck = 0.0f; m.delayToRev = 0.2f; m.delayFb = 0.45f; });
+                // the look
+                auto lk = box.getLook();
+                lk.theme = 1; lk.accent = 4; lk.knobStyle = 1; lk.trackColours = true;
+                box.setLook (lk);
+                check (box.getDataDirectory().getChildFile ("look.json").existsAsFile(), "the look is remembered", {});
+                box.setMode (ModeSound);
+            }
+
             // ---- the MENU (Project twice): drum pattern, clear (press twice), save / load, help
             {
                 box.selectTrack (5);
@@ -468,6 +562,25 @@ public:
                     if (auto os = pngFile.createOutputStream()) png.writeImageToStream (img, *os);
                     check (img.isValid(), "the screen draws the sampler", {});
                 }
+                const juce::StringArray extraPages { "FX", "MACRO", "MOD", "MY" };
+                for (int e = 0; e < 6; ++e)   // 10-13: the FX, MACRO, MOD, MY pages (light theme, rings); 14: RETURNS; 15: LOOK
+                {
+                    box.selectTrack (2);
+                    if (e < 4)
+                    {
+                        box.setMode (ModeSound);
+                        for (int i = 0; i < 30 && box.pageName() != extraPages[e]; ++i) { box.buttonDown (BtnNext); box.buttonUp (BtnNext); }
+                    }
+                    else if (e == 4) { box.setMode (ModeMix); for (int i = 0; i < 4 && box.pageIndex() != 3; ++i) { box.buttonDown (BtnNext); box.buttonUp (BtnNext); } }
+                    else { box.setMode (ModeProject); for (int i = 0; i < 2 && box.pageIndex() != 1; ++i) { box.buttonDown (BtnNext); box.buttonUp (BtnNext); } }
+                    const auto img = screen.snapshotScreen();
+                    check (img.isValid(), "the screen draws " + (e < 4 ? extraPages[e] : e == 4 ? juce::String ("RETURNS") : juce::String ("LOOK")), {});
+                    const auto pngFile = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + "-screen" + juce::String (10 + e) + ".png");
+                    pngFile.deleteFile();
+                    juce::PNGImageFormat png;
+                    if (auto os = pngFile.createOutputStream()) png.writeImageToStream (img, *os);
+                }
+                box.setLook (Look());
                 for (int extra : { 8, 9 })   // the MENU, and the help on the SEQ page
                 {
                     box.selectTrack (0);
@@ -536,6 +649,8 @@ public:
             int snares = 0;
             for (auto v : again.getProject().tracks[5].pat.drums[1]) snares += v > 0 ? 1 : 0;
             check (snares == 1, "after a restart: the recorded drum", juce::String (snares));
+            check (again.getProject().tracks[2].mods.inserts[1].type == InsDelay && again.getProject().tracks[2].mods.anyActive()
+                   && again.getProject().m.revType == 3, "after a restart: the FX chain, the modulation, the sends", {});
             check (again.getProject().tracks[6].pat.length == 32 && again.getProject().tracks[6].pat.steps[5].has (71), "after a restart: the steps", {});
             check (again.sceneExists (2), "after a restart: the scene", {});
             check (again.getProject().tracks[3].engine == EngineAnalog, "after a restart: the sounds", {});

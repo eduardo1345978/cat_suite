@@ -7,22 +7,52 @@ namespace catbox
 {
 namespace
 {
-// calm: greys, one accent; red only for Rec
-const juce::Colour bg       { 0xff0f1012 };
-const juce::Colour panel    { 0xff18191c };
-const juce::Colour cell     { 0xff1f2024 };
-const juce::Colour line     { 0xff2c2e33 };
-const juce::Colour text     { 0xffeeeeee };
-const juce::Colour dim      { 0xff8b8e95 };
-const juce::Colour faint    { 0xff4a4d54 };
-const juce::Colour accent   { 0xffff8a3d };
+// calm: greys, one accent; red only for Rec. The theme (PROJECT > LOOK) swaps them.
+juce::Colour bg       { 0xff0f1012 };
+juce::Colour panel    { 0xff18191c };
+juce::Colour cell     { 0xff1f2024 };
+juce::Colour line     { 0xff2c2e33 };
+juce::Colour text     { 0xffeeeeee };
+juce::Colour dim      { 0xff8b8e95 };
+juce::Colour faint    { 0xff4a4d54 };
+juce::Colour accent   { 0xffff8a3d };
 const juce::Colour recRed   { 0xffff453a };
 const juce::Colour hwBody   { 0xff2a2b2f };
 const juce::Colour hwKey    { 0xff3a3c41 };
+float fontScale = 1.0f;
+bool trackColours = false, rings = false;
+
+struct Theme { juce::uint32 bg, panel, cell, line, text, dim, faint; };
+const Theme themes[] = {
+    { 0xff0f1012, 0xff18191c, 0xff1f2024, 0xff2c2e33, 0xffeeeeee, 0xff8b8e95, 0xff4a4d54 },   // Graphite
+    { 0xfff2efe9, 0xffe6e2da, 0xffdcd7cd, 0xffc9c3b7, 0xff1d1c1a, 0xff6b665e, 0xffa39d92 },   // Paper
+    { 0xff0b1020, 0xff121a30, 0xff18223d, 0xff26314f, 0xffe8ecf7, 0xff8b95b3, 0xff47506b },   // Midnight
+    { 0xff0d1410, 0xff142019, 0xff1a2a21, 0xff2a3d31, 0xffe7f0e9, 0xff8aa392, 0xff4a5e51 },   // Forest
+    { 0xff000000, 0xff0a0f0a, 0xff0f170f, 0xff1c2a1c, 0xffb8ffb8, 0xff5fa35f, 0xff2f5a2f },   // Terminal
+    { 0xff000000, 0xff101010, 0xff1a1a1a, 0xff555555, 0xffffffff, 0xffd0d0d0, 0xff888888 },   // High contrast
+    { 0xff150f17, 0xff1f1622, 0xff281d2c, 0xff3a2b3f, 0xfff3eaf5, 0xffa291a8, 0xff5d4e62 },   // Plum
+    { 0xff1a1612, 0xff241f19, 0xff2d271f, 0xff3d352a, 0xfff4ecdf, 0xffa99b86, 0xff63594a },   // Sand
+};
+const juce::uint32 accents[] = { 0xffff8a3d, 0xffffc93d, 0xff4cd97b, 0xff3dd6e0, 0xff4d8dff, 0xffa77bff, 0xffff6bb5, 0xffff5a4f, 0xfff0f0f0 };
+const juce::uint32 trackHues[] = { 0xffff6b5a, 0xffffa23d, 0xffffd93d, 0xff6fdc6f, 0xff3dd6c6, 0xff4d9dff, 0xffa77bff, 0xffff6bc1 };
+
+void applyLook (const Look& l)
+{
+    const auto& t = themes[juce::jlimit (0, 7, l.theme)];
+    bg = juce::Colour (t.bg); panel = juce::Colour (t.panel); cell = juce::Colour (t.cell); line = juce::Colour (t.line);
+    text = juce::Colour (t.text); dim = juce::Colour (t.dim); faint = juce::Colour (t.faint);
+    accent = juce::Colour (accents[juce::jlimit (0, 8, l.accent)]);
+    if (l.theme == 1 && l.accent == 8) accent = juce::Colour (0xff1d1c1a);   // white on paper: ink instead
+    fontScale = l.textSize > 0 ? 1.12f : 1.0f;
+    trackColours = l.trackColours;
+    rings = l.knobStyle == 1;
+}
+
+juce::Colour trackColour (int t) { return juce::Colour (trackHues[juce::jlimit (0, 7, t)]); }
 
 juce::Font font (float size, bool bold = false)
 {
-    return juce::Font (juce::FontOptions (size, bold ? juce::Font::bold : juce::Font::plain));
+    return juce::Font (juce::FontOptions (size * fontScale, bold ? juce::Font::bold : juce::Font::plain));
 }
 
 void text1 (juce::Graphics& g, const juce::String& s, juce::Rectangle<int> r, float size, juce::Colour c,
@@ -99,6 +129,7 @@ juce::Image View::snapshotScreen()
 //==============================================================================
 void View::paint (juce::Graphics& g)
 {
+    applyLook (box.getLook());
     g.fillAll (kiosk ? bg : juce::Colour (0xff141518));
     g.addTransform (juce::AffineTransform::scale (scale).translated (offset.x, offset.y));
     if (! kiosk) drawPanel (g);
@@ -111,6 +142,7 @@ void View::paint (juce::Graphics& g)
 
 void View::drawScreen (juce::Graphics& g)
 {
+    applyLook (box.getLook());
     g.setColour (bg);
     g.fillRect (0, 0, screenW, screenH);
     auto r = juce::Rectangle<int> (0, 0, screenW, screenH);
@@ -120,8 +152,11 @@ void View::drawScreen (juce::Graphics& g)
     auto knobs = r.removeFromBottom (134);
     knobArea = knobs;
     // one line of help above the knobs: what the buttons do now
-    auto hintRow = r.removeFromBottom (20);
-    text1 (g, box.hint(), hintRow.reduced (12, 0), 12.5f, dim, juce::Justification::centredLeft);
+    if (box.getLook().hintLine || box.assigning() >= 0)
+    {
+        auto hintRow = r.removeFromBottom (20);
+        text1 (g, box.hint(), hintRow.reduced (12, 0), 12.5f, box.assigning() >= 0 ? accent : dim, juce::Justification::centredLeft, box.assigning() >= 0);
+    }
     menuHits.clearQuick();
     drawContent (g, r.reduced (10, 4));
     drawKnobs (g, knobs);
@@ -136,7 +171,7 @@ void View::drawScreen (juce::Graphics& g)
     {
         g.setFont (font (16.0f, true));
         const int w = juce::jmin (screenW - 40, juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), f) + 36);
-        const juce::Rectangle<int> pill ((screenW - w) / 2, 92, w, 32);
+        const juce::Rectangle<int> pill ((screenW - w) / 2, screenH - 32 - 134 - 22 - 38, w, 32);   // low in the content: the titles stay readable
         g.setColour (juce::Colour (0xf0282a2f));
         g.fillRoundedRectangle (pill.toFloat(), 16.0f);
         g.setColour (line.brighter (0.2f));
@@ -156,9 +191,9 @@ void View::drawHeader (juce::Graphics& g, juce::Rectangle<int> r)
 
     // the track: number, engine, sound
     auto num = r.removeFromLeft (40);
-    g.setColour (text);
+    g.setColour (trackColours ? trackColour (t) : text);
     g.fillRoundedRectangle (num.toFloat().reduced (0, 2), 6.0f);
-    text1 (g, juce::String (t + 1), num, 24.0f, bg, juce::Justification::centred, true);
+    text1 (g, juce::String (t + 1), num, 24.0f, trackColours ? juce::Colour (0xff111111) : bg, juce::Justification::centred, true);
     r.removeFromLeft (10);
 
     // right side: play, rec, tempo, position
@@ -262,6 +297,20 @@ void View::drawKnobs (juce::Graphics& g, juce::Rectangle<int> r)
         g.fillRoundedRectangle (c.toFloat(), 6.0f);
         if (! v.used) { text1 (g, juce::String (k + 1), c.reduced (8, 4), 12.0f, faint, juce::Justification::topLeft); continue; }
         auto inner = c.reduced (8, 5);
+        const float n0 = juce::jlimit (0.0f, 1.0f, v.norm);
+        if (rings)   // a ring on the right, like the encoder
+        {
+            auto ringR = inner.removeFromRight (40).toFloat().withSizeKeepingCentre (34, 34);
+            const float a0 = -2.35f, a1 = 2.35f, cx = ringR.getCentreX(), cy = ringR.getCentreY(), rad = 14.0f;
+            juce::Path back; back.addCentredArc (cx, cy, rad, rad, 0.0f, a0, a1, true);
+            g.setColour (line); g.strokePath (back, juce::PathStrokeType (4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            const float from = v.bipolar ? 0.0f : a0, to = a0 + (a1 - a0) * n0;
+            juce::Path arc; arc.addCentredArc (cx, cy, rad, rad, 0.0f, juce::jmin (from, to), juce::jmax (from, to) + 0.001f, true);
+            g.setColour (box.isShift() ? text : accent); g.strokePath (arc, juce::PathStrokeType (4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            text1 (g, v.name, inner.removeFromTop (20), 13.0f, dim, juce::Justification::centredLeft);
+            text1 (g, v.value, inner, 18.0f, text, juce::Justification::centredLeft, true);
+            continue;
+        }
         // the ring as a short bar: where the value is (from the middle for +/- values)
         auto bar = inner.removeFromBottom (5).toFloat();
         g.setColour (line);
@@ -295,6 +344,11 @@ void View::drawTracks (juce::Graphics& g, juce::Rectangle<int> r)
         const bool sel = t == box.getTrack();
         g.setColour (sel ? text : cell);
         g.fillRoundedRectangle (c.toFloat(), 4.0f);
+        if (trackColours)
+        {
+            g.setColour (trackColour (t).withAlpha (tr.mute ? 0.35f : 1.0f));
+            g.fillRoundedRectangle (c.toFloat().removeFromBottom (3.0f).reduced (4.0f, 0.0f), 1.5f);
+        }
         const juce::Colour fg = sel ? bg : (tr.mute ? faint : dim);
         text1 (g, juce::String (t + 1), c.withWidth (22), 14.0f, fg, juce::Justification::centred, true);
         text1 (g, shortEngine (tr.engine), c.withTrimmedLeft (22).withTrimmedRight (16), 12.0f, fg, juce::Justification::centredLeft, true);
@@ -358,6 +412,14 @@ void View::drawScope (juce::Graphics& g, juce::Rectangle<int> r)
 void View::drawSound (juce::Graphics& g, juce::Rectangle<int> r)
 {
     const auto& tr = box.getProject().tracks[(size_t) box.getTrack()];
+    switch (box.soundExtraPage())
+    {
+        case Controller::ExtraFx:    drawChain (g, r); return;
+        case Controller::ExtraMacro: drawMacros (g, r); return;
+        case Controller::ExtraMod:   drawMods (g, r); return;
+        case Controller::ExtraMy:    drawMy (g, r); return;
+        default: break;
+    }
     if (tr.engine == EngineSampler || tr.engine == EngineGranular) { drawSampler (g, r); return; }
     const auto& d = engineDef (tr.engine);
     // an envelope picture when the page has one, else the sound itself
@@ -687,6 +749,7 @@ void View::drawFx (juce::Graphics& g, juce::Rectangle<int> r)
 void View::drawMix (juce::Graphics& g, juce::Rectangle<int> r)
 {
     const auto& p = box.getProject();
+    if (box.pageIndex() >= 2) { drawReturns (g, r); return; }
     const int w = r.getWidth() / numTracks;
     for (int t = 0; t < numTracks; ++t)
     {
@@ -706,9 +769,12 @@ void View::drawMix (juce::Graphics& g, juce::Rectangle<int> r)
         in.removeFromBottom (4);
         // sends: two small bars
         auto sends = in.removeFromBottom (16);
-        auto sA = sends.removeFromLeft (sends.getWidth() / 2).reduced (1, 4).toFloat(), sB = sends.reduced (1, 4).toFloat();
-        g.setColour (line); g.fillRect (sA); g.fillRect (sB);
-        g.setColour (dim); g.fillRect (sA.withWidth (sA.getWidth() * tr.sendA)); g.fillRect (sB.withWidth (sB.getWidth() * tr.sendB));
+        const int sw = sends.getWidth() / 3;
+        auto sA = sends.removeFromLeft (sw).reduced (1, 4).toFloat(), sB = sends.removeFromLeft (sw).reduced (1, 4).toFloat(), sC = sends.reduced (1, 4).toFloat();
+        g.setColour (line); g.fillRect (sA); g.fillRect (sB); g.fillRect (sC);
+        g.setColour (box.pageIndex() == 1 ? accent : dim);
+        g.fillRect (sA.withWidth (sA.getWidth() * tr.sendA)); g.fillRect (sB.withWidth (sB.getWidth() * tr.sendB));
+        g.setColour (dim); g.fillRect (sC.withWidth (sC.getWidth() * tr.sendC));
         in.removeFromBottom (4);
         // volume (wide) and the level meter (thin) next to it
         auto fader = in.removeFromLeft (in.getWidth() / 2).toFloat().reduced (4, 0);
@@ -726,6 +792,41 @@ void View::drawMix (juce::Graphics& g, juce::Rectangle<int> r)
 void View::drawProject (juce::Graphics& g, juce::Rectangle<int> r)
 {
     const auto& m = box.getProject().m;
+    if (box.pageIndex() == 1)   // LOOK: the themes and colours to pick from
+    {
+        g.setColour (panel);
+        g.fillRoundedRectangle (r.toFloat(), 8.0f);
+        auto in = r.reduced (16, 12);
+        const auto& lk = box.getLook();
+        text1 (g, "THEME (knob 1)", in.removeFromTop (16), 12.0f, dim, juce::Justification::centredLeft, true);
+        auto row = in.removeFromTop (58);
+        const auto names = themeNames();
+        const int w = row.getWidth() / 8;
+        for (int i = 0; i < 8; ++i)
+        {
+            auto c = juce::Rectangle<int> (row.getX() + i * w, row.getY(), w, row.getHeight()).reduced (3, 2);
+            const auto& th = themes[i];
+            g.setColour (juce::Colour (th.bg)); g.fillRoundedRectangle (c.toFloat(), 5.0f);
+            g.setColour (juce::Colour (th.cell)); g.fillRoundedRectangle (c.toFloat().reduced (5.0f, 18.0f).withTrimmedTop (10.0f), 3.0f);
+            g.setColour (juce::Colour (accents[lk.accent])); g.fillRect (c.toFloat().reduced (8.0f, 0.0f).withHeight (3.0f).withY ((float) c.getBottom() - 9.0f));
+            text1 (g, names[i], c.removeFromTop (18).reduced (4, 0), 11.0f, juce::Colour (th.text), juce::Justification::centredLeft, true);
+            if (i == lk.theme) { g.setColour (accent); g.drawRoundedRectangle (juce::Rectangle<int> (row.getX() + i * w, row.getY(), w, row.getHeight()).reduced (1).toFloat(), 6.0f, 2.0f); }
+        }
+        in.removeFromTop (10);
+        text1 (g, "COLOUR (knob 2)", in.removeFromTop (16), 12.0f, dim, juce::Justification::centredLeft, true);
+        auto ar = in.removeFromTop (34);
+        const int aw = ar.getWidth() / 9;
+        for (int i = 0; i < 9; ++i)
+        {
+            auto c = juce::Rectangle<int> (ar.getX() + i * aw, ar.getY(), aw, ar.getHeight()).reduced (4, 3).toFloat();
+            g.setColour (juce::Colour (accents[i])); g.fillRoundedRectangle (c, 5.0f);
+            if (i == lk.accent) { g.setColour (text); g.drawRoundedRectangle (c.expanded (2.0f), 6.0f, 2.0f); }
+        }
+        in.removeFromTop (8);
+        text1 (g, juce::String ("Text ") + (lk.textSize ? "big" : "normal") + "   Knobs " + (lk.knobStyle ? "rings" : "bars") + "   Track colours " + (lk.trackColours ? "on" : "off")
+                  + "   Help line " + (lk.hintLine ? "on" : "off"), in.removeFromTop (22), 14.0f, text, juce::Justification::centredLeft);
+        return;
+    }
     g.setColour (panel);
     g.fillRoundedRectangle (r.toFloat(), 8.0f);
     auto in = r.reduced (24, 16);
@@ -738,6 +839,226 @@ void View::drawProject (juce::Graphics& g, juce::Rectangle<int> r)
     text1 (g, juce::String ("pads: ") + (box.padsAsScale() ? "scale" : "piano") + ", octave " + juce::String (box.padOctave (box.getTrack())),
            in.removeFromTop (24), 15.0f, dim, juce::Justification::centredLeft);
     if (linkInfo) text1 (g, linkInfo(), in.removeFromBottom (20), 13.0f, faint, juce::Justification::centredLeft);
+}
+
+void View::drawChain (juce::Graphics& g, juce::Rectangle<int> r)
+{
+    const auto& tr = box.getProject().tracks[(size_t) box.getTrack()];
+    const int sel = box.fxSlotNow();
+    auto top = r.removeFromTop (18);
+    text1 (g, "EFFECTS ON TRACK " + juce::String (box.getTrack() + 1) + "  -  sound > 1 > 2 > 3 > 4 > mixer", top, 12.0f, dim, juce::Justification::centredLeft, true);
+    r.removeFromTop (4);
+    const int w = r.getWidth() / numInserts;
+    for (int k = 0; k < numInserts; ++k)
+    {
+        const auto& in = tr.mods.inserts[(size_t) k];
+        const auto& d = insertDef (in.type);
+        auto c = juce::Rectangle<int> (r.getX() + k * w, r.getY(), w, r.getHeight()).reduced (5, 0);
+        const bool off = in.type == InsOff;
+        g.setColour (k == sel ? cell.brighter (0.1f) : panel);
+        g.fillRoundedRectangle (c.toFloat(), 8.0f);
+        if (k == sel) { g.setColour (accent); g.drawRoundedRectangle (c.toFloat().reduced (1.0f), 8.0f, 2.0f); }
+        if (k < numInserts - 1)   // the arrow to the next
+        {
+            juce::Path a;
+            const float x = (float) c.getRight() + 5.0f, y = (float) c.getCentreY();
+            a.addTriangle (x - 4.0f, y - 5.0f, x - 4.0f, y + 5.0f, x + 3.0f, y);
+            g.setColour (faint); g.fillPath (a);
+        }
+        auto inr = c.reduced (10, 8);
+        text1 (g, juce::String (k + 1), inr.removeFromTop (16), 13.0f, k == sel ? accent : dim, juce::Justification::centredLeft, true);
+        text1 (g, off ? juce::String ("empty") : d.name, inr.removeFromTop (26), off ? 16.0f : 19.0f, off ? faint : (in.on ? text : dim), juce::Justification::centredLeft, true);
+        if (off) { text1 (g, "knob 2 picks one", inr.removeFromTop (18), 12.0f, faint, juce::Justification::centredLeft); continue; }
+        if (! in.on) text1 (g, "BYPASSED", inr.removeFromTop (16), 12.0f, recRed, juce::Justification::centredLeft, true);
+        inr.removeFromTop (4);
+        for (size_t q = 0; q < d.params.size() && inr.getHeight() >= 15; ++q)
+        {
+            auto row = inr.removeFromTop (16);
+            const float n = d.params[q].toNorm (in.p[q]);
+            auto barR = row.removeFromBottom (3).toFloat();
+            g.setColour (line); g.fillRect (barR);
+            g.setColour (k == sel ? accent.withAlpha (0.8f) : dim); g.fillRect (barR.withWidth (barR.getWidth() * n));
+            text1 (g, d.params[q].name + "  " + d.params[q].format (in.p[q]), row, 11.0f, dim, juce::Justification::centredLeft);
+        }
+    }
+}
+
+void View::drawMacros (juce::Graphics& g, juce::Rectangle<int> r)
+{
+    const auto& tr = box.getProject().tracks[(size_t) box.getTrack()];
+    const auto& md = tr.mods;
+    g.setColour (panel);
+    g.fillRoundedRectangle (r.toFloat(), 8.0f);
+    auto in = r.reduced (12, 8);
+    auto left = in.removeFromLeft (in.getWidth() * 5 / 9);
+    text1 (g, "MACROS  -  MENU > More > Assign to macro, then turn a knob", left.removeFromTop (16), 12.0f, dim, juce::Justification::centredLeft, true);
+    const int w = left.getWidth() / numMacros;
+    for (int m = 0; m < numMacros; ++m)
+    {
+        auto c = juce::Rectangle<int> (left.getX() + m * w, left.getY() + 4, w, left.getHeight() - 4).reduced (4, 0);
+        int links = 0;
+        for (const auto& sl : md.slots) links += sl.active() && sl.source == SrcMacro1 + m ? 1 : 0;
+        auto label = c.removeFromBottom (30);
+        text1 (g, "M" + juce::String (m + 1), label.removeFromTop (15), 12.0f, text, juce::Justification::centred, true);
+        text1 (g, links > 0 ? juce::String (links) + " link" + (links > 1 ? "s" : "") : juce::String ("-"), label, 10.0f, links > 0 ? accent : faint, juce::Justification::centred);
+        auto bar = c.reduced (juce::jmax (2, c.getWidth() / 2 - 7), 2).toFloat();
+        g.setColour (line); g.fillRoundedRectangle (bar, 4.0f);
+        g.setColour (links > 0 ? accent : dim);
+        g.fillRoundedRectangle (bar.withTop (bar.getBottom() - bar.getHeight() * md.macros[(size_t) m]), 4.0f);
+    }
+    in.removeFromLeft (14);
+    // the two LFOs as pictures, and the envelope
+    const auto& sd = modSetDefs();
+    auto drawShape = [&] (juce::Rectangle<int> c, int k)
+    {
+        const int shape = juce::roundToInt (md.set[(size_t) (k == 0 ? MsLfo1Shape : MsLfo2Shape)]);
+        const int sync = juce::roundToInt (md.set[(size_t) (k == 0 ? MsLfo1Sync : MsLfo2Sync)]);
+        const float rate = md.set[(size_t) (k == 0 ? MsLfo1Rate : MsLfo2Rate)];
+        text1 (g, "LFO " + juce::String (k + 1) + "  " + sd[(size_t) (k == 0 ? MsLfo1Shape : MsLfo2Shape)].format ((float) shape) + "  "
+                  + (sync > 0 ? syncNames()[sync] : sd[(size_t) MsLfo1Rate].format (rate)), c.removeFromTop (15), 11.0f, dim, juce::Justification::centredLeft, true);
+        auto pr = c.reduced (2, 4).toFloat();
+        juce::Path p;
+        juce::Random rnd (7 + k);
+        float hold = rnd.nextFloat() * 2.0f - 1.0f, prev = hold;
+        for (int i = 0; i <= 64; ++i)
+        {
+            const float ph = std::fmod ((float) i / 32.0f, 1.0f);
+            if (i % 32 == 0 && i > 0) { prev = hold; hold = rnd.nextFloat() * 2.0f - 1.0f; }
+            float v;
+            switch (shape)
+            {
+                case 1: v = 1.0f - 4.0f * std::abs (ph - 0.5f); break;
+                case 2: v = 2.0f * ph - 1.0f; break;
+                case 3: v = 1.0f - 2.0f * ph; break;
+                case 4: v = ph < 0.5f ? 1.0f : -1.0f; break;
+                case 5: v = hold; break;
+                case 6: v = prev + (hold - prev) * (0.5f - 0.5f * std::cos (dsp::pi * ph)); break;
+                default: v = std::sin (dsp::twoPi * ph); break;
+            }
+            const float x = pr.getX() + pr.getWidth() * (float) i / 64.0f, y = pr.getCentreY() - v * pr.getHeight() * 0.42f;
+            if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y);
+        }
+        g.setColour (line); g.drawHorizontalLine ((int) pr.getCentreY(), pr.getX(), pr.getRight());
+        g.setColour (accent); g.strokePath (p, juce::PathStrokeType (2.0f));
+    };
+    const int h = in.getHeight() / 3;
+    drawShape (in.removeFromTop (h), 0);
+    drawShape (in.removeFromTop (h), 1);
+    text1 (g, "ENVELOPE  " + sd[(size_t) MsEnvAttack].format (md.set[MsEnvAttack]) + " / " + sd[(size_t) MsEnvDecay].format (md.set[MsEnvDecay])
+              + "     RANDOM  " + syncNames()[juce::roundToInt (md.set[MsRandRate])], in.removeFromTop (16), 11.0f, dim, juce::Justification::centredLeft, true);
+}
+
+void View::drawMods (juce::Graphics& g, juce::Rectangle<int> r)
+{
+    const int t = box.getTrack();
+    const auto& md = box.getProject().tracks[(size_t) t].mods;
+    const int sel = box.modSlotNow();
+    auto top = r.removeFromTop (18);
+    text1 (g, "MODULATION  -  source > where, how much (+/-)", top, 12.0f, dim, juce::Justification::centredLeft, true);
+    const int colW = r.getWidth() / 2, rowH = r.getHeight() / 8;
+    for (int i = 0; i < numModSlots; ++i)
+    {
+        const auto& sl = md.slots[(size_t) i];
+        auto c = juce::Rectangle<int> (r.getX() + (i / 8) * colW, r.getY() + (i % 8) * rowH, colW, rowH).reduced (3, 1);
+        g.setColour (i == sel ? cell.brighter (0.12f) : panel);
+        g.fillRoundedRectangle (c.toFloat(), 4.0f);
+        if (i == sel) { g.setColour (accent); g.drawRoundedRectangle (c.toFloat(), 4.0f, 1.5f); }
+        const bool used = sl.source != SrcNone && sl.dest != dest::none;
+        auto num = c.removeFromLeft (22);
+        text1 (g, juce::String (i + 1), num, 12.0f, i == sel ? accent : faint, juce::Justification::centred, true);
+        auto amt = c.removeFromRight (90).reduced (4, juce::jmax (2, c.getHeight() / 2 - 3)).toFloat();
+        if (used)
+        {
+            g.setColour (line); g.fillRect (amt);
+            const float mid = amt.getCentreX(), x = mid + amt.getWidth() * 0.5f * sl.amount;
+            g.setColour (sl.amount >= 0.0f ? accent : dim);
+            g.fillRect (juce::Rectangle<float> (juce::jmin (mid, x), amt.getY(), juce::jmax (1.5f, std::abs (x - mid)), amt.getHeight()));
+        }
+        text1 (g, used ? modSourceNames()[sl.source] + "  >  " + box.destName (t, sl.dest, true) : juce::String ("-"), c, 13.0f, used ? text : faint, juce::Justification::centredLeft, used);
+    }
+}
+
+void View::drawMy (juce::Graphics& g, juce::Rectangle<int> r)
+{
+    const int t = box.getTrack();
+    const auto& md = box.getProject().tracks[(size_t) t].mods;
+    int used = 0;
+    for (auto d : md.my) used += d >= 0 ? 1 : 0;
+    g.setColour (panel);
+    g.fillRoundedRectangle (r.toFloat(), 8.0f);
+    auto in = r.reduced (12, 8);
+    text1 (g, "MY KNOBS  " + juce::String (used) + " / 24   (Shift: 13-24)   MENU > More > Add to MY knobs", in.removeFromTop (16), 12.0f, dim, juce::Justification::centredLeft, true);
+    if (used == 0)
+    {
+        text1 (g, "Put the knobs you use most on one page:", in.removeFromTop (40).withTrimmedTop (14), 17.0f, text, juce::Justification::centredLeft, true);
+        text1 (g, "Project twice (MENU) > More > Add to MY knobs, then turn any knob - sound, FX, macro, mix.", in.removeFromTop (24), 14.0f, dim, juce::Justification::centredLeft);
+        return;
+    }
+    in.removeFromTop (4);
+    const int cw = in.getWidth() / 6, rh = in.getHeight() / 4;
+    for (int i = 0; i < numMyKnobs; ++i)
+    {
+        auto c = juce::Rectangle<int> (in.getX() + (i % 6) * cw, in.getY() + (i / 6) * rh, cw, rh).reduced (2);
+        const bool layerOn = (i < 12) != box.isShift();
+        g.setColour (layerOn ? cell : cell.withAlpha (0.35f));
+        g.fillRoundedRectangle (c.toFloat(), 4.0f);
+        text1 (g, juce::String (i % 12 + 1) + (i >= 12 ? "s" : "") + "  " + (md.my[(size_t) i] >= 0 ? box.destName (t, md.my[(size_t) i], true) : juce::String ("-")),
+               c.reduced (6, 0), 11.0f, md.my[(size_t) i] >= 0 ? (layerOn ? text : dim) : faint, juce::Justification::centredLeft);
+    }
+}
+
+void View::drawReturns (juce::Graphics& g, juce::Rectangle<int> r)
+{
+    const auto& p = box.getProject();
+    const auto& m = p.m;
+    if (box.pageIndex() == 2)   // FX SEND: how much of each track goes in, and the effect
+    {
+        auto bars = r.removeFromLeft (r.getWidth() / 2);
+        const int w = bars.getWidth() / numTracks;
+        for (int t = 0; t < numTracks; ++t)
+        {
+            auto c = juce::Rectangle<int> (bars.getX() + t * w, bars.getY(), w, bars.getHeight()).reduced (3, 0);
+            g.setColour (t == box.getTrack() ? cell.brighter (0.12f) : panel);
+            g.fillRoundedRectangle (c.toFloat(), 5.0f);
+            text1 (g, juce::String (t + 1), c.removeFromBottom (18), 12.0f, text, juce::Justification::centred, true);
+            auto bar = c.reduced (juce::jmax (2, c.getWidth() / 2 - 6), 8).toFloat();
+            g.setColour (line); g.fillRoundedRectangle (bar, 3.0f);
+            g.setColour (accent); g.fillRoundedRectangle (bar.withTop (bar.getBottom() - bar.getHeight() * p.tracks[(size_t) t].sendC), 3.0f);
+        }
+        r.removeFromLeft (10);
+        g.setColour (panel); g.fillRoundedRectangle (r.toFloat(), 8.0f);
+        auto in = r.reduced (12, 8);
+        const auto& d = insertDef (m.fxSend.type);
+        text1 (g, "FX SEND", in.removeFromTop (16), 12.0f, dim, juce::Justification::centredLeft, true);
+        text1 (g, d.name, in.removeFromTop (30), 24.0f, text, juce::Justification::centredLeft, true);
+        text1 (g, "level " + juce::String (juce::roundToInt (m.fxLevel * 100)) + "%   duck " + juce::String (juce::roundToInt (m.fxDuck * 100)) + "%",
+               in.removeFromTop (18), 12.0f, dim, juce::Justification::centredLeft);
+        for (size_t q = 0; q < d.params.size() && in.getHeight() > 14; ++q)
+            text1 (g, d.params[q].name + "  " + d.params[q].format (m.fxSend.p[q]), in.removeFromTop (16), 12.0f, dim, juce::Justification::centredLeft);
+        return;
+    }
+    // RETURNS: reverb, delay and the FX send side by side
+    const int w = r.getWidth() / 3;
+    auto box3 = [&] (int i, const juce::String& title, const juce::String& big, const juce::StringArray& lines, float level, float duck)
+    {
+        auto c = juce::Rectangle<int> (r.getX() + i * w, r.getY(), w, r.getHeight()).reduced (5, 0);
+        g.setColour (panel); g.fillRoundedRectangle (c.toFloat(), 8.0f);
+        auto in = c.reduced (12, 8);
+        text1 (g, title, in.removeFromTop (16), 12.0f, dim, juce::Justification::centredLeft, true);
+        text1 (g, big, in.removeFromTop (28), 22.0f, text, juce::Justification::centredLeft, true);
+        auto lv = in.removeFromBottom (8).toFloat().reduced (0, 1);
+        g.setColour (line); g.fillRoundedRectangle (lv, 3.0f);
+        g.setColour (accent); g.fillRoundedRectangle (lv.withWidth (lv.getWidth() * level * (1.0f - 0.5f * duck)), 3.0f);
+        for (const auto& l : lines) if (in.getHeight() > 14) text1 (g, l, in.removeFromTop (17), 12.0f, dim, juce::Justification::centredLeft);
+    };
+    auto pc = [] (float v) { return juce::String (juce::roundToInt (v * 100.0f)) + "%"; };
+    box3 (0, "REVERB (send A)", revTypeNames()[m.revType],
+          { "size " + pc (m.revSize) + "   damp " + pc (m.revDamp), "width " + pc (m.revWidth) + "   low cut " + pc (m.revLowCut),
+            "pre-delay " + juce::String (juce::roundToInt (m.revPre * 250.0f)) + " ms", "duck " + pc (m.revDuck) + "   level " + pc (m.revLevel) }, m.revLevel, m.revDuck);
+    box3 (1, "DELAY (send B)", delayTypeNames()[m.delayType] + "  " + delayNames()[m.delayTime],
+          { "feedback " + pc (m.delayFb) + "   tone " + pc (m.delayTone), "ping-pong " + pc (m.delayPingPong) + "   wow " + pc (m.delayWow),
+            "into reverb " + pc (m.delayToRev), "duck " + pc (m.delayDuck) + "   level " + pc (m.delayLevel) }, m.delayLevel, m.delayDuck);
+    box3 (2, "FX SEND (send C)", insertDef (m.fxSend.type).name, { "level " + pc (m.fxLevel), "duck " + pc (m.fxDuck), "the FX SEND page picks it" }, m.fxLevel, m.fxDuck);
 }
 
 void View::drawScenes (juce::Graphics& g, juce::Rectangle<int> r)
