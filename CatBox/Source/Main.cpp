@@ -471,6 +471,16 @@ public:
                 renderSeconds (audio, 4.0, nullptr);
                 const auto after = renderSeconds (audio, 2.0, nullptr);
                 check (after.rms > 0.05f, "the shimmer reverb with every send up doesn't run away", "rms " + juce::String (after.rms, 4));
+                // the mouse in the browser: click an engine, a category, a sound
+                box.selectTrack (4);
+                box.browseTo (0, EngineFM);
+                check (box.getMode() == ModeBrowse && box.getProject().tracks[4].engine == EngineFM, "mouse: a click on FM loads an FM sound", box.presetName (4));
+                box.browseTo (1, 1);
+                box.browseTo (2, 2);
+                check (box.browseCategory() == 1 && box.browsePresetIndex() == 2 && box.presetName (4) == box.browsePresets()[2], "mouse: a click on a category, then on a sound", box.presetName (4));
+                box.browseTo (2, 999);
+                check (box.browsePresetIndex() == box.browsePresets().size() - 1, "mouse: past the end stays on the last sound", {});
+                box.setMode (ModeSound);
                 // the look
                 auto lk = box.getLook();
                 lk.theme = 1; lk.accent = 4; lk.knobStyle = 1; lk.trackColours = true;

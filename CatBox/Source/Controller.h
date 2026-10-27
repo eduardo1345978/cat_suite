@@ -124,6 +124,9 @@ public:
     juce::StringArray browseCategories() const;
     juce::StringArray browsePresets() const;     // in the category
     int browseCategory() const { return browseCat; }
+    int browseEngineIndex() const { return browseEngine; }
+    /** The mouse in the browser: column 0 = engine, 1 = category, 2 = sound; the sound is loaded and heard. */
+    void browseTo (int column, int index);
     int browsePresetIndex() const { return browsePos; }
     // sequencer
     int seqBar() const { return bar[(size_t) track.load()]; }

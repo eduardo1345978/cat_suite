@@ -3038,4 +3038,27 @@ void Controller::prepareSamples()
     }
 }
 
+void Controller::browseTo (int column, int index)
+{
+    if (isRemote()) return;
+    if (mode.load() != ModeBrowse) { mode = ModeBrowse; browseSync(); }
+    switch (column)
+    {
+        case 0:
+            if (index == browseEngine) return;
+            browseEngine = juce::jlimit (0, NumEngineTypes - 1, index);
+            browseCat = 0; browsePos = 0;
+            break;
+        case 1:
+            browseCat = juce::jlimit (0, juce::jmax (0, browseCategories().size() - 1), index);
+            browsePos = 0;
+            break;
+        default:
+            browsePos = juce::jlimit (0, juce::jmax (0, browsePresets().size() - 1), index);
+            break;
+    }
+    browseApply (true);
+    if (onChange) onChange();
+}
+
 } // namespace catbox

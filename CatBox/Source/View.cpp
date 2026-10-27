@@ -223,7 +223,15 @@ void View::drawHeader (juce::Graphics& g, juce::Rectangle<int> r)
     auto top = r.removeFromTop (14);
     text1 (g, engineDef (tr.engine).name.toUpperCase() + (tr.fxType != FxOff ? "   +  " + noteFxNames()[tr.fxType].toUpperCase() : juce::String()),
            top, 12.0f, dim, juce::Justification::centredLeft, true);
+    soundNameHit = r;
     text1 (g, box.presetName (t) + (box.isEdited (t) ? " *" : ""), r, 24.0f, text, juce::Justification::centredLeft, true);
+    if (! kiosk)   // on the PC: a hint that the name opens the sound browser
+    {
+        g.setFont (font (24.0f, true));
+        const int nw = juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), box.presetName (t) + (box.isEdited (t) ? " *" : ""));
+        text1 (g, box.getMode() == ModeBrowse ? juce::String::fromUTF8 ("\xe2\x96\xb2") : juce::String::fromUTF8 ("\xe2\x96\xbc"),
+               r.withTrimmedLeft (juce::jmin (r.getWidth() - 20, nw + 8 * (int) fontScale)).withWidth (20), 12.0f, dim, juce::Justification::centredLeft);
+    }
 }
 
 void View::drawTabs (juce::Graphics& g, juce::Rectangle<int> r)
@@ -554,8 +562,11 @@ void View::drawBrowser (juce::Graphics& g, juce::Rectangle<int> r)
     const auto cats = box.browseCategories();
     const auto presets = box.browsePresets();
     const auto& tr = box.getProject().tracks[(size_t) box.getTrack()];
+    browseHits.clearQuick();
+    int column = 0;
     auto col = [&] (juce::Rectangle<int> c, const juce::String& title, const juce::StringArray& items, int sel, float size)
     {
+        browseColumns[(size_t) column] = c;
         g.setColour (panel);
         g.fillRoundedRectangle (c.toFloat(), 8.0f);
         c = c.reduced (10, 8);
@@ -564,23 +575,31 @@ void View::drawBrowser (juce::Graphics& g, juce::Rectangle<int> r)
         const int rowH = (int) (size + 12);
         const int rows = juce::jmax (1, c.getHeight() / rowH);
         const int first = juce::jlimit (0, juce::jmax (0, items.size() - rows), sel - rows / 2);
+        // more above / below: a small arrow
+        if (first > 0) text1 (g, juce::String::fromUTF8 ("\xe2\x96\xb2"), c.withHeight (10).withY (c.getY() - 14).withTrimmedRight (2), 9.0f, faint, juce::Justification::centredRight);
         for (int i = first; i < juce::jmin (items.size(), first + rows); ++i)
         {
             auto row = c.removeFromTop (rowH);
+            browseHits.add ({ row, column, i });
             if (i == sel)
             {
                 g.setColour (text);
                 g.fillRoundedRectangle (row.toFloat(), 5.0f);
             }
-            text1 (g, items[i], row.reduced (8, 0), size, i == sel ? bg : dim, juce::Justification::centredLeft, i == sel);
+            else if (column == hoverColumn && i == hoverIndex)   // the mouse is over it
+            {
+                g.setColour (cell.brighter (0.15f));
+                g.fillRoundedRectangle (row.toFloat(), 5.0f);
+            }
+            text1 (g, items[i], row.reduced (8, 0), size, i == sel ? bg : (column == hoverColumn && i == hoverIndex ? text : dim), juce::Justification::centredLeft, i == sel);
         }
+        if (first + rows < items.size()) text1 (g, juce::String::fromUTF8 ("\xe2\x96\xbc"), c.withHeight (10).withTrimmedRight (2), 9.0f, faint, juce::Justification::centredRight);
+        ++column;
     };
     const int w = r.getWidth();
     juce::StringArray engines = engineNames();
     // the engine shown is what knob 1 picks
-    int eSel = 0;
-    const auto k0 = box.knob (0);
-    for (int i = 0; i < engines.size(); ++i) if (engines[i] == k0.value) eSel = i;
+    const int eSel = box.browseEngineIndex();
     juce::ignoreUnused (tr);
     col (r.removeFromLeft (w * 22 / 100), "1  ENGINE", engines, eSel, 16.0f);
     r.removeFromLeft (8);
@@ -1355,6 +1374,14 @@ bool View::screenTouch (juce::Point<float> sp, bool down)
             return true;
         }
     if (playHit.contains (p)) { box.buttonDown (BtnPlay); box.buttonUp (BtnPlay); return true; }
+    if (box.getMode() == ModeBrowse)
+        for (const auto& h : browseHits) if (h.r.contains (p)) { box.browseTo (h.column, h.index); return true; }
+    if (soundNameHit.contains (p))   // the sound's name: open the browser (or close it)
+    {
+        if (box.getMode() == ModeBrowse) box.setMode (ModeSound);
+        else { box.setMode (ModeSound); box.buttonDown (BtnSound); box.buttonUp (BtnSound); }
+        return true;
+    }
     return false;
 }
 
@@ -1482,11 +1509,42 @@ void View::mouseDoubleClick (const juce::MouseEvent& e)
     if (! kiosk && sliderRect().contains (lp)) box.setSlider (0.5f);
 }
 
+void View::mouseMove (const juce::MouseEvent& e)
+{
+    int c = -1, idx = -1;
+    if (box.getMode() == ModeBrowse)
+    {
+        const auto lp = toLogical (e.position);
+        const auto sr = screenRect().toFloat();
+        if (sr.contains (lp))
+        {
+            const auto sp = (lp - sr.getPosition()).toInt();
+            for (const auto& h : browseHits) if (h.r.contains (sp)) { c = h.column; idx = h.index; }
+        }
+    }
+    const bool overName = soundNameHit.contains ((toLogical (e.position) - screenRect().toFloat().getPosition()).toInt());
+    setMouseCursor (c >= 0 || overName ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+    if (c != hoverColumn || idx != hoverIndex) { hoverColumn = c; hoverIndex = idx; repaint(); }
+}
+
 void View::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w)
 {
     const auto lp = toLogical (e.position);
     const auto sr = screenRect().toFloat();
     int k = -1;
+    const float dd = (w.deltaY != 0.0f ? w.deltaY : -w.deltaX) * (w.isReversed ? -1.0f : 1.0f);
+    if (sr.contains (lp) && box.getMode() == ModeBrowse)   // the wheel scrolls the list under the mouse
+    {
+        const auto sp = (lp - sr.getPosition()).toInt();
+        for (int c = 0; c < 3; ++c)
+            if (browseColumns[(size_t) c].contains (sp))
+            {
+                const int cur = c == 0 ? box.browseEngineIndex() : c == 1 ? box.browseCategory() : box.browsePresetIndex();
+                const int step = dd > 0 ? -1 : 1;
+                if (dd != 0.0f) box.browseTo (c, cur + step);
+                return;
+            }
+    }
     if (sr.contains (lp)) k = screenKnobAt (lp - sr.getPosition());
     else if (! kiosk) for (int i = 0; i < numKnobs; ++i) if (knobRect (i).contains (lp)) k = i;
     if (k < 0) return;
@@ -1506,6 +1564,16 @@ bool View::keyPressed (const juce::KeyPress& k)
     if (code == juce::KeyPress::spaceKey) { press (BtnPlay); return true; }
     if (code == juce::KeyPress::returnKey) { press (BtnRec); return true; }
     if (code == juce::KeyPress::tabKey) { box.selectTrack ((box.getTrack() + (mods.isShiftDown() ? numTracks - 1 : 1)) % numTracks); return true; }
+    if (box.getMode() == ModeBrowse && (code == juce::KeyPress::upKey || code == juce::KeyPress::downKey))
+    {
+        box.browseTo (2, box.browsePresetIndex() + (code == juce::KeyPress::upKey ? -1 : 1));
+        return true;
+    }
+    if (box.getMode() == ModeBrowse && (code == juce::KeyPress::pageUpKey || code == juce::KeyPress::pageDownKey))
+    {
+        box.browseTo (1, box.browseCategory() + (code == juce::KeyPress::pageUpKey ? -1 : 1));
+        return true;
+    }
     if (code == juce::KeyPress::leftKey) { press (BtnPrev); return true; }
     if (code == juce::KeyPress::rightKey) { press (BtnNext); return true; }
     if (code == juce::KeyPress::F2Key) { press (BtnSound); return true; }

@@ -88,6 +88,12 @@ private:
 
     // the screen's touch areas (screen coordinates)
     juce::Array<juce::Rectangle<int>> trackHits, modeHits, pageHits, menuHits;
+    struct BrowseHit { juce::Rectangle<int> r; int column, index; };
+    juce::Array<BrowseHit> browseHits;
+    std::array<juce::Rectangle<int>, 3> browseColumns;
+    juce::Rectangle<int> soundNameHit;
+    int hoverColumn = -1, hoverIndex = -1;
+    void mouseMove (const juce::MouseEvent&) override;
     juce::Rectangle<int> playHit, learnHit, skipHit, doneHit, knobArea;
 
     enum DragKind { DragNone, DragKnob, DragSlider, DragJoy, DragPad, DragButton };
