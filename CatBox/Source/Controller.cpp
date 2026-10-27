@@ -665,13 +665,14 @@ void Controller::browseApply (bool preview)
             const int note = SampleBank::noteFromName (bank.name (slot));
             tr.params[(size_t) d.index ("root")] = (float) (note >= 0 ? note : 60);
             const auto* smp = bank.at (slot);
-            const bool sustained = folder.contains ("sus") || folder.contains ("vib") || folder.contains ("trem") || folder.contains ("organ")
-                                || folder.contains ("pad") || folder.contains ("drone") || folder.contains ("roll");
+            // a held sound (it has a steady part) loops there, crossfaded; a hit plays to its end
+            const bool sustained = smp != nullptr && smp->loopTo > smp->loopFrom;
+            const float len = smp != nullptr ? (float) juce::jmax (1, smp->length()) : 1.0f;
             tr.params[(size_t) d.index ("mode")] = 0.0f;
             tr.params[(size_t) d.index ("start")] = 0.0f;
-            tr.params[(size_t) d.index ("end")] = sustained ? 0.97f : 1.0f;
+            tr.params[(size_t) d.index ("end")] = sustained ? juce::jlimit (0.05f, 1.0f, (float) smp->loopTo / len) : 1.0f;
             tr.params[(size_t) d.index ("loop")] = sustained ? 1.0f : 0.0f;
-            tr.params[(size_t) d.index ("loopstart")] = 0.4f;
+            tr.params[(size_t) d.index ("loopstart")] = sustained ? juce::jlimit (0.0f, 0.98f, (float) smp->loopFrom / (float) smp->loopTo) : 0.4f;
             tr.params[(size_t) d.index ("s")] = 1.0f;
             tr.params[(size_t) d.index ("d")] = 4.0f;
             tr.params[(size_t) d.index ("r")] = sustained ? 0.45f : juce::jlimit (0.05f, 2.0f, smp != nullptr ? (float) (smp->length() / smp->sampleRate) : 0.5f);

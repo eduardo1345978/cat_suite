@@ -545,6 +545,25 @@ public:
                         allPlay = allPlay && st.finite && st.rms > 0.003f;
                     }
                     check (allPlay, "a multi-sample plays from the bottom to the top", {});
+                    // held for 8 s: the loop keeps it going, and the seam doesn't click
+                    {
+                        float vals[maxParams];
+                        const auto& sd = engineDef (EngineSampler);
+                        sd.applyPreset (presetOf (EngineSampler, "Violins"), vals);
+                        auto eng = makeEngine (EngineSampler);
+                        eng->prepare (sr);
+                        eng->setParams (vals);
+                        eng->noteOn (64, 0.8f, false, false);
+                        const int total = (int) (sr * 8.0);
+                        std::vector<float> L ((size_t) total, 0.0f), R ((size_t) total, 0.0f);
+                        for (int pos = 0; pos < total; pos += 256) eng->render (L.data() + pos, R.data() + pos, juce::jmin (256, total - pos));
+                        auto rmsOf = [&L] (int a, int b) { double q = 0; for (int i = a; i < b; ++i) q += (double) L[(size_t) i] * L[(size_t) i]; return (float) std::sqrt (q / juce::jmax (1, b - a)); };
+                        auto jumpOf = [&L] (int a, int b) { float m = 0; for (int i = a + 1; i < b; ++i) m = juce::jmax (m, std::abs (L[(size_t) i] - L[(size_t) (i - 1)])); return m; };
+                        const float early = rmsOf ((int) sr, (int) (sr * 2)), late = rmsOf ((int) (sr * 6), (int) (sr * 8));
+                        const float jEarly = jumpOf ((int) (sr * 0.5), (int) (sr * 2.5)), jLate = jumpOf ((int) (sr * 2.5), total);
+                        check (late > early * 0.3f && jLate < jEarly * 2.0f + 0.01f, "a held violin note loops smoothly for 8 s",
+                               "rms " + juce::String (early, 3) + " -> " + juce::String (late, 3) + ", biggest step " + juce::String (jEarly, 3) + " -> " + juce::String (jLate, 3));
+                    }
                 }
                 // the browser lists the library folders and picks a sample from them
                 box.selectTrack (7);

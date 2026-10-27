@@ -157,6 +157,20 @@ public:
             v->to = v->from + w;
         }
         else { v->from = a; v->to = b; }
+        // the loop: a multi-sample uses each recording's own steady part; one sample the Loop start knob
+        if (zoneRoot >= 0.0f)
+        {
+            v->from = 0.0; v->to = len;
+            v->canLoop = smp->loopTo > smp->loopFrom + 64;
+            v->loopA = v->canLoop ? (double) smp->loopFrom : 0.0;
+            v->loopB = v->canLoop ? (double) smp->loopTo : (double) len;
+        }
+        else
+        {
+            v->canLoop = true;
+            v->loopA = v->from + (v->to - v->from) * juce::jlimit (0.0f, 0.98f, p[sLoopStart]);
+            v->loopB = v->to - 1.0;
+        }
         v->reverse = p[sReverse] > 0.5f;
         if (! legato)
         {
@@ -203,7 +217,8 @@ public:
             {
                 if (! v.active || v.smp == nullptr) continue;
                 const auto* s = v.smp;
-                const double loopA = v.from + (v.to - v.from) * juce::jlimit (0.0f, 0.98f, p[sLoopStart]);
+                const double loopA = v.loopA, loopB = juce::jmax (v.loopA + 32.0, v.loopB);
+                const double xfade = juce::jmin (0.08 * s->sampleRate, 0.4 * (loopB - loopA));   // the loop seam is crossfaded
                 if (filt)
                 {
                     const float oct = p[sEnvAmt] * v.fenv.value * 7.0f + p[sKeyTrack] * (v.pitch - 60.0f) / 12.0f + mod * 2.0f;
@@ -229,13 +244,27 @@ public:
                     const int ic = juce::jlimit (0, s->length() - 1, i1);
                     float l = (float) (s->l[(size_t) ic] + (s->l[(size_t) i2] - s->l[(size_t) ic]) * frac);
                     float r = (float) (s->r[(size_t) ic] + (s->r[(size_t) i2] - s->r[(size_t) ic]) * frac);
+                    const bool loops = loop > 0 && mode == ModeKeys && v.canLoop;
+                    if (loops && loop == 1 && v.dir > 0.0 && v.pos > loopB - xfade && xfade > 8.0)
+                    {
+                        // nearing the loop end: blend in the same place after the loop start (equal power)
+                        const double back = v.pos - (loopB - loopA);
+                        const int j1 = juce::jlimit (0, s->length() - 2, (int) back);
+                        const float jf = (float) (back - j1);
+                        const float bl2 = s->l[(size_t) j1] + (s->l[(size_t) (j1 + 1)] - s->l[(size_t) j1]) * jf;
+                        const float br2 = s->r[(size_t) j1] + (s->r[(size_t) (j1 + 1)] - s->r[(size_t) j1]) * jf;
+                        const float t = (float) juce::jlimit (0.0, 1.0, (v.pos - (loopB - xfade)) / xfade);
+                        const float ga = std::cos (t * 1.5707963f), gb = std::sin (t * 1.5707963f);
+                        l = l * ga + bl2 * gb;
+                        r = r * ga + br2 * gb;
+                    }
                     v.pos += rate * v.dir;
                     bool ended = false;
-                    const bool loops = loop > 0 && mode == ModeKeys;
-                    if (v.dir > 0.0 && v.pos >= v.to - 1.0)
+                    if (loops && loop == 1 && v.dir > 0.0 && v.pos >= loopB)
+                        v.pos -= (loopB - loopA);   // the crossfade already brought the loop start in
+                    else if (v.dir > 0.0 && v.pos >= v.to - 1.0)
                     {
-                        if (loops && loop == 1) v.pos = loopA + (v.pos - (v.to - 1.0));
-                        else if (loops) { v.dir = -1.0; v.pos = v.to - 1.0; }
+                        if (loops && loop == 2) { v.dir = -1.0; v.pos = v.to - 1.0; }
                         else ended = true;
                     }
                     else if (v.dir < 0.0 && v.pos <= (loops ? loopA : v.from))
@@ -283,6 +312,8 @@ private:
         int note = 60;
         double pos = 0.0, from = 0.0, to = 0.0, dir = 1.0;
         float vel = 0.8f, pitch = 60.0f, target = 60.0f, pitchEnv = 0.0f, pan = 0.0f, lastL = 0.0f, lastR = 0.0f, root = -1.0f;
+        double loopA = 0.0, loopB = 0.0;
+        bool canLoop = true;
         uint64_t age = 0;
         dsp::Adsr amp, fenv;
         dsp::Svf fl, fr, hpl, hpr;

@@ -4,6 +4,36 @@
 
 namespace catbox
 {
+/** The steady part of a held note (strings, brass, organ ...): after the attack, while it stays loud. */
+static void findLoop (Sample& s)
+{
+    const int block = juce::jmax (256, (int) (s.sampleRate * 0.01));
+    const int n = s.length() / block;
+    if (n < 30) return;   // shorter than ~0.3 s: a hit, not a held note
+    std::vector<float> rms ((size_t) n);
+    float peak = 0.0f;
+    int peakAt = 0;
+    for (int b = 0; b < n; ++b)
+    {
+        double sum = 0.0;
+        for (int i = b * block; i < (b + 1) * block; ++i) sum += (double) s.l[(size_t) i] * s.l[(size_t) i] + (double) s.r[(size_t) i] * s.r[(size_t) i];
+        rms[(size_t) b] = (float) std::sqrt (sum / (2.0 * block));
+        if (rms[(size_t) b] > peak) { peak = rms[(size_t) b]; peakAt = b; }
+    }
+    // from the peak on, as long as it stays above half the peak (a held note), not falling much
+    int end = peakAt;
+    while (end + 1 < n && rms[(size_t) (end + 1)] > peak * 0.45f) ++end;
+    const int run = end - peakAt;
+    if (run * block < (int) (s.sampleRate * 0.35)) return;    // it dies away: a plucked / hit sound
+    // a decaying sound (piano, bells) isn't held either: the end of the run much quieter than its start
+    float a = 0.0f, z = 0.0f;
+    for (int b = peakAt; b < peakAt + run / 4; ++b) a += rms[(size_t) b];
+    for (int b = end - run / 4; b <= end; ++b) z += rms[(size_t) b];
+    if (z < a * 0.55f) return;
+    s.loopFrom = (peakAt + run / 4) * block;
+    s.loopTo = (peakAt + run * 9 / 10) * block;
+}
+
 SampleBank& SampleBank::get()
 {
     static SampleBank bank;
@@ -183,6 +213,7 @@ bool SampleBank::readInto (int slot, const juce::File& f)
     s->l.resize ((size_t) (len - start));
     s->r.resize ((size_t) (len - start));
     for (int i = start; i < len; ++i) { s->l[(size_t) (i - start)] = L[i] * gain; s->r[(size_t) (i - start)] = R[i] * gain; }
+    findLoop (*s);
     slots[(size_t) slot].store (s.get(), std::memory_order_release);
     owned.push_back (std::move (s));
     return true;

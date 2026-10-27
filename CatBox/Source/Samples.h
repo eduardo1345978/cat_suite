@@ -19,6 +19,7 @@ struct Sample
     juce::String name;
     std::vector<float> l, r;
     double sampleRate = 48000.0;
+    int loopFrom = -1, loopTo = -1;   // where the sound holds steady (found when read; -1 = it doesn't: play it to the end)
     int length() const noexcept { return (int) l.size(); }
 };
 
