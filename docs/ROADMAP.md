@@ -134,6 +134,20 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
       by the box, 16 sounds), Granular (12) = 311 sounds; Glide Octave knob; Pico firmware + wiring (CatBox/pico)
 - [x] Undo with 40 steps (Shift + Chaos), copy / paste a bar (Shift + Prev / Next in SEQ), knob moves recorded into
       steps (Rec + knob), ratchet per step + drum rolls, 28 drum kits (324 sounds)
+- [x] 27 Oct: factory reset (PROJECT knob 12 / right-click, undoable); SIMPLER (user: "complicated, simpler + more options"):
+      SEQ tap = on + pick, knobs edit the picked step (no holding), keys fill steps when stopped, hit a drum to pick it;
+      MENU (Project twice): save / load 8 projects, new, clear, copy track, 15 drum patterns, 12 bass lines, help pages,
+      help line always on screen
+- [x] 27 Oct ("super ultra mega customization", "nice delay and send effects", "lots of effects and presets, polish"):
+      4 insert FX per track (22 effects, presets, 25 whole chains), 8 macros, 2 LFOs + envelope + random, 16-slot mod
+      matrix (any sound / FX / mix knob), MY knob page, sends: reverb types (hall, room, plate, shimmer, cloud, spring, dark)
+      + pre-delay + ducking, delay types (clean, tape, dub, ping-pong, multi-tap, diffused, reverse) + wow + duck + into
+      reverb, FX send (any effect); LOOK page: 8 themes, 9 colours, big text, ring knobs, track colours; ~80 FX Lab sounds
+- [x] 27 Oct ("free preset libraries? put them all in, all samples"): VSCO 2 CE (CC0 orchestra) + Dirt-Samples
+      (TidalCycles) via get_libraries.bat / pi/get_libraries.sh into CatBox/library (~6 GB, not in git), indexed at start
+      and read on demand (5231 samples, 313 folders), every folder in the browser (LIB ...), new KIT engine (16 samples on
+      pads), 15 library kits, 69 sampler + 12 granular library sounds (499 sounds); shimmer reverb runaway fixed
+- [ ] NEXT (user): a better Sampler ("add sampler if credit is left") - multi-sample zones, then MIDI .mid import, DX7 .syx import
 - [ ] Ask the user how the new drums / arp / acid / FM / sampler feel; physical-model guitar? more kits
 - [ ] NEXT hardware: get it running on the Pi 5 (user HAS: Pi 5 8 GB, 27 W supply, micro SD, HDMI monitor,
       keyboard + mouse, a USB sound card; wants HiFiBerry DAC later) - walk him through setup_pi.sh
