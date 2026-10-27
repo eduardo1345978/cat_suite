@@ -50,7 +50,7 @@ Everything can be touched: tracks, modes, pages, knobs (drag), Play.
 | **Seq** | the pads are the 16 steps of a bar (◀ ▶ = bar). Tap = step on / off. **Hold a step** and play keys (notes, a chord) or turn knobs: note, velocity, length, slide, accent, chance, nudge, notes 2-4, ratchet (knob 11: the step 2-4 times). Drums: hold a step, knob 1 / 2 = velocity, knob 3 = roll (2-4 hits). Nothing held: length, rate, swing, transpose (in the scale), rotate, all velocities / lengths, octave. Drums: all 16 drums on screen at once; **Shift + pad** (or knob 8) picks the drum. **Shift + ◀** copies the bar, **Shift + ▶** pastes it |
 | **Note FX** | ◀ ▶ = Off / Arp / Chords / Orbit, the knobs edit it, **Shift + ◀ ▶** = its presets |
 | **Mix** | knobs 1-8 = volumes (Shift: pan), 9-12 = master, glue, tape, width; ◀ ▶ = SENDS (reverb and delay per track, reverb / delay settings). Pads 1-8 = mute, 9-16 = solo · **Shift + Mix** = unmute all |
-| **Project** | tempo, swing, key, scale, click, master volume, DJ filter, pads (piano / scale), pad octave; Shift: glue, tape, width, reverb, delay |
+| **Project** | tempo, swing, key, scale, click, master volume, DJ filter, pads (piano / scale), pad octave; **knob 12 = Factory reset** (turn it all the way right: a fresh project, scenes cleared; your saved sounds, samples and MIDI keyboard stay; Undo brings it all back; on the PC also right-click > *Factory reset...*); Shift: glue, tape, width, reverb, delay |
 | **◀ Prev / Next ▶** | pages (see each mode) · **Shift + ◀ ▶** = pad octave |
 | **Shift** | the second layer of knobs and the Shift combinations |
 | **Scene** | the pads: 1-8 = scenes (recall at the next bar while playing), **Rec + pad** = save; 9-16 = mute tracks |

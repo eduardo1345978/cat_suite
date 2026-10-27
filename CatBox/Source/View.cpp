@@ -1009,6 +1009,7 @@ void View::mouseDown (const juce::MouseEvent& e)
         m.addItem (1, "Sound card and MIDI...", onSettings != nullptr);
         m.addItem (2, "Learn a MIDI keyboard / controller...");
         m.addItem (3, "Forget the MIDI keyboard", box.numLearned() > 0);
+        m.addItem (6, "Factory reset...");
         m.addSeparator();
         m.addItem (4, "Full screen", onToggleFullScreen != nullptr);
         m.addItem (5, "Keys (F1)");
@@ -1019,6 +1020,15 @@ void View::mouseDown (const juce::MouseEvent& e)
             if (r == 3) box.forgetMidiMap();
             if (r == 4 && onToggleFullScreen) onToggleFullScreen();
             if (r == 5) showHelp = ! showHelp;
+            if (r == 6)
+            {
+                juce::Component::SafePointer<View> safe (this);
+                juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::WarningIcon, "Factory reset",
+                    "Start again with the factory project? Tracks, patterns, mixer and scenes go back to the start.\n"
+                    "Your saved sounds, samples and the MIDI keyboard stay. Shift + Chaos (Undo) brings the project back.",
+                    "Reset", "Cancel", nullptr,
+                    juce::ModalCallbackFunction::create ([safe] (int ok) { if (ok == 1 && safe != nullptr) safe->box.factoryReset(); }));
+            }
         });
         return;
     }

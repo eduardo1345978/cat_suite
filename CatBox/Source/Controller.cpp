@@ -22,7 +22,7 @@ namespace
 {
 // ---- the MIX and PROJECT knobs
 enum MasterId { MVolume = 0, MGlue, MTape, MWidth, MRevSize, MRevDamp, MDelayTime, MDelayFb, MRevLowCut, MRevWidth, MDelayTone, MPingPong,
-                MTempo, MSwing, MKey, MScale, MMetronome, MDj, MPads, MOctave, NumMasterIds };
+                MTempo, MSwing, MKey, MScale, MMetronome, MDj, MPads, MOctave, MReset, NumMasterIds };
 
 const std::vector<ParamDef>& masterDefs()
 {
@@ -37,6 +37,7 @@ const std::vector<ParamDef>& masterDefs()
             num ("tempo", "Tempo", 40, 240, 110), pct ("swing", "Swing", 0.0f), choice ("key", "Key", { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, 0),
             choice ("scale", "Scale", {}, 1), toggle ("metro", "Click", false), bi ("dj", "DJ filter", 0.0f),
             choice ("pads", "Pads", { "Piano", "Scale" }, 0), num ("oct", "Pad octave", 0, 7, 3),
+            num ("reset", "Factory reset", 0, 100, 0),
         };
         for (int s = 0; s < music::numScales; ++s) v[MScale].choices.add (music::scaleName (s));
         v[MScale].hi = (float) (music::numScales - 1);
@@ -77,6 +78,22 @@ Controller::Controller (const juce::File& dir) : dataDir (dir)
 {
     dataDir.createDirectory();
     SampleBank::get().loadFolder (dataDir.getChildFile ("samples"), starterSampleNames(), [] (SampleBank& b) { makeStarterSamples (b); });
+    resetToDefaults();
+    heldSteps.fill (-1);
+    loadState();
+    loadScenes();
+    loadMidiMap();
+    audio.push (project);
+    startTimerHz (30);
+}
+
+Controller::~Controller()
+{
+    stopTimer();
+}
+
+void Controller::resetToDefaults()
+{
     for (int t = 0; t < numTracks; ++t) octave[(size_t) t] = 3;
     octave[1] = 2;
     project = Project::makeDefault();
@@ -90,18 +107,37 @@ Controller::Controller (const juce::File& dir) : dataDir (dir)
             d.applyPreset ((int) i, v);
             if (std::memcmp (v, project.tracks[(size_t) t].params.data(), sizeof (float) * d.params.size()) == 0) { presetIdx[(size_t) t] = (int) i; break; }
         }
+        edited[(size_t) t] = false;
+        userName[(size_t) t] = {};
+        soundPage[(size_t) t] = 0;
+        bar[(size_t) t] = 0;
+        lane[(size_t) t] = 0;
     }
-    heldSteps.fill (-1);
-    loadState();
-    loadScenes();
-    loadMidiMap();
-    audio.push (project);
-    startTimerHz (30);
+    mixPage = projectPage = 0;
+    scalePads = false;
+    numHeldSteps = 0;
+    loadedScene = -1;
 }
 
-Controller::~Controller()
+void Controller::factoryReset()
 {
-    stopTimer();
+    if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "reset!"); sendRemote (o); return; }
+    pushUndo ("Factory reset");
+    audio.post ({ Event::Stop, 0, 0, 0.0f });
+    audio.post ({ Event::AllOff, 0, 0, 0.0f });
+    audio.setRecording (false);
+    resetToDefaults();
+    // the scenes are kept as a backup file (scenes-backup.json), not deleted
+    const auto sf = dataDir.getChildFile ("scenes.json");
+    if (sf.existsAsFile()) sf.copyFileTo (dataDir.getChildFile ("scenes-backup.json"));
+    for (size_t i = 0; i < scenes.size(); ++i) scenesBeforeReset[i] = std::move (scenes[i]);
+    saveScenes();
+    track = 0;
+    audio.viewTrack = 0;
+    mode = ModeSound;
+    changed();
+    saveState();
+    setFlash ("Factory reset: everything is new (Shift + Chaos = undo)");
 }
 
 void Controller::runOnMessageThread (std::function<void()> f)
@@ -133,6 +169,7 @@ juce::String Controller::flashText() const
 void Controller::timerCallback()
 {
     pump();
+    if (resetProgress > 0.0f && juce::Time::getMillisecondCounter() - resetTouched > 2500) { resetProgress = 0.0f; if (onChange) onChange(); }   // not turned all the way: back to 0
     // Chaos is a hold (0.6 s): a quick tap does nothing
     if (btnDown[BtnChaos] && ! chaosDone && ! shift.load() && juce::Time::getMillisecondCounter() - chaosDownAt > 600)
     {
@@ -678,6 +715,11 @@ void Controller::undo()
     if (undoStack.empty()) { setFlash ("Nothing to take back"); return; }
     auto u = std::move (undoStack.back());
     undoStack.pop_back();
+    if (u->what == "Factory reset")   // the scenes come back too
+    {
+        for (size_t i = 0; i < scenes.size(); ++i) if (scenesBeforeReset[i] != nullptr) scenes[i] = std::move (scenesBeforeReset[i]);
+        saveScenes();
+    }
     project = u->project;
     presetIdx = u->presetIdx;
     edited = u->edited;
@@ -846,7 +888,7 @@ Controller::Target Controller::targetFor (int slot) const
             return { KMaster, MRevLowCut + (slot - 20) };
         case ModeProject:
         {
-            static const int map[24] = { MTempo, MSwing, MKey, MScale, MMetronome, MVolume, MDj, MPads, MOctave, -1, -1, -1,
+            static const int map[24] = { MTempo, MSwing, MKey, MScale, MMetronome, MVolume, MDj, MPads, MOctave, -1, -1, MReset,
                                          MGlue, MTape, MWidth, -1, MRevSize, MRevDamp, MDelayTime, MDelayFb, -1, -1, -1, -1 };
             return map[slot] >= 0 ? Target { KMaster, map[slot] } : Target {};
         }
@@ -890,6 +932,7 @@ float Controller::targetValue (const Target& t) const
                 case MDj: return m.djFilter * 2.0f - 1.0f;
                 case MPads: return scalePads.load() ? 1.0f : 0.0f;
                 case MOctave: return (float) octave[(size_t) track.load()].load();
+                case MReset: return resetProgress;
                 default: return 0.0f;
             }
         default: return 0.0f;
@@ -987,6 +1030,13 @@ void Controller::changeTarget (const Target& t, float amount, bool fraction)
                 case MDj: m.djFilter = (v + 1.0f) * 0.5f; break;
                 case MPads: scalePads = v > 0.5f; break;
                 case MOctave: octave[(size_t) track.load()] = juce::roundToInt (v); break;
+                case MReset:
+                    resetProgress = juce::jlimit (0.0f, 100.0f, resetProgress + (v - resetProgress) * 4.0f);   // 25 clicks all the way
+                    v = resetProgress;
+                    resetTouched = juce::Time::getMillisecondCounter();
+                    if (v >= 100.0f) { resetProgress = 0.0f; factoryReset(); return; }
+                    if (onChange) onChange();
+                    return;
                 default: break;
             }
             break;
@@ -1046,6 +1096,7 @@ KnobView Controller::knob (int k) const
     v.name = def->name;
     v.value = def->format (val);
     if (t.kind == KMaster && t.index == MTempo) v.value = juce::String (val, 1).trimCharactersAtEnd ("0").trimCharactersAtEnd (".") + " BPM";
+    if (t.kind == KMaster && t.index == MReset) v.value = resetProgress > 0.0f ? juce::String (juce::roundToInt (resetProgress)) + "% keep turning" : juce::String ("turn right");
     if (t.kind == KMaster && t.index == MWidth) v.value = juce::String (juce::roundToInt (val * 200.0f)) + "%";
     v.norm = def->toNorm (val);
     v.bipolar = def->unit == ParamDef::BiPct || (def->unit == ParamDef::Semi && def->lo < 0) || (def->unit == ParamDef::Cents && def->lo < 0)
@@ -1929,6 +1980,7 @@ void Controller::handleLinkMessage (const juce::var& m, const std::function<void
     else if (t == "joy")    setJoystick ((float) m["x"], (float) m["y"]);
     else if (t == "track")  selectTrack ((int) m["v"]);
     else if (t == "mode")   setMode ((int) m["v"]);
+    else if (t == "reset!") factoryReset();
     else if (t == "hello")  reply (makeState());
 }
 } // namespace catbox

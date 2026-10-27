@@ -373,6 +373,19 @@ public:
                    "pads: bottom row C D E F G A B C, top row the black keys", juce::String (box.padNote (3, 8)));
             check (box.padNote (0, 0) == 36 && box.padNote (0, 1) == 37, "drum pads: 1 kick, 2 snare ...", {});
 
+            // ---- factory reset: PROJECT knob 12 all the way right (undoable)
+            {
+                box.setMode (ModeProject);
+                const auto before = box.getProject().tracks[5].pat.drums;
+                box.turnKnob (11, 10.0f);
+                check (box.knob (11).name == "Factory reset" && box.knob (11).value.contains ("keep turning"), "PROJECT knob 12: Factory reset (turn all the way)", box.knob (11).value);
+                check (box.getProject().tracks[5].pat.drums == before, "half way it does nothing", {});
+                box.turnKnob (11, 20.0f);
+                check (box.getProject().tracks[5].pat.empty() && ! box.sceneExists (2) && box.getTrack() == 0, "all the way: factory reset", box.flashText());
+                box.buttonDown (BtnShift); box.buttonDown (BtnChaos); box.buttonUp (BtnChaos); box.buttonUp (BtnShift);
+                check (box.getProject().tracks[5].pat.drums == before && box.sceneExists (2), "Undo brings the project and the scenes back", box.flashText());
+            }
+
             box.saveState();
 
             // ---- the screen in every mode, and the PC panel

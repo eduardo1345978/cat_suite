@@ -88,6 +88,7 @@ public:
     bool sceneExists (int s) const { return scenes[(size_t) juce::jlimit (0, numScenes - 1, s)] != nullptr; }
     void saveUserSound();
     void chaos();
+    void factoryReset();   // a new project (undoable); your sounds, samples and the MIDI keyboard stay
     void undo();   // Shift + Chaos: back one step (up to 40)
     int undoSteps() const { return (int) undoStack.size(); }
     void tapTempo();
@@ -229,6 +230,10 @@ private:
     bool hasClip = false;
     /** Remembers the state before a change. Changes of the same kind within a few seconds are one step. */
     void pushUndo (const juce::String& what, bool merge = false);
+    void resetToDefaults();
+    float resetProgress = 0.0f;
+    std::array<std::unique_ptr<Project>, numScenes> scenesBeforeReset;
+    juce::uint32 resetTouched = 0;
     juce::Array<double> taps;
     juce::String flash;
     juce::uint32 flashUntil = 0;
