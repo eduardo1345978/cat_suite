@@ -28,7 +28,7 @@ enum P
     pLfoRate, pLfoShape, pLfoSync, pLfoDelay, pLfoPitch, pLfoFilter, pLfoPw, pLfoAmp,
     pPmEnv, pPmOsc,
     pChorus, pDrive, pWidth, pVolume, pModWheel,
-    pXY, pPic, pPSize, pPSpin, pPTurn, pPWobble, pPTwist,
+    pXY, pPic, pPSize, pPSpin, pPTurn, pPWobble, pPTwist, pPHyper,
     pCount
 };
 enum Mode { MMono = 0, MLegato, MPoly, MUnison };
@@ -148,6 +148,7 @@ EngineDef makeSynthDef()
         choice ("xy", "Scope XY", { "Off", "Lissajous", "Circle", "Picture" }, 0),
         choice ("pic", "Picture", scopePictureNames(), 0), pct ("psize", "Size", 0.85f), bi ("pspin", "Spin", 0.0f),
         bi ("pturn", "3D turn", 0.0f), pct ("pwobble", "Wobble", 0.0f), bi ("ptwist", "Twist", 0.0f),
+        bi ("phyper", "4D/5D turn", 0.0f),
     };
     jassert ((int) p.size() == pCount);
     e.pages = {
@@ -160,7 +161,7 @@ EngineDef makeSynthDef()
         page ("LFO", { pLfoRate, pLfoShape, pLfoSync, pLfoDelay, pLfoPitch, pLfoFilter, pLfoPw, pLfoAmp, pPmEnv, pPmOsc, pModWheel, pCutoff,
                        pO3Lfo, pO3Range, pO3Wave, pCross, pO1Pw, pDrift, pGlide, pBend, pMode, pVoices, pUniDetune, pVolume }),
         page ("OUTPUT", { pModel, pMode, pVoices, pUniDetune, pChorus, pDrive, pWidth, pVolume, pGlide, pDrift, pBend, pModWheel,
-                          pXY, pPic, pPSize, pPSpin, pPTurn, pPWobble, pPTwist, pO2Semi, pO2Fine, pO1Wave, pA, pR }),
+                          pXY, pPic, pPSize, pPSpin, pPTurn, pPWobble, pPTwist, pPHyper, pO2Semi, pO2Fine, pO1Wave, pA }),
     };
 
     // ---- factory sounds, per model (the category is the model)
@@ -282,8 +283,10 @@ EngineDef makeSynthDef()
     pic ("Rotating Cube", 9, { { "pturn", 0.45f } });
     pic ("Pyramid", 10, { { "pturn", -0.4f } });
     pic ("Globe", 11, { { "pturn", 0.3f } });
-    pic ("Your Text", 12, { { "pspin", 0.0f } });
-    pic ("Your Drawing", 13, {});
+    pic ("Tesseract 4D", 12, { { "phyper", 0.35f }, { "pturn", 0.15f } });
+    pic ("Penteract 5D", 13, { { "phyper", 0.3f }, { "pturn", 0.12f } });
+    pic ("Your Text", scopePictureText(), { { "pspin", 0.0f } });
+    pic ("Your Drawing", scopePictureDrawing(), {});
     e.presets.push_back ({ "Init", "Init", {} });
     return e;
 }
@@ -471,7 +474,7 @@ public:
         const ScopeXYZ* picTab = xyMode == 3 ? scopePicture (juce::roundToInt (p[pPic]), track) : nullptr;
         const float dcPic = 1.0f - std::exp (-dsp::twoPi * 2.0f / sr);
         auto rate = [] (float v) { return v * std::abs (v) * 2.0f; };   // knob -1..1 > -2..2 turns a second (fine near the middle)
-        const float spinRate = rate (p[pPSpin]), turnRate = rate (p[pPTurn]);
+        const float spinRate = rate (p[pPSpin]), turnRate = rate (p[pPTurn]), hyperRate = rate (p[pPHyper]);
 
         for (int i0 = 0; i0 < n; i0 += 16)
         {
@@ -501,6 +504,8 @@ public:
             };
             turn (spinAng, spinRate);
             turn (turnAng, turnRate);
+            turn (hyperAng, hyperRate);
+            const float hc = std::cos (hyperAng), hs = std::sin (hyperAng), hc2 = std::cos (hyperAng * 0.7f), hs2 = std::sin (hyperAng * 0.7f);
             wobT = std::fmod (wobT + dsp::twoPi * 1.3f * (float) m / sr, dsp::twoPi * 100.0f);
             const float cs = std::cos (spinAng), sn = std::sin (spinAng), ct = std::cos (turnAng), st = std::sin (turnAng);
             const float tiltC = 0.955f, tiltS = 0.296f;   // seen a little from above, so 3D shows
@@ -554,6 +559,24 @@ public:
                         float x = picTab[k0].x + (picTab[k1].x - picTab[k0].x) * fr;
                         float y = picTab[k0].y + (picTab[k1].y - picTab[k0].y) * fr;
                         float z = picTab[k0].z + (picTab[k1].z - picTab[k0].z) * fr;
+                        float w = picTab[k0].w + (picTab[k1].w - picTab[k0].w) * fr;
+                        float u = picTab[k0].v + (picTab[k1].v - picTab[k0].v) * fr;
+                        if (w != 0.0f || u != 0.0f)
+                        {
+                            // the 5th dimension: turn in the y-v and w-v planes, then look at it in perspective (4D)
+                            if (u != 0.0f)
+                            {
+                                const float y2 = y * hc2 - u * hs2; u = y * hs2 + u * hc2; y = y2;
+                                const float w2 = w * hc - u * hs; u = w * hs + u * hc; w = w2;
+                                const float k5 = 2.4f / (2.4f + u);
+                                x *= k5; y *= k5; z *= k5; w *= k5;
+                            }
+                            // the 4th: turn in the x-w and z-w planes, then perspective into 3D (the inner cube is the far one)
+                            const float x2 = x * hc - w * hs; w = x * hs + w * hc; x = x2;
+                            const float z2 = z * hc2 - w * hs2; w = z * hs2 + w * hc2; z = z2;
+                            const float k4 = 2.4f / (2.4f + w);
+                            x *= k4; y *= k4; z *= k4;
+                        }
                         if (p[pPWobble] > 0.001f)
                         {
                             x += p[pPWobble] * 0.12f * std::sin (dsp::twoPi * 5.0f * before1 + wobT);
@@ -759,7 +782,7 @@ private:
     std::array<float, pCount> p {};
     float sr = 48000.0f, tempo = 120.0f, bend = 0.0f, modWheel = 0.0f;
     int track = 0;
-    float spinAng = 0.0f, turnAng = 0.0f, wobT = 0.0f;
+    float spinAng = 0.0f, turnAng = 0.0f, hyperAng = 0.0f, wobT = 0.0f;
     float lfoPhase = 0.0f, lfoHold = 0.0f, lfoHoldPrev = 0.0f;
     std::vector<float> chorusL, chorusR;
     int cw = 0;

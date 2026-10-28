@@ -397,6 +397,7 @@ void Controller::buttonDown (int b)
             break;
         case BtnRec:
             if (sceneMode.load()) break;   // a modifier for saving scenes
+            if (screen.load() == ScreenScope && ! sh) { setScopeHold (! scopeHold); break; }   // SCOPE: Rec = HOLD
             if (sh)   // Shift + Rec: clear the track's pattern
             {
                 clearPattern (track.load());
@@ -1035,8 +1036,8 @@ Controller::Target Controller::targetFor (int slot) const
     const auto& tr = cur();
     if (screen == ScreenScope && m == ModeSound)   // SCOPE: the picture's knobs (Shift: more of the synth)
     {
-        static const char* ids[24] = { "pic", "psize", "pspin", "pturn", "pwobble", "ptwist", "o1range", "cutoff", "reso", "r", "lfoamp", "volume",
-                                       "xy", "o2semi", "o2fine", "o1wave", "a", "s", "lforate", "lfopitch", "lfoshape", "drive", "glide", "model" };
+        static const char* ids[24] = { "pic", "psize", "pspin", "pturn", "phyper", "pwobble", "ptwist", "cutoff", "reso", "r", "lfoamp", "volume",
+                                       "xy", "o1range", "o2semi", "o2fine", "o1wave", "a", "s", "lforate", "lfopitch", "lfoshape", "drive", "model" };
         if (tr.engine != EngineSynth) return {};
         const int i = engineDef (EngineSynth).index (ids[slot]);
         return i >= 0 ? Target { KParam, i } : Target {};
@@ -1630,7 +1631,7 @@ juce::String Controller::pageName() const
 juce::String Controller::hint() const
 {
     if (screen == ScreenHome) return "Pick an app: touch it, or step / pad 1-6 | SYNTH, DRUMS, STUDIO buttons go straight there";
-    if (screen == ScreenScope) return "Knobs: picture, size, spin, 3D turn, wobble, twist ... | Prev / Next: picture | play a key or HOLD | Shift: more";
+    if (screen == ScreenScope) return "Knobs: picture, size, spin, 3D turn, 4D/5D turn, wobble, twist ... | Prev / Next: picture | play a key or HOLD (Rec) | Shift: more";
     if (sceneMode.load()) return "Pads 1-8: scenes (Rec + pad = save) | pads 9-16: mute | Scene: back";
     if (assignPending >= 0) return assignPending == assignMy ? "Turn the knob you want on your MY page (any page, any mode) | Project: cancel"
                                                              : "Turn the knob macro " + juce::String (assignPending + 1) + " should move | Project: cancel";
@@ -3644,11 +3645,9 @@ void Controller::stepButton (int k, bool down)
     const int t = track.load();
     if (screen == ScreenHome) { if (down && k < NumApps) openApp (k); return; }
     if (screen == ScreenSettings) return;
-    if (screen == ScreenScope)   // steps 1-14: the pictures, 15: hold
+    if (screen == ScreenScope)   // steps 1-16: the pictures (Rec: hold)
     {
-        if (! down) return;
-        if (k < scopePictureNames().size()) setPicture (k);
-        else if (k == 14) setScopeHold (! scopeHold);
+        if (down && k < scopePictureNames().size()) setPicture (k);
         return;
     }
     if (screen == ScreenDrums)
@@ -3686,8 +3685,8 @@ Controller::Leds Controller::leds() const
     {
         const int pic = pictureNow();
         for (int k = 0; k < scopePictureNames().size(); ++k) l.steps[(size_t) k] = k == pic ? 3 : 1;
-        l.steps[14] = scopeHold ? 2 : 0;
-        l.playing = audio.isPlaying(); l.rec = audio.isRecording();
+        l.playing = audio.isPlaying();
+        l.rec = scopeHold;   // Rec = HOLD in the SCOPE app
         return l;
     }
     l.playing = audio.isPlaying();

@@ -18,11 +18,12 @@ and the LIBRARY · 6. **SETTINGS** - save / load, new project, MIDI keyboard, he
 
 The synth draws on an XY oscilloscope (left = X, right = Y): the beam follows a picture once per note period, so the
 picture **is** the sound - play keys (low notes draw calmer) or **HOLD** a note. Pictures: Cat, Star, Heart, Smile,
-Note, Lightning, House, Spiral, Flower, Cube, Pyramid, Globe (the last three are 3D), **Text** (TEXT: type a word, up
+Note, Lightning, House, Spiral, Flower, Cube, Pyramid, Globe (3D), **Tesseract** (4D) and **Penteract** (5D, the
+hypercubes: the 4D/5D turn knob rotates them through the higher dimensions), **Text** (TEXT: type a word, up
 to 3 lines with `|`) and **Drawing** (DRAW: draw on the scope with the mouse or a finger, every stroke is heard at
-once; CLEAR, UNDO). The 12 knobs: Picture, Size, Spin, 3D turn, Wobble, Twist, Osc 1 range, Cutoff (below 19 kHz the
+once; CLEAR, UNDO). The 12 knobs: Picture, Size, Spin, 3D turn, 4D/5D turn, Wobble, Twist, Cutoff (below 19 kHz the
 filter bends the picture), Emphasis, Release, Tremolo, Volume (Shift: more). Prev / Next = picture; on the box the step
-buttons 1-14 pick the picture, step 15 = HOLD. Your text and drawing are saved with the project.
+buttons 1-16 pick the picture, Rec = HOLD. Your text and drawing are saved with the project.
 
 - **SYNTH**: one "digital analog" synthesizer on one panel, like a Moog: controllers, 3 oscillators,
   mixer, filter, filter and amp envelopes, LFO, poly-mod, output - every knob on screen, drag it with the mouse

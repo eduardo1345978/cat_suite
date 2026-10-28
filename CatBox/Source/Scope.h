@@ -12,12 +12,13 @@
 namespace catbox
 {
 constexpr int scopePoints = 2048;
-struct ScopeXYZ { float x = 0.0f, y = 0.0f, z = 0.0f; };
+struct ScopeXYZ { float x = 0.0f, y = 0.0f, z = 0.0f, w = 0.0f, v = 0.0f; };   // w, v: the 4th and 5th dimension (tesseract, penteract)
 
 juce::StringArray scopePictureNames();   // ... "Text", "Drawing"
 int scopePictureText();                  // the index of "Text"
 int scopePictureDrawing();               // the index of "Drawing"
-bool scopePicture3D (int picture);       // a 3D wireframe (the turn knob shows it best)
+bool scopePicture3D (int picture);       // a 3D (or 4D / 5D) wireframe (the turn knobs show it best)
+bool scopePictureHyper (int picture);    // 4D / 5D: the 4D/5D turn knob rotates it through the higher dimensions
 
 /** Makes the built-in pictures (call once, not on the audio thread). */
 void scopeInit();

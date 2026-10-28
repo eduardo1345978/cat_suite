@@ -40,6 +40,7 @@ public:
     juce::Image snapshotScreen();
     void setBigScope (bool b) { bigScope = b; }
     void setDrawMode (bool b) { drawMode = b; }
+    bool isDrawMode() const noexcept { return drawMode; }
     /** The self test: a stroke drawn on the SCOPE app's pad (points in -1..1, y up), as the mouse would. */
     void drawStroke (const std::vector<juce::Point<float>>&);
     /** The box's screen (kiosk) without the hardware: the live SYNTH page for the self test. */

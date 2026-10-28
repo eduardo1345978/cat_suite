@@ -13,7 +13,7 @@ using Stroke = std::vector<ScopeXYZ>;
 using Strokes = std::vector<Stroke>;
 constexpr float twoPi = 6.2831853f;
 
-enum Pic { PCat = 0, PStar, PHeart, PSmile, PNote, PLightning, PHouse, PSpiral, PFlower, PCube, PPyramid, PGlobe, PText, PDrawing, NumPics };
+enum Pic { PCat = 0, PStar, PHeart, PSmile, PNote, PLightning, PHouse, PSpiral, PFlower, PCube, PPyramid, PGlobe, PTesseract, PPenteract, PText, PDrawing, NumPics };
 
 Stroke poly (std::initializer_list<std::pair<float, float>> pts, bool close = false)
 {
@@ -168,6 +168,22 @@ Strokes makeBuiltIn (int pic)
             s = { eq, l1, m1, m2, l2 };
             break;
         }
+        case PTesseract:
+        case PPenteract:
+        {
+            // the hypercube: every corner (+-1 in 4 or 5 dimensions), an edge where two corners differ in one coordinate
+            const int dims = pic == PTesseract ? 4 : 5, corners = 1 << dims;
+            auto corner = [] (int c, int dims2)
+            {
+                float q[5] {};
+                for (int k = 0; k < dims2; ++k) q[k] = (c >> k) & 1 ? 0.5f : -0.5f;
+                return ScopeXYZ { q[0], q[1], q[2], q[3], q[4] };
+            };
+            for (int c = 0; c < corners; ++c)
+                for (int k = 0; k < dims; ++k)
+                    if (! ((c >> k) & 1)) s.push_back ({ corner (c, dims), corner (c | (1 << k), dims) });
+            break;
+        }
         default: break;
     }
     return s;
@@ -221,7 +237,7 @@ void buildTable (Strokes strokes, ScopeXYZ* out, std::vector<std::vector<juce::P
     if (strokes.empty()) { for (int i = 0; i < scopePoints; ++i) out[i] = {}; return; }
     // the order: always the nearest stroke next (either way round), so the jumps are short
     {
-        auto d2 = [] (const ScopeXYZ& a, const ScopeXYZ& b) { return (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z); };
+        auto d2 = [] (const ScopeXYZ& a, const ScopeXYZ& b) { return (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z) + (a.w - b.w) * (a.w - b.w) + (a.v - b.v) * (a.v - b.v); };
         Strokes ordered;
         ordered.reserve (strokes.size());
         std::vector<bool> used (strokes.size(), false);
@@ -259,22 +275,26 @@ void buildTable (Strokes strokes, ScopeXYZ* out, std::vector<std::vector<juce::P
     {
         half = 1e-4f;
         for (auto& s : strokes)
-            for (auto& p : s) half = std::max (half, std::sqrt ((p.x - cx) * (p.x - cx) + (p.y - cy) * (p.y - cy) + (p.z - cz) * (p.z - cz)));
+            for (auto& p : s) half = std::max (half, std::sqrt ((p.x - cx) * (p.x - cx) + (p.y - cy) * (p.y - cy) + (p.z - cz) * (p.z - cz) + p.w * p.w + p.v * p.v));
     }
     const float k = keepSize ? 1.0f : 0.92f / half;
     for (auto& s : strokes)
     {
-        for (auto& p : s) { p.x = (p.x - cx) * k; p.y = (p.y - cy) * k; p.z = (p.z - cz) * k; }
+        for (auto& p : s) { p.x = (p.x - cx) * k; p.y = (p.y - cy) * k; p.z = (p.z - cz) * k; p.w *= k; p.v *= k; }
         if (outline != nullptr)
         {
             outline->push_back ({});
-            for (auto& p : s) outline->back().push_back ({ p.x + p.z * 0.35f, p.y + p.z * 0.2f });   // 3D: seen a little from the side
+            for (auto& p : s)   // 3D: seen a little from the side; 4D / 5D: the inner cubes a little smaller (perspective)
+            {
+                const float f = 2.2f / (2.2f + p.w + p.v * 0.7f);
+                outline->back().push_back ({ (p.x + p.z * 0.35f) * f, (p.y + p.z * 0.2f) * f });
+            }
         }
     }
 
     struct Seg { ScopeXYZ a, b; float len; };
     std::vector<Seg> segs;
-    auto dist = [] (const ScopeXYZ& a, const ScopeXYZ& b) { return std::sqrt ((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z)); };
+    auto dist = [] (const ScopeXYZ& a, const ScopeXYZ& b) { return std::sqrt ((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z) + (a.w - b.w) * (a.w - b.w) + (a.v - b.v) * (a.v - b.v)); };
     for (size_t i = 0; i < strokes.size(); ++i)
     {
         const auto& s = strokes[i];
@@ -294,7 +314,7 @@ void buildTable (Strokes strokes, ScopeXYZ* out, std::vector<std::vector<juce::P
         while (si + 1 < segs.size() && at + segs[si].len < want) { at += segs[si].len; ++si; }
         const auto& sg = segs[si];
         const float f = sg.len > 0.0f ? juce::jlimit (0.0f, 1.0f, (want - at) / sg.len) : 0.0f;
-        out[i] = { sg.a.x + (sg.b.x - sg.a.x) * f, sg.a.y + (sg.b.y - sg.a.y) * f, sg.a.z + (sg.b.z - sg.a.z) * f };
+        out[i] = { sg.a.x + (sg.b.x - sg.a.x) * f, sg.a.y + (sg.b.y - sg.a.y) * f, sg.a.z + (sg.b.z - sg.a.z) * f, sg.a.w + (sg.b.w - sg.a.w) * f, sg.a.v + (sg.b.v - sg.a.v) * f };
     }
 }
 
@@ -331,11 +351,12 @@ void setCustom (int track, int which, const Strokes& s)
 
 juce::StringArray scopePictureNames()
 {
-    return { "Cat", "Star", "Heart", "Smile", "Note", "Lightning", "House", "Spiral", "Flower", "Cube", "Pyramid", "Globe", "Text", "Drawing" };
+    return { "Cat", "Star", "Heart", "Smile", "Note", "Lightning", "House", "Spiral", "Flower", "Cube", "Pyramid", "Globe", "Tesseract", "Penteract", "Text", "Drawing" };
 }
 int scopePictureText() { return PText; }
 int scopePictureDrawing() { return PDrawing; }
-bool scopePicture3D (int p) { return p == PCube || p == PPyramid || p == PGlobe; }
+bool scopePicture3D (int p) { return p == PCube || p == PPyramid || p == PGlobe || p == PTesseract || p == PPenteract; }
+bool scopePictureHyper (int p) { return p == PTesseract || p == PPenteract; }
 
 void scopeInit()
 {

@@ -1007,6 +1007,13 @@ public:
                     check (box.pictureNow() == p0, "Prev: the picture before", {});
                     step2 (9);
                     check (box.pictureNow() == 9 && box.leds().steps[9] == 3, "step button 10: picture 10 (its LED picked)", scopePictureNames()[9]);
+                    // the DRAW bug: DRAW, then another picture - the pad and "DRAW HERE" go away
+                    pc.setDrawMode (true);
+                    box.setPicture (scopePictureDrawing());
+                    pc.snapshotScreen();
+                    box.setPicture (0);
+                    pc.snapshotScreen();
+                    check (! pc.isDrawMode(), "DRAW ends when another picture is picked", {});
                     // every picture sounds on both sides, clean; the 3D ones turn
                     {
                         const auto& sdef = engineDef (EngineSynth);
@@ -1020,6 +1027,7 @@ public:
                         {
                             vals[sdef.index ("pic")] = (float) pic;
                             vals[sdef.index ("pturn")] = scopePicture3D (pic) ? 0.5f : 0.0f;
+                            vals[sdef.index ("phyper")] = scopePictureHyper (pic) ? 0.5f : 0.0f;
                             auto eng = makeEngine (EngineSynth);
                             eng->setTrack (st);
                             eng->prepare (sr);
@@ -1043,7 +1051,7 @@ public:
                             const bool good = rl > 0.03 && rrr > (pic == scopePictureText() ? 0.01 : 0.03) && pk < 2.0f && (! scopePicture3D (pic) || d / per > 0.01);
                             if (! good) { ok = false; worst << scopePictureNames()[pic] << " (L " << juce::String (rl, 3) << " R " << juce::String (rrr, 3) << " peak " << juce::String (pk, 2) << ") "; }
                         }
-                        check (ok, "all 14 pictures sound left and right, clean; the 3D ones turn", worst);
+                        check (ok, "all 16 pictures sound left and right, clean; the 3D / 4D / 5D ones turn", worst);
                     }
                     // your text
                     box.setScopeText ("HI");
@@ -1098,6 +1106,8 @@ public:
                     };
                     shot ("Cat Picture", "-scope3", screen);
                     shot ("Rotating Cube", "-scope4", screen);
+                    shot ("Tesseract 4D", "-scope7", screen);
+                    shot ("Penteract 5D", "-scope8", screen);
                     box.setScopeText ("MEOW");
                     shot (nullptr, "-scope5", screen);
                     pc.setDrawMode (true);

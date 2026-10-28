@@ -1984,6 +1984,7 @@ void View::drawScopeApp (juce::Graphics& g, juce::Rectangle<int> r)
     text1 (g, drawMode ? juce::String ("Draw on the scope with the mouse / finger - every stroke is heard at once | DRAW again: done")
                        : box.hint(), hintRow.reduced (12, 0), 11.5f, drawMode ? green : dim, juce::Justification::centredLeft);
     r = r.reduced (8, 6);
+    if (drawMode && box.pictureNow() != scopePictureDrawing()) drawMode = false;   // another picture picked: drawing is over
     // left: the scope (in DRAW mode also the pad you draw on)
     auto sq = r.removeFromLeft (r.getHeight());
     scopeHit = sq;
@@ -2016,7 +2017,7 @@ void View::drawScopeApp (juce::Graphics& g, juce::Rectangle<int> r)
     r.removeFromBottom (6);
     const auto names = scopePictureNames();
     const int pic = box.pictureNow(), st = juce::jmax (0, box.synthTrack());
-    const int cols = 7, rows = (names.size() + cols - 1) / cols;
+    const int cols = 8, rows = (names.size() + cols - 1) / cols;
     const int cw = r.getWidth() / cols, ch = r.getHeight() / rows;
     for (int i = 0; i < names.size(); ++i)
     {
