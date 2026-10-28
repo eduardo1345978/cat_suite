@@ -34,20 +34,40 @@ else
 fi
 
 echo "== 3/3 Start with the Pi"
-# the desktop starts everything in ~/.config/autostart after logging in (enable auto-login in raspi-config)
+# a small launcher: waits for the screen, starts Cat Box full screen, starts it again if it ever closes or crashes
+cat > "$HOME/.local/bin/cat-box-run" <<EOF
+#!/usr/bin/env bash
+# Cat Box on the box: one copy only, started again if it stops (to stop it: pkill -f cat-box-run; pkill -if "cat-box --kiosk")
+pgrep -if "cat-box --kiosk" >/dev/null && exit 0
+sleep 3
+command -v xset >/dev/null && xset s off -dpms 2>/dev/null || true   # never blank the screen (X11)
+while true; do
+    "$HOME/.local/bin/cat-box" --kiosk
+    sleep 2
+done
+EOF
+chmod +x "$HOME/.local/bin/cat-box-run"
+# the desktop starts everything in ~/.config/autostart after logging in
 mkdir -p "$HOME/.config/autostart"
 cat > "$HOME/.config/autostart/cat-box.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Cat Box
-Exec=$HOME/.local/bin/cat-box --kiosk
+Exec=$HOME/.local/bin/cat-box-run
 X-GNOME-Autostart-enabled=true
 EOF
+# log in by itself to the desktop and never blank the screen (Raspberry Pi OS)
+if command -v raspi-config >/dev/null; then
+    sudo raspi-config nonint do_boot_behaviour B4 || true   # desktop, auto-login
+    sudo raspi-config nonint do_blanking 1 || true          # screen blanking off
+fi
 
 cat <<'EOF'
 
-Done. Cat Box starts full screen after the next reboot (sudo reboot).
+Done. Cat Box starts full screen by itself after the next reboot (sudo reboot), and again if it ever closes.
 Try it now from the desktop:   ~/.local/bin/cat-box --kiosk     (right-click = sound card / MIDI)
+Stop it (Ctrl + Alt + T for a terminal, or over ssh):   pkill -f cat-box-run; pkill -if "cat-box --kiosk"
+Free sample libraries (optional, a few GB):   bash CatBox/pi/get_libraries.sh
 
 HiFiBerry: add the line for your board to /boot/firmware/config.txt (see HiFiBerry's guide for
 the exact overlay name, e.g. dtoverlay=hifiberry-dacplus-std), reboot, and Cat Box picks the
