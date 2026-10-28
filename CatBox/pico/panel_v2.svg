@@ -141,11 +141,11 @@
 <text x="260.0" y="153.0" font-size="2.6" fill="#7fdcff" text-anchor="middle" font-weight="normal">12</text>
 <text x="205.0" y="100.0" font-size="2.8" fill="#7fdcff" text-anchor="middle" font-weight="normal">12 ENCODERS (push + turn = the second layer)</text>
 <rect x="285.0" y="103.0" width="14.0" height="14.0" fill="#fff" stroke="#000" stroke-width="0.2"/>
-<text x="292.0" y="121.5" font-size="2.6" fill="#ffb02e" text-anchor="middle" font-weight="normal">SYNTH</text>
-<rect x="307.0" y="103.0" width="14.0" height="14.0" fill="#fff" stroke="#000" stroke-width="0.2"/>
-<text x="314.0" y="121.5" font-size="2.6" fill="#ffb02e" text-anchor="middle" font-weight="normal">DRUMS</text>
-<rect x="329.0" y="103.0" width="14.0" height="14.0" fill="#fff" stroke="#000" stroke-width="0.2"/>
-<text x="336.0" y="121.5" font-size="2.6" fill="#ffb02e" text-anchor="middle" font-weight="normal">STUDIO</text>
+<text x="292.0" y="121.5" font-size="2.6" fill="#ffb02e" text-anchor="middle" font-weight="normal">HOME</text>
+
+
+
+
 <rect x="285.0" y="133.0" width="14.0" height="14.0" fill="#fff" stroke="#000" stroke-width="0.2"/>
 <text x="292.0" y="151.5" font-size="2.6" fill="#e8e2d4" text-anchor="middle" font-weight="normal">SOUND</text>
 <rect x="307.0" y="133.0" width="14.0" height="14.0" fill="#fff" stroke="#000" stroke-width="0.2"/>

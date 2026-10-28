@@ -2,7 +2,7 @@
 
 A front panel like an analog synth: **28 potentiometers** for the sound (one per job, nothing to page through),
 **12 push encoders** under the screen for everything else (they are the 12 knobs you see on the screen),
-**16 step buttons with LEDs** (TR-808 colours), the screen buttons **SYNTH / DRUMS / STUDIO** and the rest.
+**16 step buttons with LEDs** (TR-808 colours), a **HOME** button (the apps) and the rest.
 A Raspberry Pi Pico reads it all and talks to the Pi 5 (Cat Box) over USB MIDI. Cat Box needs no setup.
 
 The drawing with every hole: `../panel_v2.svg` (1 unit = 1 mm, 420 x 235 mm; print it in two halves along the
@@ -25,9 +25,9 @@ when you turn it past the sound's value** (the screen tells you where that is).
 
 Encoders 1-12 = the 12 knobs on the screen (its pages: ◀ ▶). **Push and turn** = that knob's second layer (like Shift).
 
-Buttons: SYNTH, DRUMS, STUDIO (screens) · Sound (sounds: once = the knobs, twice = the browser) · Scene · Project (twice =
+Buttons: **HOME** (the apps: then step 1-6 opens SYNTH, DRUMS, STUDIO, SCOPE, SAMPLER, SETTINGS; HOME again = back where you were) · Sound (sounds: once = the knobs, twice = the browser) · Scene · Project (twice =
 MENU) · Shift · ◀ ▶ · Chaos (Shift + Chaos = undo) · Play · Rec.
-Steps: DRUMS = the steps of the drum you picked (**Shift + step** = pick a drum and hear it); SYNTH = the synth's own
+Steps: HOME = the apps 1-6; DRUMS = the steps of the drum you picked (**Shift + step** = pick a drum and hear it); SYNTH = the synth's own
 steps; STUDIO + Shift = step 1-8 picks the track.
 LEDs: a step that is on (dim, its group's colour), the step playing (white), the picked one (blue); the screen
 buttons, Play (green), Rec (red).
@@ -43,9 +43,9 @@ buttons, Play (green), Rec (red).
 | Knobs for them (one bigger for Cutoff) | 28 | 12 EUR |
 | Rotary encoder EC11 with push switch, 20 mm shaft | 12 | 15 EUR |
 | Encoder knobs | 12 | 5 EUR |
-| MX-style key switches (or Kailh Choc) | 31 | 10 EUR |
-| Keycaps, transparent / light (to see the LEDs) | 31 | 10 EUR |
-| SK6812 MINI-E LEDs (or a WS2812 strip, 60 / m, cut) | 21 | 5 EUR |
+| MX-style key switches (or Kailh Choc) | 29 | 10 EUR |
+| Keycaps, transparent / light (to see the LEDs) | 29 | 10 EUR |
+| SK6812 MINI-E LEDs (or a WS2812 strip, 60 / m, cut) | 19 | 5 EUR |
 | 5" HDMI screen 800 x 480 (Waveshare 5inch or similar) | 1 | 40 EUR |
 | Perfboard, wires (silicone, 24-26 AWG), headers, 100 nF capacitors, a 330 ohm resistor | | 12 EUR |
 | PLA / PETG for the case | | 10 EUR |
@@ -59,7 +59,7 @@ VSS (pin 10) to GND, a 100 nF capacitor across each chip. Addresses with A0-A2 (
 |---|---|---|---|
 | 1 | GND GND GND | 0x20 | encoders 1-8: encoder n = A on GPA/GPB bit 2(n-1), B on the next bit (GPA0+1 = enc 1 ... GPB6+7 = enc 8) |
 | 2 | GND GND 3V3 | 0x21 | encoders 9-12 on GPA0-7 (the same way); pushes 1-8 on GPB0-7 |
-| 3 | GND 3V3 GND | 0x22 | pushes 9-12 on GPA0-3; buttons on GPA4-GPB7 in this order: SYNTH, DRUMS, STUDIO, Play, Rec, Shift, Prev, Next, Sound, Scene, Project, Chaos |
+| 3 | GND 3V3 GND | 0x22 | pushes 9-12 on GPA0-3; buttons on GPA4-GPB5 in this order: HOME, Play, Rec, Shift, Prev, Next, Sound, Scene, Project, Chaos (GPB6-7 free) |
 | 4 | GND 3V3 3V3 | 0x23 | the 16 step buttons: GPA0 = step 1 ... GPB7 = step 16 |
 
 Every encoder's middle pin (C) and the other leg of every switch go to GND (the pull-ups are inside the chips).
@@ -73,7 +73,7 @@ Emphasis, Contour, Overload, High pass, F attack, F decay, F sustain, F release,
 A release, LFO rate, LFO amount, Delay time, Feedback, Delay, Reverb size, Reverb, Glide, Volume.
 
 **LEDs**: one chain from GP15 (through a 330 ohm resistor) to DIN; 5 V from VBUS (pin 40), GND. Order along the chain:
-steps 1-16, SYNTH, DRUMS, STUDIO, Play, Rec.
+steps 1-16, HOME, Play, Rec.
 
 **USB**: the Pico into the Pi 5. It shows up as **Cat Box Panel**.
 
@@ -96,7 +96,7 @@ the step LEDs follow.
 | Potentiometers 1-28 | CC 40-67, 0-127 |
 | Encoders 1-12 | CC 20-31, relative (1 = right, 127 = left) |
 | Encoder pushes 1-12 | CC 70-81 (127 down, 0 up) |
-| SYNTH / DRUMS / STUDIO | CC 85 / 86 / 87 |
+| HOME | CC 85 (CC 86 / 87 = DRUMS / STUDIO still work, for the first firmware) |
 | Other buttons | CC 102 + button number (Sound 110, Project 114, Prev 115, Next 116, Shift 117, Scene 118, Rec 119, Play 120, Chaos 121) |
 | Step buttons 1-16 | notes 60-75 |
-| LEDs (Cat Box > panel) | notes 60-75 (velocity 1 on, 2 playing, 3 picked), 85-87 screens, 88 Play, 89 Rec |
+| LEDs (Cat Box > panel) | notes 60-75 (velocity 1 on, 2 playing, 3 picked), 85 HOME (lit on HOME), 88 Play, 89 Rec |

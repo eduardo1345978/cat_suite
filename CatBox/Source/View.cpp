@@ -1947,7 +1947,7 @@ void View::drawHome (juce::Graphics& g, juce::Rectangle<int> r)
     text1 (g, "BPM", right.removeFromRight (40).withTrimmedLeft (4), 12.0f, dim, juce::Justification::centredLeft);
 
     auto hintRow = r.removeFromBottom (26);
-    text1 (g, kiosk ? "Touch an app - or step / pad 1-6 | SYNTH, DRUMS, STUDIO buttons go straight there | Shift + one of them: back HOME"
+    text1 (g, kiosk ? "Touch an app - or step / pad 1-6 | the HOME button: here from any app, and back again"
                     : "Click an app - or keys 1-6 | Esc: back HOME from any app",
            hintRow.reduced (20, 0), 12.0f, dim, juce::Justification::centredLeft);
     auto grid = r.reduced (14, 4);

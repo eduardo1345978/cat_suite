@@ -751,6 +751,7 @@ void Controller::startSampling()
     if (enableMicrophone && ! enableMicrophone())
     {
         setFlash ("No input: connect a microphone (right-click > Sound card)");
+        if (disableMicrophone) disableMicrophone();
         return;
     }
     audio.captureLength = 0;
@@ -761,6 +762,7 @@ void Controller::startSampling()
 void Controller::stopSampling()
 {
     audio.capturing = false;
+    if (disableMicrophone) disableMicrophone();
     const int len = audio.captureLength.load();
     const auto& L = audio.captureL;
     const auto& R = audio.captureR;
@@ -1630,7 +1632,7 @@ juce::String Controller::pageName() const
 
 juce::String Controller::hint() const
 {
-    if (screen == ScreenHome) return "Pick an app: touch it, or step / pad 1-6 | SYNTH, DRUMS, STUDIO buttons go straight there";
+    if (screen == ScreenHome) return "Pick an app: touch it, or step / pad 1-6 | HOME again: back to the app you came from";
     if (screen == ScreenScope) return "Knobs: picture, size, spin, 3D turn, 4D/5D turn, wobble, twist ... | Prev / Next: picture | play a key or HOLD (Rec) | Shift: more";
     if (sceneMode.load()) return "Pads 1-8: scenes (Rec + pad = save) | pads 9-16: mute | Scene: back";
     if (assignPending >= 0) return assignPending == assignMy ? "Turn the knob you want on your MY page (any page, any mode) | Project: cancel"
@@ -2133,9 +2135,10 @@ void Controller::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMe
             {
                 if (v >= 64) runOnMessageThread ([this, s = cc - screenButtonCC]
                 {
-                    // Shift + a screen button, or the button of the app you are in: HOME
+                    if (s == 0) { homeButton(); return; }   // HOME
+                    // the first panel firmware also had DRUMS and STUDIO buttons
                     if (shift.load() || screen.load() == s) { goHome(); return; }
-                    s == 0 ? goSynth() : s == 1 ? goDrums() : goStudio();
+                    s == 1 ? goDrums() : goStudio();
                 });
                 return;
             }
@@ -3211,9 +3214,16 @@ void Controller::openApp (int app)
     }
 }
 
+void Controller::homeButton()
+{
+    if (screen.load() == ScreenHome) { openApp (lastApp); return; }   // HOME again: back where you were
+    goHome();
+}
+
 void Controller::goHome()
 {
     if (isRemote()) return;
+    for (int a = 0; a < NumApps; ++a) if (appScreen (a) == screen.load()) lastApp = a;
     sceneMode = false;
     screen = ScreenHome;
     if (onChange) onChange();
@@ -3674,6 +3684,7 @@ Controller::Leds Controller::leds() const
 {
     Leds l;
     const int scr = screen.load();
+    l.home = scr == ScreenHome;
     l.screen = scr == ScreenHome ? -1 : scr == ScreenScope ? ScreenSynth : scr >= ScreenHome ? ScreenStudio : scr;
     if (scr == ScreenHome)
     {

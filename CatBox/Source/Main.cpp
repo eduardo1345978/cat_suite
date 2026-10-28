@@ -324,6 +324,8 @@ public:
                 box.setMode (ModeSound);
                 soloOnly (7);
                 if (audio.isPlaying()) press (BtnPlay);
+                bool inputClosed = false;
+                box.disableMicrophone = [&inputClosed] { inputClosed = true; };
                 press (BtnRec);
                 check (box.isSampling(), "Rec on a sampler track records a sample", box.flashText());
                 std::vector<float> in (480);
@@ -337,6 +339,8 @@ public:
                 const auto* smp = SampleBank::get().at (slot);
                 check (! box.isSampling() && smp != nullptr && smp->name.startsWith ("Rec") && smp->length() < 48000 * 0.95,
                        "Rec again stops: the new sample is on the track (silence cut off)", smp != nullptr ? smp->name + " " + juce::String (smp->length()) : juce::String ("none"));
+                check (inputClosed, "and the microphone input is closed again (an open input makes the sound stutter)", {});
+                box.disableMicrophone = nullptr;
                 box.keyDown (67, 100);
                 const auto st = renderSeconds (audio, 0.5, nullptr);
                 box.keyUp (67);
@@ -635,7 +639,7 @@ public:
                 auto cc = [&box] (int n, int v) { box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (controllerChannel, n, v)); };
                 auto note = [&box] (int n, bool on) { box.handleIncomingMidiMessage (nullptr, on ? juce::MidiMessage::noteOn (controllerChannel, n, (juce::uint8) 100) : juce::MidiMessage::noteOff (controllerChannel, n)); };
                 cc (screenButtonCC + 1, 127); cc (screenButtonCC + 1, 0);
-                check (box.getScreen() == Controller::ScreenDrums, "v2: the DRUMS button", {});
+                check (box.getScreen() == Controller::ScreenDrums, "v2: the DRUMS button (the first panel firmware)", {});
                 const int dtr = box.getTrack();
                 const auto lane0 = box.getProject().tracks[(size_t) dtr].pat.drums[(size_t) box.seqLane()][2];
                 note (firstStepNote + 2, true); note (firstStepNote + 2, false);
@@ -643,7 +647,9 @@ public:
                 check (box.leds().steps[2] == (lane0 > 0 ? 0 : 1) || box.leds().steps[2] == 3, "v2: and its LED follows", juce::String (box.leds().steps[2]));
                 note (firstStepNote + 2, true); note (firstStepNote + 2, false);
                 cc (screenButtonCC, 127); cc (screenButtonCC, 0);
-                check (box.getScreen() == Controller::ScreenSynth, "v2: the SYNTH button", {});
+                check (box.getScreen() == Controller::ScreenHome && box.leds().home, "v2: the HOME button (its LED lit)", {});
+                note (firstStepNote + 0, true); note (firstStepNote + 0, false);
+                check (box.getScreen() == Controller::ScreenSynth && ! box.leds().home, "v2: on HOME, step 1 = SYNTH", {});
                 const int stk = box.synthTrack();
                 const auto& sdef2 = engineDef (EngineSynth);
                 const int cutI = sdef2.index ("cutoff");
@@ -664,7 +670,7 @@ public:
                 box.pump(); wait (50);
                 check (box.getProject().tracks[(size_t) stk].params[(size_t) pg.slot[12]] != b4, "v2: push + turn = the knob's second layer", {});
                 cc (screenButtonCC + 2, 127); cc (screenButtonCC + 2, 0);
-                check (box.getScreen() == Controller::ScreenStudio && box.leds().screen == Controller::ScreenStudio, "v2: the STUDIO button (and its LED)", {});
+                check (box.getScreen() == Controller::ScreenStudio && box.leds().screen == Controller::ScreenStudio, "v2: the STUDIO button (the first panel firmware, and its LED)", {});
                 box.setMode (ModeSound);
             }
 
@@ -986,9 +992,9 @@ public:
                     box.goHome(); step2 (4);
                     check (box.getScreen() == Controller::ScreenSampler, "HOME: step button 5 opens SAMPLER", juce::String (box.getScreen()));
                     cc2 (screenButtonCC, 127); cc2 (screenButtonCC, 0);
-                    check (box.getScreen() == Controller::ScreenSynth, "the SYNTH button: SYNTH", {});
+                    check (box.getScreen() == Controller::ScreenHome, "the HOME button: HOME", {});
                     cc2 (screenButtonCC, 127); cc2 (screenButtonCC, 0);
-                    check (box.getScreen() == Controller::ScreenHome, "the SYNTH button again: HOME", {});
+                    check (box.getScreen() == Controller::ScreenSampler, "HOME again: back to the app you came from (SAMPLER)", juce::String (box.getScreen()));
                     box.goSampler();
                     savePng (screen.snapshotScreen(), "-sampler");
                     box.goSettings();
@@ -1414,7 +1420,7 @@ private:
             for (auto& o : outs) o->sendMessageNow (m);
         };
         for (int k = 0; k < 16; ++k) send (firstStepNote + k, l.steps[(size_t) k], lastStep[(size_t) k]);
-        for (int s = 0; s < 3; ++s) send (ledScreenNote + s, l.screen == s ? 1 : 0, lastScreen[(size_t) s]);
+        send (ledScreenNote, l.home ? 1 : 0, lastScreen[0]);   // the HOME button's LED: lit on HOME
         send (ledPlayNote, l.playing ? 1 : 0, lastPlay);
         send (ledRecNote, l.rec ? 1 : 0, lastRec);
     }
@@ -1488,6 +1494,7 @@ public:
             auto* dev = deviceManager.getCurrentAudioDevice();
             return err.isEmpty() && dev != nullptr && dev->getActiveInputChannels().countNumberOfSetBits() > 0;
         };
+        box->disableMicrophone = [this] { closeInput(); };
         std::function<juce::String()> info;
         if (isBox)
         {
@@ -1559,12 +1566,13 @@ private:
         if (auto* dev = deviceManager.getCurrentAudioDevice(); dev != nullptr && (saved == nullptr || dev->getCurrentBufferSizeSamples() > 256))
         {
             int best = dev->getCurrentBufferSizeSamples();
-            for (int b : dev->getAvailableBufferSizes()) if (b >= 128 && b < best) best = b;
+            for (int b : dev->getAvailableBufferSizes()) if (b >= 256 && b < best) best = b;   // 256: quick and safe (smaller by hand in the right-click menu)
             auto setup = deviceManager.getAudioDeviceSetup();
             setup.bufferSize = best;
             deviceManager.setAudioDeviceSetup (setup, true);
         }
        #endif
+        closeInput();   // an input left open from a recording (saved settings) would make the sound stutter
         deviceManager.addAudioCallback (&box->getAudio());
         enableMidiInputs();
         deviceManager.addMidiInputDeviceCallback ({}, box.get());
@@ -1581,7 +1589,44 @@ private:
             }
     }
 
-    void timerCallback() override { enableMidiInputs(); }
+    void timerCallback() override
+    {
+        enableMidiInputs();
+        // the sound stutters (the computer can't keep up with this buffer): a bigger buffer, by itself
+        if (auto* dev = deviceManager.getCurrentAudioDevice())
+        {
+            const int x = dev->getXRunCount();
+            if (x >= 0 && lastXRuns >= 0 && x - lastXRuns >= 3 && box != nullptr && ! box->isSampling())
+            {
+                const int now = dev->getCurrentBufferSizeSamples();
+                int next = now;
+                for (int b : dev->getAvailableBufferSizes()) if (b > now && (next == now || b < next)) next = b;
+                if (next != now && next <= 1024)
+                {
+                    auto setup = deviceManager.getAudioDeviceSetup();
+                    setup.bufferSize = next;
+                    deviceManager.setAudioDeviceSetup (setup, true);
+                    box->notify ("The sound stuttered: buffer " + juce::String (next) + " (right-click > Response)");
+                    lastXRuns = -1;
+                    return;
+                }
+            }
+            lastXRuns = x;
+        }
+    }
+    int lastXRuns = -1;
+
+    /** The microphone input closed (it is opened only while a sample is recorded). */
+    void closeInput()
+    {
+        auto* dev = deviceManager.getCurrentAudioDevice();
+        if (dev == nullptr || dev->getActiveInputChannels().countNumberOfSetBits() == 0) return;
+        auto setup = deviceManager.getAudioDeviceSetup();
+        setup.inputDeviceName = {};
+        setup.useDefaultInputChannels = false;
+        setup.inputChannels.clear();
+        deviceManager.setAudioDeviceSetup (setup, true);
+    }
 
     juce::AudioDeviceManager deviceManager;
     std::unique_ptr<Controller> box;

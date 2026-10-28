@@ -8,7 +8,7 @@ in one key. Nothing is generated: you play it in or tap it into the steps.
 
 It starts on **HOME**: six apps as big icons - touch or click one (or step / pad / key 1-6). Each app shows only its own
 things; everything still plays together (one project, one tempo). **Back HOME**: the little house top left, `Esc` on the
-PC, on the box Shift + SYNTH / DRUMS / STUDIO (or the button of the app you are in).
+PC, on the box the **HOME** button (on HOME it takes you back to the app you came from).
 
 1. **SYNTH** - the synthesizer (below) · 2. **DRUMS** - the drum machine · 3. **STUDIO** - everything else (8 tracks,
 SEQ, note FX, mix, project) · 4. **SCOPE** - pictures on the oscilloscope · 5. **SAMPLER** - the sampler track, its SOUND
@@ -180,9 +180,9 @@ The firmware and the wiring are in `CatBox/pico` (Arduino IDE, about 10 minutes 
 
 28 potentiometers on the synth (oscillators, filter, envelopes, LFO, delay and reverb, glide, volume - they pick the
 value up when they pass it, nothing jumps), 12 push encoders = the 12 knobs on the screen (push + turn = the second
-layer), 16 step buttons with LEDs, SYNTH / DRUMS / STUDIO buttons. Firmware, wiring, parts and the panel drawing:
+layer), 16 step buttons with LEDs, a HOME button (then step 1-6 = the app). Firmware, wiring, parts and the panel drawing:
 `CatBox/pico/catbox_panel_v2` and `CatBox/pico/panel_v2.svg`. MIDI channel 16: pots CC 40-67, pushes CC 70-81,
-screens CC 85-87, steps notes 60-75 (the LEDs come back on the same notes).
+HOME CC 85, steps notes 60-75 (the LEDs come back on the same notes).
 On the box's own screen (`--kiosk`) the SYNTH page doesn't repeat the labelled pots: it shows the sound alive - a
 **XY oscilloscope** (left channel = X, right = Y, green phosphor with afterglow - tap it for full screen), the wave
 and its spectrum,

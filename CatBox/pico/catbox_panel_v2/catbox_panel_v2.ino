@@ -3,7 +3,7 @@
 //   28 potentiometers  CC 40-67 (absolute 0-127)          two CD74HC4067 multiplexers into ADC0 / ADC1
 //   12 push encoders   CC 20-31 (relative: 1 = one click right, 127 = one click left), pushes CC 70-81
 //   16 step buttons    notes 60-75 (on / off)               LEDs: the same notes come back (velocity = what to show)
-//   SYNTH DRUMS STUDIO CC 85-87                              LEDs: notes 85-87
+//   HOME               CC 85 (to the apps; on HOME: back)  LED: note 85 (lit on HOME)
 //   Play Rec Shift Prev Next Sound Scene Project Chaos       the box's button CCs (102 + button number)
 //   (LEDs: Play note 88, Rec note 89)
 // everything on MIDI channel 16 - exactly what Cat Box expects (CatBox/README.md, "The box, version 2").
@@ -29,17 +29,18 @@ const uint8_t sdaPin = 4, sclPin = 5;                 // I2C0: the four MCP23017
 const uint8_t muxSel[4] = { 10, 11, 12, 13 };         // S0..S3 of both multiplexers
 const uint8_t muxA = 26, muxB = 27;                   // their SIG pins: ADC0 (pots 1-16), ADC1 (pots 17-28)
 const uint8_t ledPin = 15;                            // the WS2812 / SK6812 chain (data in)
-const int numLeds = 21;                               // 16 steps, SYNTH, DRUMS, STUDIO, Play, Rec
+const int numLeds = 19;                               // 16 steps, HOME, Play, Rec
 
 // ---- the four MCP23017 (addresses 0x20-0x23)
 //   0x20  encoders 1-8 (A on even bits, B on odd bits)
 //   0x21  encoders 9-12 (bits 0-7), pushes 1-8 (bits 8-15)
-//   0x22  pushes 9-12 (bits 0-3), buttons (bits 4-15, below)
+//   0x22  pushes 9-12 (bits 0-3), buttons (bits 4-13, below; 14-15 free)
 //   0x23  the 16 step buttons (bit = step)
 const uint8_t mcp[4] = { 0x20, 0x21, 0x22, 0x23 };
-// the buttons on 0x22 bits 4-15: what each one sends (CC number)
-const uint8_t buttonCC[12] = {
-    screenCC + 0, screenCC + 1, screenCC + 2,         // SYNTH, DRUMS, STUDIO
+// the buttons on 0x22 bits 4-13: what each one sends (CC number)
+const int numButtons = 10;
+const uint8_t buttonCC[numButtons] = {
+    screenCC + 0,                                     // HOME
     firstButtonCC + 18, firstButtonCC + 17,           // Play, Rec
     firstButtonCC + 15, firstButtonCC + 13, firstButtonCC + 14,   // Shift, Prev, Next
     firstButtonCC + 8, firstButtonCC + 16,            // Sound (sounds / browser), Scene
@@ -52,8 +53,8 @@ uint16_t bits[4] {};
 uint8_t encState[12] {};
 int8_t encAccum[12] {};
 int clicks[12] {};
-bool pushDown[12] {}, buttonDown[12] {}, stepDown[16] {};
-uint32_t pushT[12] {}, buttonT[12] {}, stepT[16] {};
+bool pushDown[12] {}, buttonDown[numButtons] {}, stepDown[16] {};
+uint32_t pushT[12] {}, buttonT[numButtons] {}, stepT[16] {};
 float potF[28] {};
 int potSent[28];
 uint8_t stepLed[16] {}, screenLed[3] {}, playLed = 0, recLed = 0;
@@ -106,9 +107,9 @@ uint32_t stepColour (int k, uint8_t code)
 void showLeds()
 {
     for (int k = 0; k < 16; ++k) leds.setPixelColor (k, stepColour (k, stepLed[k]));
-    for (int s = 0; s < 3; ++s) leds.setPixelColor (16 + s, screenLed[s] ? leds.Color (255, 140, 40) : leds.Color (6, 4, 2));
-    leds.setPixelColor (19, playLed ? leds.Color (0, 220, 60) : leds.Color (0, 6, 2));
-    leds.setPixelColor (20, recLed ? leds.Color (255, 20, 20) : leds.Color (6, 0, 0));
+    leds.setPixelColor (16, screenLed[0] ? leds.Color (255, 140, 40) : leds.Color (6, 4, 2));   // HOME
+    leds.setPixelColor (17, playLed ? leds.Color (0, 220, 60) : leds.Color (0, 6, 2));
+    leds.setPixelColor (18, recLed ? leds.Color (255, 20, 20) : leds.Color (6, 0, 0));
     leds.show();
     ledsDirty = false;
 }
@@ -177,7 +178,7 @@ void sendControls()
         const bool down = k < 8 ? ! ((bits[1] >> (8 + k)) & 1) : ! ((bits[2] >> (k - 8)) & 1);
         if (debounced (down, pushDown[k], pushT[k])) MIDI.sendControlChange (firstPushCC + k, down ? 127 : 0, channel);
     }
-    for (int b = 0; b < 12; ++b)
+    for (int b = 0; b < numButtons; ++b)
     {
         const bool down = ! ((bits[2] >> (4 + b)) & 1);
         if (debounced (down, buttonDown[b], buttonT[b])) MIDI.sendControlChange (buttonCC[b], down ? 127 : 0, channel);

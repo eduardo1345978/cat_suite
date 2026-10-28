@@ -41,7 +41,7 @@ constexpr int firstPadNote = 36;      // 36..51: the 16 pads
 constexpr int numPots = 28;
 constexpr int firstPotCC = 40;        // 40..67: the potentiometers (absolute 0..127; they pick the value up when they pass it)
 constexpr int firstPushCC = 70;       // 70..81: the 12 encoders' pushes (push + turn = the second layer of that knob)
-constexpr int screenButtonCC = 85;    // 85 SYNTH, 86 DRUMS, 87 STUDIO
+constexpr int screenButtonCC = 85;    // 85 HOME (86 DRUMS, 87 STUDIO: the first panel firmware)
 constexpr int firstStepNote = 60;     // 60..75: the 16 step buttons (and their LEDs, sent back)
 constexpr int ledScreenNote = 85, ledPlayNote = 88, ledRecNote = 89;
 
@@ -190,6 +190,7 @@ public:
     void goDrums();
     void goStudio();
     void goHome();
+    void homeButton();                     // the box's HOME button: HOME, and from HOME back to the app you came from
     void goScope();
     void goSampler();
     void goSettings();
@@ -229,7 +230,7 @@ public:
     bool potHolds (int pot) const { return potGrab[(size_t) juce::jlimit (0, numPots - 1, pot)]; }
     void stepButton (int step, bool down);
     /** What the box's LEDs show: the 16 steps (0 off, 1 on, 2 the playing step, 3 picked), the screen, play, rec. */
-    struct Leds { std::array<uint8_t, 16> steps {}; int screen = 0; bool playing = false, rec = false; };
+    struct Leds { std::array<uint8_t, 16> steps {}; int screen = 0; bool home = false, playing = false, rec = false; };
     /** The knob turned last on the box (the screen shows it big for a moment). potNorm: where the pot is while it waits to take over. */
     struct Touch { juce::String name, value; float norm = 0.0f, potNorm = -1.0f; bool waiting = false; juce::uint32 at = 0; };
     const Touch& lastTouch() const noexcept { return touch; }
@@ -263,6 +264,8 @@ public:
     std::function<void()> onChange;   // the screen repaints
     /** The app switches the sound card's input on (returns false when there is none). */
     std::function<bool()> enableMicrophone;
+    std::function<void()> disableMicrophone;   // after a recording: the input is closed again (an open input can make the sound stutter)
+    void notify (const juce::String& s) { setFlash (s); }
     bool isSampling() const noexcept { return audio.capturing.load(); }
     void startSampling();
     void stopSampling();
@@ -339,6 +342,7 @@ private:
     int sendFxPreset = 0, chainIdx = 0;
     std::atomic<int> screen { ScreenStudio };
     bool scopeHold = false;
+    int lastApp = AppSynth;               // the app HOME was opened from
     int scopeHoldTrack = -1;
     std::array<juce::String, numTracks> scopeTextBuilt, scopeDrawBuilt;
     bool scopeSynced = false;
