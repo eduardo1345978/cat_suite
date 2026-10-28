@@ -1,0 +1,48 @@
+# Cat Box on its own: after every push to main, the Cat Box part (tools/export_catbox.sh) goes to
+# github.com/eduardo1345978/cat-box. Needs the secret CATBOX_DEPLOY_KEY (a deploy key of cat-box with write access).
+name: Sync Cat Box repository
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'CatBox/**'
+      - 'Shared/Source/CatSounds.*'
+      - 'Shared/Source/SafetyLimiter.h'
+      - 'GlideCat/Source/**'
+      - 'OrbitCat/Source/OrbitEngine.*'
+      - 'SingCat/Source/**'
+      - 'CatHub/Resources/icon*'
+      - 'cmake/**'
+      - 'tools/**'
+      - 'get_libraries.bat'
+      - 'build_catbox.bat'
+      - '.github/workflows/sync-catbox.yml'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    name: Copy Cat Box to cat-box
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push to github.com/eduardo1345978/cat-box
+        env:
+          KEY: ${{ secrets.CATBOX_DEPLOY_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then echo "::warning::The secret CATBOX_DEPLOY_KEY is missing, nothing copied"; exit 0; fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          git clone git@github.com:eduardo1345978/cat-box.git out
+          bash tools/export_catbox.sh out
+          msg="$(git log -1 --format=%s)"
+          cd out
+          git config user.name "Cat Box sync"
+          git config user.email "catbox-sync@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "Nothing new for Cat Box"; exit 0; fi
+          git commit -q -m "$msg" -m "From cat_suite ${GITHUB_SHA::7}"
+          git push origin HEAD:main

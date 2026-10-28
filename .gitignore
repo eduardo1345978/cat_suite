@@ -8,3 +8,4 @@ out/
 *.user
 .DS_Store
 CatBox/library/
+_catbox_key/

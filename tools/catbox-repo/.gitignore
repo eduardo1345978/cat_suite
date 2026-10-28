@@ -1,0 +1,11 @@
+build/
+build-*/
+cmake-build-*/
+out/
+.vs/
+.vscode/
+.idea/
+*.user
+.DS_Store
+CatBox/library/
+build_catbox_log.txt
