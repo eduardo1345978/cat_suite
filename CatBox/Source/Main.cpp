@@ -633,7 +633,7 @@ public:
                 for (int v = far; v != at + (far < at ? 3 : -3); v += far < at ? 1 : -1) cc (firstPotCC + potCut, v);   // turned through it
                 check (box.potHolds (potCut) && box.getProject().tracks[(size_t) stk].params[(size_t) cutI] != cut0, "v2: when it passes the value it takes over", box.flashText());
                 cc (firstPotCC + 23, 127);   // reverb size up
-                check (box.getProject().m.revSize > 0.9f || box.flashText().contains ("take it over"), "v2: an EFFECTS pot (reverb size)", juce::String (box.getProject().m.revSize));
+                check (box.getProject().m.revSize > 0.9f || box.lastTouch().waiting, "v2: an EFFECTS pot (reverb size)", juce::String (box.getProject().m.revSize));
                 const auto& pg = engineDef (EngineSynth).pages[0];
                 const float b4 = box.getProject().tracks[(size_t) stk].params[(size_t) pg.slot[12]];
                 cc (firstPushCC + 0, 127); cc (firstKnobCC + 0, 3); cc (firstPushCC + 0, 0);
@@ -886,7 +886,20 @@ public:
                         int pi = 0;
                         for (size_t i = 0; i < sdef.presets.size(); ++i) if (! sdef.presets[i].values.empty() && (int) sdef.presets[i].values[0].second == mdl) { pi = (int) i; break; }
                         box.loadSound (box.getTrack(), EngineSynth, pi);
+                        // a chord playing (the scopes have something to show), a pot just turned
+                        for (int nt : { 48, 55, 60 }) audio.post ({ Event::NoteOn, (int8_t) box.getTrack(), (int16_t) nt, 0.8f });
+                        renderSeconds (audio, 0.6, nullptr);
+                        if (mdl == (int) ModelMini) box.potMoved (6, 64);
+                        if (mdl == (int) ModelJuno) { box.potMoved (7, 120); box.potMoved (7, 120); }
                         const auto img = screen.snapshotScreen();
+                        {
+                            const auto pimg = pc.snapshotScreen();   // the PC: the whole panel to turn with the mouse
+                            const auto pf = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + "-pc" + juce::String (shot2) + ".png");
+                            pf.deleteFile();
+                            juce::PNGImageFormat png2;
+                            if (auto os = pf.createOutputStream()) png2.writeImageToStream (pimg, *os);
+                        }
+                        for (int nt : { 48, 55, 60 }) audio.post ({ Event::NoteOff, (int8_t) box.getTrack(), (int16_t) nt, 0.0f });
                         check (img.isValid(), "the synth panel draws (" + juce::String (synthModelLook (mdl).name) + ")", {});
                         const auto f = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + "-screen" + juce::String (shot2++) + ".png");
                         f.deleteFile();

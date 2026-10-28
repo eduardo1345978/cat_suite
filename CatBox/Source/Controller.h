@@ -206,6 +206,9 @@ public:
     void stepButton (int step, bool down);
     /** What the box's LEDs show: the 16 steps (0 off, 1 on, 2 the playing step, 3 picked), the screen, play, rec. */
     struct Leds { std::array<uint8_t, 16> steps {}; int screen = 0; bool playing = false, rec = false; };
+    /** The knob turned last on the box (the screen shows it big for a moment). potNorm: where the pot is while it waits to take over. */
+    struct Touch { juce::String name, value; float norm = 0.0f, potNorm = -1.0f; bool waiting = false; juce::uint32 at = 0; };
+    const Touch& lastTouch() const noexcept { return touch; }
     Leds leds() const;
     void clickStep (int step);            // a melodic step (like tapping its pad in SEQ)
     void nextDrumPattern (int dir);       // the DRUMS screen: a ready-made beat
@@ -312,6 +315,7 @@ private:
     int sendFxPreset = 0, chainIdx = 0;
     int screen = ScreenStudio;
     int drumPattern = -1;
+    Touch touch;
     int assignPending = -1;
     Look look;
     std::array<int, numTracks> presetIdx {};

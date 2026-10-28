@@ -3374,7 +3374,9 @@ void Controller::potMoved (int pot, int value)
         potLast[(size_t) pot] = want;
         if (std::abs (want - now) > 0.04f && ! passed)
         {
-            setFlash (pd->name + ": turn to " + juce::String (juce::roundToInt (now * 100.0f)) + "% to take it over (" + juce::String (juce::roundToInt (want * 100.0f)) + "% now)");
+            touch = { code >= 0 ? panelFxView (code).name : pd->name, code >= 0 ? panelFxView (code).value : pd->format (project.tracks[(size_t) t].params[(size_t) idx]),
+                      now, want, true, juce::Time::getMillisecondCounter() };
+            if (onChange) onChange();
             return;
         }
         grab = true;
@@ -3384,7 +3386,7 @@ void Controller::potMoved (int pot, int value)
     {
         changeTarget (fxT, want - now, true);
         potSet[(size_t) pot] = pd->toNorm (targetValue (fxT));
-        setFlash (panelFxView (code).name + " " + pd->format (targetValue (fxT)));
+        touch = { panelFxView (code).name, pd->format (targetValue (fxT)), potSet[(size_t) pot], want, false, juce::Time::getMillisecondCounter() };
         return;
     }
     pushUndo ("Sound edit", true);
@@ -3392,8 +3394,8 @@ void Controller::potMoved (int pot, int value)
     tr.params[(size_t) idx] = pd->fromNorm (want);
     edited[(size_t) t] = true;
     potSet[(size_t) pot] = pd->toNorm (tr.params[(size_t) idx]);
+    touch = { pd->name, pd->format (tr.params[(size_t) idx]), potSet[(size_t) pot], want, false, juce::Time::getMillisecondCounter() };
     changed();
-    setFlash (pd->name + " " + pd->format (tr.params[(size_t) idx]));
 }
 
 void Controller::stepButton (int k, bool down)

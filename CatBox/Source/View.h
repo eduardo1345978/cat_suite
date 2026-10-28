@@ -38,6 +38,7 @@ public:
 
     /** For the self test: draws the screen alone. */
     juce::Image snapshotScreen();
+    /** The box's screen (kiosk) without the hardware: the live SYNTH page for the self test. */
 
 private:
     void timerCallback() override;
@@ -67,6 +68,15 @@ private:
     void drawMy (juce::Graphics&, juce::Rectangle<int>);
     void drawReturns (juce::Graphics&, juce::Rectangle<int>);
     void drawSynthPanel (juce::Graphics&, juce::Rectangle<int>);
+    // the box's own screen (the pots are labelled on the panel): the sound alive, the filter and envelopes, the knob turned
+    void drawSynthLive (juce::Graphics&, juce::Rectangle<int>);
+    void drawPolarScope (juce::Graphics&, juce::Rectangle<int>, juce::Colour);
+    void drawSpectrum (juce::Graphics&, juce::Rectangle<int>, juce::Colour);
+    void drawFilterCurve (juce::Graphics&, juce::Rectangle<int>, juce::Colour);
+    void drawEnvelope (juce::Graphics&, juce::Rectangle<int>, const juce::String& title, float a, float d, float s, float r, juce::Colour);
+    void drawTouch (juce::Graphics&, juce::Rectangle<int>, bool big);
+    std::vector<juce::Path> polarTrail;
+    std::array<float, 48> spectrum {};
     void drawDrumMachine (juce::Graphics&, juce::Rectangle<int>);
     bool synthPanelShown() const;
 

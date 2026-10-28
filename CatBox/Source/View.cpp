@@ -3,6 +3,7 @@
 #include "Samples.h"
 #include "Synth.h"
 #include <cmath>
+#include <complex>
 
 namespace catbox
 {
@@ -174,10 +175,12 @@ void View::drawScreen (juce::Graphics& g)
         // SYNTH and DRUMS: the whole screen for the instrument, no track strip, no knob row
         knobArea = {};
         auto hintRow = r.removeFromBottom (18);
-        if (synthPanelShown()) drawSynthPanel (g, r);
+        if (synthPanelShown() && kiosk) { auto knobs = r.removeFromBottom (134); knobArea = knobs; drawSynthLive (g, r); drawKnobs (g, knobs); }
+        else if (synthPanelShown()) drawSynthPanel (g, r);
         else if (scr == Controller::ScreenDrums && box.getMode() == ModeSeq) drawDrumMachine (g, r.reduced (8, 4));
         else drawContent (g, r.reduced (10, 4));
-        text1 (g, scr == Controller::ScreenSynth ? juce::String ("Drag a knob (Ctrl = fine) - wheel - double-click = back to start - click the model to change it - numbers = your 12 knobs")
+        text1 (g, scr == Controller::ScreenSynth ? (kiosk ? juce::String ("The pots play the sound - the 12 knobs below: ") + box.pageName() + juce::String (" (Prev / Next: pages, push + turn: the 2nd layer)")
+                                                        : juce::String ("Drag a knob (Ctrl = fine) - wheel - double-click = back to start - click the model to change it - numbers = your 12 knobs"))
                                                  : juce::String ("Click a step to turn it on / off - click a drum name to hear it - Space = play"),
                hintRow.reduced (12, 0), 11.5f, dim, juce::Justification::centredLeft);
     }
@@ -185,6 +188,8 @@ void View::drawScreen (juce::Graphics& g)
     if (box.isLearning()) drawLearn (g, juce::Rectangle<int> (0, 52, screenW, screenH - 52));
     if (box.isHelpShown()) drawHelp (g, juce::Rectangle<int> (0, 0, screenW, screenH));
 
+    // the knob turned last on the box: big on the box's screen, a line on the PC
+    drawTouch (g, juce::Rectangle<int> (0, 86, screenW, screenH - 86 - 134), kiosk && box.getScreen() != Controller::ScreenStudio);
     // a short message, on top of the content
     const auto f = box.flashText();
     if (f.isNotEmpty() && ! box.isLearning())
@@ -1258,6 +1263,269 @@ void View::drawSynthPanel (juce::Graphics& g, juce::Rectangle<int> r)
     };
     layoutRow (rowTop, 0, split);
     layoutRow (rowBottom, split, (int) sections.size());
+}
+
+void View::drawSynthLive (juce::Graphics& g, juce::Rectangle<int> r)
+{
+    const auto& tr = box.getProject().tracks[(size_t) box.getTrack()];
+    const auto& d = engineDef (EngineSynth);
+    const int mdl = juce::roundToInt (tr.params[(size_t) d.index ("model")]);
+    const auto& lk = synthModelLook (mdl);
+    const juce::Colour pnl (lk.panel), acc (lk.accent), ink (lk.ink);
+    g.setColour (pnl);
+    g.fillRect (r);
+    r = r.reduced (6, 4);
+    // left: the circular scope; middle: the wave and its spectrum; right: the filter and the two envelopes
+    const int side = juce::jmin (r.getHeight(), 240);
+    drawPolarScope (g, r.removeFromLeft (side), acc);
+    r.removeFromLeft (6);
+    auto right = r.removeFromRight (230);
+    r.removeFromRight (6);
+    auto mid = r;
+    auto frame = [&] (juce::Rectangle<int> b, const juce::String& title)
+    {
+        g.setColour (pnl.contrasting (0.07f));
+        g.fillRoundedRectangle (b.toFloat(), 6.0f);
+        text1 (g, title, b.withHeight (16).reduced (8, 0), 10.0f, ink.withAlpha (0.7f), juce::Justification::centredLeft, true);
+        return b.withTrimmedTop (16).reduced (6, 4);
+    };
+    auto scopeR = mid.removeFromTop (mid.getHeight() / 2);
+    mid.removeFromTop (6);
+    {
+        auto in = frame (scopeR, "WAVE");
+        g.setColour (pnl.contrasting (0.12f));
+        g.drawHorizontalLine (in.getCentreY(), (float) in.getX(), (float) in.getRight());
+        auto& a = box.getAudio();
+        const int n = Audio::scopeSize, w = a.scope.size() > 0 ? a.scopeWrite.load (std::memory_order_relaxed) : 0;
+        int start = 0;
+        for (int i = 1; i < n / 2; ++i)
+            if (a.scope[(size_t) ((w + i - 1) % n)].load (std::memory_order_relaxed) <= 0.0f && a.scope[(size_t) ((w + i) % n)].load (std::memory_order_relaxed) > 0.0f) { start = i; break; }
+        juce::Path p;
+        const int len = n / 2;
+        for (int i = 0; i < len; ++i)
+        {
+            const float v = juce::jlimit (-1.0f, 1.0f, a.scope[(size_t) ((w + start + i) % n)].load (std::memory_order_relaxed) * 1.8f);
+            const float x = in.getX() + in.getWidth() * (float) i / (float) (len - 1), y = in.getCentreY() - v * in.getHeight() * 0.46f;
+            if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y);
+        }
+        g.setColour (acc.withAlpha (0.25f));
+        g.strokePath (p, juce::PathStrokeType (5.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setColour (acc);
+        g.strokePath (p, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
+    drawSpectrum (g, frame (mid, "SPECTRUM"), acc);
+    // right column
+    auto fr = right.removeFromTop (right.getHeight() / 2);
+    right.removeFromTop (6);
+    drawFilterCurve (g, frame (fr, "FILTER  " + d.params[(size_t) d.index ("cutoff")].format (tr.params[(size_t) d.index ("cutoff")])
+                                   + "  " + d.params[(size_t) d.index ("fmode")].format (tr.params[(size_t) d.index ("fmode")])), acc);
+    auto envR = right;
+    auto e1 = envR.removeFromLeft (envR.getWidth() / 2 - 3);
+    envR.removeFromLeft (6);
+    auto par = [&] (const char* id) { return tr.params[(size_t) d.index (id)]; };
+    drawEnvelope (g, frame (e1, "FILTER ENV"), {}, par ("fa"), par ("fd"), par ("fs"), par ("fr"), acc);
+    drawEnvelope (g, frame (envR, "AMP ENV"), {}, par ("a"), par ("d"), par ("s"), par ("r"), acc);
+}
+
+void View::drawPolarScope (juce::Graphics& g, juce::Rectangle<int> r, juce::Colour acc)
+{
+    // the wave wrapped around a circle: one period = one turn, so a tone stands still as a flower; the old turns glow on
+    const auto c = r.getCentre().toFloat();
+    const float R = juce::jmin (r.getWidth(), r.getHeight()) * 0.5f - 6.0f;
+    g.setColour (acc.withAlpha (0.08f));
+    g.fillEllipse (juce::Rectangle<float> (R * 2.0f, R * 2.0f).withCentre (c));
+    g.setColour (acc.withAlpha (0.18f));
+    g.drawEllipse (juce::Rectangle<float> (R * 1.1f, R * 1.1f).withCentre (c), 1.0f);
+    g.drawEllipse (juce::Rectangle<float> (R * 2.0f, R * 2.0f).withCentre (c), 1.0f);
+    auto& a = box.getAudio();
+    const int n = Audio::scopeSize, w = a.scopeWrite.load (std::memory_order_relaxed);
+    auto at = [&a, n, w] (int i) { return a.scope[(size_t) (((w + i) % n + n) % n)].load (std::memory_order_relaxed); };
+    // one period: from a rising zero crossing to the next
+    int z0 = -1, z1 = -1;
+    for (int i = 1; i < n - 1 && z1 < 0; ++i)
+        if (at (i - 1) <= 0.0f && at (i) > 0.0f) { if (z0 < 0) z0 = i; else if (i - z0 > 6) z1 = i; }
+    int period = z0 >= 0 && z1 > z0 ? z1 - z0 : n / 2;
+    if (z0 < 0) z0 = 0;
+    period = juce::jlimit (16, n - z0 - 1, period * (period < 40 ? 4 : period < 90 ? 2 : 1));   // short periods: a few turns
+    float peak = 0.0f;
+    for (int i = 0; i < period; ++i) peak = juce::jmax (peak, std::abs (at (z0 + i)));
+    const float gain = peak > 0.0001f ? 0.42f / juce::jmax (0.08f, peak) : 0.0f;
+    juce::Path p;
+    for (int i = 0; i <= period; ++i)
+    {
+        const float v = juce::jlimit (-1.0f, 1.0f, at (z0 + (i % period)) * gain);
+        const float ang = juce::MathConstants<float>::twoPi * (float) i / (float) period - juce::MathConstants<float>::halfPi;
+        const float rad = R * (0.55f + v);
+        const float x = c.x + std::cos (ang) * rad, y = c.y + std::sin (ang) * rad;
+        if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y);
+    }
+    p.closeSubPath();
+    polarTrail.push_back (p);
+    if (polarTrail.size() > 8) polarTrail.erase (polarTrail.begin());
+    for (size_t k = 0; k < polarTrail.size(); ++k)
+    {
+        const float age = (float) (k + 1) / (float) polarTrail.size();
+        g.setColour (acc.withAlpha (0.05f + 0.25f * age * age));
+        g.strokePath (polarTrail[k], juce::PathStrokeType (1.0f + 3.0f * age));
+    }
+    g.setColour (acc.brighter (0.4f));
+    g.strokePath (p, juce::PathStrokeType (1.6f));
+    g.setColour (acc.withAlpha (0.12f));
+    g.fillPath (p);
+}
+
+void View::drawSpectrum (juce::Graphics& g, juce::Rectangle<int> r, juce::Colour acc)
+{
+    // 48 bands from 40 Hz to 11 kHz (Goertzel on the scope's 512 samples at 24 kHz, Hann window)
+    auto& a = box.getAudio();
+    const int n = Audio::scopeSize, w = a.scopeWrite.load (std::memory_order_relaxed);
+    const double fs = a.getSampleRate() / 2.0;
+    std::array<float, Audio::scopeSize> x {};
+    for (int i = 0; i < n; ++i)
+        x[(size_t) i] = a.scope[(size_t) ((w + i) % n)].load (std::memory_order_relaxed) * (0.5f - 0.5f * std::cos (dsp::twoPi * (float) i / (float) (n - 1)));
+    const int bands = (int) spectrum.size();
+    const float bw = (float) r.getWidth() / (float) bands;
+    for (int b = 0; b < bands; ++b)
+    {
+        const double f = 40.0 * std::pow (11000.0 / 40.0, (double) b / (double) (bands - 1));
+        const double coeff = 2.0 * std::cos (2.0 * juce::MathConstants<double>::pi * f / fs);
+        double s1 = 0.0, s2 = 0.0;
+        for (int i = 0; i < n; ++i) { const double s0 = x[(size_t) i] + coeff * s1 - s2; s2 = s1; s1 = s0; }
+        const double mag = std::sqrt (juce::jmax (0.0, s1 * s1 + s2 * s2 - coeff * s1 * s2)) / (n * 0.25);
+        const float db = juce::Decibels::gainToDecibels ((float) mag, -80.0f);
+        const float lvl = juce::jlimit (0.0f, 1.0f, (db + 66.0f) / 60.0f);
+        spectrum[(size_t) b] = lvl > spectrum[(size_t) b] ? lvl : spectrum[(size_t) b] * 0.86f + lvl * 0.14f;
+        const float h = spectrum[(size_t) b] * (float) r.getHeight();
+        auto bar = juce::Rectangle<float> (r.getX() + b * bw + 1.0f, r.getBottom() - h, juce::jmax (1.0f, bw - 2.0f), h);
+        g.setColour (acc.withAlpha (0.35f + 0.65f * spectrum[(size_t) b]));
+        g.fillRoundedRectangle (bar, 1.5f);
+    }
+}
+
+void View::drawFilterCurve (juce::Graphics& g, juce::Rectangle<int> r, juce::Colour acc)
+{
+    // the filter's answer over 20 Hz - 20 kHz (-48 .. +18 dB): the model's slope, the resonance peak, the mode
+    const auto& tr = box.getProject().tracks[(size_t) box.getTrack()];
+    const auto& d = engineDef (EngineSynth);
+    auto par = [&] (const char* id) { return tr.params[(size_t) d.index (id)]; };
+    const int mdl = juce::roundToInt (par ("model")), mode = juce::roundToInt (par ("fmode"));
+    const float fc = par ("cutoff"), reso = par ("reso"), hp = par ("hpf");
+    const bool twoPole = mdl == ModelOberheim || mdl == ModelMS || mdl == ModelBuchla;
+    const int poles = mdl == ModelAcid ? 3 : 4;
+    g.setColour (acc.withAlpha (0.12f));
+    for (float f : { 100.0f, 1000.0f, 10000.0f })
+    {
+        const float x = r.getX() + r.getWidth() * std::log (f / 20.0f) / std::log (1000.0f);
+        g.drawVerticalLine ((int) x, (float) r.getY(), (float) r.getBottom());
+    }
+    auto dbToY = [&r] (float db) { return r.getY() + r.getHeight() * (1.0f - (juce::jlimit (-48.0f, 18.0f, db) + 48.0f) / 66.0f); };
+    g.drawHorizontalLine ((int) dbToY (0.0f), (float) r.getX(), (float) r.getRight());
+    juce::Path p, fill;
+    const int steps = r.getWidth();
+    for (int i = 0; i <= steps; ++i)
+    {
+        const float f = 20.0f * std::pow (1000.0f, (float) i / (float) steps);
+        const std::complex<float> s (0.0f, f / fc);
+        std::complex<float> h;
+        if (twoPole)
+        {
+            const float q = (mdl == ModelMS ? 0.6f + reso * reso * 28.0f : 0.55f + reso * reso * 18.0f) * 0.5f + 0.35f;
+            const auto den = s * s + s / q + 1.0f;
+            switch (mode) { case 1: h = (s / q) / den; break; case 2: h = (s * s) / den; break; case 3: h = (s * s + 1.0f) / den; break; default: h = 1.0f / den; }
+        }
+        else
+        {
+            const float k = reso * 3.9f;
+            auto G = 1.0f / (1.0f + s);
+            std::complex<float> Gn (1.0f, 0.0f);
+            for (int q = 0; q < poles; ++q) Gn *= G;
+            const auto lp = Gn / (1.0f + k * Gn) * (1.0f + 0.5f * k * 0.5f);
+            switch (mode)
+            {
+                case 1: h = lp * s * 2.0f; break;
+                case 2: { auto hpRes = s * s * s * s / ((1.0f + s) * (1.0f + s) * (1.0f + s) * (1.0f + s)); h = hpRes / (1.0f + k * Gn); break; }
+                case 3: h = lp + (s * s * s * s / ((1.0f + s) * (1.0f + s) * (1.0f + s) * (1.0f + s))) / (1.0f + k * Gn); break;
+                default: h = lp; break;
+            }
+        }
+        if (hp > 21.0f) h *= std::complex<float> (0.0f, f / hp) / (1.0f + std::complex<float> (0.0f, f / hp));
+        const float db = juce::Decibels::gainToDecibels (std::abs (h), -60.0f);
+        const float x = (float) r.getX() + (float) i, y = dbToY (db);
+        if (i == 0) { p.startNewSubPath (x, y); fill.startNewSubPath (x, (float) r.getBottom()); }
+        else p.lineTo (x, y);
+        fill.lineTo (x, y);
+    }
+    fill.lineTo ((float) r.getRight(), (float) r.getBottom());
+    fill.closeSubPath();
+    g.setColour (acc.withAlpha (0.15f));
+    g.fillPath (fill);
+    g.setColour (acc);
+    g.strokePath (p, juce::PathStrokeType (2.0f));
+}
+
+void View::drawEnvelope (juce::Graphics& g, juce::Rectangle<int> er, const juce::String&, float a, float dd, float s, float rel, juce::Colour acc)
+{
+    const float total = a + dd + 0.4f + rel;
+    const float W = (float) er.getWidth(), H = (float) er.getHeight();
+    auto X = [&] (float tt) { return er.getX() + W * std::sqrt (tt / total); };
+    juce::Path p;
+    p.startNewSubPath ((float) er.getX(), (float) er.getBottom());
+    p.lineTo (X (a), (float) er.getY());
+    p.quadraticTo (X (a + dd * 0.3f), er.getY() + H * (1.0f - s) * 0.85f, X (a + dd), er.getY() + H * (1.0f - s));
+    p.lineTo (X (a + dd + 0.4f), er.getY() + H * (1.0f - s));
+    p.quadraticTo (X (a + dd + 0.4f + rel * 0.3f), (float) er.getBottom(), X (total), (float) er.getBottom());
+    juce::Path fill (p);
+    fill.lineTo ((float) er.getX(), (float) er.getBottom());
+    fill.closeSubPath();
+    g.setColour (acc.withAlpha (0.15f));
+    g.fillPath (fill);
+    g.setColour (acc);
+    g.strokePath (p, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+
+void View::drawTouch (juce::Graphics& g, juce::Rectangle<int> area, bool big)
+{
+    const auto& t = box.lastTouch();
+    if (t.name.isEmpty()) return;
+    const auto age = juce::Time::getMillisecondCounter() - t.at;
+    if (age > 1600) return;
+    const float alpha = age < 1200 ? 1.0f : 1.0f - (float) (age - 1200) / 400.0f;
+    if (! big)   // the PC: one line
+    {
+        const auto s = t.name + "  " + t.value + (t.waiting ? "   (turn the knob to " + juce::String (juce::roundToInt (t.norm * 100.0f)) + "% to take over)" : juce::String());
+        g.setFont (font (15.0f, true));
+        const int w = juce::jmin (screenW - 40, juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), s) + 36);
+        const juce::Rectangle<int> pill ((screenW - w) / 2, area.getBottom() - 46, w, 30);
+        g.setColour (juce::Colour (0xf0282a2f).withMultipliedAlpha (alpha));
+        g.fillRoundedRectangle (pill.toFloat(), 15.0f);
+        text1 (g, s, pill, 15.0f, text.withMultipliedAlpha (alpha), juce::Justification::centred, true);
+        return;
+    }
+    // the box: big in the middle - the name, the value, a ring; waiting: where the pot is, where it takes over
+    const auto b = juce::Rectangle<int> (300, 190).withCentre (area.getCentre());
+    g.setColour (juce::Colour (0xf0101010).withMultipliedAlpha (alpha));
+    g.fillRoundedRectangle (b.toFloat(), 14.0f);
+    g.setColour (accent.withMultipliedAlpha (alpha * 0.6f));
+    g.drawRoundedRectangle (b.toFloat(), 14.0f, 1.5f);
+    auto in = b.reduced (14, 10);
+    text1 (g, t.name.toUpperCase(), in.removeFromTop (26), 20.0f, juce::Colours::white.withMultipliedAlpha (alpha), juce::Justification::centred, true);
+    auto ringR = in.removeFromTop (100).toFloat().withSizeKeepingCentre (96, 96);
+    const float a0 = -2.4f, a1 = 2.4f, cx = ringR.getCentreX(), cy = ringR.getCentreY(), rad = 44.0f;
+    juce::Path back; back.addCentredArc (cx, cy, rad, rad, 0.0f, a0, a1, true);
+    g.setColour (juce::Colours::white.withAlpha (0.15f * alpha));
+    g.strokePath (back, juce::PathStrokeType (7.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    juce::Path arc; arc.addCentredArc (cx, cy, rad, rad, 0.0f, a0, a0 + (a1 - a0) * juce::jlimit (0.0f, 1.0f, t.norm) + 0.001f, true);
+    g.setColour (accent.withMultipliedAlpha (alpha));
+    g.strokePath (arc, juce::PathStrokeType (7.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    if (t.waiting && t.potNorm >= 0.0f)   // where the pot is now: a dot on the ring
+    {
+        const float ang = a0 + (a1 - a0) * t.potNorm - juce::MathConstants<float>::halfPi;
+        g.setColour (juce::Colours::white.withMultipliedAlpha (alpha));
+        g.fillEllipse (juce::Rectangle<float> (12.0f, 12.0f).withCentre ({ cx + std::cos (ang) * rad, cy + std::sin (ang) * rad }));
+    }
+    text1 (g, t.value, ringR.toNearestInt(), 18.0f, juce::Colours::white.withMultipliedAlpha (alpha), juce::Justification::centred, true);
+    text1 (g, t.waiting ? juce::String ("turn to the orange end to take over") : juce::String(), in, 13.0f,
+           juce::Colours::white.withAlpha (0.7f * alpha), juce::Justification::centred);
 }
 
 void View::drawDrumMachine (juce::Graphics& g, juce::Rectangle<int> r)

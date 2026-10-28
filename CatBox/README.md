@@ -164,6 +164,10 @@ value up when they pass it, nothing jumps), 12 push encoders = the 12 knobs on t
 layer), 16 step buttons with LEDs, SYNTH / DRUMS / STUDIO buttons. Firmware, wiring, parts and the panel drawing:
 `CatBox/pico/catbox_panel_v2` and `CatBox/pico/panel_v2.svg`. MIDI channel 16: pots CC 40-67, pushes CC 70-81,
 screens CC 85-87, steps notes 60-75 (the LEDs come back on the same notes).
+On the box's own screen (`--kiosk`) the SYNTH page doesn't repeat the labelled pots: it shows the sound alive - a
+**circular oscilloscope** (one period of the wave around a circle, with a glowing trail), the wave and its spectrum,
+the filter's curve (its slope, resonance and mode as you turn), both envelopes - with the 12 knobs below, and the pot
+you turn big in the middle for a moment (waiting to take over: a dot shows where the pot is).
 
 ## Memory
 
