@@ -1093,6 +1093,17 @@ public:
                     renderSeconds (audio, 1.0, nullptr);
                     const auto after = renderSeconds (audio, 0.3, nullptr);
                     check (! box.isScopeHold() && after.rms < hs.rms * 0.1f, "leaving SCOPE lets the held note go", juce::String (after.rms, 4));
+                    // response: a key sounds in the very first block after it is hit (128 samples = 2.7 ms)
+                    {
+                        const auto& sdef = engineDef (EngineSynth);
+                        for (size_t i = 0; i < sdef.presets.size(); ++i) if (sdef.presets[i].name == "Fat Bass") box.loadSound (st, EngineSynth, (int) i);
+                        renderSeconds (audio, 0.3, nullptr);
+                        audio.post ({ Event::NoteOn, (int8_t) st, 48, 0.9f });
+                        const auto first = renderSeconds (audio, 128.0 / sr, nullptr);
+                        audio.post ({ Event::NoteOff, (int8_t) st, 48, 0.0f });
+                        renderSeconds (audio, 0.5, nullptr);
+                        check (first.peak > 0.01f, "a key sounds in the very first block (128 samples = 2.7 ms)", juce::String (first.peak, 3));
+                    }
                     // pictures on the screen
                     auto shot = [&] (const char* preset, const juce::String& suffix, View& v)
                     {
@@ -1310,6 +1321,21 @@ public:
     {
         auto* view = new View (box, kiosk);
         view->onSettings = [this] { showSettings(); };
+        // the right-click menu: how quick the sound answers (a smaller buffer = quicker; crackles = take a bigger one)
+        view->audioBufferNow = [this] { auto* d = deviceManager.getCurrentAudioDevice(); return d != nullptr ? d->getCurrentBufferSizeSamples() : 0; };
+        view->audioLatencyMs = [this]
+        {
+            auto* d = deviceManager.getCurrentAudioDevice();
+            if (d == nullptr || d->getCurrentSampleRate() <= 0.0) return 0.0;
+            return (d->getCurrentBufferSizeSamples() + d->getOutputLatencyInSamples()) * 1000.0 / d->getCurrentSampleRate();
+        };
+        view->audioBuffers = [this] { auto* d = deviceManager.getCurrentAudioDevice(); return d != nullptr ? d->getAvailableBufferSizes() : juce::Array<int>(); };
+        view->setAudioBuffer = [this] (int size)
+        {
+            auto setup = deviceManager.getAudioDeviceSetup();
+            setup.bufferSize = size;
+            deviceManager.setAudioDeviceSetup (setup, true);
+        };
         view->onToggleFullScreen = [this] { setFullScreen (! isFullScreen()); };
         view->linkInfo = std::move (info);
         auto* content = new AppContent (view, link != nullptr ? new LinkPanel (box, *link) : nullptr);
@@ -1513,19 +1539,27 @@ private:
                 for (const auto& name : type->getDeviceNames (false))
                     if (name.containsIgnoreCase ("hifiberry")) setup.outputDeviceName = name;
            #if JUCE_LINUX
-            setup.bufferSize = 256;
+            setup.bufferSize = 128;   // 2.7 ms at 48 kHz
+            setup.sampleRate = 48000.0;
            #endif
             deviceManager.setAudioDeviceSetup (setup, true);
         }
 
        #if JUCE_WINDOWS
-        // quick response: DirectSound is slow, a big buffer too (a key should sound at once)
-        if (deviceManager.getCurrentAudioDeviceType().containsIgnoreCase ("DirectSound"))
-            deviceManager.setCurrentAudioDeviceType ("Windows Audio", true);
-        if (auto* dev = deviceManager.getCurrentAudioDevice(); dev != nullptr && dev->getCurrentBufferSizeSamples() > 512)
+        // quick response: DirectSound is slow, ordinary Windows Audio adds a buffer of its own; the low latency mode
+        // (Windows 10+) doesn't. Exclusive mode and ASIO, when picked by hand, stay.
+        {
+            const auto type = deviceManager.getCurrentAudioDeviceType();
+            if (type.containsIgnoreCase ("DirectSound") || type == "Windows Audio")
+            {
+                deviceManager.setCurrentAudioDeviceType ("Windows Audio (Low Latency Mode)", true);
+                if (deviceManager.getCurrentAudioDevice() == nullptr) deviceManager.setCurrentAudioDeviceType ("Windows Audio", true);
+            }
+        }
+        if (auto* dev = deviceManager.getCurrentAudioDevice(); dev != nullptr && (saved == nullptr || dev->getCurrentBufferSizeSamples() > 256))
         {
             int best = dev->getCurrentBufferSizeSamples();
-            for (int b : dev->getAvailableBufferSizes()) if (b >= 256 && b < best) best = b;
+            for (int b : dev->getAvailableBufferSizes()) if (b >= 128 && b < best) best = b;
             auto setup = deviceManager.getAudioDeviceSetup();
             setup.bufferSize = best;
             deviceManager.setAudioDeviceSetup (setup, true);

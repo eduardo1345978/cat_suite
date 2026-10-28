@@ -94,6 +94,7 @@ public:
     void audioDeviceStopped() override {}
 
 private:
+    std::atomic<bool> rtAsked { false };   // the audio thread asked for real-time priority (Linux: the Pi)
     struct Queued { double ppq; int16_t note; float vel; bool on, slide, accent; };
 
     struct TrackRt : public NoteSink

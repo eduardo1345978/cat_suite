@@ -33,6 +33,16 @@ else
     echo "(skipped: run this script from the Pi's desktop to also run the self test)"
 fi
 
+echo "== Quick sound: real-time priority for the sound, the CPU at full speed"
+# Cat Box's audio thread asks for real-time priority (so the screen never makes the sound late); this allows it
+printf '@audio - rtprio 95\n@audio - memlock unlimited\n' | sudo tee /etc/security/limits.d/95-catbox-audio.conf >/dev/null
+sudo usermod -aG audio "$USER"
+# the CPU always at full speed (no slow start when a key is hit); the Pi 5 needs its active cooler for this
+CMDLINE=/boot/firmware/cmdline.txt
+if [ -f "$CMDLINE" ] && ! grep -q "cpufreq.default_governor" "$CMDLINE"; then
+    sudo sed -i '1 s/$/ cpufreq.default_governor=performance/' "$CMDLINE"
+fi
+
 echo "== 3/3 Start with the Pi"
 # a small launcher: waits for the screen, starts Cat Box full screen, starts it again if it ever closes or crashes
 cat > "$HOME/.local/bin/cat-box-run" <<EOF

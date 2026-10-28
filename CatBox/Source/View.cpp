@@ -2353,6 +2353,16 @@ void View::mouseDown (const juce::MouseEvent& e)
     {
         juce::PopupMenu m;
         m.addItem (1, "Sound card and MIDI...", onSettings != nullptr);
+        if (audioBuffers && setAudioBuffer)
+        {
+            // how quick a key sounds: the smallest buffer that doesn't crackle
+            juce::PopupMenu q;
+            const int nowB = audioBufferNow ? audioBufferNow() : 0;
+            for (int b : audioBuffers())
+                if (b >= 32 && b <= 1024)
+                    q.addItem (1000 + b, juce::String (b) + " samples" + (b <= 128 ? "  (quickest)" : b >= 512 ? "  (safe)" : ""), true, b == nowB);
+            m.addSubMenu ("Response: " + juce::String (audioLatencyMs ? audioLatencyMs() : 0.0, 1) + " ms (smaller = quicker, crackles = bigger)", q);
+        }
         m.addItem (2, "Learn a MIDI keyboard / controller...");
         m.addItem (3, "Forget the MIDI keyboard", box.numLearned() > 0);
         m.addItem (6, "Factory reset...");
@@ -2362,6 +2372,7 @@ void View::mouseDown (const juce::MouseEvent& e)
         m.showMenuAsync (juce::PopupMenu::Options(), [this] (int r)
         {
             if (r == 1 && onSettings) onSettings();
+            if (r > 1000 && setAudioBuffer) setAudioBuffer (r - 1000);
             if (r == 2) box.startLearn();
             if (r == 3) box.forgetMidiMap();
             if (r == 4 && onToggleFullScreen) onToggleFullScreen();

@@ -1,6 +1,10 @@
 #include "Audio.h"
 #include "Scope.h"
 #include <cmath>
+#if JUCE_LINUX
+ #include <pthread.h>
+ #include <sched.h>
+#endif
 
 namespace catbox
 {
@@ -70,6 +74,7 @@ void Audio::prepare (double sampleRate, int block)
 
 void Audio::audioDeviceAboutToStart (juce::AudioIODevice* d)
 {
+    rtAsked = false;
     prepare (d->getCurrentSampleRate(), d->getCurrentBufferSizeSamples());
 }
 
@@ -90,6 +95,16 @@ void Audio::feedInput (const float* l, const float* r, int n)
 void Audio::audioDeviceIOCallbackWithContext (const float* const* in, int numIn, float* const* out, int numOut, int n,
                                               const juce::AudioIODeviceCallbackContext&)
 {
+   #if JUCE_LINUX
+    // the Pi: the sound card's thread asks for real-time priority once, so the screen never makes it late
+    // (setup_pi.sh allows it for the audio group; without that permission nothing changes)
+    if (! rtAsked.exchange (true))
+    {
+        sched_param sp {};
+        sp.sched_priority = 70;
+        pthread_setschedparam (pthread_self(), SCHED_FIFO, &sp);
+    }
+   #endif
     if (numIn > 0 && in[0] != nullptr) feedInput (in[0], numIn > 1 && in[1] != nullptr ? in[1] : in[0], n);
     for (int c = 0; c < numOut; ++c) if (out[c] != nullptr) juce::FloatVectorOperations::clear (out[c], n);
     if (numOut < 1 || out[0] == nullptr) return;

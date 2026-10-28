@@ -35,6 +35,10 @@ public:
 
     std::function<void()> onSettings, onToggleFullScreen;
     std::function<juce::String()> linkInfo;
+    std::function<int()> audioBufferNow;
+    std::function<double()> audioLatencyMs;
+    std::function<juce::Array<int>()> audioBuffers;
+    std::function<void (int)> setAudioBuffer;
 
     /** For the self test: draws the screen alone. */
     juce::Image snapshotScreen();
