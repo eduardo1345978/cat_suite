@@ -15,6 +15,7 @@ EngineDef makeChoirDef();
 EngineDef makeSamplerDef();
 EngineDef makeGranularDef();
 EngineDef makeKitDef();
+EngineDef makeSynthDef();
 
 juce::String ParamDef::format (float v) const
 {
@@ -101,7 +102,7 @@ const EngineDef& engineDef (int type)
 {
     static const std::array<EngineDef, NumEngineTypes> all = []
     {
-        std::array<EngineDef, NumEngineTypes> a { makeAnalogDef(), makeAcidDef(), makeDrumsDef(), makeKeysDef(), makeGlideDef(), makeFMDef(), makeWavetableDef(), makeChoirDef(), makeSamplerDef(), makeGranularDef(), makeKitDef() };
+        std::array<EngineDef, NumEngineTypes> a { makeAnalogDef(), makeAcidDef(), makeDrumsDef(), makeKeysDef(), makeGlideDef(), makeFMDef(), makeWavetableDef(), makeChoirDef(), makeSamplerDef(), makeGranularDef(), makeKitDef(), makeSynthDef() };
         for (int i = 0; i < NumEngineTypes; ++i) addExtraPresets (a[(size_t) i], i);
         return a;
     }();

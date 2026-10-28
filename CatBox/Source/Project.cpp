@@ -52,7 +52,7 @@ Project Project::makeDefault()
     setup (0, EngineDrums, "808 Classic", 0.8f);
     setup (1, EngineAcid, "Classic 303", 0.7f);
     setup (2, EngineKeys, "Rhodes", 0.7f);
-    setup (3, EngineAnalog, "Classic Lead", 0.7f);
+    setup (3, EngineSynth, "Mini Brass", 0.7f);   // the main instrument: the SYNTH screen
     setup (4, EngineGlide, "Warm Analog Pad", 0.75f);
     setup (5, EngineDrums, "909 Classic", 0.7f);
     setup (6, EngineAnalog, "Pluck", 0.7f);

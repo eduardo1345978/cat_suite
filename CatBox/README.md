@@ -4,6 +4,21 @@ A groovebox you play yourself: **8 equal tracks**, and each track picks its own 
 own **note FX** and has its own **pattern** and **mixer strip**. Everything plays together at one tempo,
 in one key. Nothing is generated: you play it in or tap it into the steps.
 
+## Three screens
+
+- **SYNTH** (it starts here): one "digital analog" synthesizer on one panel, like a Moog: controllers, 3 oscillators,
+  mixer, filter, filter and amp envelopes, LFO, poly-mod, output - every knob on screen, drag it with the mouse
+  (Ctrl = fine), the wheel turns it, a double-click puts it back; switches flip with a click. The small numbers show
+  which of your 12 knobs turns it now (◀ ▶ = the knob pages OSC, FILTER, ENV, LFO, OUTPUT).
+  **10 models** - a click on the model's name switches - each its own circuit, not just presets:
+  MINI (Moog ladder 24 dB, overload, drift), PROPHET (poly-mod), OB (12 dB state variable: low / band / high / notch),
+  JUPITER (clean OTA, high pass), JUNO (stable DCO, sub, chorus I / II), SH (punchy mono), ACID (303 diode filter),
+  MS (MS-20: the resonance screams), ODYSSEY (sync, ring), BUCHLA (wave folder, lowpass gate). Each has its colours.
+  Voices: Mono, Legato, Poly or Unison, always. 45 sounds made for the models.
+- **DRUMS**: a drum machine: kit ◀ ▶, a ready-made beat ◀ ▶, tempo, Play, Clear; click a step to turn it on or off,
+  click a drum's name to hear it.
+- **STUDIO**: everything else - 8 tracks, all engines, SEQ, note FX, mixer, effects, the libraries (below).
+
 | Engine | What it is | Factory sounds |
 |---|---|---|
 | **Analog** | 2 oscillators (saw, square + PWM, triangle, sine, noise), sub, unison 4, sync, FM, ring, ladder / state-variable filter, 2 envelopes, pitch envelope, 2 LFOs (tempo-synced), poly / mono / legato, drive, crush, EQ, chorus, width | 39 |
@@ -16,6 +31,7 @@ in one key. Nothing is generated: you play it in or tap it into the steps.
 | **Choir** | Sing-Cat's choir: physically modelled singers and cats (glottis + vocal tract each), vowels, styles, rooms; up to 16 singers | 67 |
 | **Sampler** | your samples: **record one with a microphone** (Rec on a Sampler track's SOUND page) or put WAVs in the `samples` folder; Keys (across the keyboard, loop forward / ping-pong), Chop (2-16 slices on the pads), One shot; envelope, filter, crush, reverse. 8 starter samples are made by the box itself the first time | 16 |
 | **Granular** | clouds of grains from any sample: position and travel, grain size, density, scatter, pitch scatter, reverse grains, freeze | 12 + 12 library |
+| **Synth** | the SYNTH screen's synthesizer (10 models, above) | 45 |
 | **Kit** | a drum kit of 16 samples, one per pad: sample, tune, level, pan, decay, tone per pad; drive, hat choke, stereo | 15 library kits |
 
 **499 factory sounds**, in categories, heard the moment you pick them. **FX Lab** sounds come with their own effect chains;

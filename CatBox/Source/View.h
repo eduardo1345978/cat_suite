@@ -66,6 +66,9 @@ private:
     void drawMods (juce::Graphics&, juce::Rectangle<int>);
     void drawMy (juce::Graphics&, juce::Rectangle<int>);
     void drawReturns (juce::Graphics&, juce::Rectangle<int>);
+    void drawSynthPanel (juce::Graphics&, juce::Rectangle<int>);
+    void drawDrumMachine (juce::Graphics&, juce::Rectangle<int>);
+    bool synthPanelShown() const;
 
     // the PC panel (in panel coordinates)
     void drawPanel (juce::Graphics&);
@@ -91,12 +94,20 @@ private:
     struct BrowseHit { juce::Rectangle<int> r; int column, index; };
     juce::Array<BrowseHit> browseHits;
     std::array<juce::Rectangle<int>, 3> browseColumns;
-    juce::Rectangle<int> soundNameHit;
+    juce::Rectangle<int> soundNameHit, modelHit;
+    struct PanelHit { juce::Rectangle<int> r; int param; };
+    juce::Array<PanelHit> panelHits;
+    struct SeqHit { juce::Rectangle<int> r; int lane, step; };
+    juce::Array<SeqHit> seqHits;               // drum cells (lane >= 0), melodic steps (lane = -1), lane names (step = -1)
+    struct ActionHit { juce::Rectangle<int> r; int action; };
+    juce::Array<ActionHit> actionHits, screenHits;
+    int panelActive = -1, panelHover = -1;
+    bool panelMoved = false;
     int hoverColumn = -1, hoverIndex = -1;
     void mouseMove (const juce::MouseEvent&) override;
     juce::Rectangle<int> playHit, learnHit, skipHit, doneHit, knobArea;
 
-    enum DragKind { DragNone, DragKnob, DragSlider, DragJoy, DragPad, DragButton };
+    enum DragKind { DragNone, DragKnob, DragSlider, DragJoy, DragPad, DragButton, DragPanel };
     DragKind drag = DragNone;
     int dragIndex = -1;
     float dragLastY = 0.0f;

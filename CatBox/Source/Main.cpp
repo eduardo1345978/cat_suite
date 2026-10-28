@@ -9,6 +9,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "Controller.h"
+#include "Synth.h"
 #include "View.h"
 #include "BoxLink.h"
 #include "LinkPanel.h"
@@ -489,6 +490,124 @@ public:
                 box.setMode (ModeSound);
             }
 
+            // ---- the SYNTH: every model and sound speaks, is not too quiet / loud, mono / legato / poly / unison work
+            {
+                const auto& sd = engineDef (EngineSynth);
+                juce::String bad, levels;
+                float lo = 9.0f, hi = 0.0f;
+                for (size_t i = 0; i < sd.presets.size(); ++i)
+                {
+                    float vals[maxParams];
+                    sd.applyPreset ((int) i, vals);
+                    auto eng = makeEngine (EngineSynth);
+                    eng->prepare (sr);
+                    eng->setParams (vals);
+                    const bool poly = vals[sd.index ("mode")] >= 2.0f;
+                    for (int nt : poly ? std::vector<int> { 48, 55, 60 } : std::vector<int> { 36 }) eng->noteOn (nt, 0.8f, false, false);
+                    const int total = (int) (sr * 1.2);
+                    std::vector<float> L ((size_t) total, 0.0f), R ((size_t) total, 0.0f);
+                    for (int pos = 0; pos < total; pos += 128)
+                    {
+                        if (pos == (int) (sr * 0.9) / 128 * 128) for (int nt : { 36, 48, 55, 60 }) eng->noteOff (nt);
+                        eng->render (L.data() + pos, R.data() + pos, juce::jmin (128, total - pos));
+                    }
+                    double q = 0.0, dc = 0.0; float pk = 0.0f; bool fin = true;
+                    for (int k = 0; k < (int) (sr * 0.9); ++k) { q += (double) L[(size_t) k] * L[(size_t) k]; dc += L[(size_t) k]; pk = juce::jmax (pk, std::abs (L[(size_t) k])); fin = fin && std::isfinite (L[(size_t) k]); }
+                    const float rms = (float) std::sqrt (q / (sr * 0.9));
+                    const float dcv = (float) std::abs (dc / (sr * 0.9));
+                    lo = juce::jmin (lo, rms); hi = juce::jmax (hi, rms);
+                    levels << sd.presets[i].name << " " << juce::String (rms, 3) << "; ";
+                    if (! fin || (rms < 0.02f && pk < 0.15f) || pk > 3.0f || dcv > 0.02f) bad << sd.presets[i].name << " rms " << rms << " peak " << pk << " dc " << dcv << "; ";
+                }
+                check (bad.isEmpty(), juce::String ((int) sd.presets.size()) + " synth sounds: heard, not too loud, no DC", bad + " (rms " + juce::String (lo, 3) + " .. " + juce::String (hi, 3) + ")");
+                check (true, "synth levels", levels);
+                // the voice modes
+                auto eng = makeEngine (EngineSynth);
+                eng->prepare (sr);
+                float vals[maxParams];
+                sd.defaults (vals);
+                auto heard = [&] (std::function<void()> play)
+                {
+                    eng->allOff();
+                    eng->setParams (vals);
+                    play();
+                    std::vector<float> L ((size_t) 9600, 0.0f), R ((size_t) 9600, 0.0f);
+                    eng->render (L.data(), R.data(), 9600);
+                    double q = 0; for (auto x : L) q += (double) x * x;
+                    return (float) std::sqrt (q / 9600.0);
+                };
+                vals[sd.index ("mode")] = 2;
+                const float poly3 = heard ([&] { eng->noteOn (48, 0.8f, false, false); eng->noteOn (52, 0.8f, false, false); eng->noteOn (55, 0.8f, false, false); });
+                vals[sd.index ("mode")] = 0;
+                const float mono3 = heard ([&] { eng->noteOn (48, 0.8f, false, false); eng->noteOn (52, 0.8f, false, false); eng->noteOn (55, 0.8f, false, false); });
+                vals[sd.index ("mode")] = 3;
+                const float uni = heard ([&] { eng->noteOn (48, 0.8f, false, false); });
+                check (poly3 > mono3 * 1.3f && uni > 0.02f, "Poly plays a chord, Mono one note, Unison stacks voices",
+                       "poly " + juce::String (poly3, 3) + " mono " + juce::String (mono3, 3) + " unison " + juce::String (uni, 3));
+            }
+
+            // ---- the screens: SYNTH (the panel), DRUMS (the drum machine), STUDIO
+            {
+                box.goSynth();
+                const int st = box.getTrack();
+                const auto& sdef = engineDef (EngineSynth);
+                check (box.getScreen() == Controller::ScreenSynth && box.getMode() == ModeSound && box.getProject().tracks[(size_t) st].engine == EngineSynth,
+                       "SYNTH: the synth track's panel", juce::String (st + 1));
+                const int cut = sdef.index ("cutoff");
+                const float c0 = box.getProject().tracks[(size_t) st].params[(size_t) cut];
+                box.nudgeParam (cut, 0.1f);
+                check (box.getProject().tracks[(size_t) st].params[(size_t) cut] > c0 * 1.5f, "the mouse turns the cutoff", juce::String (box.getProject().tracks[(size_t) st].params[(size_t) cut]));
+                box.resetParam (cut);
+                check (box.getProject().tracks[(size_t) st].params[(size_t) cut] == sdef.params[(size_t) cut].def, "double-click: back to its start", {});
+                check (box.hardwareKnobFor (cut) == 11, "the panel shows which hardware knob turns it (OSC page: knob 11 = cutoff)", juce::String (box.hardwareKnobFor (cut)));
+                const int m0 = (int) box.getProject().tracks[(size_t) st].params[(size_t) sdef.index ("model")];
+                box.nextModel (1);
+                check ((int) box.getProject().tracks[(size_t) st].params[(size_t) sdef.index ("model")] == (m0 + 1) % NumSynthModels, "a click on the model: the next one", box.flashText());
+                box.nextModel (-1);
+                // every model plays the same notes differently (a different filter / oscillators), all clean
+                {
+                    float vals[maxParams];
+                    sdef.defaults (vals);
+                    std::vector<float> rmsOf;
+                    bool clean = true;
+                    for (int mdl = 0; mdl < NumSynthModels; ++mdl)
+                    {
+                        vals[sdef.index ("model")] = (float) mdl;
+                        vals[sdef.index ("reso")] = 0.7f;
+                        auto eng = makeEngine (EngineSynth);
+                        eng->prepare (sr);
+                        eng->setParams (vals);
+                        eng->noteOn (48, 0.9f, false, false);
+                        std::vector<float> L ((size_t) 24000, 0.0f), R ((size_t) 24000, 0.0f);
+                        eng->render (L.data(), R.data(), 24000);
+                        double q = 0; for (auto x : L) { q += (double) x * x; clean = clean && std::isfinite (x) && std::abs (x) < 4.0f; }
+                        rmsOf.push_back ((float) std::sqrt (q / 24000.0));
+                    }
+                    int different = 0;
+                    for (size_t a = 0; a < rmsOf.size(); ++a)
+                        for (size_t b = a + 1; b < rmsOf.size(); ++b) different += std::abs (rmsOf[a] - rmsOf[b]) > 0.002f ? 1 : 0;
+                    check (clean && different > 30, "10 models, 10 different voices (same knobs, high resonance), all clean", juce::String (different) + " of 45 pairs differ");
+                }
+                box.goDrums();
+                const int dt = box.getTrack();
+                check (box.getScreen() == Controller::ScreenDrums && box.getMode() == ModeSeq && box.getProject().tracks[(size_t) dt].isDrums(), "DRUMS: the drum machine", juce::String (dt + 1));
+                const auto before = box.getProject().tracks[(size_t) dt].pat.drums[2][5];
+                box.toggleDrumStep (2, 5);
+                check (box.getProject().tracks[(size_t) dt].pat.drums[2][5] != before, "a click on a step turns it on / off", {});
+                box.toggleDrumStep (2, 5);
+                const auto kit0 = box.presetName (dt);
+                box.nextKit (1);
+                check (box.presetName (dt) != kit0, "the kit arrows change the kit", box.presetName (dt));
+                box.nextKit (-1);
+                box.nextDrumPattern (1);
+                check (box.drumPatternName() == "House" && box.getProject().tracks[(size_t) dt].pat.drums[0][4] > 0, "the beat arrows: a ready-made beat", box.drumPatternName());
+                shiftPress (BtnChaos);
+                box.setMode (ModeMix);
+                check (box.getScreen() == Controller::ScreenStudio, "any other mode: the STUDIO", {});
+                box.goStudio();
+                box.setMode (ModeSound);
+            }
+
             // ---- the libraries (when they are there: CATBOX_LIBRARY or CatBox/library)
             if (SampleBank::get().libraryFolders().size() > 0)
             {
@@ -722,6 +841,31 @@ public:
                     if (auto os = pngFile.createOutputStream()) png.writeImageToStream (img, *os);
                 }
                 box.setLook (Look());
+                {
+                    const auto& sdef = engineDef (EngineSynth);
+                    int shot2 = 16;
+                    for (int mdl : { (int) ModelMini, (int) ModelJuno, (int) ModelAcid, (int) ModelOdyssey })
+                    {
+                        box.goSynth();
+                        int pi = 0;
+                        for (size_t i = 0; i < sdef.presets.size(); ++i) if (! sdef.presets[i].values.empty() && (int) sdef.presets[i].values[0].second == mdl) { pi = (int) i; break; }
+                        box.loadSound (box.getTrack(), EngineSynth, pi);
+                        const auto img = screen.snapshotScreen();
+                        check (img.isValid(), "the synth panel draws (" + juce::String (synthModelLook (mdl).name) + ")", {});
+                        const auto f = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + "-screen" + juce::String (shot2++) + ".png");
+                        f.deleteFile();
+                        juce::PNGImageFormat png;
+                        if (auto os = f.createOutputStream()) png.writeImageToStream (img, *os);
+                    }
+                    box.goDrums();
+                    const auto img = screen.snapshotScreen();
+                    check (img.isValid(), "the drum machine draws", {});
+                    const auto f = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + "-screen20.png");
+                    f.deleteFile();
+                    juce::PNGImageFormat png;
+                    if (auto os = f.createOutputStream()) png.writeImageToStream (img, *os);
+                    box.goStudio();
+                }
                 for (int extra : { 8, 9 })   // the MENU, and the help on the SEQ page
                 {
                     box.selectTrack (0);
@@ -794,7 +938,7 @@ public:
                    && again.getProject().m.revType == 3, "after a restart: the FX chain, the modulation, the sends", {});
             check (again.getProject().tracks[6].pat.length == 32 && again.getProject().tracks[6].pat.steps[5].has (71), "after a restart: the steps", {});
             check (again.sceneExists (2), "after a restart: the scene", {});
-            check (again.getProject().tracks[3].engine == EngineAnalog, "after a restart: the sounds", {});
+            check (again.getProject().tracks[3].engine == EngineSynth, "after a restart: the sounds", {});
         }
         dir.deleteRecursively();
 
@@ -982,6 +1126,7 @@ public:
 
         box = std::make_unique<Controller> (dataDir);
         startAudio (dataDir);
+        box->goSynth();   // the instrument first; DRUMS and the STUDIO are a click away
         box->enableMicrophone = [this]
         {
             // the input is switched on only when a sample is recorded (no microphone open all the time)

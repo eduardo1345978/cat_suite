@@ -171,6 +171,26 @@ public:
     const Look& getLook() const noexcept { return look; }
     void setLook (const Look&);
 
+    // ---- the three screens: SYNTH (the instrument), DRUMS (a simple drum machine), STUDIO (everything else)
+    enum Screen { ScreenSynth = 0, ScreenDrums, ScreenStudio };
+    int getScreen() const noexcept { return screen; }
+    void goSynth();
+    void goDrums();
+    void goStudio();
+    int synthTrack() const;              // the first track playing the Synth (the SYNTH screen's)
+    int drumTrack() const;               // the first drum track (the DRUMS screen's)
+    /** The panel and the mouse: a parameter of the current track moved by a part of its travel (undo merges a turn). */
+    void nudgeParam (int index, float normDelta);
+    void cycleParam (int index, int dir);  // a switch / choice: the next position
+    void resetParam (int index);
+    int hardwareKnobFor (int index) const; // which of the 12 knobs turns it now (1-24 with Shift), 0 = none
+    void nextModel (int dir);             // the Synth's model
+    void nextKit (int dir);               // the drum track's kit
+    void toggleDrumStep (int lane, int step);
+    void clickStep (int step);            // a melodic step (like tapping its pad in SEQ)
+    void nextDrumPattern (int dir);       // the DRUMS screen: a ready-made beat
+    juce::String drumPatternName() const;
+
     // ---- MIDI learn: any MIDI keyboard / controller plays the box
     void startLearn();
     void learnSkip();
@@ -266,6 +286,8 @@ private:
     int mixPage = 0, projectPage = 0;
     std::array<int, numTracks> fxSlot {}, modSlot {}, insPreset {};
     int sendFxPreset = 0, chainIdx = 0;
+    int screen = ScreenStudio;
+    int drumPattern = -1;
     int assignPending = -1;
     Look look;
     std::array<int, numTracks> presetIdx {};

@@ -62,7 +62,7 @@ struct EngineDef
     std::vector<int> presetsIn (const juce::String& category) const;
 };
 
-enum EngineType { EngineAnalog = 0, EngineAcid, EngineDrums, EngineKeys, EngineGlide, EngineFM, EngineWavetable, EngineChoir, EngineSampler, EngineGranular, EngineKit, NumEngineTypes };
+enum EngineType { EngineAnalog = 0, EngineAcid, EngineDrums, EngineKeys, EngineGlide, EngineFM, EngineWavetable, EngineChoir, EngineSampler, EngineGranular, EngineKit, EngineSynth, NumEngineTypes };
 const EngineDef& engineDef (int type);
 /** The "FX Lab" sounds and more, added to each engine. */
 void addExtraPresets (EngineDef&, int engine);

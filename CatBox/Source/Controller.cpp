@@ -2,6 +2,7 @@
 #include "Music.h"
 #include "Samples.h"
 #include "Templates.h"
+#include "Synth.h"
 #include <cmath>
 
 namespace catbox
@@ -435,6 +436,8 @@ void Controller::selectTrack (int t)
     if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "track"); o->setProperty ("v", t); sendRemote (o); return; }
     track = t;
     audio.viewTrack = t;
+    if ((screen == ScreenSynth && project.tracks[(size_t) t].engine != EngineSynth) || (screen == ScreenDrums && ! project.tracks[(size_t) t].isDrums()))
+        screen = ScreenStudio;
     numHeldSteps = 0;
     if (mode.load() == ModeBrowse) browseSync();
     if (onChange) onChange();
@@ -447,6 +450,9 @@ void Controller::setMode (int m)
     if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "mode"); o->setProperty ("v", m); sendRemote (o); return; }
     mode = juce::jlimit (0, NumModes - 1, m);
     numHeldSteps = 0;
+    // the SYNTH screen is the sound (and its browser), the DRUMS screen the steps: anything else is the STUDIO
+    if (screen == ScreenSynth && m != ModeSound && m != ModeBrowse) screen = ScreenStudio;
+    if (screen == ScreenDrums && m != ModeSeq) screen = ScreenStudio;
     if (m == ModeMenu) menuPage = 0;
     if (m == ModeBrowse) browseSync();
     if (onChange) onChange();
@@ -3060,6 +3066,170 @@ void Controller::browseTo (int column, int index)
     }
     browseApply (true);
     if (onChange) onChange();
+}
+
+//==============================================================================
+// The screens
+int Controller::synthTrack() const
+{
+    for (int t = 0; t < numTracks; ++t) if (project.tracks[(size_t) t].engine == EngineSynth) return t;
+    return -1;
+}
+
+int Controller::drumTrack() const
+{
+    for (int t = 0; t < numTracks; ++t) if (project.tracks[(size_t) t].isDrums()) return t;
+    return -1;
+}
+
+void Controller::goSynth()
+{
+    int t = synthTrack();
+    if (t < 0)   // no synth track (an old project): track 4 becomes one
+    {
+        t = 3;
+        const auto& d = engineDef (EngineSynth);
+        int pi = 0;
+        for (size_t i = 0; i < d.presets.size(); ++i) if (d.presets[i].name == "Mini Brass") pi = (int) i;
+        loadSound (t, EngineSynth, pi);
+    }
+    screen = ScreenSynth;
+    track = t;
+    audio.viewTrack = t;
+    mode = ModeSound;
+    if (soundExtraPage() >= 0) soundPage[(size_t) t] = 0;
+    if (onChange) onChange();
+}
+
+void Controller::goDrums()
+{
+    int t = drumTrack();
+    if (t < 0) { t = 0; loadSound (t, EngineDrums, 0); }
+    screen = ScreenDrums;
+    track = t;
+    audio.viewTrack = t;
+    mode = ModeSeq;
+    numHeldSteps = 0;
+    if (onChange) onChange();
+}
+
+void Controller::goStudio()
+{
+    screen = ScreenStudio;
+    if (onChange) onChange();
+}
+
+void Controller::nudgeParam (int index, float normDelta)
+{
+    const auto& d = engineDef (cur().engine);
+    if (index < 0 || index >= (int) d.params.size() || normDelta == 0.0f) return;
+    const auto& pd = d.params[(size_t) index];
+    if (pd.stepped())
+    {
+        static float acc = 0.0f;
+        static int lastIndex = -1;
+        if (lastIndex != index) { acc = 0.0f; lastIndex = index; }
+        acc += normDelta * juce::jmin (24.0f, pd.hi - pd.lo + 1.0f);
+        const int steps = (int) acc;
+        if (steps == 0) return;
+        acc -= (float) steps;
+        changeTarget ({ KParam, index }, (float) steps, false);
+        return;
+    }
+    changeTarget ({ KParam, index }, normDelta, true);
+}
+
+void Controller::cycleParam (int index, int dir)
+{
+    const auto& d = engineDef (cur().engine);
+    if (index < 0 || index >= (int) d.params.size()) return;
+    const auto& pd = d.params[(size_t) index];
+    pushUndo ("Sound edit", true);
+    float v = cur().params[(size_t) index] + (float) dir;
+    if (v > pd.hi) v = pd.lo;
+    if (v < pd.lo) v = pd.hi;
+    cur().params[(size_t) index] = pd.clamp (v);
+    edited[(size_t) track.load()] = true;
+    changed();
+}
+
+void Controller::resetParam (int index)
+{
+    const auto& d = engineDef (cur().engine);
+    if (index < 0 || index >= (int) d.params.size()) return;
+    pushUndo ("Sound edit", true);
+    cur().params[(size_t) index] = d.params[(size_t) index].def;
+    edited[(size_t) track.load()] = true;
+    changed();
+}
+
+int Controller::hardwareKnobFor (int index) const
+{
+    if (mode.load() != ModeSound || soundExtraPage() >= 0) return 0;
+    const auto& pages = engineDef (cur().engine).pages;
+    if (pages.empty()) return 0;
+    const auto& pg = pages[(size_t) juce::jlimit (0, (int) pages.size() - 1, soundPage[(size_t) track.load()])];
+    for (int s = 0; s < 24; ++s) if (pg.slot[(size_t) s] == index) return s + 1;
+    return 0;
+}
+
+void Controller::nextModel (int dir)
+{
+    if (cur().engine != EngineSynth) return;
+    const int i = engineDef (EngineSynth).index ("model");
+    cycleParam (i, dir);
+    setFlash (synthModelLook (juce::roundToInt (cur().params[(size_t) i])).name + juce::String (" - ") + synthModelLook (juce::roundToInt (cur().params[(size_t) i])).about);
+}
+
+void Controller::nextKit (int dir)
+{
+    const int t = track.load();
+    if (! cur().isDrums()) return;
+    const auto& d = engineDef (cur().engine);
+    std::vector<int> kits;
+    for (size_t i = 0; i < d.presets.size(); ++i) if (d.presets[i].name != "Init") kits.push_back ((int) i);
+    if (kits.empty()) return;
+    int pos = 0;
+    for (size_t k = 0; k < kits.size(); ++k) if (kits[k] == presetIdx[(size_t) t]) pos = (int) k;
+    pos = (pos + dir + (int) kits.size()) % (int) kits.size();
+    loadSound (t, cur().engine, kits[(size_t) pos]);
+    setFlash ("Kit: " + d.presets[(size_t) kits[(size_t) pos]].name);
+}
+
+void Controller::toggleDrumStep (int l, int step)
+{
+    auto& pat = cur().pat;
+    if (! cur().isDrums() || l < 0 || l >= numLanes || step < 0 || step >= pat.length) return;
+    pushUndo ("Steps", true);
+    lane[(size_t) track.load()] = l;
+    auto& v = pat.drums[(size_t) l][(size_t) step];
+    if (v > 0) { v = 0; pat.rolls[(size_t) l][(size_t) step] = 0; }
+    else { v = 100; selectStep (step); }
+    changed();
+}
+
+void Controller::clickStep (int step)
+{
+    if (step < 0 || step >= cur().pat.length) return;
+    stepTap (step);
+    changed();
+}
+
+void Controller::nextDrumPattern (int dir)
+{
+    if (! cur().isDrums()) return;
+    const auto names = drumTemplateNames();
+    drumPattern = drumPattern < 0 ? (dir > 0 ? 0 : names.size() - 1) : (drumPattern + dir + names.size()) % names.size();
+    pushUndo ("Drum pattern");
+    applyDrumTemplate (cur().pat, drumPattern);
+    bar[(size_t) track.load()] = 0;
+    changed();
+    if (! audio.isPlaying()) setPlaying (true);
+}
+
+juce::String Controller::drumPatternName() const
+{
+    return drumPattern >= 0 ? drumTemplateNames()[drumPattern] : juce::String ("your own");
 }
 
 } // namespace catbox

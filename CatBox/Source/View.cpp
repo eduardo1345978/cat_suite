@@ -1,6 +1,7 @@
 #include "View.h"
 #include "Music.h"
 #include "Samples.h"
+#include "Synth.h"
 #include <cmath>
 
 namespace catbox
@@ -65,7 +66,7 @@ void text1 (juce::Graphics& g, const juce::String& s, juce::Rectangle<int> r, fl
 
 const char* shortEngine (int e)
 {
-    static const char* n[] = { "ANLG", "ACID", "DRUM", "KEYS", "GLDE", "FM", "WAVE", "CHOR", "SMPL", "GRAN", "KIT" };
+    static const char* n[] = { "ANLG", "ACID", "DRUM", "KEYS", "GLDE", "FM", "WAVE", "CHOR", "SMPL", "GRAN", "KIT", "SYN" };
     return n[juce::jlimit (0, NumEngineTypes - 1, e)];
 }
 
@@ -146,21 +147,40 @@ void View::drawScreen (juce::Graphics& g)
     g.setColour (bg);
     g.fillRect (0, 0, screenW, screenH);
     auto r = juce::Rectangle<int> (0, 0, screenW, screenH);
+    panelHits.clearQuick();
+    seqHits.clearQuick();
+    actionHits.clearQuick();
+    menuHits.clearQuick();
     drawHeader (g, r.removeFromTop (52));
     drawTabs (g, r.removeFromTop (34));
-    auto tracks = r.removeFromBottom (32);
-    auto knobs = r.removeFromBottom (134);
-    knobArea = knobs;
-    // one line of help above the knobs: what the buttons do now
-    if (box.getLook().hintLine || box.assigning() >= 0)
+    const int scr = box.getScreen();
+    if (scr == Controller::ScreenStudio)
     {
-        auto hintRow = r.removeFromBottom (20);
-        text1 (g, box.hint(), hintRow.reduced (12, 0), 12.5f, box.assigning() >= 0 ? accent : dim, juce::Justification::centredLeft, box.assigning() >= 0);
+        auto tracks = r.removeFromBottom (32);
+        auto knobs = r.removeFromBottom (134);
+        knobArea = knobs;
+        // one line of help above the knobs: what the buttons do now
+        if (box.getLook().hintLine || box.assigning() >= 0)
+        {
+            auto hintRow = r.removeFromBottom (20);
+            text1 (g, box.hint(), hintRow.reduced (12, 0), 12.5f, box.assigning() >= 0 ? accent : dim, juce::Justification::centredLeft, box.assigning() >= 0);
+        }
+        drawContent (g, r.reduced (10, 4));
+        drawKnobs (g, knobs);
+        drawTracks (g, tracks);
     }
-    menuHits.clearQuick();
-    drawContent (g, r.reduced (10, 4));
-    drawKnobs (g, knobs);
-    drawTracks (g, tracks);
+    else
+    {
+        // SYNTH and DRUMS: the whole screen for the instrument, no track strip, no knob row
+        knobArea = {};
+        auto hintRow = r.removeFromBottom (18);
+        if (synthPanelShown()) drawSynthPanel (g, r);
+        else if (scr == Controller::ScreenDrums && box.getMode() == ModeSeq) drawDrumMachine (g, r.reduced (8, 4));
+        else drawContent (g, r.reduced (10, 4));
+        text1 (g, scr == Controller::ScreenSynth ? juce::String ("Drag a knob (Ctrl = fine) - wheel - double-click = back to start - click the model to change it - numbers = your 12 knobs")
+                                                 : juce::String ("Click a step to turn it on / off - click a drum name to hear it - Space = play"),
+               hintRow.reduced (12, 0), 11.5f, dim, juce::Justification::centredLeft);
+    }
 
     if (box.isLearning()) drawLearn (g, juce::Rectangle<int> (0, 52, screenW, screenH - 52));
     if (box.isHelpShown()) drawHelp (g, juce::Rectangle<int> (0, 0, screenW, screenH));
@@ -219,6 +239,20 @@ void View::drawHeader (juce::Graphics& g, juce::Rectangle<int> r)
     text1 (g, "BPM", right.removeFromRight (40).withTrimmedLeft (4), 12.0f, dim, juce::Justification::centredLeft);
     learnHit = {};
 
+    modelHit = {};
+    if (synthPanelShown())   // the SYNTH: the model's name, click = the next model
+    {
+        const int mdl = juce::roundToInt (tr.params[(size_t) engineDef (EngineSynth).index ("model")]);
+        const auto& lk = synthModelLook (mdl);
+        auto mr = r.removeFromLeft (150);
+        modelHit = mr;
+        g.setColour (juce::Colour (lk.accent));
+        g.fillRoundedRectangle (mr.toFloat().reduced (0, 2), 6.0f);
+        const auto onAcc = juce::Colour (lk.accent).contrasting (0.9f);
+        text1 (g, lk.name, mr.withTrimmedBottom (14), 20.0f, onAcc, juce::Justification::centred, true);
+        text1 (g, juce::String ("after ") + lk.inspired, mr.withTrimmedTop (22), 9.5f, onAcc.withAlpha (0.8f), juce::Justification::centred);
+        r.removeFromLeft (10);
+    }
     // engine above, sound name big
     auto top = r.removeFromTop (14);
     text1 (g, engineDef (tr.engine).name.toUpperCase() + (tr.fxType != FxOff ? "   +  " + noteFxNames()[tr.fxType].toUpperCase() : juce::String()),
@@ -241,10 +275,29 @@ void View::drawTabs (juce::Graphics& g, juce::Rectangle<int> r)
     r = r.reduced (10, 0);
     modeHits.clearQuick();
     pageHits.clearQuick();
+    screenHits.clearQuick();
     const int m = box.getMode();
-    // modes (left)
+    const int scr = box.getScreen();
+    // the three screens: SYNTH, DRUMS, STUDIO (the studio then shows its own modes)
+    {
+        const char* names[] = { "SYNTH", "DRUMS", "STUDIO" };
+        for (int s = 0; s < 3; ++s)
+        {
+            if (scr == Controller::ScreenStudio && s != 2) continue;
+            const juce::String name = scr == Controller::ScreenStudio ? juce::String::fromUTF8 ("\xe2\x97\x80 SYNTH") : juce::String (names[s]);
+            g.setFont (font (14.0f, true));
+            const int w = juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), name) + 22;
+            auto cellR = r.removeFromLeft (w);
+            const bool on = scr == s && scr != Controller::ScreenStudio;
+            if (on) { g.setColour (accent); g.fillRect (cellR.removeFromBottom (3).reduced (6, 0)); }
+            text1 (g, name, cellR, 14.0f, on ? text : (scr == Controller::ScreenStudio ? accent : dim), juce::Justification::centred, true);
+            screenHits.add ({ cellR.withHeight (34).withY (52), scr == Controller::ScreenStudio ? 0 : s });
+        }
+        if (scr == Controller::ScreenStudio) { g.setColour (line); g.drawVerticalLine (r.getX() + 2, 60.0f, 80.0f); r.removeFromLeft (8); }
+    }
     for (int mm : modeOrder)
     {
+        if (scr != Controller::ScreenStudio) break;
         const juce::String name = mm == ModeSound && m == ModeBrowse ? "BROWSE" : (mm == ModeProject && m == ModeMenu ? "MENU" : modeName (mm));
         g.setFont (font (14.0f, true));
         const int w = juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), name) + 18;
@@ -626,6 +679,7 @@ void View::drawSeq (juce::Graphics& g, juce::Rectangle<int> r)
             const float y = r.getY() + l * rowH;
             const bool sel = l == box.seqLane();
             const auto name = box.laneName (box.getTrack(), l); juce::ignoreUnused (d);
+            seqHits.add ({ juce::Rectangle<float> ((float) r.getX(), y, (float) nameW, rowH).toNearestInt(), l, -1 });
             if (sel) { g.setColour (cell.brighter (0.1f)); g.fillRect (juce::Rectangle<float> ((float) r.getX(), y, (float) r.getWidth(), rowH)); }
             const float glow = laneGlow[(size_t) l];
             text1 (g, name, juce::Rectangle<float> ((float) r.getX() + 4, y, (float) nameW - 6, rowH).toNearestInt(), juce::jmin (13.0f, rowH),
@@ -634,6 +688,7 @@ void View::drawSeq (juce::Graphics& g, juce::Rectangle<int> r)
             {
                 const int step = barIdx * 16 + s;
                 auto c = juce::Rectangle<float> (r.getX() + nameW + s * cw, y, cw, rowH).reduced (1.5f, 1.5f);
+                seqHits.add ({ c.toNearestInt(), l, step });
                 if (step >= pat.length) { g.setColour (bg); g.fillRect (c); continue; }
                 const int v = pat.drums[(size_t) l][(size_t) step];
                 const bool held = sel && (box.isStepHeld (step) || step == box.selectedStep());
@@ -659,6 +714,7 @@ void View::drawSeq (juce::Graphics& g, juce::Rectangle<int> r)
         const int step = barIdx * 16 + s;
         auto c = juce::Rectangle<int> (r.getX() + (s % 8) * cw, r.getY() + (s / 8) * ch, cw, ch).reduced (3);
         if (step >= pat.length) { g.setColour (bg); g.fillRect (c); continue; }
+        seqHits.add ({ c, -1, step });
         const auto& st = pat.steps[(size_t) step];
         const bool held = box.isStepHeld (step) || step == box.selectedStep();
         g.setColour (st.on() ? cell.brighter (0.25f) : cell);
@@ -1080,6 +1136,171 @@ void View::drawReturns (juce::Graphics& g, juce::Rectangle<int> r)
     box3 (2, "FX SEND (send C)", insertDef (m.fxSend.type).name, { "level " + pc (m.fxLevel), "duck " + pc (m.fxDuck), "the FX SEND page picks it" }, m.fxLevel, m.fxDuck);
 }
 
+bool View::synthPanelShown() const
+{
+    const auto& tr = box.getProject().tracks[(size_t) box.getTrack()];
+    return box.getScreen() == Controller::ScreenSynth && box.getMode() == ModeSound && tr.engine == EngineSynth && box.soundExtraPage() < 0
+        && ! box.isSceneMode();
+}
+
+void View::drawSynthPanel (juce::Graphics& g, juce::Rectangle<int> r)
+{
+    const int t = box.getTrack();
+    const auto& tr = box.getProject().tracks[(size_t) t];
+    const auto& d = engineDef (EngineSynth);
+    const int mdl = juce::roundToInt (tr.params[(size_t) d.index ("model")]);
+    const auto& lk = synthModelLook (mdl);
+    const juce::Colour pnl (lk.panel), face (lk.face), acc (lk.accent), ink (lk.ink);
+    g.setColour (pnl);
+    g.fillRect (r);
+    // wooden cheeks (the 70s instruments)
+    if (lk.side != 0)
+    {
+        const juce::Colour wood (lk.side);
+        for (auto side : { r.withWidth (9), r.withLeft (r.getRight() - 9) })
+        {
+            g.setGradientFill (juce::ColourGradient (wood.brighter (0.25f), (float) side.getX(), 0.0f, wood.darker (0.35f), (float) side.getRight(), 0.0f, false));
+            g.fillRect (side);
+            g.setColour (wood.darker (0.6f).withAlpha (0.5f));
+            for (int y = side.getY() + 7; y < side.getBottom(); y += 13) g.drawHorizontalLine (y, (float) side.getX(), (float) side.getRight());
+        }
+        r = r.reduced (11, 0);
+    }
+    r = r.reduced (4, 4);
+    const auto& sections = synthPanel();
+    // two rows of sections, like the hardware: sound sources on top, shaping below
+    const int split = 5;
+    auto rowTop = r.removeFromTop (r.getHeight() / 2);
+    auto rowBottom = r;
+    auto layoutRow = [&] (juce::Rectangle<int> row, int from, int to)
+    {
+        int cols = 0;
+        for (int s = from; s < to; ++s) cols += ((int) sections[(size_t) s].ids.size() + 1) / 2;
+        const float colW = (float) row.getWidth() / (float) juce::jmax (1, cols);
+        float x = (float) row.getX();
+        for (int s = from; s < to; ++s)
+        {
+            const auto& sec = sections[(size_t) s];
+            const int n = (int) sec.ids.size(), c = (n + 1) / 2;
+            auto box2 = juce::Rectangle<float> (x, (float) row.getY(), colW * (float) c, (float) row.getHeight()).reduced (2.0f, 2.0f);
+            x += colW * (float) c;
+            g.setColour (pnl.contrasting (0.06f));
+            g.fillRoundedRectangle (box2, 5.0f);
+            g.setColour (acc.withAlpha (0.35f));
+            g.drawRoundedRectangle (box2, 5.0f, 1.0f);
+            auto inner = box2.toNearestInt();
+            text1 (g, sec.title, inner.removeFromTop (14).reduced (5, 0), 9.5f, pnl.getPerceivedBrightness() > 0.5f ? acc.darker (0.3f) : acc, juce::Justification::centredLeft, true);
+            const int cellW = inner.getWidth() / c, cellH = inner.getHeight() / 2;
+            for (int k = 0; k < n; ++k)
+            {
+                const int idx = d.index (sec.ids[(size_t) k]);
+                if (idx < 0) continue;
+                const auto& pd = d.params[(size_t) idx];
+                auto cell2 = juce::Rectangle<int> (inner.getX() + (k / 2) * cellW, inner.getY() + (k % 2) * cellH, cellW, cellH);
+                panelHits.add ({ cell2, idx });
+                const float val = tr.params[(size_t) idx];
+                const float nrm = pd.toNorm (val);
+                const bool active = idx == panelActive || idx == panelHover;
+                auto lab = cell2.removeFromTop (11);
+                auto valR = cell2.removeFromBottom (11);
+                juce::String name = pd.name;
+                for (const char* cut : { "Osc 1 ", "Osc 2 ", "Osc 3 ", "LFO > ", "F " }) if (name.startsWith (cut) && name.length() > (int) strlen (cut)) name = name.substring ((int) strlen (cut));
+                text1 (g, name, lab.reduced (1, 0), 9.0f, ink.withAlpha (0.85f), juce::Justification::centred);
+                text1 (g, pd.format (val), valR.reduced (1, 0), 9.0f, active ? acc : ink.withAlpha (0.55f), juce::Justification::centred, active);
+                // the knob
+                const float dia = (float) juce::jmin (cell2.getWidth() - 6, cell2.getHeight() - 2);
+                if (dia < 8.0f) continue;
+                const auto kc = cell2.toFloat().withSizeKeepingCentre (dia, dia);
+                const bool sw = pd.unit == ParamDef::Toggle;
+                if (sw)   // a switch: a lit rectangle
+                {
+                    auto sr2 = kc.withSizeKeepingCentre (dia * 0.9f, dia * 0.55f);
+                    g.setColour (val > 0.5f ? acc : face.contrasting (0.12f));
+                    g.fillRoundedRectangle (sr2, 3.0f);
+                    text1 (g, val > 0.5f ? "ON" : "OFF", sr2.toNearestInt(), 8.5f, val > 0.5f ? acc.contrasting (0.9f) : face.contrasting (0.7f), juce::Justification::centred, true);
+                }
+                else
+                {
+                    const float a0 = -2.4f, a1 = 2.4f, cx = kc.getCentreX(), cy = kc.getCentreY(), rad = dia * 0.5f;
+                    g.setColour (face.darker (0.4f));
+                    g.fillEllipse (kc.expanded (1.5f));
+                    g.setColour (face);
+                    g.fillEllipse (kc.reduced (dia * 0.12f));
+                    juce::Path back; back.addCentredArc (cx, cy, rad - 1.5f, rad - 1.5f, 0.0f, a0, a1, true);
+                    g.setColour (pnl.contrasting (0.18f));
+                    g.strokePath (back, juce::PathStrokeType (2.5f));
+                    const bool bip = pd.unit == ParamDef::BiPct || ((pd.unit == ParamDef::Semi || pd.unit == ParamDef::Cents) && pd.lo < 0);
+                    const float from = bip ? 0.0f : a0, to = a0 + (a1 - a0) * nrm;
+                    juce::Path arc; arc.addCentredArc (cx, cy, rad - 1.5f, rad - 1.5f, 0.0f, juce::jmin (from, to), juce::jmax (from, to) + 0.001f, true);
+                    g.setColour (active ? acc.brighter (0.3f) : acc);
+                    g.strokePath (arc, juce::PathStrokeType (2.5f));
+                    const float ang = to - juce::MathConstants<float>::halfPi;
+                    g.setColour (face.contrasting (0.85f));
+                    g.drawLine (cx + std::cos (ang) * rad * 0.15f, cy + std::sin (ang) * rad * 0.15f, cx + std::cos (ang) * rad * 0.72f, cy + std::sin (ang) * rad * 0.72f, 2.0f);
+                }
+                // which of the 12 knobs turns it now (Shift: the second layer)
+                const int hw = box.hardwareKnobFor (idx);
+                const bool layer = hw > 0 && ((hw <= 12) != box.isShift());
+                if (layer)
+                {
+                    const auto badge = juce::Rectangle<float> (12.0f, 12.0f).withPosition (kc.getRight() - 6.0f, kc.getY() - 3.0f);
+                    g.setColour (acc);
+                    g.fillEllipse (badge);
+                    text1 (g, juce::String ((hw - 1) % 12 + 1), badge.toNearestInt(), 8.0f, acc.contrasting (0.9f), juce::Justification::centred, true);
+                }
+            }
+        }
+    };
+    layoutRow (rowTop, 0, split);
+    layoutRow (rowBottom, split, (int) sections.size());
+}
+
+void View::drawDrumMachine (juce::Graphics& g, juce::Rectangle<int> r)
+{
+    const auto& p = box.getProject();
+    const int t = box.getTrack();
+    const auto& tr = p.tracks[(size_t) t];
+    auto bar = r.removeFromTop (34);
+    r.removeFromTop (4);
+    auto button = [&] (juce::Rectangle<int> b, const juce::String& label, int action, bool on = false, float size = 14.0f)
+    {
+        g.setColour (on ? accent : cell);
+        g.fillRoundedRectangle (b.toFloat().reduced (2.0f), 6.0f);
+        text1 (g, label, b, size, on ? bg : text, juce::Justification::centred, true);
+        actionHits.add ({ b, action });
+    };
+    const juce::String arrowL = juce::String::fromUTF8 ("\xe2\x97\x80"), arrowR = juce::String::fromUTF8 ("\xe2\x96\xb6");
+    // kit
+    button (bar.removeFromLeft (34), arrowL, 1, false, 11.0f);
+    {
+        auto k = bar.removeFromLeft (190);
+        g.setColour (panel); g.fillRoundedRectangle (k.toFloat().reduced (2.0f), 6.0f);
+        text1 (g, "KIT", k.removeFromLeft (34), 10.0f, dim, juce::Justification::centred, true);
+        text1 (g, box.presetName (t), k, 15.0f, text, juce::Justification::centredLeft, true);
+    }
+    button (bar.removeFromLeft (34), arrowR, 2, false, 11.0f);
+    bar.removeFromLeft (8);
+    // ready-made patterns
+    button (bar.removeFromLeft (34), arrowL, 3, false, 11.0f);
+    {
+        auto k = bar.removeFromLeft (150);
+        g.setColour (panel); g.fillRoundedRectangle (k.toFloat().reduced (2.0f), 6.0f);
+        text1 (g, "BEAT", k.removeFromLeft (40), 10.0f, dim, juce::Justification::centred, true);
+        text1 (g, box.drumPatternName(), k, 14.0f, text, juce::Justification::centredLeft, true);
+    }
+    button (bar.removeFromLeft (34), arrowR, 4, false, 11.0f);
+    bar.removeFromLeft (8);
+    // tempo, play, clear
+    button (bar.removeFromLeft (28), "-", 5);
+    text1 (g, juce::String (juce::roundToInt (p.m.tempo)) + " BPM", bar.removeFromLeft (70), 14.0f, text, juce::Justification::centred, true);
+    button (bar.removeFromLeft (28), "+", 6);
+    bar.removeFromLeft (8);
+    button (bar.removeFromRight (70), "CLEAR", 8, false, 12.0f);
+    button (bar.removeFromRight (80), box.getAudio().isPlaying() ? "STOP" : "PLAY", 7, box.getAudio().isPlaying());
+    juce::ignoreUnused (tr);
+    drawSeq (g, r);
+}
+
 void View::drawScenes (juce::Graphics& g, juce::Rectangle<int> r)
 {
     const auto& p = box.getProject();
@@ -1355,6 +1576,35 @@ bool View::screenTouch (juce::Point<float> sp, bool down)
         return true;
     }
     if (box.isHelpShown()) { box.toggleHelp(); return true; }
+    for (const auto& h : screenHits)
+        if (h.r.contains (p)) { if (h.action == 0) box.goSynth(); else if (h.action == 1) box.goDrums(); else box.goStudio(); return true; }
+    if (modelHit.contains (p)) { box.nextModel (1); return true; }
+    for (const auto& h : actionHits)
+        if (h.r.contains (p))
+        {
+            switch (h.action)
+            {
+                case 1: box.nextKit (-1); break;
+                case 2: box.nextKit (1); break;
+                case 3: box.nextDrumPattern (-1); break;
+                case 4: box.nextDrumPattern (1); break;
+                case 5: box.setMaster ([] (Master& m) { m.tempo = juce::jmax (40.0f, std::round (m.tempo) - 1.0f); }); break;
+                case 6: box.setMaster ([] (Master& m) { m.tempo = juce::jmin (240.0f, std::round (m.tempo) + 1.0f); }); break;
+                case 7: box.setPlaying (! box.getAudio().isPlaying()); break;
+                case 8: box.clearPattern (box.getTrack()); break;
+                default: break;
+            }
+            return true;
+        }
+    if (box.getMode() == ModeSeq)
+        for (const auto& h : seqHits)
+            if (h.r.contains (p))
+            {
+                if (h.lane >= 0 && h.step < 0) { box.keyDown (36 + h.lane, 100); box.keyUp (36 + h.lane); }   // a drum's name: hear it, pick it
+                else if (h.lane >= 0) box.toggleDrumStep (h.lane, h.step);
+                else box.clickStep (h.step);
+                return true;
+            }
     for (int i = 0; i < menuHits.size(); ++i) if (menuHits[i].contains (p)) { box.menuPress (i); return true; }
     for (int i = 0; i < trackHits.size(); ++i) if (trackHits[i].contains (p)) { box.selectTrack (i); return true; }
     for (int i = 0; i < modeHits.size(); ++i)
@@ -1423,6 +1673,12 @@ void View::mouseDown (const juce::MouseEvent& e)
     {
         const auto sp = lp - sr.getPosition();
         if (screenTouch (sp, true)) return;
+        for (const auto& h : panelHits)
+            if (h.r.contains (sp.toInt()))   // a knob of the synth panel: drag it (a click on a switch flips it)
+            {
+                drag = DragPanel; dragIndex = h.param; dragLastY = lp.y; panelActive = h.param; panelMoved = false;
+                return;
+            }
         const int k = screenKnobAt (sp);
         if (k >= 0) { drag = DragKnob; dragIndex = k; dragLastY = lp.y; return; }
         return;
@@ -1471,6 +1727,17 @@ void View::mouseDrag (const juce::MouseEvent& e)
             }
             break;
         }
+        case DragPanel:
+        {
+            const float dy = dragLastY - lp.y;
+            if (std::abs (dy) >= 1.0f)
+            {
+                box.nudgeParam (dragIndex, dy * (e.mods.isCtrlDown() ? 0.0012f : 0.0055f));
+                dragLastY = lp.y;
+                panelMoved = true;
+            }
+            break;
+        }
         case DragSlider:
         {
             const auto s = sliderRect();
@@ -1491,6 +1758,14 @@ void View::mouseDrag (const juce::MouseEvent& e)
 
 void View::mouseUp (const juce::MouseEvent&)
 {
+    if (drag == DragPanel)
+    {
+        const auto& d = engineDef (box.getProject().tracks[(size_t) box.getTrack()].engine);
+        if (! panelMoved && dragIndex >= 0 && dragIndex < (int) d.params.size()
+            && (d.params[(size_t) dragIndex].unit == ParamDef::Toggle || d.params[(size_t) dragIndex].unit == ParamDef::Choice))
+            box.cycleParam (dragIndex, 1);   // a click: the next position
+        panelActive = -1;
+    }
     if (drag == DragPad) box.padUp (dragIndex);
     if (drag == DragButton && dragIndex != BtnShift) box.buttonUp (dragIndex);
     if (drag == DragJoy) { joyPos = {}; box.setJoystick (0.0f, 0.0f); }   // springs back
@@ -1502,6 +1777,15 @@ void View::mouseDoubleClick (const juce::MouseEvent& e)
 {
     const auto lp = toLogical (e.position);
     const auto sr = screenRect().toFloat();
+    if (sr.contains (lp))
+        for (const auto& h : panelHits)
+            if (h.r.contains ((lp - sr.getPosition()).toInt()))
+            {
+                const auto& d = engineDef (box.getProject().tracks[(size_t) box.getTrack()].engine);
+                if (h.param < (int) d.params.size() && d.params[(size_t) h.param].unit != ParamDef::Choice && d.params[(size_t) h.param].unit != ParamDef::Toggle)
+                    box.resetParam (h.param);
+                return;
+            }
     int k = -1;
     if (sr.contains (lp)) k = screenKnobAt (lp - sr.getPosition());
     else if (! kiosk) for (int i = 0; i < numKnobs; ++i) if (knobRect (i).contains (lp)) k = i;
@@ -1522,8 +1806,17 @@ void View::mouseMove (const juce::MouseEvent& e)
             for (const auto& h : browseHits) if (h.r.contains (sp)) { c = h.column; idx = h.index; }
         }
     }
-    const bool overName = soundNameHit.contains ((toLogical (e.position) - screenRect().toFloat().getPosition()).toInt());
-    setMouseCursor (c >= 0 || overName ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+    const auto spos = (toLogical (e.position) - screenRect().toFloat().getPosition()).toInt();
+    const bool overName = soundNameHit.contains (spos) || modelHit.contains (spos);
+    int ph = -1;
+    for (const auto& h : panelHits) if (h.r.contains (spos)) ph = h.param;
+    bool overAction = false;
+    for (const auto& h : actionHits) overAction = overAction || h.r.contains (spos);
+    for (const auto& h : screenHits) overAction = overAction || h.r.contains (spos);
+    if (box.getMode() == ModeSeq) for (const auto& h : seqHits) overAction = overAction || h.r.contains (spos);
+    setMouseCursor (ph >= 0 ? juce::MouseCursor::UpDownResizeCursor
+                    : (c >= 0 || overName || overAction ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor));
+    if (ph != panelHover) { panelHover = ph; repaint(); }
     if (c != hoverColumn || idx != hoverIndex) { hoverColumn = c; hoverIndex = idx; repaint(); }
 }
 
@@ -1533,6 +1826,16 @@ void View::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDeta
     const auto sr = screenRect().toFloat();
     int k = -1;
     const float dd = (w.deltaY != 0.0f ? w.deltaY : -w.deltaX) * (w.isReversed ? -1.0f : 1.0f);
+    if (sr.contains (lp))
+        for (const auto& h : panelHits)
+            if (h.r.contains ((lp - sr.getPosition()).toInt()))   // the wheel turns the panel knob under the mouse
+            {
+                const auto& pdefs = engineDef (box.getProject().tracks[(size_t) box.getTrack()].engine).params;
+                const bool stepped = h.param < (int) pdefs.size() && pdefs[(size_t) h.param].stepped();
+                const float stepN = stepped ? 1.01f / juce::jmin (24.0f, pdefs[(size_t) h.param].hi - pdefs[(size_t) h.param].lo + 1.0f) : 0.02f;
+                if (dd != 0.0f) box.nudgeParam (h.param, dd > 0 ? stepN : -stepN);
+                return;
+            }
     if (sr.contains (lp) && box.getMode() == ModeBrowse)   // the wheel scrolls the list under the mouse
     {
         const auto sp = (lp - sr.getPosition()).toInt();
