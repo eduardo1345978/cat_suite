@@ -1,4 +1,5 @@
 #include "Controller.h"
+#include "Scope.h"
 #include "Music.h"
 #include "Samples.h"
 #include "Templates.h"
@@ -116,6 +117,7 @@ Controller::Controller (const juce::File& dir) : dataDir (dir)
     loadLook();
     potLast.fill (-1.0f);
     prepareSamples(); audio.push (project);
+    syncScope();
     startTimerHz (30);
 }
 
@@ -220,6 +222,8 @@ void Controller::pump()
     bool any = false;
     while (audio.popRec (r)) { if (! any) pushUndo ("Recording", true); applyRecNote (r); any = true; }
     if (any) { dirty = true; if (onChange) onChange(); }
+    syncScope();
+    if (scopeHold && screen.load() != ScreenScope) setScopeHold (false);   // the held picture note stays in the SCOPE app
 }
 
 void Controller::applyRecNote (const RecNote& r)
@@ -291,6 +295,8 @@ void Controller::buttonDown (int b)
         case BtnNext:
         {
             const int dir = b == BtnNext ? 1 : -1;
+            if (screen == ScreenScope && ! sh) { nextPicture (dir); break; }
+            if (screen == ScreenHome) break;
             const int t = track.load();
             const int m = mode.load();
             if (sh && (m == ModeSound || m == ModeBrowse || m == ModeProject || m == ModeFx || m == ModeMix))
@@ -437,7 +443,9 @@ void Controller::selectTrack (int t)
     if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "track"); o->setProperty ("v", t); sendRemote (o); return; }
     track = t;
     audio.viewTrack = t;
-    if ((screen == ScreenSynth && project.tracks[(size_t) t].engine != EngineSynth) || (screen == ScreenDrums && ! project.tracks[(size_t) t].isDrums()))
+    const int e = project.tracks[(size_t) t].engine;
+    if (((screen == ScreenSynth || screen == ScreenScope) && e != EngineSynth) || (screen == ScreenDrums && ! project.tracks[(size_t) t].isDrums())
+        || (screen == ScreenSampler && e != EngineSampler && e != EngineKit && e != EngineGranular))
         screen = ScreenStudio;
     numHeldSteps = 0;
     if (mode.load() == ModeBrowse) browseSync();
@@ -452,8 +460,11 @@ void Controller::setMode (int m)
     mode = juce::jlimit (0, NumModes - 1, m);
     numHeldSteps = 0;
     // the SYNTH screen is the sound (and its browser), the DRUMS screen the steps: anything else is the STUDIO
-    if (screen == ScreenSynth && m != ModeSound && m != ModeBrowse) screen = ScreenStudio;
+    if ((screen == ScreenSynth || screen == ScreenSampler) && m != ModeSound && m != ModeBrowse) screen = ScreenStudio;
     if (screen == ScreenDrums && m != ModeSeq) screen = ScreenStudio;
+    if (screen == ScreenScope && m != ModeSound) screen = ScreenStudio;
+    if (screen == ScreenSettings && m != ModeMenu && m != ModeProject) screen = ScreenStudio;
+    if (screen == ScreenHome) screen = ScreenStudio;   // a button of the studio pressed on HOME
     if (m == ModeMenu) menuPage = 0;
     if (m == ModeBrowse) browseSync();
     if (onChange) onChange();
@@ -1022,6 +1033,14 @@ Controller::Target Controller::targetFor (int slot) const
 {
     const int m = mode.load();
     const auto& tr = cur();
+    if (screen == ScreenScope && m == ModeSound)   // SCOPE: the picture's knobs (Shift: more of the synth)
+    {
+        static const char* ids[24] = { "pic", "psize", "pspin", "pturn", "pwobble", "ptwist", "o1range", "cutoff", "reso", "r", "lfoamp", "volume",
+                                       "xy", "o2semi", "o2fine", "o1wave", "a", "s", "lforate", "lfopitch", "lfoshape", "drive", "glide", "model" };
+        if (tr.engine != EngineSynth) return {};
+        const int i = engineDef (EngineSynth).index (ids[slot]);
+        return i >= 0 ? Target { KParam, i } : Target {};
+    }
     switch (m)
     {
         case ModeSound:
@@ -1463,6 +1482,7 @@ void Controller::turnKnob (int k, float clicks)
 {
     if (k < 0 || k >= numKnobs || clicks == 0.0f) return;
     if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "knob"); o->setProperty ("k", k); o->setProperty ("c", clicks); sendRemote (o); return; }
+    if (screen == ScreenHome) return;
     const int slot = k + (shift.load() || encPush[(size_t) k].load() ? numKnobs : 0);   // push + turn = the second layer
     if (mode.load() == ModeSeq) { seqKnob (slot, clicks); return; }
     if (assignPending >= 0 && tryAssign (targetFor (slot))) return;
@@ -1473,6 +1493,7 @@ void Controller::turnKnobBy (int k, float fraction)
 {
     if (k < 0 || k >= numKnobs || fraction == 0.0f) return;
     if (isRemote()) { turnKnob (k, fraction * 100.0f); return; }
+    if (screen == ScreenHome) return;
     const int slot = k + (shift.load() ? numKnobs : 0);
     if (mode.load() == ModeSeq) { seqKnob (slot, fraction * 48.0f); return; }
     if (assignPending >= 0 && tryAssign (targetFor (slot))) return;
@@ -1568,6 +1589,8 @@ KnobView Controller::knob (int k) const
 juce::StringArray Controller::pageNames() const
 {
     juce::StringArray n;
+    if (screen == ScreenHome) return n;
+    if (screen == ScreenScope) { n.add ("SCOPE"); return n; }
     switch (mode.load())
     {
         case ModeSound: for (const auto& p : engineDef (cur().engine).pages) n.add (p.name); n.add ("FX"); n.add ("MACRO"); n.add ("MOD"); n.add ("MY"); break;
@@ -1584,6 +1607,7 @@ juce::StringArray Controller::pageNames() const
 
 int Controller::pageIndex() const
 {
+    if (screen == ScreenScope || screen == ScreenHome) return 0;
     switch (mode.load())
     {
         case ModeSound: return soundPage[(size_t) track.load()];
@@ -1605,6 +1629,8 @@ juce::String Controller::pageName() const
 
 juce::String Controller::hint() const
 {
+    if (screen == ScreenHome) return "Pick an app: touch it, or step / pad 1-6 | SYNTH, DRUMS, STUDIO buttons go straight there";
+    if (screen == ScreenScope) return "Knobs: picture, size, spin, 3D turn, wobble, twist ... | Prev / Next: picture | play a key or HOLD | Shift: more";
     if (sceneMode.load()) return "Pads 1-8: scenes (Rec + pad = save) | pads 9-16: mute | Scene: back";
     if (assignPending >= 0) return assignPending == assignMy ? "Turn the knob you want on your MY page (any page, any mode) | Project: cancel"
                                                              : "Turn the knob macro " + juce::String (assignPending + 1) + " should move | Project: cancel";
@@ -1950,6 +1976,7 @@ void Controller::padDown (int pad, int velocity)
         runOnMessageThread ([this, pad, velocity] { auto* o = new juce::DynamicObject(); o->setProperty ("t", "pad"); o->setProperty ("p", pad); o->setProperty ("v", velocity); o->setProperty ("down", true); sendRemote (o); });
         return;
     }
+    if (screen.load() == ScreenHome) { if (pad < NumApps) runOnMessageThread ([this, pad] { openApp (pad); }); return; }   // HOME: pads 1-6 open the apps
     const int m = mode.load();
     if (m == ModeMenu && ! sceneMode.load()) { runOnMessageThread ([this, pad] { menuPress (pad); }); return; }
     if (sceneMode.load() || m == ModeSeq || m == ModeMix || shift.load())
@@ -2103,7 +2130,12 @@ void Controller::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMe
             if (cc >= firstPushCC && cc < firstPushCC + numKnobs) { encPush[(size_t) (cc - firstPushCC)] = v >= 64; return; }
             if (cc >= screenButtonCC && cc < screenButtonCC + 3)
             {
-                if (v >= 64) runOnMessageThread ([this, s = cc - screenButtonCC] { s == 0 ? goSynth() : s == 1 ? goDrums() : goStudio(); });
+                if (v >= 64) runOnMessageThread ([this, s = cc - screenButtonCC]
+                {
+                    // Shift + a screen button, or the button of the app you are in: HOME
+                    if (shift.load() || screen.load() == s) { goHome(); return; }
+                    s == 0 ? goSynth() : s == 1 ? goDrums() : goStudio();
+                });
                 return;
             }
         }
@@ -3137,6 +3169,214 @@ void Controller::goStudio()
     if (onChange) onChange();
 }
 
+juce::StringArray Controller::appNames() { return { "SYNTH", "DRUMS", "STUDIO", "SCOPE", "SAMPLER", "SETTINGS" }; }
+
+int Controller::appScreen (int app)
+{
+    static const int s[NumApps] = { ScreenSynth, ScreenDrums, ScreenStudio, ScreenScope, ScreenSampler, ScreenSettings };
+    return s[juce::jlimit (0, NumApps - 1, app)];
+}
+
+juce::String Controller::appDetail (int app) const
+{
+    switch (app)
+    {
+        case AppSynth:
+        {
+            const int t = synthTrack();
+            if (t < 0) return "the synthesizer";
+            return juce::String (synthModelLook (juce::roundToInt (project.tracks[(size_t) t].params[(size_t) engineDef (EngineSynth).index ("model")])).name) + " - " + presetName (t);
+        }
+        case AppDrums:   { const int t = drumTrack(); return t < 0 ? juce::String ("the drum machine") : presetName (t); }
+        case AppStudio:  return "8 tracks, steps, mix, effects";
+        case AppScope:   { const int p = pictureNow(); return p < 0 ? juce::String ("pictures you can hear") : scopePictureNames()[p]; }
+        case AppSampler: { const int t = samplerTrack(); return t < 0 ? juce::String ("samples and libraries") : presetName (t); }
+        case AppSettings: return "projects, MIDI, look, help";
+        default: return {};
+    }
+}
+
+void Controller::openApp (int app)
+{
+    switch (app)
+    {
+        case AppSynth:    goSynth(); break;
+        case AppDrums:    goDrums(); break;
+        case AppStudio:   goStudio(); break;
+        case AppScope:    goScope(); break;
+        case AppSampler:  goSampler(); break;
+        case AppSettings: goSettings(); break;
+        default: break;
+    }
+}
+
+void Controller::goHome()
+{
+    if (isRemote()) return;
+    sceneMode = false;
+    screen = ScreenHome;
+    if (onChange) onChange();
+}
+
+int Controller::samplerTrack() const
+{
+    for (int e : { (int) EngineSampler, (int) EngineKit, (int) EngineGranular })
+        for (int t = 0; t < numTracks; ++t) if (project.tracks[(size_t) t].engine == e) return t;
+    return -1;
+}
+
+void Controller::goSampler()
+{
+    int t = samplerTrack();
+    if (t < 0)   // none yet: track 7 becomes a sampler
+    {
+        t = 6;
+        loadSound (t, EngineSampler, 0);
+        setFlash ("Track 7 is now a Sampler (Shift + Chaos = undo)");
+    }
+    screen = ScreenSampler;
+    track = t;
+    audio.viewTrack = t;
+    mode = ModeSound;
+    if (soundExtraPage() >= 0) soundPage[(size_t) t] = 0;
+    if (onChange) onChange();
+}
+
+void Controller::goSettings()
+{
+    screen = ScreenSettings;
+    menuPage = 0;
+    menuConfirm = -1;
+    mode = ModeMenu;
+    if (onChange) onChange();
+}
+
+void Controller::goScope()
+{
+    goSynth();   // the synth track draws the pictures
+    screen = ScreenScope;
+    if (pictureNow() < 0)   // a plain synth sound: start with a picture (undo brings the sound back)
+    {
+        const auto& d = engineDef (EngineSynth);
+        for (size_t i = 0; i < d.presets.size(); ++i)
+            if (d.presets[i].name == "Cat Picture") { loadSound (track.load(), EngineSynth, (int) i); break; }
+    }
+    if (onChange) onChange();
+}
+
+int Controller::pictureNow() const
+{
+    const int t = synthTrack();
+    if (t < 0) return -1;
+    const auto& d = engineDef (EngineSynth);
+    const auto& tr = project.tracks[(size_t) t];
+    if (juce::roundToInt (tr.params[(size_t) d.index ("xy")]) != 3) return -1;
+    return juce::roundToInt (tr.params[(size_t) d.index ("pic")]);
+}
+
+void Controller::setPicture (int pic)
+{
+    const int t = synthTrack();
+    if (t < 0) return;
+    const auto& d = engineDef (EngineSynth);
+    pic = juce::jlimit (0, scopePictureNames().size() - 1, pic);
+    pushUndo ("Picture", true);
+    auto& tr = project.tracks[(size_t) t];
+    tr.params[(size_t) d.index ("xy")] = 3.0f;
+    tr.params[(size_t) d.index ("pic")] = (float) pic;
+    edited[(size_t) t] = true;
+    changed();
+    if (screen.load() != ScreenScope) setFlash ("Picture: " + scopePictureNames()[pic]);   // the SCOPE app shows it lit
+}
+
+void Controller::nextPicture (int dir)
+{
+    const int n = scopePictureNames().size();
+    setPicture ((juce::jmax (0, pictureNow()) + dir + n) % n);
+}
+
+juce::String Controller::scopeTextNow() const
+{
+    const int t = synthTrack();
+    return t < 0 ? juce::String() : project.tracks[(size_t) t].scopeText;
+}
+
+void Controller::setScopeText (const juce::String& text)
+{
+    const int t = synthTrack();
+    if (t < 0) return;
+    pushUndo ("Scope text");
+    project.tracks[(size_t) t].scopeText = text.trim().isEmpty() ? juce::String ("CAT BOX") : text.trim().substring (0, 80);
+    syncScope();
+    changed();
+    if (pictureNow() != scopePictureText()) setPicture (scopePictureText());
+}
+
+void Controller::scopeDrawBegin()
+{
+    pushUndo ("Drawing");
+    if (pictureNow() != scopePictureDrawing()) setPicture (scopePictureDrawing());
+}
+
+std::vector<float> Controller::scopeDrawingNow() const
+{
+    const int t = synthTrack();
+    return t < 0 ? std::vector<float>() : scopeDrawingFromString (project.tracks[(size_t) t].scopeDraw);
+}
+
+void Controller::setScopeDrawing (const std::vector<float>& d)
+{
+    const int t = synthTrack();
+    if (t < 0) return;
+    project.tracks[(size_t) t].scopeDraw = scopeDrawingToString (d);
+    syncScope();   // the beam follows right away
+    dirty = true;
+    audio.push (project);
+    if (onChange) onChange();
+}
+
+void Controller::clearScopeDrawing()
+{
+    pushUndo ("Clear drawing");
+    setScopeDrawing ({});
+}
+
+void Controller::setScopeHold (bool on)
+{
+    if (on == scopeHold) return;
+    if (on)
+    {
+        const int t = synthTrack();
+        if (t < 0) return;
+        audio.post ({ Event::NoteOn, (int8_t) t, (int16_t) scopeHoldNote, 0.8f });
+        scopeHoldTrack = t;
+    }
+    else if (scopeHoldTrack >= 0) audio.post ({ Event::NoteOff, (int8_t) scopeHoldTrack, (int16_t) scopeHoldNote, 0.0f });
+    scopeHold = on;
+    if (onChange) onChange();
+}
+
+void Controller::syncScope()
+{
+    for (int t = 0; t < numTracks; ++t)
+    {
+        const auto& tr = project.tracks[(size_t) t];
+        // the same string object (shared): nothing changed - no need to compare long drawings
+        if (! scopeSynced || tr.scopeText != scopeTextBuilt[(size_t) t])
+        {
+            catbox::setScopeText (t, tr.scopeText);
+            scopeTextBuilt[(size_t) t] = tr.scopeText;
+        }
+        if (! scopeSynced || (tr.scopeDraw.getCharPointer().getAddress() != scopeDrawBuilt[(size_t) t].getCharPointer().getAddress()
+                              && tr.scopeDraw != scopeDrawBuilt[(size_t) t]))
+        {
+            catbox::setScopeDrawing (t, scopeDrawingFromString (tr.scopeDraw));
+            scopeDrawBuilt[(size_t) t] = tr.scopeDraw;
+        }
+    }
+    scopeSynced = true;
+}
+
 namespace
 {
 const char* panelFxIds[] = { "#dtype", "#dtime", "#dfb", "#dsend", "#rtype", "#rsize", "#rsend", "#rpre" };
@@ -3402,6 +3642,15 @@ void Controller::stepButton (int k, bool down)
 {
     if (k < 0 || k >= 16) return;
     const int t = track.load();
+    if (screen == ScreenHome) { if (down && k < NumApps) openApp (k); return; }
+    if (screen == ScreenSettings) return;
+    if (screen == ScreenScope)   // steps 1-14: the pictures, 15: hold
+    {
+        if (! down) return;
+        if (k < scopePictureNames().size()) setPicture (k);
+        else if (k == 14) setScopeHold (! scopeHold);
+        return;
+    }
     if (screen == ScreenDrums)
     {
         if (! down) return;
@@ -3425,14 +3674,29 @@ void Controller::stepButton (int k, bool down)
 Controller::Leds Controller::leds() const
 {
     Leds l;
-    l.screen = screen;
+    const int scr = screen.load();
+    l.screen = scr == ScreenHome ? -1 : scr == ScreenScope ? ScreenSynth : scr >= ScreenHome ? ScreenStudio : scr;
+    if (scr == ScreenHome)
+    {
+        for (int k = 0; k < NumApps; ++k) l.steps[(size_t) k] = 1;
+        l.playing = audio.isPlaying(); l.rec = audio.isRecording();
+        return l;
+    }
+    if (scr == ScreenScope)
+    {
+        const int pic = pictureNow();
+        for (int k = 0; k < scopePictureNames().size(); ++k) l.steps[(size_t) k] = k == pic ? 3 : 1;
+        l.steps[14] = scopeHold ? 2 : 0;
+        l.playing = audio.isPlaying(); l.rec = audio.isRecording();
+        return l;
+    }
     l.playing = audio.isPlaying();
     l.rec = audio.isRecording();
     const int t = track.load();
     const auto& tr = cur();
     const auto& pat = tr.pat;
     const int b = bar[(size_t) t] * 16;
-    const bool steps = screen != ScreenStudio || mode.load() == ModeSeq;
+    const bool steps = scr == ScreenSynth || scr == ScreenDrums || (scr == ScreenStudio && mode.load() == ModeSeq);
     if (steps)
     {
         for (int k = 0; k < 16; ++k)

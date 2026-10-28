@@ -178,12 +178,36 @@ public:
     const Look& getLook() const noexcept { return look; }
     void setLook (const Look&);
 
-    // ---- the three screens: SYNTH (the instrument), DRUMS (a simple drum machine), STUDIO (everything else)
-    enum Screen { ScreenSynth = 0, ScreenDrums, ScreenStudio };
-    int getScreen() const noexcept { return screen; }
+    // ---- the apps: HOME (the icons), SYNTH (the instrument), DRUMS (a simple drum machine), STUDIO (everything else),
+    //      SCOPE (pictures on the oscilloscope), SAMPLER (samples and the libraries), SETTINGS
+    enum Screen { ScreenSynth = 0, ScreenDrums, ScreenStudio, ScreenHome, ScreenScope, ScreenSampler, ScreenSettings };
+    enum App { AppSynth = 0, AppDrums, AppStudio, AppScope, AppSampler, AppSettings, NumApps };
+    static juce::StringArray appNames();
+    static int appScreen (int app);
+    juce::String appDetail (int app) const;   // one line under the icon (what is in it now)
+    int getScreen() const noexcept { return screen.load(); }
     void goSynth();
     void goDrums();
     void goStudio();
+    void goHome();
+    void goScope();
+    void goSampler();
+    void goSettings();
+    void openApp (int app);
+    int samplerTrack() const;            // the first Sampler / Kit / Granular track (the SAMPLER app's)
+    // ---- the SCOPE app: pictures on the oscilloscope (the Synth track draws them)
+    void setPicture (int picture);
+    void nextPicture (int dir);
+    int pictureNow() const;               // -1 = the synth isn't drawing a picture
+    void setScopeText (const juce::String&);
+    juce::String scopeTextNow() const;
+    void scopeDrawBegin();                // a new stroke (undo remembers the drawing before it)
+    void setScopeDrawing (const std::vector<float>&);
+    std::vector<float> scopeDrawingNow() const;
+    void clearScopeDrawing();
+    void setScopeHold (bool);             // a note held so the picture stays
+    bool isScopeHold() const noexcept { return scopeHold; }
+    static constexpr int scopeHoldNote = 48;
     int synthTrack() const;              // the first track playing the Synth (the SYNTH screen's)
     int drumTrack() const;               // the first drum track (the DRUMS screen's)
     /** The panel and the mouse: a parameter of the current track moved by a part of its travel (undo merges a turn). */
@@ -313,7 +337,12 @@ private:
     int mixPage = 0, projectPage = 0;
     std::array<int, numTracks> fxSlot {}, modSlot {}, insPreset {};
     int sendFxPreset = 0, chainIdx = 0;
-    int screen = ScreenStudio;
+    std::atomic<int> screen { ScreenStudio };
+    bool scopeHold = false;
+    int scopeHoldTrack = -1;
+    std::array<juce::String, numTracks> scopeTextBuilt, scopeDrawBuilt;
+    bool scopeSynced = false;
+    void syncScope();   // the text and drawing pictures follow the project
     int drumPattern = -1;
     Touch touch;
     int assignPending = -1;

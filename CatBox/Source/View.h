@@ -39,6 +39,9 @@ public:
     /** For the self test: draws the screen alone. */
     juce::Image snapshotScreen();
     void setBigScope (bool b) { bigScope = b; }
+    void setDrawMode (bool b) { drawMode = b; }
+    /** The self test: a stroke drawn on the SCOPE app's pad (points in -1..1, y up), as the mouse would. */
+    void drawStroke (const std::vector<juce::Point<float>>&);
     /** The box's screen (kiosk) without the hardware: the live SYNTH page for the self test. */
 
 private:
@@ -85,6 +88,17 @@ private:
     std::vector<juce::Path> polarTrail;
     std::array<float, 48> spectrum {};
     void drawDrumMachine (juce::Graphics&, juce::Rectangle<int>);
+    // the apps
+    void drawHome (juce::Graphics&, juce::Rectangle<int>);
+    void drawAppIcon (juce::Graphics&, int app, juce::Rectangle<float>, juce::Colour);
+    void drawScopeApp (juce::Graphics&, juce::Rectangle<int>);
+    void showTextDialog();
+    static juce::Colour appColour (int app);
+    static constexpr int ActHome = 100, ActApp0 = 200, ActMode0 = 300, ActAudioMidi = 400, ActPic0 = 500,
+                         ActHold = 600, ActText = 601, ActDraw = 602, ActClear = 603, ActBig = 604, ActUndoStroke = 605;
+    bool drawMode = false;                 // SCOPE: the mouse / finger draws on the scope
+    juce::Rectangle<int> drawPad;
+    std::vector<float> drawPts;
     bool synthPanelShown() const;
 
     // the PC panel (in panel coordinates)
@@ -124,7 +138,7 @@ private:
     void mouseMove (const juce::MouseEvent&) override;
     juce::Rectangle<int> playHit, learnHit, skipHit, doneHit, knobArea;
 
-    enum DragKind { DragNone, DragKnob, DragSlider, DragJoy, DragPad, DragButton, DragPanel };
+    enum DragKind { DragNone, DragKnob, DragSlider, DragJoy, DragPad, DragButton, DragPanel, DragDraw };
     DragKind drag = DragNone;
     int dragIndex = -1;
     float dragLastY = 0.0f;

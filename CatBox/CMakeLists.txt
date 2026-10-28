@@ -30,6 +30,7 @@ target_sources(CatBox PRIVATE
     Source/Project.cpp
     Source/MixFx.cpp
     Source/Audio.cpp
+    Source/Scope.cpp
     Source/Controller.cpp
     Source/View.cpp
     Source/BoxLink.cpp

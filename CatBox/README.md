@@ -4,9 +4,27 @@ A groovebox you play yourself: **8 equal tracks**, and each track picks its own 
 own **note FX** and has its own **pattern** and **mixer strip**. Everything plays together at one tempo,
 in one key. Nothing is generated: you play it in or tap it into the steps.
 
-## Three screens
+## Apps
 
-- **SYNTH** (it starts here): one "digital analog" synthesizer on one panel, like a Moog: controllers, 3 oscillators,
+It starts on **HOME**: six apps as big icons - touch or click one (or step / pad / key 1-6). Each app shows only its own
+things; everything still plays together (one project, one tempo). **Back HOME**: the little house top left, `Esc` on the
+PC, on the box Shift + SYNTH / DRUMS / STUDIO (or the button of the app you are in).
+
+1. **SYNTH** - the synthesizer (below) · 2. **DRUMS** - the drum machine · 3. **STUDIO** - everything else (8 tracks,
+SEQ, note FX, mix, project) · 4. **SCOPE** - pictures on the oscilloscope · 5. **SAMPLER** - the sampler track, its SOUND
+and the LIBRARY · 6. **SETTINGS** - save / load, new project, MIDI keyboard, help, LOOK, sound card + MIDI (PC).
+
+### SCOPE: pictures you can hear
+
+The synth draws on an XY oscilloscope (left = X, right = Y): the beam follows a picture once per note period, so the
+picture **is** the sound - play keys (low notes draw calmer) or **HOLD** a note. Pictures: Cat, Star, Heart, Smile,
+Note, Lightning, House, Spiral, Flower, Cube, Pyramid, Globe (the last three are 3D), **Text** (TEXT: type a word, up
+to 3 lines with `|`) and **Drawing** (DRAW: draw on the scope with the mouse or a finger, every stroke is heard at
+once; CLEAR, UNDO). The 12 knobs: Picture, Size, Spin, 3D turn, Wobble, Twist, Osc 1 range, Cutoff (below 19 kHz the
+filter bends the picture), Emphasis, Release, Tremolo, Volume (Shift: more). Prev / Next = picture; on the box the step
+buttons 1-14 pick the picture, step 15 = HOLD. Your text and drawing are saved with the project.
+
+- **SYNTH**: one "digital analog" synthesizer on one panel, like a Moog: controllers, 3 oscillators,
   mixer, filter, filter and amp envelopes, LFO, poly-mod, output - every knob on screen, drag it with the mouse
   (Ctrl = fine), the wheel turns it, a double-click puts it back; switches flip with a click. The small numbers show
   which of your 12 knobs turns it now (◀ ▶ = the knob pages OSC, FILTER, ENV, LFO, OUTPUT).
@@ -126,7 +144,7 @@ other engines = like a piano: the bottom row the white keys C D E F G A B C, the
 
 `1-8` / `Q-I` the pads · `Space` Play · `Enter` Rec · `Shift` Shift · `Tab` next track · `←` `→` Prev / Next ·
 `F2` Sound · `F3` Seq · `F4` Note FX · `F5` Mix · `F6` Project · `N` Scene · `C` (hold) Chaos · `Z` / `X` pad octave ·
-`F1` all keys · `F7` XY oscilloscope. Mouse: drag or scroll a knob, double-click = back to its start; a pad clicked high = hard, low = soft.
+`F1` all keys · `F7` XY oscilloscope · `Esc` HOME (the apps). Mouse: drag or scroll a knob, double-click = back to its start; a pad clicked high = hard, low = soft.
 Right-click: sound card and MIDI, learn a MIDI keyboard, full screen.
 
 ## A MIDI keyboard (e.g. M-Audio Oxygen Pro Mini)

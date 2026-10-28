@@ -2,6 +2,7 @@
 #include "Music.h"
 #include "Samples.h"
 #include "Synth.h"
+#include "Scope.h"
 #include <cmath>
 #include <complex>
 
@@ -152,10 +153,33 @@ void View::drawScreen (juce::Graphics& g)
     seqHits.clearQuick();
     actionHits.clearQuick();
     menuHits.clearQuick();
+    trackHits.clearQuick(); modeHits.clearQuick(); pageHits.clearQuick(); screenHits.clearQuick();
+    playHit = soundNameHit = modelHit = scopeHit = drawPad = knobArea = {};
+    const int scr = box.getScreen();
+    if (scr != Controller::ScreenScope) drawMode = false;
+    if (scr == Controller::ScreenHome) drawHome (g, r);
+    else
+    {
     drawHeader (g, r.removeFromTop (52));
     drawTabs (g, r.removeFromTop (34));
-    const int scr = box.getScreen();
-    if (scr == Controller::ScreenStudio)
+    if (scr == Controller::ScreenScope) drawScopeApp (g, r);
+    else if (scr == Controller::ScreenSampler || (scr == Controller::ScreenSettings && box.getMode() != ModeMenu))
+    {
+        // an app with the 12 knobs below and no track strip
+        auto knobs = r.removeFromBottom (134);
+        knobArea = knobs;
+        auto hintRow = r.removeFromBottom (20);
+        text1 (g, box.hint(), hintRow.reduced (12, 0), 12.5f, dim, juce::Justification::centredLeft);
+        drawContent (g, r.reduced (10, 4));
+        drawKnobs (g, knobs);
+    }
+    else if (scr == Controller::ScreenSettings)
+    {
+        auto hintRow = r.removeFromBottom (20);
+        text1 (g, "Touch a tile (or its pad) | red = touch again to be sure | LOOK: how the screen looks", hintRow.reduced (12, 0), 12.5f, dim, juce::Justification::centredLeft);
+        drawContent (g, r.reduced (10, 6));
+    }
+    else if (scr == Controller::ScreenStudio)
     {
         auto tracks = r.removeFromBottom (32);
         auto knobs = r.removeFromBottom (134);
@@ -183,6 +207,7 @@ void View::drawScreen (juce::Graphics& g)
                                                         : juce::String ("Drag a knob (Ctrl = fine) - wheel - double-click = back to start - click the model to change it - numbers = your 12 knobs"))
                                                  : juce::String ("Click a step to turn it on / off - click a drum name to hear it - Space = play"),
                hintRow.reduced (12, 0), 11.5f, dim, juce::Justification::centredLeft);
+    }
     }
 
     if (bigScope && ! (kiosk && synthPanelShown()))   // F7: the XY scope over everything
@@ -291,22 +316,47 @@ void View::drawTabs (juce::Graphics& g, juce::Rectangle<int> r)
     screenHits.clearQuick();
     const int m = box.getMode();
     const int scr = box.getScreen();
-    // the three screens: SYNTH, DRUMS, STUDIO (the studio then shows its own modes)
+    // HOME (a little house) and the app you are in; the STUDIO then shows its modes, SAMPLER and SETTINGS their tabs
     {
-        const char* names[] = { "SYNTH", "DRUMS", "STUDIO" };
-        for (int s = 0; s < 3; ++s)
+        auto homeR = r.removeFromLeft (40);
+        const auto hc = homeR.toFloat().withSizeKeepingCentre (18.0f, 16.0f);
+        juce::Path house;
+        house.startNewSubPath (hc.getX(), hc.getY() + 7.0f);
+        house.lineTo (hc.getCentreX(), hc.getY());
+        house.lineTo (hc.getRight(), hc.getY() + 7.0f);
+        house.addRectangle (hc.getX() + 3.0f, hc.getY() + 7.0f, hc.getWidth() - 6.0f, hc.getHeight() - 7.0f);
+        g.setColour (dim);
+        g.strokePath (house, juce::PathStrokeType (1.8f, juce::PathStrokeType::mitered, juce::PathStrokeType::rounded));
+        screenHits.add ({ homeR.withHeight (34).withY (52), ActHome });
+        int app = Controller::AppStudio;
+        for (int a = 0; a < Controller::NumApps; ++a) if (Controller::appScreen (a) == scr) app = a;
+        const auto name = Controller::appNames()[app];
+        g.setFont (font (14.0f, true));
+        auto cellR = r.removeFromLeft (juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), name) + 22);
+        g.setColour (appColour (app));
+        g.fillRect (cellR.removeFromBottom (3).reduced (6, 0));
+        text1 (g, name, cellR, 14.0f, text, juce::Justification::centred, true);
+        g.setColour (line); g.drawVerticalLine (r.getX() + 2, 60.0f, 80.0f); r.removeFromLeft (8);
+        // the app's own tabs
+        auto tab = [&] (const juce::String& label, bool on, int action)
         {
-            if (scr == Controller::ScreenStudio && s != 2) continue;
-            const juce::String name = scr == Controller::ScreenStudio ? juce::String::fromUTF8 ("\xe2\x97\x80 SYNTH") : juce::String (names[s]);
-            g.setFont (font (14.0f, true));
-            const int w = juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), name) + 22;
-            auto cellR = r.removeFromLeft (w);
-            const bool on = scr == s && scr != Controller::ScreenStudio;
-            if (on) { g.setColour (accent); g.fillRect (cellR.removeFromBottom (3).reduced (6, 0)); }
-            text1 (g, name, cellR, 14.0f, on ? text : (scr == Controller::ScreenStudio ? accent : dim), juce::Justification::centred, true);
-            screenHits.add ({ cellR.withHeight (34).withY (52), scr == Controller::ScreenStudio ? 0 : s });
+            g.setFont (font (13.0f, true));
+            auto c = r.removeFromLeft (juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), label) + 18);
+            if (on) { g.setColour (accent); g.fillRect (c.removeFromBottom (3).reduced (6, 0)); }
+            text1 (g, label, c, 13.0f, on ? text : dim, juce::Justification::centred, true);
+            screenHits.add ({ c.withHeight (34).withY (52), action });
+        };
+        if (scr == Controller::ScreenSampler)
+        {
+            tab ("SOUND", m == ModeSound, ActMode0 + ModeSound);
+            tab ("LIBRARY", m == ModeBrowse, ActMode0 + ModeBrowse);
         }
-        if (scr == Controller::ScreenStudio) { g.setColour (line); g.drawVerticalLine (r.getX() + 2, 60.0f, 80.0f); r.removeFromLeft (8); }
+        if (scr == Controller::ScreenSettings)
+        {
+            tab ("MENU", m == ModeMenu, ActMode0 + ModeMenu);
+            tab ("LOOK", m == ModeProject, ActMode0 + ModeProject);
+            if (onSettings) tab ("AUDIO + MIDI", false, ActAudioMidi);
+        }
     }
     for (int mm : modeOrder)
     {
@@ -326,7 +376,7 @@ void View::drawTabs (juce::Graphics& g, juce::Rectangle<int> r)
     }
     // pages (right): the current one bright, ◀ ▶ around
     const auto pages = box.pageNames();
-    if (pages.size() > 1 || m == ModeFx)
+    if ((pages.size() > 1 || m == ModeFx) && scr != Controller::ScreenSettings)
     {
         auto pr = r.withTrimmedLeft (20);
         g.setFont (font (13.0f, true));
@@ -1356,9 +1406,19 @@ void View::drawXYScope (juce::Graphics& g, juce::Rectangle<int> r)
         const int k = (w - count + i + n) % n;
         peak = juce::jmax (peak, std::abs (a.xyL[(size_t) k].load (std::memory_order_relaxed)), std::abs (a.xyR[(size_t) k].load (std::memory_order_relaxed)));
     }
-    // the size follows the sound gently (a quiet figure fills the tube too)
-    const float target = peak > 0.002f ? 0.42f / peak : xyScale;
-    xyScale += (juce::jlimit (0.3f, 60.0f, target) - xyScale) * (target < xyScale * 0.8f ? 0.5f : 0.03f);   // calm: the figure doesn't breathe
+    // the size follows the sound gently (a quiet figure fills the tube too); a picture keeps its own size (the Size knob)
+    const int st = box.synthTrack();
+    if (box.pictureNow() >= 0 && st == box.getTrack())
+    {
+        const auto& sd = engineDef (EngineSynth);
+        const float vol = juce::Decibels::decibelsToGain (box.getProject().tracks[(size_t) st].params[(size_t) sd.index ("volume")]);
+        xyScale = 0.47f / juce::jmax (0.01f, 0.5f * 2.2f * vol);
+    }
+    else
+    {
+        const float target = peak > 0.002f ? 0.42f / peak : xyScale;
+        xyScale += (juce::jlimit (0.3f, 60.0f, target) - xyScale) * (target < xyScale * 0.8f ? 0.5f : 0.03f);   // calm: the figure doesn't breathe
+    }
     {
         juce::Graphics pg (phosphor);
         pg.setColour (juce::Colour (0xff020a04).withAlpha (0.28f));   // the afterglow fades
@@ -1711,7 +1771,7 @@ void View::drawHelp (juce::Graphics& g, juce::Rectangle<int> r)
     in.removeFromTop (8);
     const char* keys[] = {
         "PC:  1-8 / Q-I pads   Space Play   Enter Rec   Shift   Tab next track   Left / Right Prev / Next",
-        "F2 Sound   F3 Seq   F4 Note FX   F5 Mix   F6 Project (twice: MENU)   N Scene   C (hold) Chaos   Z / X pad octave",
+        "F2 Sound   F3 Seq   F4 Note FX   F5 Mix   F6 Project (twice: MENU)   N Scene   C (hold) Chaos   Z / X pad octave   Esc HOME   F7 scope",
         "Mouse: drag or scroll a knob, double-click = start value; right-click = sound card, MIDI, full screen",
     };
     for (auto* l : keys) text1 (g, l, in.removeFromTop (22), 13.0f, dim, juce::Justification::centredLeft);
@@ -1742,6 +1802,287 @@ void View::drawMenu (juce::Graphics& g, juce::Rectangle<int> r)
         if (t.detail.isNotEmpty() && ! red) text1 (g, t.detail, in, 10.5f, t.enabled ? dim : faint, juce::Justification::bottomLeft);
         if (t.danger && ! red) { g.setColour (recRed.withAlpha (0.8f)); g.fillRect (c.removeFromBottom (3).reduced (8, 0)); }
     }
+}
+
+//==============================================================================
+// The apps: HOME and SCOPE
+juce::Colour View::appColour (int app)
+{
+    static const juce::uint32 c[Controller::NumApps] = { 0xffff9a3c, 0xffff5a5f, 0xff4da3ff, 0xff3cff7a, 0xffc77dff, 0xffb8bcc6 };
+    return juce::Colour (c[juce::jlimit (0, Controller::NumApps - 1, app)]);
+}
+
+void View::drawAppIcon (juce::Graphics& g, int app, juce::Rectangle<float> r, juce::Colour c)
+{
+    const auto stroke = juce::PathStrokeType (2.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+    switch (app)
+    {
+        case Controller::AppSynth:   // three knobs over a keyboard
+        {
+            auto kb = r.removeFromBottom (r.getHeight() * 0.5f);
+            for (int k = 0; k < 3; ++k)
+            {
+                const auto kc = juce::Rectangle<float> (r.getX() + k * r.getWidth() / 3.0f, r.getY(), r.getWidth() / 3.0f, r.getHeight()).withSizeKeepingCentre (r.getHeight() * 0.62f, r.getHeight() * 0.62f);
+                g.setColour (c.withAlpha (0.25f)); g.fillEllipse (kc);
+                g.setColour (c); g.drawEllipse (kc, 2.0f);
+                const float a = -2.0f + 1.6f * (float) k;
+                g.drawLine (kc.getCentreX(), kc.getCentreY(), kc.getCentreX() + std::sin (a) * kc.getWidth() * 0.42f, kc.getCentreY() - std::cos (a) * kc.getHeight() * 0.42f, 2.0f);
+            }
+            kb = kb.reduced (2.0f, 4.0f);
+            g.setColour (c); g.drawRoundedRectangle (kb, 3.0f, 2.0f);
+            const float kw = kb.getWidth() / 7.0f;
+            for (int k = 1; k < 7; ++k) g.drawVerticalLine (juce::roundToInt (kb.getX() + kw * k), kb.getY(), kb.getBottom());
+            for (int k : { 1, 2, 4, 5, 6 }) g.fillRect (juce::Rectangle<float> (kw * 0.55f, kb.getHeight() * 0.58f).withCentre ({ kb.getX() + kw * k, kb.getY() + kb.getHeight() * 0.29f }));
+            break;
+        }
+        case Controller::AppDrums:   // a step grid
+        {
+            static const int on[16] = { 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1 };
+            const float cw = r.getWidth() / 4.0f, ch = r.getHeight() / 4.0f;
+            for (int k = 0; k < 16; ++k)
+            {
+                const auto cr = juce::Rectangle<float> (r.getX() + (k % 4) * cw, r.getY() + (k / 4) * ch, cw, ch).reduced (3.0f);
+                g.setColour (on[k] ? c : c.withAlpha (0.18f));
+                g.fillRoundedRectangle (cr, 3.0f);
+            }
+            break;
+        }
+        case Controller::AppStudio:   // a mixer: 8 faders
+        {
+            static const float lv[8] = { 0.7f, 0.45f, 0.8f, 0.55f, 0.3f, 0.65f, 0.5f, 0.85f };
+            const float cw = r.getWidth() / 8.0f;
+            for (int k = 0; k < 8; ++k)
+            {
+                const float x = r.getX() + cw * (k + 0.5f);
+                g.setColour (c.withAlpha (0.3f)); g.drawLine (x, r.getY(), x, r.getBottom(), 2.0f);
+                g.setColour (c); g.fillRoundedRectangle (juce::Rectangle<float> (cw * 0.7f, 6.0f).withCentre ({ x, r.getBottom() - r.getHeight() * lv[k] }), 2.0f);
+            }
+            break;
+        }
+        case Controller::AppScope:   // a figure on a round tube
+        {
+            const auto sq = r.withSizeKeepingCentre (juce::jmin (r.getWidth(), r.getHeight()), juce::jmin (r.getWidth(), r.getHeight()));
+            g.setColour (juce::Colour (0xff031008)); g.fillEllipse (sq);
+            g.setColour (c.withAlpha (0.4f)); g.drawEllipse (sq, 1.5f);
+            juce::Path p;
+            for (int i = 0; i <= 120; ++i)
+            {
+                const float t = juce::MathConstants<float>::twoPi * (float) i / 120.0f;
+                const float x = sq.getCentreX() + std::sin (3.0f * t) * sq.getWidth() * 0.34f, y = sq.getCentreY() - std::sin (2.0f * t + 0.6f) * sq.getHeight() * 0.34f;
+                if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y);
+            }
+            g.setColour (c.withAlpha (0.3f)); g.strokePath (p, juce::PathStrokeType (5.0f));
+            g.setColour (c); g.strokePath (p, juce::PathStrokeType (1.8f));
+            break;
+        }
+        case Controller::AppSampler:   // a sample's wave
+        {
+            juce::Path p;
+            const int n = 90;
+            for (int i = 0; i <= n; ++i)
+            {
+                const float t = (float) i / (float) n;
+                const float env = std::exp (-3.5f * t) * (t < 0.04f ? t / 0.04f : 1.0f);
+                const float v = std::sin (t * 60.0f) * env * (0.6f + 0.4f * std::sin (t * 13.0f));
+                const float x = r.getX() + r.getWidth() * t, y = r.getCentreY() - v * r.getHeight() * 0.45f;
+                if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y);
+            }
+            g.setColour (c.withAlpha (0.3f)); g.drawHorizontalLine (juce::roundToInt (r.getCentreY()), r.getX(), r.getRight());
+            g.setColour (c); g.strokePath (p, juce::PathStrokeType (2.0f));
+            break;
+        }
+        default:   // a gear
+        {
+            const auto ctr = r.getCentre();
+            const float R = juce::jmin (r.getWidth(), r.getHeight()) * 0.42f;
+            juce::Path gear;
+            for (int k = 0; k < 8; ++k)
+            {
+                const float a = juce::MathConstants<float>::twoPi * (float) k / 8.0f;
+                gear.addRectangle (juce::Rectangle<float> (R * 0.36f, R * 0.5f).withCentre (ctr.translated (std::sin (a) * R * 0.86f, -std::cos (a) * R * 0.86f)));
+                gear.applyTransform (juce::AffineTransform());
+            }
+            juce::Path teeth;
+            for (int k = 0; k < 8; ++k)
+            {
+                juce::Path t1;
+                t1.addRoundedRectangle (juce::Rectangle<float> (R * 0.38f, R * 0.5f).withCentre ({ 0.0f, -R * 0.86f }), 2.0f);
+                teeth.addPath (t1, juce::AffineTransform::rotation (juce::MathConstants<float>::twoPi * (float) k / 8.0f).translated (ctr));
+            }
+            g.setColour (c);
+            g.fillPath (teeth);
+            g.fillEllipse (juce::Rectangle<float> (R * 1.6f, R * 1.6f).withCentre (ctr));
+            g.setColour (cell);
+            g.fillEllipse (juce::Rectangle<float> (R * 0.6f, R * 0.6f).withCentre (ctr));
+            juce::ignoreUnused (gear, stroke);
+            break;
+        }
+    }
+}
+
+void View::drawHome (juce::Graphics& g, juce::Rectangle<int> r)
+{
+    g.setColour (bg);
+    g.fillRect (r);
+    auto top = r.removeFromTop (58).reduced (20, 8);
+    // the name, with a cat's ears on the C
+    text1 (g, "CAT BOX", top.removeFromLeft (220), 30.0f, text, juce::Justification::centredLeft, true);
+    {
+        juce::Path ears;
+        const float x = (float) top.getX() - 220.0f + 2.0f, y = (float) top.getCentreY() - 19.0f;
+        ears.addTriangle (x, y + 8.0f, x + 5.0f, y, x + 10.0f, y + 6.0f);
+        ears.addTriangle (x + 13.0f, y + 6.0f, x + 18.0f, y, x + 23.0f, y + 8.0f);
+        g.setColour (accent);
+        g.fillPath (ears);
+    }
+    auto right = top.removeFromRight (250);
+    const bool playing = box.getAudio().isPlaying();
+    auto icon = right.removeFromRight (40).toFloat().reduced (9, 9);
+    playHit = icon.toNearestInt().expanded (8);
+    g.setColour (playing ? accent : dim);
+    if (playing) { juce::Path tri; tri.addTriangle (icon.getX(), icon.getY(), icon.getX(), icon.getBottom(), icon.getRight(), icon.getCentreY()); g.fillPath (tri); }
+    else g.fillRect (icon.reduced (2));
+    right.removeFromRight (10);
+    text1 (g, juce::String (juce::roundToInt (box.getProject().m.tempo)), right.removeFromRight (60), 26.0f, text, juce::Justification::centredRight, true);
+    text1 (g, "BPM", right.removeFromRight (40).withTrimmedLeft (4), 12.0f, dim, juce::Justification::centredLeft);
+
+    auto hintRow = r.removeFromBottom (26);
+    text1 (g, kiosk ? "Touch an app - or step / pad 1-6 | SYNTH, DRUMS, STUDIO buttons go straight there | Shift + one of them: back HOME"
+                    : "Click an app - or keys 1-6 | Esc: back HOME from any app",
+           hintRow.reduced (20, 0), 12.0f, dim, juce::Justification::centredLeft);
+    auto grid = r.reduced (14, 4);
+    const int cw = grid.getWidth() / 3, ch = grid.getHeight() / 2;
+    for (int a = 0; a < Controller::NumApps; ++a)
+    {
+        auto c = juce::Rectangle<int> (grid.getX() + (a % 3) * cw, grid.getY() + (a / 3) * ch, cw, ch).reduced (7);
+        const auto col = appColour (a);
+        g.setColour (cell);
+        g.fillRoundedRectangle (c.toFloat(), 12.0f);
+        g.setColour (col.withAlpha (0.35f));
+        g.drawRoundedRectangle (c.toFloat().reduced (0.5f), 12.0f, 1.0f);
+        g.setColour (col);
+        g.fillRoundedRectangle (c.toFloat().removeFromTop (4.0f).reduced (14.0f, 0.0f), 2.0f);
+        auto in = c.reduced (14, 10);
+        text1 (g, juce::String (a + 1), in.withHeight (14), 11.0f, faint, juce::Justification::topLeft, true);
+        auto iconR = in.removeFromTop (in.getHeight() - 50).toFloat().withSizeKeepingCentre (juce::jmin (130.0f, (float) in.getWidth() * 0.6f), (float) (in.getHeight() - 56) * 0.0f + juce::jmin (78.0f, (float) c.getHeight() - 76.0f));
+        drawAppIcon (g, a, iconR, col);
+        text1 (g, Controller::appNames()[a], in.removeFromTop (28), 21.0f, text, juce::Justification::centred, true);
+        text1 (g, box.appDetail (a), in, 12.0f, dim, juce::Justification::centredTop);
+        actionHits.add ({ c, ActApp0 + a });
+    }
+}
+
+void View::drawScopeApp (juce::Graphics& g, juce::Rectangle<int> r)
+{
+    const juce::Colour green (0xff3cff7a);
+    auto knobs = r.removeFromBottom (134);
+    knobArea = knobs;
+    drawKnobs (g, knobs);
+    auto hintRow = r.removeFromBottom (18);
+    g.setColour (juce::Colour (0xff070a08));
+    g.fillRect (r);
+    text1 (g, drawMode ? juce::String ("Draw on the scope with the mouse / finger - every stroke is heard at once | DRAW again: done")
+                       : box.hint(), hintRow.reduced (12, 0), 11.5f, drawMode ? green : dim, juce::Justification::centredLeft);
+    r = r.reduced (8, 6);
+    // left: the scope (in DRAW mode also the pad you draw on)
+    auto sq = r.removeFromLeft (r.getHeight());
+    scopeHit = sq;
+    drawXYScope (g, sq);
+    if (drawMode)
+    {
+        drawPad = sq;
+        const auto pts = box.scopeDrawingNow();
+        const auto c = sq.toFloat().getCentre();
+        const float half = sq.getWidth() * 0.5f;
+        juce::Path p;
+        bool pen = false;
+        for (size_t i = 0; i + 1 < pts.size(); i += 2)
+        {
+            if (pts[i] >= scopePenUp) { pen = false; continue; }
+            const float x = c.x + pts[i] * half, y = c.y - pts[i + 1] * half;
+            if (! pen) { p.startNewSubPath (x, y); pen = true; } else p.lineTo (x, y);
+        }
+        g.setColour (juce::Colours::white.withAlpha (0.35f));
+        g.strokePath (p, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setColour (green.withAlpha (0.9f));
+        const float dl[] = { 6.0f, 4.0f };
+        g.drawDashedLine (juce::Line<float> (sq.toFloat().getTopLeft(), sq.toFloat().getTopRight()), dl, 2, 2.0f);
+        g.drawDashedLine (juce::Line<float> (sq.toFloat().getBottomLeft(), sq.toFloat().getBottomRight()), dl, 2, 2.0f);
+        if (pts.empty()) text1 (g, "DRAW HERE", sq, 22.0f, green.withAlpha (0.6f), juce::Justification::centred, true);
+    }
+    r.removeFromLeft (10);
+    // right: the pictures, then the buttons
+    auto buttons = r.removeFromBottom (44);
+    r.removeFromBottom (6);
+    const auto names = scopePictureNames();
+    const int pic = box.pictureNow(), st = juce::jmax (0, box.synthTrack());
+    const int cols = 7, rows = (names.size() + cols - 1) / cols;
+    const int cw = r.getWidth() / cols, ch = r.getHeight() / rows;
+    for (int i = 0; i < names.size(); ++i)
+    {
+        auto c = juce::Rectangle<int> (r.getX() + (i % cols) * cw, r.getY() + (i / cols) * ch, cw, ch).reduced (3);
+        const bool on = i == pic;
+        g.setColour (on ? green.withAlpha (0.16f) : juce::Colour (0xff111613));
+        g.fillRoundedRectangle (c.toFloat(), 6.0f);
+        g.setColour (on ? green : green.withAlpha (0.15f));
+        g.drawRoundedRectangle (c.toFloat().reduced (0.5f), 6.0f, on ? 1.5f : 1.0f);
+        auto nameR = c.removeFromBottom (15);
+        text1 (g, names[i], nameR, 10.0f, on ? green : green.withAlpha (0.55f), juce::Justification::centred, on);
+        const auto th = c.toFloat().reduced (6.0f);
+        const float half = juce::jmin (th.getWidth(), th.getHeight()) * 0.5f;
+        const auto ctr = th.getCentre();
+        juce::Path p;
+        for (const auto& stroke : scopeOutline (i, st))
+            for (size_t k = 0; k < stroke.size(); ++k)
+            {
+                const float x = ctr.x + stroke[k].x * half, y = ctr.y - stroke[k].y * half;
+                if (k == 0) p.startNewSubPath (x, y); else p.lineTo (x, y);
+            }
+        g.setColour (on ? green : green.withAlpha (0.6f));
+        g.strokePath (p, juce::PathStrokeType (1.1f));
+        actionHits.add ({ c.withTrimmedBottom (-15), ActPic0 + i });
+    }
+    // buttons: HOLD, TEXT, DRAW (CLEAR, UNDO), BIG
+    auto button = [&] (int w, const juce::String& label, int action, bool on)
+    {
+        auto b = buttons.removeFromLeft (w).reduced (3);
+        g.setColour (on ? green : juce::Colour (0xff17201a));
+        g.fillRoundedRectangle (b.toFloat(), 6.0f);
+        g.setColour (green.withAlpha (on ? 1.0f : 0.35f));
+        g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 6.0f, 1.0f);
+        text1 (g, label, b.reduced (6, 0), 13.0f, on ? juce::Colour (0xff04140a) : green, juce::Justification::centred, true);
+        actionHits.add ({ b, action });
+    };
+    button (80, "HOLD", ActHold, box.isScopeHold());
+    juce::String t = box.scopeTextNow().replace ("\n", " / ");
+    if (t.length() > 12) t = t.substring (0, 11) + "...";
+    button (150, "TEXT: " + t, ActText, pic == scopePictureText());
+    button (80, "DRAW", ActDraw, drawMode);
+    if (drawMode) { button (80, "CLEAR", ActClear, false); button (80, "UNDO", ActUndoStroke, false); }
+    else button (70, "BIG", ActBig, false);
+}
+
+void View::showTextDialog()
+{
+    auto* w = new juce::AlertWindow ("Text on the scope", "What should the beam write? Up to 3 lines (a | starts a new line).", juce::MessageBoxIconType::NoIcon, this);
+    w->addTextEditor ("text", box.scopeTextNow().replace ("\n", "|"));
+    w->addButton ("Write", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+    juce::Component::SafePointer<View> safe (this);
+    w->enterModalState (true, juce::ModalCallbackFunction::create ([safe, w] (int r)
+    {
+        if (r == 1 && safe != nullptr) safe->box.setScopeText (w->getTextEditorContents ("text").replace ("|", "\n"));
+    }), true);
+}
+
+void View::drawStroke (const std::vector<juce::Point<float>>& pts)
+{
+    if (pts.empty()) return;
+    box.scopeDrawBegin();
+    drawPts = box.scopeDrawingNow();
+    if (! drawPts.empty()) { drawPts.push_back (scopePenUp); drawPts.push_back (0.0f); }
+    for (auto p : pts) { drawPts.push_back (p.x); drawPts.push_back (p.y); }
+    box.setScopeDrawing (drawPts);
 }
 
 //==============================================================================
@@ -1881,7 +2222,8 @@ void View::drawPanel (juce::Graphics& g)
             g.drawRoundedRectangle (r.reduced (2.0f), 5.0f, 2.0f);
         }
         juce::String label;
-        if (box.isSceneMode()) label = p < 8 ? "Scene " + juce::String (p + 1) : "Mute " + juce::String (p - 7);
+        if (box.getScreen() == Controller::ScreenHome) label = p < Controller::NumApps ? Controller::appNames()[p] : juce::String();
+        else if (box.isSceneMode()) label = p < 8 ? "Scene " + juce::String (p + 1) : "Mute " + juce::String (p - 7);
         else if (box.getMode() == ModeMix) label = p < 8 ? "Mute " + juce::String (p + 1) : "Solo " + juce::String (p - 7);
         else if (box.getMode() == ModeSeq) label = "Step " + juce::String (box.seqBar() * 16 + p + 1);
         else if (box.getMode() == ModeMenu) label = menuNow[(size_t) p].label;
@@ -1920,8 +2262,21 @@ bool View::screenTouch (juce::Point<float> sp, bool down)
         return true;
     }
     if (box.isHelpShown()) { box.toggleHelp(); return true; }
+    if (bigScope && box.getScreen() == Controller::ScreenScope) { bigScope = false; return true; }   // a touch on the big scope: back
     for (const auto& h : screenHits)
-        if (h.r.contains (p)) { if (h.action == 0) box.goSynth(); else if (h.action == 1) box.goDrums(); else box.goStudio(); return true; }
+        if (h.r.contains (p))
+        {
+            if (h.action == ActHome) box.goHome();
+            else if (h.action == ActAudioMidi) { if (onSettings) onSettings(); }
+            else if (h.action >= ActMode0 && h.action < ActMode0 + NumModes)
+            {
+                const int mm = h.action - ActMode0;
+                if (box.getScreen() == Controller::ScreenSettings && mm == ModeProject) { box.setMode (ModeProject); if (box.pageIndex() != 1) { box.buttonDown (BtnNext); box.buttonUp (BtnNext); } }
+                else if (box.getScreen() == Controller::ScreenSettings && mm == ModeMenu) box.goSettings();
+                else box.setMode (mm);
+            }
+            return true;
+        }
     if (modelHit.contains (p)) { box.nextModel (1); return true; }
     if (scopeHit.contains (p) && synthPanelShown() && kiosk) { bigScope = ! bigScope; return true; }   // a touch on the scope: big / small
     for (const auto& h : actionHits)
@@ -1937,7 +2292,16 @@ bool View::screenTouch (juce::Point<float> sp, bool down)
                 case 6: box.setMaster ([] (Master& m) { m.tempo = juce::jmin (240.0f, std::round (m.tempo) + 1.0f); }); break;
                 case 7: box.setPlaying (! box.getAudio().isPlaying()); break;
                 case 8: box.clearPattern (box.getTrack()); break;
-                default: break;
+                case ActHold: box.setScopeHold (! box.isScopeHold()); break;
+                case ActText: showTextDialog(); break;
+                case ActDraw: drawMode = ! drawMode; if (drawMode && box.pictureNow() != scopePictureDrawing()) box.setPicture (scopePictureDrawing()); break;
+                case ActClear: box.clearScopeDrawing(); break;
+                case ActUndoStroke: box.undo(); break;
+                case ActBig: bigScope = true; break;
+                default:
+                    if (h.action >= ActApp0 && h.action < ActApp0 + Controller::NumApps) box.openApp (h.action - ActApp0);
+                    if (h.action >= ActPic0 && h.action < ActPic0 + 32) box.setPicture (h.action - ActPic0);
+                    break;
             }
             return true;
         }
@@ -2017,6 +2381,18 @@ void View::mouseDown (const juce::MouseEvent& e)
     if (sr.contains (lp))
     {
         const auto sp = lp - sr.getPosition();
+        if (drawMode && drawPad.contains (sp.toInt()) && box.getScreen() == Controller::ScreenScope && ! bigScope)   // drawing on the scope
+        {
+            box.scopeDrawBegin();
+            drawPts = box.scopeDrawingNow();
+            if (! drawPts.empty()) { drawPts.push_back (scopePenUp); drawPts.push_back (0.0f); }
+            const auto c = drawPad.toFloat().getCentre();
+            const float half = drawPad.getWidth() * 0.5f;
+            drawPts.push_back ((sp.x - c.x) / half); drawPts.push_back ((c.y - sp.y) / half);
+            box.setScopeDrawing (drawPts);
+            drag = DragDraw;
+            return;
+        }
         if (screenTouch (sp, true)) return;
         for (const auto& h : panelHits)
             if (h.r.contains (sp.toInt()))   // a knob of the synth panel: drag it (a click on a switch flips it)
@@ -2081,6 +2457,19 @@ void View::mouseDrag (const juce::MouseEvent& e)
                 dragLastY = lp.y;
                 panelMoved = true;
             }
+            break;
+        }
+        case DragDraw:
+        {
+            const auto sp = lp - screenRect().toFloat().getPosition();
+            const auto c = drawPad.toFloat().getCentre();
+            const float half = juce::jmax (1.0f, drawPad.getWidth() * 0.5f);
+            const float x = juce::jlimit (-1.0f, 1.0f, (sp.x - c.x) / half), y = juce::jlimit (-1.0f, 1.0f, (c.y - sp.y) / half);
+            const size_t n = drawPts.size();
+            if (n >= 2 && std::hypot (x - drawPts[n - 2], y - drawPts[n - 1]) < 0.015f) break;   // not far enough yet
+            if (n >= 2 * 2400) break;   // full
+            drawPts.push_back (x); drawPts.push_back (y);
+            box.setScopeDrawing (drawPts);
             break;
         }
         case DragSlider:
@@ -2234,7 +2623,14 @@ bool View::keyPressed (const juce::KeyPress& k)
     if (code == juce::KeyPress::F5Key) { press (BtnMix); return true; }
     if (code == juce::KeyPress::F6Key) { press (BtnProject); return true; }
     if (code == juce::KeyPress::F11Key && onToggleFullScreen) { onToggleFullScreen(); return true; }
-    if (code == juce::KeyPress::escapeKey) { if (box.isHelpShown()) box.toggleHelp(); if (box.isLearning()) box.learnDone(); return true; }
+    if (code == juce::KeyPress::escapeKey || code == juce::KeyPress::homeKey)   // Esc: closes help, else HOME
+    {
+        if (box.isHelpShown()) box.toggleHelp();
+        else if (box.isLearning()) box.learnDone();
+        else if (bigScope) bigScope = false;
+        else box.goHome();
+        return true;
+    }
     const juce::juce_wchar ch = juce::CharacterFunctions::toUpperCase (k.getTextCharacter());
     if (ch == 'N') { press (BtnScene); return true; }
     if (ch == 'Z' || ch == 'X') { box.buttonDown (BtnShift); press (ch == 'Z' ? BtnPrev : BtnNext); box.buttonUp (BtnShift); return true; }

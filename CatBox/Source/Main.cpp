@@ -11,6 +11,7 @@
 #include "Controller.h"
 #include "Synth.h"
 #include "View.h"
+#include "Scope.h"
 #include "BoxLink.h"
 #include "LinkPanel.h"
 #include "Samples.h"
@@ -957,6 +958,163 @@ public:
                     if (auto os = f.createOutputStream()) png.writeImageToStream (img, *os);
                     box.goStudio();
                 }
+
+                // ---- the apps: HOME and its six apps; SCOPE: pictures (shapes, your text, your drawing), hold
+                {
+                    auto savePng = [&wavOut] (const juce::Image& img, const juce::String& suffix)
+                    {
+                        const auto f = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + suffix + ".png");
+                        f.deleteFile();
+                        juce::PNGImageFormat png;
+                        if (auto os = f.createOutputStream()) png.writeImageToStream (img, *os);
+                    };
+                    auto cc2 = [&box] (int n, int v) { box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (controllerChannel, n, v)); };
+                    auto step2 = [&box] (int k) { box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::noteOn (controllerChannel, firstStepNote + k, (juce::uint8) 100));
+                                                  box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::noteOff (controllerChannel, firstStepNote + k)); };
+                    noSolo();
+                    box.setPlaying (false);
+                    renderSeconds (audio, 0.5, nullptr);
+                    box.goHome();
+                    check (box.getScreen() == Controller::ScreenHome && box.leds().screen == -1, "HOME: the six apps (no screen LED lit)", {});
+                    savePng (screen.snapshotScreen(), "-home");
+                    savePng (pc.snapshotScreen(), "-pchome");
+                    bool all = true;
+                    for (int a = 0; a < Controller::NumApps; ++a) { box.goHome(); box.openApp (a); all = all && box.getScreen() == Controller::appScreen (a); }
+                    check (all, "every app opens from HOME", {});
+                    box.goHome(); box.padDown (3, 100); box.padUp (3);
+                    check (box.getScreen() == Controller::ScreenScope, "HOME: pad 4 opens SCOPE", juce::String (box.getScreen()));
+                    box.goHome(); step2 (4);
+                    check (box.getScreen() == Controller::ScreenSampler, "HOME: step button 5 opens SAMPLER", juce::String (box.getScreen()));
+                    cc2 (screenButtonCC, 127); cc2 (screenButtonCC, 0);
+                    check (box.getScreen() == Controller::ScreenSynth, "the SYNTH button: SYNTH", {});
+                    cc2 (screenButtonCC, 127); cc2 (screenButtonCC, 0);
+                    check (box.getScreen() == Controller::ScreenHome, "the SYNTH button again: HOME", {});
+                    box.goSampler();
+                    savePng (screen.snapshotScreen(), "-sampler");
+                    box.goSettings();
+                    check (box.getMode() == ModeMenu, "SETTINGS: the menu tiles", {});
+                    savePng (screen.snapshotScreen(), "-settings");
+
+                    // SCOPE (the synth track's FX and modulation from the tests before off: a clean picture)
+                    box.goSynth(); box.goSettings(); box.menuPress (15); box.menuPress (13); box.menuPress (13);
+                    box.goScope();
+                    const int st = box.synthTrack();
+                    const int p0 = box.pictureNow();
+                    check (box.getScreen() == Controller::ScreenScope && p0 >= 0, "SCOPE: the synth draws a picture", p0 >= 0 ? scopePictureNames()[p0] : juce::String ("none"));
+                    box.turnKnob (0, 1);
+                    check (box.pictureNow() == p0 + 1, "SCOPE knob 1: the next picture", scopePictureNames()[juce::jmax (0, box.pictureNow())]);
+                    press (BtnPrev);
+                    check (box.pictureNow() == p0, "Prev: the picture before", {});
+                    step2 (9);
+                    check (box.pictureNow() == 9 && box.leds().steps[9] == 3, "step button 10: picture 10 (its LED picked)", scopePictureNames()[9]);
+                    // every picture sounds on both sides, clean; the 3D ones turn
+                    {
+                        const auto& sdef = engineDef (EngineSynth);
+                        int pi = 0;
+                        for (size_t i = 0; i < sdef.presets.size(); ++i) if (sdef.presets[i].name == "Cat Picture") pi = (int) i;
+                        float vals[maxParams];
+                        sdef.applyPreset (pi, vals);
+                        bool ok = true;
+                        juce::String worst;
+                        for (int pic = 0; pic < scopePictureNames().size(); ++pic)
+                        {
+                            vals[sdef.index ("pic")] = (float) pic;
+                            vals[sdef.index ("pturn")] = scopePicture3D (pic) ? 0.5f : 0.0f;
+                            auto eng = makeEngine (EngineSynth);
+                            eng->setTrack (st);
+                            eng->prepare (sr);
+                            eng->setParams (vals);
+                            eng->noteOn (48, 0.9f, false, false);
+                            const int n = (int) sr;
+                            std::vector<float> L ((size_t) n, 0.0f), R ((size_t) n, 0.0f);
+                            for (int pos = 0; pos < n; pos += block) eng->render (L.data() + pos, R.data() + pos, juce::jmin (block, n - pos));
+                            double ll = 0, rr = 0, d = 0;
+                            float pk = 0.0f;
+                            for (int i = 4800; i < n; ++i)
+                            {
+                                ll += (double) L[(size_t) i] * L[(size_t) i]; rr += (double) R[(size_t) i] * R[(size_t) i];
+                                pk = juce::jmax (pk, std::abs (L[(size_t) i]), std::abs (R[(size_t) i]));
+                                if (! std::isfinite (L[(size_t) i]) || ! std::isfinite (R[(size_t) i])) pk = 99.0f;
+                            }
+                            // 3D: the figure moves (a period at the start and later differ)
+                            const int per = (int) (sr / (440.0 * std::pow (2.0, (36.0 - 69.0) / 12.0)));
+                            for (int i = 0; i < per; ++i) d += std::abs (L[(size_t) (6000 + i)] - L[(size_t) (6000 + i + per * 30)]);
+                            const double rl = std::sqrt (ll / (n - 4800)), rrr = std::sqrt (rr / (n - 4800));
+                            const bool good = rl > 0.03 && rrr > (pic == scopePictureText() ? 0.01 : 0.03) && pk < 2.0f && (! scopePicture3D (pic) || d / per > 0.01);
+                            if (! good) { ok = false; worst << scopePictureNames()[pic] << " (L " << juce::String (rl, 3) << " R " << juce::String (rrr, 3) << " peak " << juce::String (pk, 2) << ") "; }
+                        }
+                        check (ok, "all 14 pictures sound left and right, clean; the 3D ones turn", worst);
+                    }
+                    // your text
+                    box.setScopeText ("HI");
+                    box.pump();
+                    check (box.pictureNow() == scopePictureText() && scopeOutline (scopePictureText(), st).size() >= 2, "TEXT: the beam writes your text",
+                           juce::String ((int) scopeOutline (scopePictureText(), st).size()) + " strokes");
+                    {
+                        Project copy;
+                        copy.fromVar (box.getProject().toVar());
+                        check (copy.tracks[(size_t) st].scopeText == "HI", "the text is saved with the project", copy.tracks[(size_t) st].scopeText);
+                    }
+                    // your drawing
+                    box.clearScopeDrawing();
+                    pc.drawStroke ({ { -0.5f, -0.5f }, { 0.5f, -0.5f }, { 0.5f, 0.5f }, { -0.5f, 0.5f }, { -0.5f, -0.5f } });
+                    box.pump();
+                    check (box.pictureNow() == scopePictureDrawing() && box.scopeDrawingNow().size() == 10 && scopeOutline (scopePictureDrawing(), st).size() == 1,
+                           "DRAW: a stroke becomes the picture", juce::String ((int) box.scopeDrawingNow().size()));
+                    pc.drawStroke ({ { 0.0f, 0.0f }, { 0.2f, 0.3f } });
+                    box.pump();
+                    const auto two = scopeOutline (scopePictureDrawing(), st).size();
+                    box.undo();
+                    box.pump();
+                    check (two == 2 && scopeOutline (scopePictureDrawing(), st).size() == 1, "a second stroke, and UNDO takes it back", juce::String ((int) two));
+                    {
+                        Project copy;
+                        copy.fromVar (box.getProject().toVar());
+                        check (scopeDrawingFromString (copy.tracks[(size_t) st].scopeDraw).size() == 10, "the drawing is saved with the project", {});
+                    }
+                    // HOLD: a note held so the picture stays; it lets go when you leave
+                    soloOnly (st);
+                    box.setPicture (0);
+                    box.setMaster ([] (Master& m) { m.revLevel = 0.0f; m.delayLevel = 0.0f; m.fxLevel = 0.0f; });   // the returns quiet (earlier tests left long tails)
+                    renderSeconds (audio, 2.0, nullptr);
+                    box.setScopeHold (true);
+                    const auto hs = renderSeconds (audio, 0.5, nullptr);
+                    check (hs.rms > 0.01f && hs.finite, "HOLD: the picture keeps sounding", juce::String (hs.rms, 3));
+                    box.goHome();
+                    box.pump();
+                    renderSeconds (audio, 1.0, nullptr);
+                    const auto after = renderSeconds (audio, 0.3, nullptr);
+                    check (! box.isScopeHold() && after.rms < hs.rms * 0.1f, "leaving SCOPE lets the held note go", juce::String (after.rms, 4));
+                    // pictures on the screen
+                    auto shot = [&] (const char* preset, const juce::String& suffix, View& v)
+                    {
+                        box.goScope();
+                        const auto& sdef = engineDef (EngineSynth);
+                        for (size_t i = 0; i < sdef.presets.size(); ++i) if (preset != nullptr && sdef.presets[i].name == preset) box.loadSound (st, EngineSynth, (int) i);
+                        box.setScopeHold (false);
+                        box.setScopeHold (true);
+                        for (int f = 0; f < 8; ++f) { renderSeconds (audio, 1.0 / 30.0, nullptr); v.snapshotScreen(); }
+                        savePng (v.snapshotScreen(), suffix);
+                    };
+                    shot ("Cat Picture", "-scope3", screen);
+                    shot ("Rotating Cube", "-scope4", screen);
+                    box.setScopeText ("MEOW");
+                    shot (nullptr, "-scope5", screen);
+                    pc.setDrawMode (true);
+                    box.clearScopeDrawing();
+                    {
+                        std::vector<juce::Point<float>> starPts;
+                        for (int k = 0; k <= 10; ++k) { const float a = 1.5708f + 0.6283f * (float) k, rr = k % 2 == 0 ? 0.8f : 0.33f; starPts.push_back ({ rr * std::cos (a), rr * std::sin (a) }); }
+                        pc.drawStroke (starPts);
+                        pc.drawStroke ({ { -0.15f, -0.05f }, { 0.0f, -0.18f }, { 0.15f, -0.05f } });
+                    }
+                    box.pump();
+                    shot (nullptr, "-scope6", pc);
+                    pc.setDrawMode (false);
+                    box.setScopeHold (false);
+                    noSolo();
+                    box.goStudio();
+                }
                 for (int extra : { 8, 9 })   // the MENU, and the help on the SEQ page
                 {
                     box.selectTrack (0);
@@ -1263,7 +1421,7 @@ public:
 
         box = std::make_unique<Controller> (dataDir);
         startAudio (dataDir);
-        box->goSynth();   // the instrument first; DRUMS and the STUDIO are a click away
+        box->goHome();   // the apps first: SYNTH, DRUMS, STUDIO, SCOPE, SAMPLER, SETTINGS
         leds = std::make_unique<LedSender> (*box);
         box->enableMicrophone = [this]
         {

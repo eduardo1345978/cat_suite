@@ -1,4 +1,5 @@
 #include "Audio.h"
+#include "Scope.h"
 #include <cmath>
 
 namespace catbox
@@ -31,8 +32,9 @@ Audio::Audio()
     for (auto& s : scope) s = 0.0f;
     for (auto& s : xyL) s = 0.0f;
     for (auto& s : xyR) s = 0.0f;
-    for (auto& t : tracks)
-        for (int e = 0; e < NumEngineTypes; ++e) t.engines[(size_t) e] = makeEngine (e);
+    scopeInit();
+    for (size_t ti = 0; ti < tracks.size(); ++ti)
+        for (int e = 0; e < NumEngineTypes; ++e) { tracks[ti].engines[(size_t) e] = makeEngine (e); tracks[ti].engines[(size_t) e]->setTrack ((int) ti); }
     live = Project::makeDefault();
     incoming = std::make_unique<Project>();
 }

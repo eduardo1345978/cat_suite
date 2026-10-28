@@ -1,6 +1,7 @@
 #include "Engine.h"
 #include "Dsp.h"
 #include "Synth.h"
+#include "Scope.h"
 #include <cmath>
 
 /**
@@ -27,7 +28,7 @@ enum P
     pLfoRate, pLfoShape, pLfoSync, pLfoDelay, pLfoPitch, pLfoFilter, pLfoPw, pLfoAmp,
     pPmEnv, pPmOsc,
     pChorus, pDrive, pWidth, pVolume, pModWheel,
-    pXY,
+    pXY, pPic, pPSize, pPSpin, pPTurn, pPWobble, pPTwist,
     pCount
 };
 enum Mode { MMono = 0, MLegato, MPoly, MUnison };
@@ -144,7 +145,9 @@ EngineDef makeSynthDef()
         bi ("pmenv", "Env > osc 1", 0.0f), pct ("pmosc", "Osc 2 > filter", 0.0f),
         choice ("chorus", "Chorus", { "Off", "I", "II", "I + II" }, 0), pct ("drive", "Drive", 0.0f), pct ("width", "Width", 0.6f),
         db ("volume", "Volume", -36.0f, 6.0f, -6.0f), pct ("modwheel", "Mod wheel", 0.5f),
-        choice ("xy", "Scope XY", { "Off", "Lissajous", "Circle" }, 0),
+        choice ("xy", "Scope XY", { "Off", "Lissajous", "Circle", "Picture" }, 0),
+        choice ("pic", "Picture", scopePictureNames(), 0), pct ("psize", "Size", 0.85f), bi ("pspin", "Spin", 0.0f),
+        bi ("pturn", "3D turn", 0.0f), pct ("pwobble", "Wobble", 0.0f), bi ("ptwist", "Twist", 0.0f),
     };
     jassert ((int) p.size() == pCount);
     e.pages = {
@@ -157,7 +160,7 @@ EngineDef makeSynthDef()
         page ("LFO", { pLfoRate, pLfoShape, pLfoSync, pLfoDelay, pLfoPitch, pLfoFilter, pLfoPw, pLfoAmp, pPmEnv, pPmOsc, pModWheel, pCutoff,
                        pO3Lfo, pO3Range, pO3Wave, pCross, pO1Pw, pDrift, pGlide, pBend, pMode, pVoices, pUniDetune, pVolume }),
         page ("OUTPUT", { pModel, pMode, pVoices, pUniDetune, pChorus, pDrive, pWidth, pVolume, pGlide, pDrift, pBend, pModWheel,
-                          pXY, pO2Semi, pO2Fine, pO1Wave, pO2Wave, pA, pR, pFA, pFD, pCutoff, pReso, pFMode }),
+                          pXY, pPic, pPSize, pPSpin, pPTurn, pPWobble, pPTwist, pO2Semi, pO2Fine, pO1Wave, pA, pR }),
     };
 
     // ---- factory sounds, per model (the category is the model)
@@ -258,6 +261,29 @@ EngineDef makeSynthDef()
                                         { "d", 1.5f }, { "s", 0.0f }, { "r", 1.5f }, { "drift", 0.0f }, { "volume", -6.0f } });
     scope ("Filter Flower", ModelMini, { { "xy", 1 }, { "o1wave", 2 }, { "o2wave", 2 }, { "o2semi", 7 }, { "o2fine", 1 }, { "o2lvl", 1.0f }, { "cutoff", 700 },
                                          { "reso", 0.5f }, { "envamt", 0.5f }, { "fd", 0.8f }, { "mode", 0 }, { "volume", -6.0f } });
+    // PICTURES: a shape (or your text, or your drawing) drawn by the beam - the picture is the sound
+    auto pic = [&e] (const char* name, int picture, V v)
+    {
+        V base { { "model", (float) ModelJuno }, { "xy", 3 }, { "pic", (float) picture }, { "o1range", 1 }, { "cutoff", 20000 }, { "envamt", 0.0f }, { "keytrack", 0.0f },
+                 { "velfilt", 0.0f }, { "velamp", 0.0f }, { "reso", 0.0f }, { "mode", 0 }, { "drift", 0.0f }, { "a", 0.01f }, { "d", 1.0f }, { "s", 1.0f }, { "r", 0.35f },
+                 { "overload", 0.0f }, { "o2lvl", 0.0f }, { "volume", -9.0f } };
+        for (auto& x : v) base.push_back (x);
+        e.presets.push_back ({ name, "Scope", std::move (base) });
+    };
+    pic ("Cat Picture", 0, {});
+    pic ("Spinning Star", 1, { { "pspin", 0.4f } });
+    pic ("Heart Beat", 2, { { "lfoamp", 0.45f }, { "lforate", 1.6f }, { "lfoshape", 1 } });
+    pic ("Wobbly Smile", 3, { { "pwobble", 0.35f } });
+    pic ("Music Note", 4, { { "pspin", -0.15f } });
+    pic ("Lightning", 5, { { "pwobble", 0.6f }, { "lfopitch", 0.2f }, { "lforate", 7.0f } });
+    pic ("House", 6, { { "pturn", 0.2f } });
+    pic ("Twisted Spiral", 7, { { "ptwist", 0.6f }, { "pspin", 0.25f } });
+    pic ("Flower", 8, { { "pspin", 0.15f }, { "pwobble", 0.15f } });
+    pic ("Rotating Cube", 9, { { "pturn", 0.45f } });
+    pic ("Pyramid", 10, { { "pturn", -0.4f } });
+    pic ("Globe", 11, { { "pturn", 0.3f } });
+    pic ("Your Text", 12, { { "pspin", 0.0f } });
+    pic ("Your Drawing", 13, {});
     e.presets.push_back ({ "Init", "Init", {} });
     return e;
 }
@@ -361,6 +387,7 @@ public:
         }
     }
     void setTempo (double bpm) override { tempo = (float) bpm; }
+    void setTrack (int t) override { track = t; }
     void setBend (float s) override { bend = juce::jlimit (-1.0f, 1.0f, s / 2.0f) * p[pBend]; }
     void setMod (float m) override { modWheel = m; }
 
@@ -440,6 +467,11 @@ public:
         const bool sync2 = p[pO2Sync] > 0.5f, osc3Low = p[pO3Lfo] > 0.5f;
         const float driftCents = p[pDrift] * c.drift;
         const int xyMode = juce::roundToInt (p[pXY]);
+        // a picture: the table, and how it turns (per block)
+        const ScopeXYZ* picTab = xyMode == 3 ? scopePicture (juce::roundToInt (p[pPic]), track) : nullptr;
+        const float dcPic = 1.0f - std::exp (-dsp::twoPi * 2.0f / sr);
+        auto rate = [] (float v) { return v * std::abs (v) * 2.0f; };   // knob -1..1 > -2..2 turns a second (fine near the middle)
+        const float spinRate = rate (p[pPSpin]), turnRate = rate (p[pPTurn]);
 
         for (int i0 = 0; i0 < n; i0 += 16)
         {
@@ -458,6 +490,20 @@ public:
                 default: lfo = 1.0f - 4.0f * std::abs (lfoPhase - 0.5f); break;
             }
             float bl[16] {}, br[16] {};
+            // turning; with the knob in the middle the picture settles back upright, facing you
+            auto turn = [&] (float& ang, float rate)
+            {
+                if (rate != 0.0f) { ang = std::fmod (ang + rate * dsp::twoPi * (float) m / sr, dsp::twoPi); return; }
+                if (ang > dsp::pi) ang -= dsp::twoPi;
+                if (ang < -dsp::pi) ang += dsp::twoPi;
+                ang *= std::exp (-5.0f * (float) m / sr);
+                if (std::abs (ang) < 1e-4f) ang = 0.0f;
+            };
+            turn (spinAng, spinRate);
+            turn (turnAng, turnRate);
+            wobT = std::fmod (wobT + dsp::twoPi * 1.3f * (float) m / sr, dsp::twoPi * 100.0f);
+            const float cs = std::cos (spinAng), sn = std::sin (spinAng), ct = std::cos (turnAng), st = std::sin (turnAng);
+            const float tiltC = 0.955f, tiltS = 0.296f;   // seen a little from above, so 3D shows
             for (auto& v : voices)
             {
                 if (! v.active) continue;
@@ -498,6 +544,50 @@ public:
                     // sub: a square an octave under osc 1
                     if (v.ph[0] < before1) v.subFlip = ! v.subFlip;
                     const float sub = v.subFlip ? 1.0f : -1.0f;
+                    if (picTab != nullptr)
+                    {
+                        // the picture: osc 1's phase walks round it once per period
+                        const float pos = before1 * (float) scopePoints;
+                        const int k0 = juce::jlimit (0, scopePoints - 1, (int) pos);
+                        const int k1 = (k0 + 1) % scopePoints;
+                        const float fr = pos - (float) k0;
+                        float x = picTab[k0].x + (picTab[k1].x - picTab[k0].x) * fr;
+                        float y = picTab[k0].y + (picTab[k1].y - picTab[k0].y) * fr;
+                        float z = picTab[k0].z + (picTab[k1].z - picTab[k0].z) * fr;
+                        if (p[pPWobble] > 0.001f)
+                        {
+                            x += p[pPWobble] * 0.12f * std::sin (dsp::twoPi * 5.0f * before1 + wobT);
+                            y += p[pPWobble] * 0.12f * std::cos (dsp::twoPi * 4.0f * before1 + wobT * 1.3f);
+                        }
+                        if (std::abs (p[pPTwist]) > 0.001f)
+                        {
+                            const float a = p[pPTwist] * dsp::pi * std::sqrt (x * x + y * y);
+                            const float c2 = std::cos (a), s2 = std::sin (a);
+                            const float x2 = x * c2 - y * s2; y = x * s2 + y * c2; x = x2;
+                        }
+                        if (turnRate != 0.0f || turnAng != 0.0f || z != 0.0f)
+                        {
+                            const float x2 = x * ct + z * st, z2 = -x * st + z * ct;   // turn round the up axis
+                            const float y3 = y * tiltC - z2 * tiltS, z3 = y * tiltS + z2 * tiltC;   // a little from above
+                            const float persp = 2.6f / (2.6f + z3);
+                            x = x2 * persp; y = y3 * persp;
+                        }
+                        const float x2 = x * cs - y * sn; y = x * sn + y * cs; x = x2;
+                        const float size = p[pPSize] * 0.5f;
+                        float yl = x * size, yr = y * size;
+                        if (p[pCutoff] < 19000.0f || p[pEnvAmt] < 0.0f)   // the filter shapes the picture only when it is closing (wide open: the clean drawing)
+                        {
+                            const float cutP = juce::jlimit (20.0f, sr * 0.45f, cutBase * std::exp2 (p[pEnvAmt] * fe * 7.0f));
+                            yl = v.filter.process (yl, c.filter, fmode, cutP, p[pReso], c, sr);
+                            yr = v.filterR.process (yr, c.filter, fmode, cutP, p[pReso], c, sr);
+                        }
+                        v.dc += (yl - v.dc) * dcPic; yl -= v.dc;
+                        v.dcR += (yr - v.dcR) * dcPic; yr -= v.dcR;
+                        const float gxy = ae * velGain * trem * v.gain;
+                        bl[i] += yl * gxy; br[i] += yr * gxy;
+                        if (! v.aenv.active()) { v.active = false; break; }
+                        continue;
+                    }
                     if (xyMode > 0)
                     {
                         // oscilloscope graphics: left and right are different oscillators, the scope draws the figure
@@ -668,6 +758,8 @@ private:
     int numHeld = 0;
     std::array<float, pCount> p {};
     float sr = 48000.0f, tempo = 120.0f, bend = 0.0f, modWheel = 0.0f;
+    int track = 0;
+    float spinAng = 0.0f, turnAng = 0.0f, wobT = 0.0f;
     float lfoPhase = 0.0f, lfoHold = 0.0f, lfoHoldPrev = 0.0f;
     std::vector<float> chorusL, chorusR;
     int cw = 0;

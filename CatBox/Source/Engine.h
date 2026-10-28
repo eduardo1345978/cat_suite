@@ -24,6 +24,8 @@ public:
     virtual void setBend (float semitones) { juce::ignoreUnused (semitones); }
     virtual void setMod (float amount) { juce::ignoreUnused (amount); }
     virtual void setTempo (double bpm) { juce::ignoreUnused (bpm); }
+    /** Which track it plays on (the Synth's scope pictures are per track). */
+    virtual void setTrack (int t) { juce::ignoreUnused (t); }
 };
 
 std::unique_ptr<Engine> makeEngine (int type);

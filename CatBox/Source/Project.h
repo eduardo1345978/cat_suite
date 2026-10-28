@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include "Params.h"
 #include "NoteFx.h"
 #include "TrackFx.h"
@@ -90,6 +92,8 @@ struct Track
     bool mute = false, solo = false;
     TrackMods mods;   // insert effects, macros, LFOs, modulation, MY knobs
     Pattern pat;
+    juce::String scopeText { "CAT BOX" };   // the Synth's scope pictures: your text
+    juce::String scopeDraw;                 // and your drawing (scopeDrawingToString: thousandths, a string so the audio copy never allocates)
 
     bool isDrums() const { return engineDef (engine).drums; }
 };

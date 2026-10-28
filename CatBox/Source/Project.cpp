@@ -260,6 +260,8 @@ juce::var Project::toVar() const
         to->setProperty ("volume", t.volume); to->setProperty ("pan", t.pan);
         to->setProperty ("sendA", t.sendA); to->setProperty ("sendB", t.sendB); to->setProperty ("sendC", t.sendC);
         to->setProperty ("mute", t.mute); to->setProperty ("solo", t.solo);
+        to->setProperty ("scopeText", t.scopeText);
+        if (t.scopeDraw.isNotEmpty()) to->setProperty ("scopeDraw", t.scopeDraw);
         tr.add (juce::var (to));
     }
     o->setProperty ("tracks", tr);
@@ -305,6 +307,8 @@ void Project::fromVar (const juce::var& v)
             t.sendA = (float) tv.getProperty ("sendA", 0.12f); t.sendB = (float) tv.getProperty ("sendB", 0.0f);
             t.sendC = (float) tv.getProperty ("sendC", 0.0f);
             t.mute = (bool) tv.getProperty ("mute", false); t.solo = (bool) tv.getProperty ("solo", false);
+            t.scopeText = tv.getProperty ("scopeText", "CAT BOX").toString();
+            t.scopeDraw = tv.getProperty ("scopeDraw", "").toString();
         }
 }
 } // namespace catbox
