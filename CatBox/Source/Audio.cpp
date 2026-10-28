@@ -29,6 +29,8 @@ Audio::Audio()
     for (auto& a : level) a = 0.0f;
     for (auto& a : hits) a = 0u;
     for (auto& s : scope) s = 0.0f;
+    for (auto& s : xyL) s = 0.0f;
+    for (auto& s : xyR) s = 0.0f;
     for (auto& t : tracks)
         for (int e = 0; e < NumEngineTypes; ++e) t.engines[(size_t) e] = makeEngine (e);
     live = Project::makeDefault();
@@ -539,6 +541,17 @@ void Audio::render (float* outL, float* outR, int n)
                 rt.ins[(size_t) k].process (in.type, pv, tl.data(), tr_.data(), m, from, ppqPerSample, live.m.tempo);
             }
 
+            if (t == viewTrack.load (std::memory_order_relaxed))   // the XY scope: this track alone, before the mixer
+            {
+                int xw = xyWrite.load (std::memory_order_relaxed);
+                for (int i = 0; i < m; ++i)
+                {
+                    xyL[(size_t) xw].store (tl[(size_t) i], std::memory_order_relaxed);
+                    xyR[(size_t) xw].store (tr_[(size_t) i], std::memory_order_relaxed);
+                    xw = (xw + 1) % xySize;
+                }
+                xyWrite.store (xw, std::memory_order_relaxed);
+            }
             float volume = tr.volume, panV = tr.pan, sendA = tr.sendA, sendB = tr.sendB, sendC = tr.sendC;
             if (rt.anyMods)
             {

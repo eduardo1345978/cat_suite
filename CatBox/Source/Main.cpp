@@ -542,6 +542,29 @@ public:
                 const float mono3 = heard ([&] { eng->noteOn (48, 0.8f, false, false); eng->noteOn (52, 0.8f, false, false); eng->noteOn (55, 0.8f, false, false); });
                 vals[sd.index ("mode")] = 3;
                 const float uni = heard ([&] { eng->noteOn (48, 0.8f, false, false); });
+                // oscilloscope graphics: "Circle" = left and right a quarter apart (a round figure), Lissajous = both sides sound
+                {
+                    auto xyOf = [&] (const char* nm)
+                    {
+                        float v2[maxParams];
+                        int pi = 0;
+                        for (size_t i = 0; i < sd.presets.size(); ++i) if (sd.presets[i].name == nm) pi = (int) i;
+                        sd.applyPreset (pi, v2);
+                        auto e2 = makeEngine (EngineSynth);
+                        e2->prepare (sr);
+                        e2->setParams (v2);
+                        e2->noteOn (57, 0.8f, false, false);
+                        std::vector<float> L ((size_t) 24000, 0.0f), R ((size_t) 24000, 0.0f);
+                        e2->render (L.data(), R.data(), 24000);
+                        double ll = 0, rr = 0, lr = 0;
+                        for (int i = 4800; i < 24000; ++i) { ll += (double) L[(size_t) i] * L[(size_t) i]; rr += (double) R[(size_t) i] * R[(size_t) i]; lr += (double) L[(size_t) i] * R[(size_t) i]; }
+                        return std::array<double, 3> { std::sqrt (ll / 19200), std::sqrt (rr / 19200), lr / std::sqrt (juce::jmax (1e-12, ll * rr)) };
+                    };
+                    const auto circ = xyOf ("Circle"), lis = xyOf ("Lissajous 3 : 2");
+                    check (circ[0] > 0.02 && std::abs (circ[0] / circ[1] - 1.0) < 0.15 && std::abs (circ[2]) < 0.15, "Scope: Circle - left and right equal and a quarter apart",
+                           "L " + juce::String (circ[0], 3) + " R " + juce::String (circ[1], 3) + " corr " + juce::String (circ[2], 3));
+                    check (lis[0] > 0.02 && lis[1] > 0.02 && std::abs (lis[2]) < 0.3, "Scope: Lissajous 3 : 2 - two different oscillators left and right", juce::String (lis[2], 3));
+                }
                 check (poly3 > mono3 * 1.3f && uni > 0.02f, "Poly plays a chord, Mono one note, Unison stacks voices",
                        "poly " + juce::String (poly3, 3) + " mono " + juce::String (mono3, 3) + " unison " + juce::String (uni, 3));
             }
@@ -902,6 +925,25 @@ public:
                         for (int nt : { 48, 55, 60 }) audio.post ({ Event::NoteOff, (int8_t) box.getTrack(), (int16_t) nt, 0.0f });
                         check (img.isValid(), "the synth panel draws (" + juce::String (synthModelLook (mdl).name) + ")", {});
                         const auto f = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + "-screen" + juce::String (shot2++) + ".png");
+                        f.deleteFile();
+                        juce::PNGImageFormat png;
+                        if (auto os = f.createOutputStream()) png.writeImageToStream (img, *os);
+                    }
+                    // oscilloscope graphics: a circle and a 3 : 2 figure on the XY scope (big)
+                    wait (1700);   // the big knob from before has faded
+                    for (const char* nm : { "Circle", "Lissajous 3 : 2" })
+                    {
+                        box.goSynth();
+                        int pi = 0;
+                        for (size_t i = 0; i < sdef.presets.size(); ++i) if (sdef.presets[i].name == nm) pi = (int) i;
+                        box.loadSound (box.getTrack(), EngineSynth, pi);
+                        audio.post ({ Event::NoteOn, (int8_t) box.getTrack(), 57, 0.8f });
+                        screen.setBigScope (true);
+                        for (int f = 0; f < 6; ++f) { renderSeconds (audio, 1.0 / 30.0, nullptr); screen.snapshotScreen(); }   // a few frames: the afterglow
+                        const auto img = screen.snapshotScreen();
+                        screen.setBigScope (false);
+                        audio.post ({ Event::NoteOff, (int8_t) box.getTrack(), 57, 0.0f });
+                        const auto f = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + (juce::String (nm) == "Circle" ? "-scope1.png" : "-scope2.png"));
                         f.deleteFile();
                         juce::PNGImageFormat png;
                         if (auto os = f.createOutputStream()) png.writeImageToStream (img, *os);

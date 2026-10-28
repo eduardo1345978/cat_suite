@@ -82,6 +82,10 @@ public:
     static constexpr int scopeSize = 512;
     std::array<std::atomic<float>, scopeSize> scope;
     std::atomic<int> scopeWrite { 0 };
+    /** The XY scope (oscilloscope graphics): the track on screen, left = x, right = y, every sample. */
+    static constexpr int xySize = 4096;
+    std::array<std::atomic<float>, xySize> xyL, xyR;
+    std::atomic<int> xyWrite { 0 };
 
     // juce::AudioIODeviceCallback
     void audioDeviceIOCallbackWithContext (const float* const*, int, float* const* out, int numOut, int n,

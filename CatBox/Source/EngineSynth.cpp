@@ -27,6 +27,7 @@ enum P
     pLfoRate, pLfoShape, pLfoSync, pLfoDelay, pLfoPitch, pLfoFilter, pLfoPw, pLfoAmp,
     pPmEnv, pPmOsc,
     pChorus, pDrive, pWidth, pVolume, pModWheel,
+    pXY,
     pCount
 };
 enum Mode { MMono = 0, MLegato, MPoly, MUnison };
@@ -101,7 +102,7 @@ const std::vector<SynthSection>& synthPanel()
         { "OSCILLATOR 3", { "o3range", "o3wave", "o3semi", "o3fine", "o3lfo" } },
         { "MIXER", { "o1lvl", "o2lvl", "o3lvl", "sub", "noise", "ring", "cross", "overload" } },
         { "POLY-MOD", { "pmenv", "pmosc" } },
-        { "OUTPUT", { "chorus", "drive", "width", "volume" } },
+        { "OUTPUT", { "chorus", "drive", "width", "volume", "xy" } },
         // bottom row: shaping and space
         { "FILTER", { "cutoff", "reso", "envamt", "keytrack", "fmode", "hpf", "velfilt" } },
         { "FILTER ENV", { "fa", "fd", "fs", "fr" } },
@@ -143,6 +144,7 @@ EngineDef makeSynthDef()
         bi ("pmenv", "Env > osc 1", 0.0f), pct ("pmosc", "Osc 2 > filter", 0.0f),
         choice ("chorus", "Chorus", { "Off", "I", "II", "I + II" }, 0), pct ("drive", "Drive", 0.0f), pct ("width", "Width", 0.6f),
         db ("volume", "Volume", -36.0f, 6.0f, -6.0f), pct ("modwheel", "Mod wheel", 0.5f),
+        choice ("xy", "Scope XY", { "Off", "Lissajous", "Circle" }, 0),
     };
     jassert ((int) p.size() == pCount);
     e.pages = {
@@ -155,7 +157,7 @@ EngineDef makeSynthDef()
         page ("LFO", { pLfoRate, pLfoShape, pLfoSync, pLfoDelay, pLfoPitch, pLfoFilter, pLfoPw, pLfoAmp, pPmEnv, pPmOsc, pModWheel, pCutoff,
                        pO3Lfo, pO3Range, pO3Wave, pCross, pO1Pw, pDrift, pGlide, pBend, pMode, pVoices, pUniDetune, pVolume }),
         page ("OUTPUT", { pModel, pMode, pVoices, pUniDetune, pChorus, pDrive, pWidth, pVolume, pGlide, pDrift, pBend, pModWheel,
-                          pCutoff, pReso, pEnvAmt, pOverload, pA, pR, pFA, pFD, pVelAmp, pVelFilt, pHpf, pFMode }),
+                          pXY, pO2Semi, pO2Fine, pO1Wave, pO2Wave, pA, pR, pFA, pFD, pCutoff, pReso, pFMode }),
     };
 
     // ---- factory sounds, per model (the category is the model)
@@ -238,6 +240,24 @@ EngineDef makeSynthDef()
                                  { "a", 0.001f }, { "d", 0.25f }, { "s", 0.0f }, { "r", 0.25f } });
     add ("Gong Easel", ModelBuchla, { { "volume", -8.5f }, { "mode", 2 }, { "o1wave", 7 }, { "o1pw", 0.9f }, { "cross", 0.7f }, { "o3range", 3 }, { "o3semi", 5 }, { "cutoff", 4000 },
                                       { "d", 3.0f }, { "s", 0.0f }, { "r", 3.0f } });
+    // SCOPE: oscilloscope graphics - left and right draw a figure on the XY scope (and sound like it)
+    auto scope = [&e] (const char* name, int model, V v)
+    {
+        v.insert (v.begin(), { "model", (float) model });
+        e.presets.push_back ({ name, "Scope", std::move (v) });
+    };
+    scope ("Circle", ModelJuno, { { "xy", 2 }, { "o1wave", 6 }, { "o2lvl", 0.0f }, { "cutoff", 20000 }, { "envamt", 0.0f }, { "mode", 0 }, { "drift", 0.0f }, { "s", 1.0f }, { "d", 1.0f }, { "overload", 0.0f }, { "a", 0.01f }, { "volume", -8.0f } });
+    scope ("Lissajous 3 : 2", ModelJuno, { { "xy", 1 }, { "o1wave", 6 }, { "o2wave", 6 }, { "o2semi", 7 }, { "o2fine", 2 }, { "o2lvl", 1.0f }, { "cutoff", 20000 },
+                                           { "envamt", 0.0f }, { "mode", 0 }, { "drift", 0.0f }, { "s", 1.0f }, { "d", 1.0f }, { "overload", 0.0f }, { "a", 0.01f }, { "volume", -8.0f } });
+    scope ("Turning Knot", ModelJuno, { { "xy", 1 }, { "o1wave", 6 }, { "o2wave", 6 }, { "o2semi", 5 }, { "o2fine", 0 }, { "o2lvl", 1.0f }, { "cutoff", 20000 },
+                                        { "envamt", 0.0f }, { "mode", 0 }, { "drift", 0.0f }, { "s", 1.0f }, { "d", 1.0f }, { "overload", 0.0f }, { "a", 0.01f }, { "volume", -8.0f } });
+    scope ("Octave Figure", ModelJuno, { { "xy", 1 }, { "o1wave", 6 }, { "o2wave", 6 }, { "o2range", 3 }, { "o2fine", 0 }, { "o2lvl", 1.0f }, { "cutoff", 20000 },
+                                         { "envamt", 0.0f }, { "mode", 0 }, { "drift", 0.0f }, { "s", 1.0f }, { "d", 1.0f }, { "overload", 0.0f }, { "a", 0.01f }, { "volume", -8.0f } });
+    scope ("Square Box", ModelSH, { { "xy", 2 }, { "o1wave", 0 }, { "o2lvl", 0.0f }, { "cutoff", 20000 }, { "envamt", 0.0f }, { "mode", 0 }, { "drift", 0.0f }, { "s", 1.0f }, { "d", 1.0f }, { "overload", 0.0f }, { "a", 0.01f }, { "volume", -9.0f } });
+    scope ("Spiral Pluck", ModelMini, { { "xy", 2 }, { "o1wave", 6 }, { "o2lvl", 0.0f }, { "cutoff", 20000 }, { "envamt", 0.0f }, { "mode", 2 }, { "a", 0.001f },
+                                        { "d", 1.5f }, { "s", 0.0f }, { "r", 1.5f }, { "drift", 0.0f }, { "volume", -6.0f } });
+    scope ("Filter Flower", ModelMini, { { "xy", 1 }, { "o1wave", 2 }, { "o2wave", 2 }, { "o2semi", 7 }, { "o2fine", 1 }, { "o2lvl", 1.0f }, { "cutoff", 700 },
+                                         { "reso", 0.5f }, { "envamt", 0.5f }, { "fd", 0.8f }, { "mode", 0 }, { "volume", -6.0f } });
     e.presets.push_back ({ "Init", "Init", {} });
     return e;
 }
@@ -419,6 +439,7 @@ public:
         const int w1 = juce::roundToInt (p[pO1Wave]), w2 = juce::roundToInt (p[pO2Wave]), w3 = juce::roundToInt (p[pO3Wave]);
         const bool sync2 = p[pO2Sync] > 0.5f, osc3Low = p[pO3Lfo] > 0.5f;
         const float driftCents = p[pDrift] * c.drift;
+        const int xyMode = juce::roundToInt (p[pXY]);
 
         for (int i0 = 0; i0 < n; i0 += 16)
         {
@@ -477,6 +498,25 @@ public:
                     // sub: a square an octave under osc 1
                     if (v.ph[0] < before1) v.subFlip = ! v.subFlip;
                     const float sub = v.subFlip ? 1.0f : -1.0f;
+                    if (xyMode > 0)
+                    {
+                        // oscilloscope graphics: left and right are different oscillators, the scope draws the figure
+                        float q = 0.0f;
+                        if (xyMode == 2) { float ph = v.ph[0] + 0.25f; if (ph >= 1.0f) ph -= 1.0f; q = wave (ph, 0.0f, w1, pw); }   // the same wave, a quarter later
+                        float mL = o1 * p[pO1Lvl] + sub * p[pSub] * 0.8f + (osc3Low ? 0.0f : o3 * p[pO3Lvl]);
+                        float mR = (xyMode == 1 ? o2 * p[pO2Lvl] : q * p[pO1Lvl]) + sub * p[pSub] * 0.8f;
+                        mL = dsp::fastTanh (mL * 0.45f * overload) / (0.45f * overload) * 0.5f;
+                        mR = dsp::fastTanh (mR * 0.45f * overload) / (0.45f * overload) * 0.5f;
+                        float cutXY = juce::jlimit (20.0f, sr * 0.45f, cutBase * std::exp2 (p[pEnvAmt] * fe * 7.0f));
+                        float yl = v.filter.process (mL, c.filter, fmode, cutXY, p[pReso], c, sr);
+                        float yr = v.filterR.process (mR, c.filter, fmode, cutXY, p[pReso], c, sr);
+                        v.dc += (yl - v.dc) * dcA; yl -= v.dc;
+                        v.dcR += (yr - v.dcR) * dcA; yr -= v.dcR;
+                        const float gxy = ae * velGain * trem * v.gain;
+                        bl[i] += yl * gxy; br[i] += yr * gxy;
+                        if (! v.aenv.active()) { v.active = false; break; }
+                        continue;
+                    }
                     float mix = o1 * p[pO1Lvl] + o2 * p[pO2Lvl] + (osc3Low ? 0.0f : o3 * p[pO3Lvl]) + sub * p[pSub] * 0.8f
                               + v.rng.next() * (p[pNoise] * 0.8f + c.noiseFloor) + o1 * o2 * p[pRing];
                     mix = dsp::fastTanh (mix * 0.45f * overload) / (0.45f * overload) * 0.5f;   // the mixer overloads into the filter (Moog warmth)
@@ -501,7 +541,7 @@ public:
             {
                 float l = bl[i], r = br[i];
                 if (drive > 1.01f) { l = dsp::fastTanh (l * drive) / std::sqrt (drive); r = dsp::fastTanh (r * drive) / std::sqrt (drive); }
-                chorus (l, r, juce::roundToInt (p[pChorus]), c.chorusDepth);
+                if (xyMode == 0) chorus (l, r, juce::roundToInt (p[pChorus]), c.chorusDepth);   // a chorus would blur the figure
                 const float g = volume.process (vol) * 2.2f;
                 outL[i0 + i] += l * g;
                 outR[i0 + i] += r * g;
@@ -517,7 +557,8 @@ private:
         float vel = 0.8f, pitch = 60.0f, target = 60.0f, uni = 0.0f, gl = 1.0f, gr = 1.0f, lfoFade = 0.0f, vac = 0.0f, hpState = 0.0f, tolerance = 0.0f, dc = 0.0f, gain = 1.0f;
         std::array<float, 3> ph { 0.0f, 0.33f, 0.66f }, drift {};
         dsp::Adsr fenv, aenv;
-        ModelFilter filter;
+        ModelFilter filter, filterR;
+        float dcR = 0.0f;
         dsp::Rng rng;
         uint64_t age = 0;
         void release() { gate = false; fenv.gateOff(); aenv.gateOff(); }
@@ -543,6 +584,7 @@ private:
             v.rng.s = 0x9e3779b9u ^ (uint32_t) (counter * 2654435761u);
             v.tolerance = v.rng.next();   // each voice a little different, like real parts
             v.filter.reset();
+            v.filterR.reset();
             v.vac = 0.0f;
             if (model() != ModelJuno) for (auto& ph : v.ph) ph = v.rng.uni();   // free-running oscillators (the Juno's DCOs restart)
             else v.ph = { 0.0f, 0.0f, 0.0f };

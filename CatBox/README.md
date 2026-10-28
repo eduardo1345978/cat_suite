@@ -126,7 +126,7 @@ other engines = like a piano: the bottom row the white keys C D E F G A B C, the
 
 `1-8` / `Q-I` the pads · `Space` Play · `Enter` Rec · `Shift` Shift · `Tab` next track · `←` `→` Prev / Next ·
 `F2` Sound · `F3` Seq · `F4` Note FX · `F5` Mix · `F6` Project · `N` Scene · `C` (hold) Chaos · `Z` / `X` pad octave ·
-`F1` all keys. Mouse: drag or scroll a knob, double-click = back to its start; a pad clicked high = hard, low = soft.
+`F1` all keys · `F7` XY oscilloscope. Mouse: drag or scroll a knob, double-click = back to its start; a pad clicked high = hard, low = soft.
 Right-click: sound card and MIDI, learn a MIDI keyboard, full screen.
 
 ## A MIDI keyboard (e.g. M-Audio Oxygen Pro Mini)
@@ -165,9 +165,15 @@ layer), 16 step buttons with LEDs, SYNTH / DRUMS / STUDIO buttons. Firmware, wir
 `CatBox/pico/catbox_panel_v2` and `CatBox/pico/panel_v2.svg`. MIDI channel 16: pots CC 40-67, pushes CC 70-81,
 screens CC 85-87, steps notes 60-75 (the LEDs come back on the same notes).
 On the box's own screen (`--kiosk`) the SYNTH page doesn't repeat the labelled pots: it shows the sound alive - a
-**circular oscilloscope** (one period of the wave around a circle, with a glowing trail), the wave and its spectrum,
+**XY oscilloscope** (left channel = X, right = Y, green phosphor with afterglow - tap it for full screen), the wave
+and its spectrum,
 the filter's curve (its slope, resonance and mode as you turn), both envelopes - with the 12 knobs below, and the pot
 you turn big in the middle for a moment (waiting to take over: a dot shows where the pot is).
+
+**Oscilloscope graphics**: the synth's OUTPUT section has **Scope XY** (Off / Lissajous / Circle). Lissajous = osc 1
+goes left (X), osc 2 right (Y), so their tuning draws the figure (fifth = 3 : 2, octave = 2 : 1, a few cents off =
+it turns); Circle = sine and cosine. The filter and envelopes still shape it. Sounds: category **Scope** (Circle,
+Lissajous 3 : 2, Turning Knot, Octave Figure, Square Box, Spiral Pluck, Filter Flower). On the PC `F7` = the big scope.
 
 ## Memory
 

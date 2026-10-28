@@ -185,6 +185,14 @@ void View::drawScreen (juce::Graphics& g)
                hintRow.reduced (12, 0), 11.5f, dim, juce::Justification::centredLeft);
     }
 
+    if (bigScope && ! (kiosk && synthPanelShown()))   // F7: the XY scope over everything
+    {
+        auto area = juce::Rectangle<int> (0, 86, screenW, screenH - 86);
+        g.setColour (juce::Colours::black);
+        g.fillRect (area);
+        drawXYScope (g, area.withSizeKeepingCentre (area.getHeight() * 3 / 2, area.getHeight()).reduced (6));
+        text1 (g, "F7: back", area.removeFromBottom (16).reduced (8, 0), 11.0f, juce::Colour (0xff3cff7a).withAlpha (0.6f), juce::Justification::centredRight);
+    }
     if (box.isLearning()) drawLearn (g, juce::Rectangle<int> (0, 52, screenW, screenH - 52));
     if (box.isHelpShown()) drawHelp (g, juce::Rectangle<int> (0, 0, screenW, screenH));
 
@@ -1277,7 +1285,9 @@ void View::drawSynthLive (juce::Graphics& g, juce::Rectangle<int> r)
     r = r.reduced (6, 4);
     // left: the circular scope; middle: the wave and its spectrum; right: the filter and the two envelopes
     const int side = juce::jmin (r.getHeight(), 240);
-    drawPolarScope (g, r.removeFromLeft (side), acc);
+    if (bigScope) { scopeHit = r; drawXYScope (g, r.withSizeKeepingCentre (juce::jmin (r.getWidth(), r.getHeight() * 3 / 2), r.getHeight())); return; }
+    scopeHit = r.removeFromLeft (side);
+    drawXYScope (g, scopeHit);
     r.removeFromLeft (6);
     auto right = r.removeFromRight (230);
     r.removeFromRight (6);
@@ -1325,6 +1335,67 @@ void View::drawSynthLive (juce::Graphics& g, juce::Rectangle<int> r)
     auto par = [&] (const char* id) { return tr.params[(size_t) d.index (id)]; };
     drawEnvelope (g, frame (e1, "FILTER ENV"), {}, par ("fa"), par ("fd"), par ("fs"), par ("fr"), acc);
     drawEnvelope (g, frame (envR, "AMP ENV"), {}, par ("a"), par ("d"), par ("s"), par ("r"), acc);
+}
+
+void View::drawXYScope (juce::Graphics& g, juce::Rectangle<int> r)
+{
+    // the screen: a dark green tube with a graticule; the beam is a green line that glows where it is slow and fades
+    const int W = juce::jmax (64, r.getWidth()), H = juce::jmax (64, r.getHeight());
+    if (! phosphor.isValid() || phosphor.getWidth() != W || phosphor.getHeight() != H)
+    {
+        phosphor = juce::Image (juce::Image::RGB, W, H, true);
+        juce::Graphics pg (phosphor);
+        pg.fillAll (juce::Colour (0xff020a04));
+    }
+    auto& a = box.getAudio();
+    const int n = Audio::xySize, w = a.xyWrite.load (std::memory_order_relaxed);
+    const int count = juce::jmin (n - 1, (int) (a.getSampleRate() / 30.0) + 64);   // what played since the last frame (and a little more)
+    float peak = 0.0f;
+    for (int i = 0; i < count; ++i)
+    {
+        const int k = (w - count + i + n) % n;
+        peak = juce::jmax (peak, std::abs (a.xyL[(size_t) k].load (std::memory_order_relaxed)), std::abs (a.xyR[(size_t) k].load (std::memory_order_relaxed)));
+    }
+    // the size follows the sound gently (a quiet figure fills the tube too)
+    const float target = peak > 0.002f ? 0.42f / peak : xyScale;
+    xyScale += (juce::jlimit (0.3f, 60.0f, target) - xyScale) * (target < xyScale * 0.8f ? 0.5f : 0.03f);   // calm: the figure doesn't breathe
+    {
+        juce::Graphics pg (phosphor);
+        pg.setColour (juce::Colour (0xff020a04).withAlpha (0.28f));   // the afterglow fades
+        pg.fillAll();
+        const float cx = W * 0.5f, cy = H * 0.5f, sc = (float) juce::jmin (W, H);
+        float px = 0.0f, py = 0.0f;
+        for (int i = 0; i < count; i += 2)
+        {
+            const int k = (w - count + i + n) % n;
+            const float x = cx + a.xyL[(size_t) k].load (std::memory_order_relaxed) * xyScale * sc;
+            const float y = cy - a.xyR[(size_t) k].load (std::memory_order_relaxed) * xyScale * sc;
+            if (i > 0)
+            {
+                const float len = std::hypot (x - px, y - py);
+                const float bright = juce::jlimit (0.04f, 0.9f, 2.2f / (1.0f + len));   // a slow beam burns brighter
+                pg.setColour (juce::Colour (0xff3cff7a).withAlpha (bright));
+                pg.drawLine (px, py, x, y, 1.7f);
+            }
+            px = x; py = y;
+        }
+    }
+    g.setColour (juce::Colour (0xff010603));
+    g.fillRoundedRectangle (r.toFloat(), 10.0f);
+    g.drawImage (phosphor, r.toFloat());
+    // a soft halo around the bright lines: the image again, a little bigger, very faint
+    g.setOpacity (0.18f);
+    g.drawImage (phosphor, r.toFloat().expanded (2.0f));
+    g.setOpacity (1.0f);
+    g.setColour (juce::Colour (0xff3cff7a).withAlpha (0.10f));
+    for (int k = 1; k < 10; ++k)
+    {
+        g.drawVerticalLine (r.getX() + r.getWidth() * k / 10, (float) r.getY(), (float) r.getBottom());
+        g.drawHorizontalLine (r.getY() + r.getHeight() * k / 10, (float) r.getX(), (float) r.getRight());
+    }
+    g.setColour (juce::Colour (0xff3cff7a).withAlpha (0.25f));
+    g.drawRoundedRectangle (r.toFloat().reduced (0.5f), 10.0f, 1.0f);
+    text1 (g, "XY", r.reduced (8, 4).removeFromTop (14), 10.0f, juce::Colour (0xff3cff7a).withAlpha (0.5f), juce::Justification::topLeft, true);
 }
 
 void View::drawPolarScope (juce::Graphics& g, juce::Rectangle<int> r, juce::Colour acc)
@@ -1852,6 +1923,7 @@ bool View::screenTouch (juce::Point<float> sp, bool down)
     for (const auto& h : screenHits)
         if (h.r.contains (p)) { if (h.action == 0) box.goSynth(); else if (h.action == 1) box.goDrums(); else box.goStudio(); return true; }
     if (modelHit.contains (p)) { box.nextModel (1); return true; }
+    if (scopeHit.contains (p) && synthPanelShown() && kiosk) { bigScope = ! bigScope; return true; }   // a touch on the scope: big / small
     for (const auto& h : actionHits)
         if (h.r.contains (p))
         {
@@ -2140,6 +2212,7 @@ bool View::keyPressed (const juce::KeyPress& k)
     const auto mods = k.getModifiers();
     auto press = [this] (int b) { box.buttonDown (b); box.buttonUp (b); };
     if (code == juce::KeyPress::F1Key) { box.toggleHelp(); return true; }
+    if (code == juce::KeyPress::F7Key) { bigScope = ! bigScope; repaint(); return true; }   // the XY scope over the screen
     if (code == juce::KeyPress::spaceKey) { press (BtnPlay); return true; }
     if (code == juce::KeyPress::returnKey) { press (BtnRec); return true; }
     if (code == juce::KeyPress::tabKey) { box.selectTrack ((box.getTrack() + (mods.isShiftDown() ? numTracks - 1 : 1)) % numTracks); return true; }
