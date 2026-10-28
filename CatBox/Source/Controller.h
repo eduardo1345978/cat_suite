@@ -37,6 +37,13 @@ constexpr int firstButtonCC = 102;    // 102..121: the 20 buttons (127 down, 0 u
 constexpr int sliderCC = 8;           // the slider (absolute 0..127): the DJ filter
 constexpr int joyXCC = 16, joyYCC = 17; // the joystick (absolute, 64 = middle): bend and mod
 constexpr int firstPadNote = 36;      // 36..51: the 16 pads
+// ---- the box, version 2 (a synth panel): 28 potentiometers, 12 push encoders, 16 step buttons, screen buttons
+constexpr int numPots = 28;
+constexpr int firstPotCC = 40;        // 40..67: the potentiometers (absolute 0..127; they pick the value up when they pass it)
+constexpr int firstPushCC = 70;       // 70..81: the 12 encoders' pushes (push + turn = the second layer of that knob)
+constexpr int screenButtonCC = 85;    // 85 SYNTH, 86 DRUMS, 87 STUDIO
+constexpr int firstStepNote = 60;     // 60..75: the 16 step buttons (and their LEDs, sent back)
+constexpr int ledScreenNote = 85, ledPlayNote = 88, ledRecNote = 89;
 
 /** What one of the 12 knobs does right now (for the screen and the panel). */
 struct KnobView
@@ -181,12 +188,25 @@ public:
     int drumTrack() const;               // the first drum track (the DRUMS screen's)
     /** The panel and the mouse: a parameter of the current track moved by a part of its travel (undo merges a turn). */
     void nudgeParam (int index, float normDelta);
+    /** The panel's EFFECTS section (the send delay and reverb): codes from 1000 ("#dtime" ...). */
+    static constexpr int panelFx0 = 1000;
+    static int panelFxCode (const juce::String& id);   // -1 = not one
+    KnobView panelFxView (int code) const;
+    bool panelFxStepped (int code) const;
     void cycleParam (int index, int dir);  // a switch / choice: the next position
     void resetParam (int index);
     int hardwareKnobFor (int index) const; // which of the 12 knobs turns it now (1-24 with Shift), 0 = none
     void nextModel (int dir);             // the Synth's model
     void nextKit (int dir);               // the drum track's kit
     void toggleDrumStep (int lane, int step);
+    // ---- the box v2
+    static const char* potId (int pot);   // which synth knob a potentiometer is ("cutoff", "#dtime" ...)
+    void potMoved (int pot, int value);    // 0..127
+    bool potHolds (int pot) const { return potGrab[(size_t) juce::jlimit (0, numPots - 1, pot)]; }
+    void stepButton (int step, bool down);
+    /** What the box's LEDs show: the 16 steps (0 off, 1 on, 2 the playing step, 3 picked), the screen, play, rec. */
+    struct Leds { std::array<uint8_t, 16> steps {}; int screen = 0; bool playing = false, rec = false; };
+    Leds leds() const;
     void clickStep (int step);            // a melodic step (like tapping its pad in SEQ)
     void nextDrumPattern (int dir);       // the DRUMS screen: a ready-made beat
     juce::String drumPatternName() const;
@@ -235,6 +255,10 @@ private:
     enum Kind { KParam = 0, KFx, KMaster, KMix, KSeq, KBrowse, KIns, KInsType, KInsOn, KInsPreset, KFxSel, KMacro, KModSet,
                 KModSel, KModField, KModAmt, KLook, KSendC, KSendFx, KSendFxPreset, KChain };
     Target destTarget (int dest) const;
+    Target panelFxTarget (int code, int forTrack = -1) const;
+    std::array<float, numPots> potLast {}, potSet {};
+    std::array<bool, numPots> potGrab {};
+    std::array<std::atomic<bool>, numKnobs> encPush {};
     int targetDest (const Target&) const;
     bool tryAssign (const Target&);
     void loadLook();

@@ -114,6 +114,7 @@ Controller::Controller (const juce::File& dir) : dataDir (dir)
     loadScenes();
     loadMidiMap();
     loadLook();
+    potLast.fill (-1.0f);
     prepareSamples(); audio.push (project);
     startTimerHz (30);
 }
@@ -1462,7 +1463,7 @@ void Controller::turnKnob (int k, float clicks)
 {
     if (k < 0 || k >= numKnobs || clicks == 0.0f) return;
     if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "knob"); o->setProperty ("k", k); o->setProperty ("c", clicks); sendRemote (o); return; }
-    const int slot = k + (shift.load() ? numKnobs : 0);
+    const int slot = k + (shift.load() || encPush[(size_t) k].load() ? numKnobs : 0);   // push + turn = the second layer
     if (mode.load() == ModeSeq) { seqKnob (slot, clicks); return; }
     if (assignPending >= 0 && tryAssign (targetFor (slot))) return;
     changeTarget (targetFor (slot), clicks, false);
@@ -2089,6 +2090,23 @@ void Controller::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMe
 
     if (m.getChannel() == controllerChannel)   // the box's own knobs, buttons, pads, slider and joystick
     {
+        // the box v2: step buttons, potentiometers, encoder pushes, screen buttons
+        if ((m.isNoteOn() || m.isNoteOff()) && m.getNoteNumber() >= firstStepNote && m.getNoteNumber() < firstStepNote + 16)
+        {
+            runOnMessageThread ([this, k = m.getNoteNumber() - firstStepNote, down = m.isNoteOn()] { stepButton (k, down); });
+            return;
+        }
+        if (m.isController())
+        {
+            const int cc = m.getControllerNumber(), v = m.getControllerValue();
+            if (cc >= firstPotCC && cc < firstPotCC + numPots) { runOnMessageThread ([this, p = cc - firstPotCC, v] { potMoved (p, v); }); return; }
+            if (cc >= firstPushCC && cc < firstPushCC + numKnobs) { encPush[(size_t) (cc - firstPushCC)] = v >= 64; return; }
+            if (cc >= screenButtonCC && cc < screenButtonCC + 3)
+            {
+                if (v >= 64) runOnMessageThread ([this, s = cc - screenButtonCC] { s == 0 ? goSynth() : s == 1 ? goDrums() : goStudio(); });
+                return;
+            }
+        }
         if (m.isNoteOn() && m.getNoteNumber() >= firstPadNote && m.getNoteNumber() < firstPadNote + numPads)
             padDown (m.getNoteNumber() - firstPadNote, m.getVelocity());
         else if (m.isNoteOff() && m.getNoteNumber() >= firstPadNote && m.getNoteNumber() < firstPadNote + numPads)
@@ -3119,8 +3137,74 @@ void Controller::goStudio()
     if (onChange) onChange();
 }
 
+namespace
+{
+const char* panelFxIds[] = { "#dtype", "#dtime", "#dfb", "#dsend", "#rtype", "#rsize", "#rsend", "#rpre" };
+}
+
+int Controller::panelFxCode (const juce::String& id)
+{
+    for (int i = 0; i < 8; ++i) if (id == panelFxIds[i]) return panelFx0 + i;
+    return -1;
+}
+
+Controller::Target Controller::panelFxTarget (int code, int forTrack) const
+{
+    const int t = forTrack >= 0 ? forTrack : track.load();
+    switch (code - panelFx0)
+    {
+        case 0: return { KMaster, MDelayType };
+        case 1: return { KMaster, MDelayTime };
+        case 2: return { KMaster, MDelayFb };
+        case 3: return { KMix, t * 4 + 3 };
+        case 4: return { KMaster, MRevType };
+        case 5: return { KMaster, MRevSize };
+        case 6: return { KMix, t * 4 + 2 };
+        case 7: return { KMaster, MRevPre };
+        default: return {};
+    }
+}
+
+KnobView Controller::panelFxView (int code) const
+{
+    KnobView v;
+    const auto t = panelFxTarget (code);
+    const auto* def = targetDef (t);
+    if (def == nullptr) return v;
+    static const char* names[] = { "Delay", "Time", "Feedback", "Delay amt", "Reverb", "Size", "Reverb amt", "Pre-delay" };
+    v.used = true;
+    v.name = names[(code - panelFx0) & 7];
+    const float val = targetValue (t);
+    v.value = def->format (val);
+    v.norm = def->toNorm (val);
+    return v;
+}
+
+bool Controller::panelFxStepped (int code) const
+{
+    const auto* def = targetDef (panelFxTarget (code));
+    return def != nullptr && def->stepped();
+}
+
 void Controller::nudgeParam (int index, float normDelta)
 {
+    if (index >= panelFx0)
+    {
+        const auto t = panelFxTarget (index);
+        const auto* def = targetDef (t);
+        if (def == nullptr || normDelta == 0.0f) return;
+        if (def->stepped())
+        {
+            static float acc = 0.0f;
+            acc += normDelta * juce::jmin (24.0f, def->hi - def->lo + 1.0f);
+            const int steps = (int) acc;
+            if (steps == 0) return;
+            acc -= (float) steps;
+            changeTarget (t, (float) steps, false);
+        }
+        else changeTarget (t, normDelta, true);
+        return;
+    }
     const auto& d = engineDef (cur().engine);
     if (index < 0 || index >= (int) d.params.size() || normDelta == 0.0f) return;
     const auto& pd = d.params[(size_t) index];
@@ -3141,6 +3225,17 @@ void Controller::nudgeParam (int index, float normDelta)
 
 void Controller::cycleParam (int index, int dir)
 {
+    if (index >= panelFx0)
+    {
+        const auto t = panelFxTarget (index);
+        const auto* def = targetDef (t);
+        if (def == nullptr) return;
+        float v = targetValue (t) + (float) dir;
+        if (v > def->hi) v = def->lo;
+        if (v < def->lo) v = def->hi;
+        changeTarget (t, v - targetValue (t), false);
+        return;
+    }
     const auto& d = engineDef (cur().engine);
     if (index < 0 || index >= (int) d.params.size()) return;
     const auto& pd = d.params[(size_t) index];
@@ -3155,6 +3250,12 @@ void Controller::cycleParam (int index, int dir)
 
 void Controller::resetParam (int index)
 {
+    if (index >= panelFx0)
+    {
+        const auto t = panelFxTarget (index);
+        if (const auto* def = targetDef (t)) changeTarget (t, def->toNorm (def->def) - def->toNorm (targetValue (t)), true);
+        return;
+    }
     const auto& d = engineDef (cur().engine);
     if (index < 0 || index >= (int) d.params.size()) return;
     pushUndo ("Sound edit", true);
@@ -3230,6 +3331,122 @@ void Controller::nextDrumPattern (int dir)
 juce::String Controller::drumPatternName() const
 {
     return drumPattern >= 0 ? drumTemplateNames()[drumPattern] : juce::String ("your own");
+}
+
+//==============================================================================
+// The box v2: potentiometers on the synth, 16 step buttons with LEDs
+const char* Controller::potId (int pot)
+{
+    static const char* ids[numPots] = {
+        "o1wave", "o2wave", "o2fine", "o1lvl", "o2lvl", "o3lvl",          // OSCILLATORS
+        "cutoff", "reso", "envamt", "overload", "hpf",                       // FILTER
+        "fa", "fd", "fs", "fr",                                              // FILTER ENV
+        "a", "d", "s", "r",                                                  // AMP ENV
+        "lforate", "lfofilter",                                              // LFO
+        "#dtime", "#dfb", "#dsend", "#rsize", "#rsend",                      // EFFECTS
+        "glide", "volume" };
+    return ids[juce::jlimit (0, numPots - 1, pot)];
+}
+
+void Controller::potMoved (int pot, int value)
+{
+    if (pot < 0 || pot >= numPots) return;
+    const int t = synthTrack();
+    if (t < 0) return;
+    const float want = juce::jlimit (0.0f, 1.0f, value / 127.0f);
+    const juce::String id (potId (pot));
+    const auto& d = engineDef (EngineSynth);
+    const int code = panelFxCode (id);
+    const int idx = code >= 0 ? -1 : d.index (id);
+    // where the knob it moves is now
+    float now = 0.0f;
+    const ParamDef* pd = nullptr;
+    Target fxT;
+    if (code >= 0) { fxT = panelFxTarget (code, t); pd = targetDef (fxT); if (pd == nullptr) return; now = pd->toNorm (targetValue (fxT)); }
+    else { if (idx < 0) return; pd = &d.params[(size_t) idx]; now = pd->toNorm (project.tracks[(size_t) t].params[(size_t) idx]); }
+    auto& grab = potGrab[(size_t) pot];
+    if (grab && std::abs (now - potSet[(size_t) pot]) > 0.02f) grab = false;   // a new sound moved it meanwhile
+    if (! grab)
+    {
+        // pick-up: the pot takes over when it reaches (or passes) the value, so nothing jumps
+        const float last = potLast[(size_t) pot];
+        const bool passed = (last - now) * (want - now) <= 0.0f && last >= 0.0f;
+        potLast[(size_t) pot] = want;
+        if (std::abs (want - now) > 0.04f && ! passed)
+        {
+            setFlash (pd->name + ": turn to " + juce::String (juce::roundToInt (now * 100.0f)) + "% to take it over (" + juce::String (juce::roundToInt (want * 100.0f)) + "% now)");
+            return;
+        }
+        grab = true;
+    }
+    potLast[(size_t) pot] = want;
+    if (code >= 0)
+    {
+        changeTarget (fxT, want - now, true);
+        potSet[(size_t) pot] = pd->toNorm (targetValue (fxT));
+        setFlash (panelFxView (code).name + " " + pd->format (targetValue (fxT)));
+        return;
+    }
+    pushUndo ("Sound edit", true);
+    auto& tr = project.tracks[(size_t) t];
+    tr.params[(size_t) idx] = pd->fromNorm (want);
+    edited[(size_t) t] = true;
+    potSet[(size_t) pot] = pd->toNorm (tr.params[(size_t) idx]);
+    changed();
+    setFlash (pd->name + " " + pd->format (tr.params[(size_t) idx]));
+}
+
+void Controller::stepButton (int k, bool down)
+{
+    if (k < 0 || k >= 16) return;
+    const int t = track.load();
+    if (screen == ScreenDrums)
+    {
+        if (! down) return;
+        if (shift.load()) { keyDown (36 + k, 100); keyUp (36 + k); return; }   // Shift + step: pick that drum (and hear it)
+        toggleDrumStep (lane[(size_t) t], bar[(size_t) t] * 16 + k);
+        return;
+    }
+    if (screen == ScreenSynth)
+    {
+        if (! down) return;
+        // the synth's own steps (a melody); Play runs them
+        const int step = bar[(size_t) t] * 16 + k;
+        if (step < cur().pat.length) clickStep (step);
+        return;
+    }
+    // the STUDIO: Shift + step 1-8 picks the track, else the step buttons are the pads
+    if (shift.load()) { if (down && k < numTracks) selectTrack (k); return; }
+    down ? padDown (k, 100) : padUp (k);
+}
+
+Controller::Leds Controller::leds() const
+{
+    Leds l;
+    l.screen = screen;
+    l.playing = audio.isPlaying();
+    l.rec = audio.isRecording();
+    const int t = track.load();
+    const auto& tr = cur();
+    const auto& pat = tr.pat;
+    const int b = bar[(size_t) t] * 16;
+    const bool steps = screen != ScreenStudio || mode.load() == ModeSeq;
+    if (steps)
+    {
+        for (int k = 0; k < 16; ++k)
+        {
+            const int s = b + k;
+            if (s >= pat.length) continue;
+            const bool on = tr.isDrums() ? pat.drums[(size_t) lane[(size_t) t]][(size_t) s] > 0 : pat.steps[(size_t) s].on();
+            l.steps[(size_t) k] = on ? (s == selStep[(size_t) t] ? 3 : 1) : 0;
+        }
+        const int now = audio.stepNow[(size_t) t].load() - b;
+        if (l.playing && now >= 0 && now < 16) l.steps[(size_t) now] = 2;
+    }
+    else
+        for (int k = 0; k < numTracks; ++k)   // the tracks: the picked one bright, muted ones off
+            l.steps[(size_t) k] = k == t ? 3 : (project.tracks[(size_t) k].mute ? 0 : 1);
+    return l;
 }
 
 } // namespace catbox

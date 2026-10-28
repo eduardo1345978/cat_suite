@@ -606,6 +606,42 @@ public:
                 check (box.getScreen() == Controller::ScreenStudio, "any other mode: the STUDIO", {});
                 box.goStudio();
                 box.setMode (ModeSound);
+
+                // ---- the box v2 over MIDI: screen buttons, potentiometers (pick-up), step buttons with LEDs, push + turn
+                auto cc = [&box] (int n, int v) { box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (controllerChannel, n, v)); };
+                auto note = [&box] (int n, bool on) { box.handleIncomingMidiMessage (nullptr, on ? juce::MidiMessage::noteOn (controllerChannel, n, (juce::uint8) 100) : juce::MidiMessage::noteOff (controllerChannel, n)); };
+                cc (screenButtonCC + 1, 127); cc (screenButtonCC + 1, 0);
+                check (box.getScreen() == Controller::ScreenDrums, "v2: the DRUMS button", {});
+                const int dtr = box.getTrack();
+                const auto lane0 = box.getProject().tracks[(size_t) dtr].pat.drums[(size_t) box.seqLane()][2];
+                note (firstStepNote + 2, true); note (firstStepNote + 2, false);
+                check (box.getProject().tracks[(size_t) dtr].pat.drums[(size_t) box.seqLane()][2] != lane0, "v2: step button 3 turns step 3 on / off", {});
+                check (box.leds().steps[2] == (lane0 > 0 ? 0 : 1) || box.leds().steps[2] == 3, "v2: and its LED follows", juce::String (box.leds().steps[2]));
+                note (firstStepNote + 2, true); note (firstStepNote + 2, false);
+                cc (screenButtonCC, 127); cc (screenButtonCC, 0);
+                check (box.getScreen() == Controller::ScreenSynth, "v2: the SYNTH button", {});
+                const int stk = box.synthTrack();
+                const auto& sdef2 = engineDef (EngineSynth);
+                const int cutI = sdef2.index ("cutoff");
+                const float cut0 = box.getProject().tracks[(size_t) stk].params[(size_t) cutI];
+                const int potCut = 6;
+                check (juce::String (Controller::potId (potCut)) == "cutoff", "v2: pot 7 is the cutoff", {});
+                const int at = juce::roundToInt (sdef2.params[(size_t) cutI].toNorm (cut0) * 127.0f);
+                const int far = at > 63 ? 5 : 122;
+                cc (firstPotCC + potCut, far);
+                check (box.getProject().tracks[(size_t) stk].params[(size_t) cutI] == cut0, "v2: a pot far from the value doesn't jump", box.flashText());
+                for (int v = far; v != at + (far < at ? 3 : -3); v += far < at ? 1 : -1) cc (firstPotCC + potCut, v);   // turned through it
+                check (box.potHolds (potCut) && box.getProject().tracks[(size_t) stk].params[(size_t) cutI] != cut0, "v2: when it passes the value it takes over", box.flashText());
+                cc (firstPotCC + 23, 127);   // reverb size up
+                check (box.getProject().m.revSize > 0.9f || box.flashText().contains ("take it over"), "v2: an EFFECTS pot (reverb size)", juce::String (box.getProject().m.revSize));
+                const auto& pg = engineDef (EngineSynth).pages[0];
+                const float b4 = box.getProject().tracks[(size_t) stk].params[(size_t) pg.slot[12]];
+                cc (firstPushCC + 0, 127); cc (firstKnobCC + 0, 3); cc (firstPushCC + 0, 0);
+                box.pump(); wait (50);
+                check (box.getProject().tracks[(size_t) stk].params[(size_t) pg.slot[12]] != b4, "v2: push + turn = the knob's second layer", {});
+                cc (screenButtonCC + 2, 127); cc (screenButtonCC + 2, 0);
+                check (box.getScreen() == Controller::ScreenStudio && box.leds().screen == Controller::ScreenStudio, "v2: the STUDIO button (and its LED)", {});
+                box.setMode (ModeSound);
             }
 
             // ---- the libraries (when they are there: CATBOX_LIBRARY or CatBox/library)
@@ -1096,6 +1132,52 @@ private:
 };
 
 //==============================================================================
+
+/** The box v2's LEDs: the 16 steps, the screen buttons, Play and Rec - sent to the panel (USB MIDI "Cat Box Panel") when they change. */
+class LedSender : private juce::Timer
+{
+public:
+    explicit LedSender (Controller& c) : box (c) { startTimerHz (30); }
+    ~LedSender() override { stopTimer(); }
+
+private:
+    void timerCallback() override
+    {
+        if (++scan % 60 == 1) openOutputs();
+        if (outs.empty()) return;
+        const auto l = box.leds();
+        auto send = [this] (int note, int vel, int& last)
+        {
+            if (vel == last) return;
+            last = vel;
+            const auto m = vel > 0 ? juce::MidiMessage::noteOn (controllerChannel, note, (juce::uint8) vel) : juce::MidiMessage::noteOff (controllerChannel, note);
+            for (auto& o : outs) o->sendMessageNow (m);
+        };
+        for (int k = 0; k < 16; ++k) send (firstStepNote + k, l.steps[(size_t) k], lastStep[(size_t) k]);
+        for (int s = 0; s < 3; ++s) send (ledScreenNote + s, l.screen == s ? 1 : 0, lastScreen[(size_t) s]);
+        send (ledPlayNote, l.playing ? 1 : 0, lastPlay);
+        send (ledRecNote, l.rec ? 1 : 0, lastRec);
+    }
+
+    void openOutputs()
+    {
+        const auto devices = juce::MidiOutput::getAvailableDevices();
+        if (devices.size() == knownDevices) return;
+        knownDevices = devices.size();
+        outs.clear();
+        for (const auto& d : devices)
+            if (d.name.containsIgnoreCase ("Cat Box Panel"))
+                if (auto o = juce::MidiOutput::openDevice (d.identifier)) outs.push_back (std::move (o));
+        lastStep.fill (-1); lastScreen.fill (-1); lastPlay = lastRec = -1;   // a new panel: send it everything
+    }
+
+    Controller& box;
+    std::vector<std::unique_ptr<juce::MidiOutput>> outs;
+    std::array<int, 16> lastStep {};
+    std::array<int, 3> lastScreen {};
+    int lastPlay = -1, lastRec = -1, scan = 0, knownDevices = -1;
+};
+
 class CatBoxApplication : public juce::JUCEApplication, private juce::Timer
 {
 public:
@@ -1127,6 +1209,7 @@ public:
         box = std::make_unique<Controller> (dataDir);
         startAudio (dataDir);
         box->goSynth();   // the instrument first; DRUMS and the STUDIO are a click away
+        leds = std::make_unique<LedSender> (*box);
         box->enableMicrophone = [this]
         {
             // the input is switched on only when a sample is recorded (no microphone open all the time)
@@ -1164,6 +1247,7 @@ public:
         window = nullptr;
         link = nullptr;
         server = nullptr;
+        leds = nullptr;
         if (box != nullptr)
         {
             if (auto xml = deviceManager.createStateXml())
@@ -1233,6 +1317,7 @@ private:
 
     juce::AudioDeviceManager deviceManager;
     std::unique_ptr<Controller> box;
+    std::unique_ptr<LedSender> leds;
     std::unique_ptr<LinkServer> server;   // the box
     std::unique_ptr<LinkClient> link;     // the PC app
     std::unique_ptr<MainWindow> window;

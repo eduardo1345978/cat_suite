@@ -1169,7 +1169,7 @@ void View::drawSynthPanel (juce::Graphics& g, juce::Rectangle<int> r)
     r = r.reduced (4, 4);
     const auto& sections = synthPanel();
     // two rows of sections, like the hardware: sound sources on top, shaping below
-    const int split = 5;
+    const int split = 7;
     auto rowTop = r.removeFromTop (r.getHeight() / 2);
     auto rowBottom = r;
     auto layoutRow = [&] (juce::Rectangle<int> row, int from, int to)
@@ -1193,20 +1193,25 @@ void View::drawSynthPanel (juce::Graphics& g, juce::Rectangle<int> r)
             const int cellW = inner.getWidth() / c, cellH = inner.getHeight() / 2;
             for (int k = 0; k < n; ++k)
             {
-                const int idx = d.index (sec.ids[(size_t) k]);
+                const int fxCode = Controller::panelFxCode (sec.ids[(size_t) k]);
+                const int idx = fxCode >= 0 ? fxCode : d.index (sec.ids[(size_t) k]);
                 if (idx < 0) continue;
-                const auto& pd = d.params[(size_t) idx];
+                // the EFFECTS knobs are the box's send delay and reverb (not the synth's own)
+                ParamDef fxDef;
+                if (fxCode >= 0) { fxDef.unit = box.panelFxStepped (fxCode) ? ParamDef::Choice : ParamDef::Pct; fxDef.lo = 0.0f; fxDef.hi = 1.0f; }
+                const auto& pd = fxCode >= 0 ? fxDef : d.params[(size_t) idx];
+                const auto fxv = fxCode >= 0 ? box.panelFxView (fxCode) : KnobView();
                 auto cell2 = juce::Rectangle<int> (inner.getX() + (k / 2) * cellW, inner.getY() + (k % 2) * cellH, cellW, cellH);
                 panelHits.add ({ cell2, idx });
-                const float val = tr.params[(size_t) idx];
-                const float nrm = pd.toNorm (val);
+                const float val = fxCode >= 0 ? fxv.norm : tr.params[(size_t) idx];
+                const float nrm = fxCode >= 0 ? fxv.norm : pd.toNorm (val);
                 const bool active = idx == panelActive || idx == panelHover;
                 auto lab = cell2.removeFromTop (11);
                 auto valR = cell2.removeFromBottom (11);
-                juce::String name = pd.name;
+                juce::String name = fxCode >= 0 ? fxv.name : pd.name;
                 for (const char* cut : { "Osc 1 ", "Osc 2 ", "Osc 3 ", "LFO > ", "F " }) if (name.startsWith (cut) && name.length() > (int) strlen (cut)) name = name.substring ((int) strlen (cut));
                 text1 (g, name, lab.reduced (1, 0), 9.0f, ink.withAlpha (0.85f), juce::Justification::centred);
-                text1 (g, pd.format (val), valR.reduced (1, 0), 9.0f, active ? acc : ink.withAlpha (0.55f), juce::Justification::centred, active);
+                text1 (g, fxCode >= 0 ? fxv.value : pd.format (val), valR.reduced (1, 0), 9.0f, active ? acc : ink.withAlpha (0.55f), juce::Justification::centred, active);
                 // the knob
                 const float dia = (float) juce::jmin (cell2.getWidth() - 6, cell2.getHeight() - 2);
                 if (dia < 8.0f) continue;
@@ -1761,7 +1766,8 @@ void View::mouseUp (const juce::MouseEvent&)
     if (drag == DragPanel)
     {
         const auto& d = engineDef (box.getProject().tracks[(size_t) box.getTrack()].engine);
-        if (! panelMoved && dragIndex >= 0 && dragIndex < (int) d.params.size()
+        if (! panelMoved && dragIndex >= Controller::panelFx0 && box.panelFxStepped (dragIndex)) box.cycleParam (dragIndex, 1);
+        else if (! panelMoved && dragIndex >= 0 && dragIndex < (int) d.params.size()
             && (d.params[(size_t) dragIndex].unit == ParamDef::Toggle || d.params[(size_t) dragIndex].unit == ParamDef::Choice))
             box.cycleParam (dragIndex, 1);   // a click: the next position
         panelActive = -1;
@@ -1782,7 +1788,8 @@ void View::mouseDoubleClick (const juce::MouseEvent& e)
             if (h.r.contains ((lp - sr.getPosition()).toInt()))
             {
                 const auto& d = engineDef (box.getProject().tracks[(size_t) box.getTrack()].engine);
-                if (h.param < (int) d.params.size() && d.params[(size_t) h.param].unit != ParamDef::Choice && d.params[(size_t) h.param].unit != ParamDef::Toggle)
+                if (h.param >= Controller::panelFx0) { if (! box.panelFxStepped (h.param)) box.resetParam (h.param); }
+                else if (h.param < (int) d.params.size() && d.params[(size_t) h.param].unit != ParamDef::Choice && d.params[(size_t) h.param].unit != ParamDef::Toggle)
                     box.resetParam (h.param);
                 return;
             }
@@ -1831,8 +1838,9 @@ void View::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDeta
             if (h.r.contains ((lp - sr.getPosition()).toInt()))   // the wheel turns the panel knob under the mouse
             {
                 const auto& pdefs = engineDef (box.getProject().tracks[(size_t) box.getTrack()].engine).params;
-                const bool stepped = h.param < (int) pdefs.size() && pdefs[(size_t) h.param].stepped();
-                const float stepN = stepped ? 1.01f / juce::jmin (24.0f, pdefs[(size_t) h.param].hi - pdefs[(size_t) h.param].lo + 1.0f) : 0.02f;
+                const bool fxStep = h.param >= Controller::panelFx0 && box.panelFxStepped (h.param);
+                const bool stepped = fxStep || (h.param < (int) pdefs.size() && pdefs[(size_t) h.param].stepped());
+                const float stepN = fxStep ? 0.15f : stepped ? 1.01f / juce::jmin (24.0f, pdefs[(size_t) h.param].hi - pdefs[(size_t) h.param].lo + 1.0f) : 0.02f;
                 if (dd != 0.0f) box.nudgeParam (h.param, dd > 0 ? stepN : -stepN);
                 return;
             }

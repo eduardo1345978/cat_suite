@@ -94,17 +94,20 @@ juce::StringArray synthModelNames()
 const std::vector<SynthSection>& synthPanel()
 {
     static const std::vector<SynthSection> s = {
+        // top row: the sound sources (and how it plays)
         { "CONTROLLERS", { "glide", "mode", "voices", "unidetune", "bend", "drift", "modwheel" } },
         { "OSCILLATOR 1", { "o1range", "o1wave", "o1pw" } },
         { "OSCILLATOR 2", { "o2range", "o2wave", "o2semi", "o2fine", "o2sync" } },
         { "OSCILLATOR 3", { "o3range", "o3wave", "o3semi", "o3fine", "o3lfo" } },
         { "MIXER", { "o1lvl", "o2lvl", "o3lvl", "sub", "noise", "ring", "cross", "overload" } },
+        { "POLY-MOD", { "pmenv", "pmosc" } },
+        { "OUTPUT", { "chorus", "drive", "width", "volume" } },
+        // bottom row: shaping and space
         { "FILTER", { "cutoff", "reso", "envamt", "keytrack", "fmode", "hpf", "velfilt" } },
         { "FILTER ENV", { "fa", "fd", "fs", "fr" } },
         { "AMP ENV", { "a", "d", "s", "r", "velamp" } },
         { "LFO", { "lforate", "lfoshape", "lfosync", "lfodelay", "lfopitch", "lfofilter", "lfopw", "lfoamp" } },
-        { "POLY-MOD", { "pmenv", "pmosc" } },
-        { "OUTPUT", { "chorus", "drive", "width", "volume" } },
+        { "EFFECTS", { "#dtype", "#dtime", "#dfb", "#dsend", "#rtype", "#rsize", "#rsend", "#rpre" } },
     };
     return s;
 }
