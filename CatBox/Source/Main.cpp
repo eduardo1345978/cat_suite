@@ -1027,7 +1027,7 @@ public:
                         {
                             vals[sdef.index ("pic")] = (float) pic;
                             vals[sdef.index ("pturn")] = scopePicture3D (pic) ? 0.5f : 0.0f;
-                            vals[sdef.index ("phyper")] = scopePictureHyper (pic) ? 0.5f : 0.0f;
+                            vals[sdef.index ("phyper")] = 0.5f;   // every picture turns through 4D
                             auto eng = makeEngine (EngineSynth);
                             eng->setTrack (st);
                             eng->prepare (sr);
@@ -1048,10 +1048,10 @@ public:
                             const int per = (int) (sr / (440.0 * std::pow (2.0, (36.0 - 69.0) / 12.0)));
                             for (int i = 0; i < per; ++i) d += std::abs (L[(size_t) (6000 + i)] - L[(size_t) (6000 + i + per * 30)]);
                             const double rl = std::sqrt (ll / (n - 4800)), rrr = std::sqrt (rr / (n - 4800));
-                            const bool good = rl > 0.03 && rrr > (pic == scopePictureText() ? 0.01 : 0.03) && pk < 2.0f && (! scopePicture3D (pic) || d / per > 0.01);
+                            const bool good = rl > 0.03 && rrr > (pic == scopePictureText() ? 0.01 : 0.03) && pk < 2.0f && d / per > 0.01;
                             if (! good) { ok = false; worst << scopePictureNames()[pic] << " (L " << juce::String (rl, 3) << " R " << juce::String (rrr, 3) << " peak " << juce::String (pk, 2) << ") "; }
                         }
-                        check (ok, "all 16 pictures sound left and right, clean; the 3D / 4D / 5D ones turn", worst);
+                        check (ok, "all 16 pictures sound left and right, clean; every one turns through 4D", worst);
                     }
                     // your text
                     box.setScopeText ("HI");
@@ -1108,6 +1108,17 @@ public:
                     shot ("Rotating Cube", "-scope4", screen);
                     shot ("Tesseract 4D", "-scope7", screen);
                     shot ("Penteract 5D", "-scope8", screen);
+                    box.goScope();
+                    {
+                        const auto& sdef = engineDef (EngineSynth);
+                        for (size_t i = 0; i < sdef.presets.size(); ++i) if (sdef.presets[i].name == "Cat Picture") box.loadSound (st, EngineSynth, (int) i);
+                        box.setParam (st, sdef.index ("phyper"), 0.35f);
+                    }
+                    box.setScopeHold (false);
+                    box.setScopeHold (true);
+                    renderSeconds (audio, 0.5, nullptr);
+                    for (int f = 0; f < 8; ++f) { renderSeconds (audio, 1.0 / 30.0, nullptr); screen.snapshotScreen(); }
+                    savePng (screen.snapshotScreen(), "-scope9");
                     box.setScopeText ("MEOW");
                     shot (nullptr, "-scope5", screen);
                     pc.setDrawMode (true);

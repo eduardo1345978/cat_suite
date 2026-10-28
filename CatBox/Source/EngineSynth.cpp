@@ -577,6 +577,16 @@ public:
                             const float k4 = 2.4f / (2.4f + w);
                             x *= k4; y *= k4; z *= k4;
                         }
+                        else if (hyperAng != 0.0f)
+                        {
+                            // a flat (or 3D) picture through the 4th dimension: how far a point is from the middle becomes
+                            // its w, so turning in x-w turns the picture inside out and back
+                            const float w0 = (std::sqrt (x * x + y * y + z * z) - 0.5f) * 0.9f;
+                            float ww = w0;
+                            const float x2 = x * hc - ww * hs; ww = x * hs + ww * hc; x = x2;   // x-w only: the height stays, so it never goes flat
+                            const float k4 = 2.4f / juce::jmax (1.6f, 2.4f + (ww - w0) * 0.6f);   // a gentle perspective: it stays on the screen
+                            x *= k4; y *= k4; z *= k4;
+                        }
                         if (p[pPWobble] > 0.001f)
                         {
                             x += p[pPWobble] * 0.12f * std::sin (dsp::twoPi * 5.0f * before1 + wobT);
