@@ -415,3 +415,10 @@ std::vector<std::vector<juce::Point<float>>> scopeOutline (int pic, int track)
     return builtIns()[(size_t) pic].outline;
 }
 } // namespace catbox
+
+namespace catbox
+{
+static std::atomic<bool> circleAll { false };
+void setScopeCircleAll (bool on) { circleAll.store (on, std::memory_order_relaxed); }
+bool scopeCircleAll() { return circleAll.load (std::memory_order_relaxed); }
+}

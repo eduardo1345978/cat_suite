@@ -507,6 +507,12 @@ void View::drawContent (juce::Graphics& g, juce::Rectangle<int> r)
 
 void View::drawScope (juce::Graphics& g, juce::Rectangle<int> r)
 {
+    if (box.getLook().xyEverywhere)   // Settings > Look: the round XY scope here too
+    {
+        const int side = juce::jmin (r.getWidth(), r.getHeight());
+        drawXYScope (g, r.withSizeKeepingCentre (side, side));
+        return;
+    }
     auto& a = box.getAudio();
     const int n = Audio::scopeSize;
     const int w = a.scopeWrite.load (std::memory_order_relaxed);
@@ -963,6 +969,8 @@ void View::drawProject (juce::Graphics& g, juce::Rectangle<int> r)
         in.removeFromTop (8);
         text1 (g, juce::String ("Text ") + (lk.textSize ? "big" : "normal") + "   Knobs " + (lk.knobStyle ? "rings" : "bars") + "   Track colours " + (lk.trackColours ? "on" : "off")
                   + "   Help line " + (lk.hintLine ? "on" : "off"), in.removeFromTop (22), 14.0f, text, juce::Justification::centredLeft);
+        text1 (g, juce::String ("XY scope everywhere ") + (lk.xyEverywhere ? "on" : "off") + " (knob 7)   Circle for every sound " + (lk.circleAll ? "on" : "off") + " (knob 8)",
+               in.removeFromTop (22), 14.0f, text, juce::Justification::centredLeft);
         return;
     }
     g.setColour (panel);
@@ -1349,8 +1357,10 @@ void View::drawSynthLive (juce::Graphics& g, juce::Rectangle<int> r)
         text1 (g, title, b.withHeight (16).reduced (8, 0), 10.0f, ink.withAlpha (0.7f), juce::Justification::centredLeft, true);
         return b.withTrimmedTop (16).reduced (6, 4);
     };
-    auto scopeR = mid.removeFromTop (mid.getHeight() / 2);
-    mid.removeFromTop (6);
+    const bool lineWave = ! box.getLook().xyEverywhere;   // Settings > Look: XY everywhere = no line scope here (the XY one is on the left)
+    auto scopeR = lineWave ? mid.removeFromTop (mid.getHeight() / 2) : juce::Rectangle<int>();
+    if (lineWave) mid.removeFromTop (6);
+    if (lineWave)
     {
         auto in = frame (scopeR, "WAVE");
         g.setColour (pnl.contrasting (0.12f));

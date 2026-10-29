@@ -469,7 +469,8 @@ public:
         const int w1 = juce::roundToInt (p[pO1Wave]), w2 = juce::roundToInt (p[pO2Wave]), w3 = juce::roundToInt (p[pO3Wave]);
         const bool sync2 = p[pO2Sync] > 0.5f, osc3Low = p[pO3Lfo] > 0.5f;
         const float driftCents = p[pDrift] * c.drift;
-        const int xyMode = juce::roundToInt (p[pXY]);
+        int xyMode = juce::roundToInt (p[pXY]);
+        if (xyMode == 0 && scopeCircleAll()) xyMode = 2;   // Settings > Look: Circle for every sound
         // a picture: the table, and how it turns (per block)
         const ScopeXYZ* picTab = xyMode == 3 ? scopePicture (juce::roundToInt (p[pPic]), track) : nullptr;
         const float dcPic = 1.0f - std::exp (-dsp::twoPi * 2.0f / sr);

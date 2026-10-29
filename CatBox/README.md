@@ -108,7 +108,7 @@ every key plays the nearest recorded note, and how hard you play picks the soft 
 ## The screen
 
 Calm and readable: grey on black, one accent colour, big type. **PROJECT, ▶ = LOOK**: 8 themes (Graphite, Paper, Midnight,
-Forest, Terminal, High contrast, Plum, Sand), 9 accent colours, big text, ring knobs, a colour per track, the help line on / off. **A help line above the knobs** always says what the pads and knobs do right now; **Help** (MENU, F1 or a touch) explains the whole page.
+Forest, Terminal, High contrast, Plum, Sand), 9 accent colours, big text, ring knobs, a colour per track, the help line on / off, **XY scope** (knob 7: the round XY scope everywhere instead of the line scope) and **Circle all** (knob 8: every synth sound whose Scope XY is Off plays as Circle - a round figure; for all tracks and projects, remembered). On the box: HOME, step 6 (SETTINGS), Project, ▶ = LOOK, then encoders 7 and 8. **A help line above the knobs** always says what the pads and knobs do right now; **Help** (MENU, F1 or a touch) explains the whole page.
 - **Top:** the track number, its engine (and note FX), the **sound's name** (big; `*` = changed), tempo, bar.beat, Play and Rec.
 - **Under it:** the modes (SOUND, SEQ, NOTE FX, MIX, PROJECT) and the **pages** of the mode with ◀ ▶.
 - **Middle:** what the mode is about (the sound's waveform and envelope, the browser, the steps, the arp /

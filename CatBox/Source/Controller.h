@@ -59,6 +59,8 @@ struct Look
 {
     int theme = 0, accent = 0, textSize = 0, knobStyle = 0;
     bool trackColours = false, hintLine = true;
+    bool xyEverywhere = false;   // the round XY scope wherever a line scope was
+    bool circleAll = false;      // every synth sound with Scope XY Off plays as Circle
 };
 juce::StringArray themeNames();
 juce::StringArray accentNames();

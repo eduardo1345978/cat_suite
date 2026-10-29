@@ -502,6 +502,9 @@ void Audio::handleEvents()
 //==============================================================================
 void Audio::render (float* outL, float* outR, int n)
 {
+    // tiny numbers (a reverb or delay tail fading to silence) are flushed to zero: without this the CPU computes them
+    // 10-100 times slower, the sound card misses its turn and everything stutters (and the last bit of sound repeats)
+    const juce::ScopedNoDenormals noDenormals;
     applyIncoming (false);
     handleEvents();
     wasPlaying = playing.load();

@@ -22,6 +22,10 @@ bool scopePictureHyper (int picture);    // 4D / 5D: the 4D/5D turn knob rotates
 
 /** Makes the built-in pictures (call once, not on the audio thread). */
 void scopeInit();
+
+// Settings > Look: every synth sound whose Scope XY is Off plays as "Circle" (left and right a quarter apart)
+void setScopeCircleAll (bool on);
+bool scopeCircleAll();
 /** The table the beam follows: scopePoints points, about -1..1. Safe on the audio thread. */
 const ScopeXYZ* scopePicture (int picture, int track);
 

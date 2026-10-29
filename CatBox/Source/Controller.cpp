@@ -85,7 +85,8 @@ const std::vector<ParamDef>& lookDefs()
         return std::vector<ParamDef> {
             choice ("theme", "Theme", themeNames(), 0), choice ("accent", "Colour", accentNames(), 0),
             choice ("text", "Text", { "Normal", "Big" }, 0), choice ("knobs", "Knobs", { "Bars", "Rings" }, 0),
-            toggle ("trackColours", "Track colours", false), toggle ("hint", "Help line", true) };
+            toggle ("trackColours", "Track colours", false), toggle ("hint", "Help line", true),
+            toggle ("xyscope", "XY scope", false), toggle ("circle", "Circle all", false) };
     }();
     return d;
 }
@@ -1209,7 +1210,8 @@ float Controller::targetValue (const Target& t) const
             switch (t.index)
             {
                 case 0: return (float) look.theme; case 1: return (float) look.accent; case 2: return (float) look.textSize;
-                case 3: return (float) look.knobStyle; case 4: return look.trackColours ? 1.0f : 0.0f; default: return look.hintLine ? 1.0f : 0.0f;
+                case 3: return (float) look.knobStyle; case 4: return look.trackColours ? 1.0f : 0.0f; case 5: return look.hintLine ? 1.0f : 0.0f;
+                case 6: return look.xyEverywhere ? 1.0f : 0.0f; default: return look.circleAll ? 1.0f : 0.0f;
             }
         case KMix:
         {
@@ -1424,7 +1426,8 @@ void Controller::changeTarget (const Target& t, float amount, bool fraction)
             switch (t.index)
             {
                 case 0: l.theme = juce::roundToInt (v); break; case 1: l.accent = juce::roundToInt (v); break; case 2: l.textSize = juce::roundToInt (v); break;
-                case 3: l.knobStyle = juce::roundToInt (v); break; case 4: l.trackColours = v > 0.5f; break; default: l.hintLine = v > 0.5f; break;
+                case 3: l.knobStyle = juce::roundToInt (v); break; case 4: l.trackColours = v > 0.5f; break; case 5: l.hintLine = v > 0.5f; break;
+                case 6: l.xyEverywhere = v > 0.5f; break; default: l.circleAll = v > 0.5f; break;
             }
             setLook (l);
             return;
@@ -1646,7 +1649,7 @@ juce::String Controller::hint() const
             case ExtraMy:    return "Your own knobs | MENU > More > Add to MY knobs, then turn any knob";
             default: break;
         }
-    if (mode.load() == ModeProject && projectPage == 1) return "How the screen looks: theme, colour, text size, knobs, track colours";
+    if (mode.load() == ModeProject && projectPage == 1) return "How the screen looks: theme, colour, text size, knobs, track colours - knob 7: XY scope everywhere, knob 8: Circle for every sound";
     switch (mode.load())
     {
         case ModeSound:   if (cur().engine == EngineSampler) return "Rec: record a sample (microphone) | knob 1: the sample | Play: Keys / Chop / One shot";
@@ -3043,6 +3046,7 @@ void Controller::setLook (const Look& l)
     look.accent = juce::jlimit (0, accentNames().size() - 1, look.accent);
     look.textSize = juce::jlimit (0, 1, look.textSize);
     look.knobStyle = juce::jlimit (0, 1, look.knobStyle);
+    setScopeCircleAll (look.circleAll);
     saveLook();
     if (onChange) onChange();
 }
@@ -3058,7 +3062,10 @@ void Controller::loadLook()
     l.knobStyle = (int) v.getProperty ("knobStyle", 0);
     l.trackColours = (bool) v.getProperty ("trackColours", false);
     l.hintLine = (bool) v.getProperty ("hintLine", true);
+    l.xyEverywhere = (bool) v.getProperty ("xyEverywhere", false);
+    l.circleAll = (bool) v.getProperty ("circleAll", false);
     look = l;
+    setScopeCircleAll (look.circleAll);
 }
 
 void Controller::saveLook() const
@@ -3070,6 +3077,8 @@ void Controller::saveLook() const
     o->setProperty ("knobStyle", look.knobStyle);
     o->setProperty ("trackColours", look.trackColours);
     o->setProperty ("hintLine", look.hintLine);
+    o->setProperty ("xyEverywhere", look.xyEverywhere);
+    o->setProperty ("circleAll", look.circleAll);
     dataDir.getChildFile ("look.json").replaceWithText (juce::JSON::toString (juce::var (o)));
 }
 

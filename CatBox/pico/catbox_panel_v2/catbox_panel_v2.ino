@@ -31,14 +31,35 @@ const uint8_t muxA = 26, muxB = 27;                   // their SIG pins: ADC0 (p
 const uint8_t ledPin = 15;                            // the WS2812 / SK6812 chain (data in)
 const int numLeds = 19;                               // 16 steps, HOME, Play, Rec
 
-// ---- the four MCP23017 (addresses 0x20-0x23)
-//   0x20  encoders 1-8 (A on even bits, B on odd bits)
-//   0x21  encoders 9-12 (bits 0-7), pushes 1-8 (bits 8-15)
-//   0x22  pushes 9-12 (bits 0-3), buttons (bits 4-13, below; 14-15 free)
-//   0x23  the 16 step buttons (bit = step)
+// ---- where every switch is: one of the four MCP23017 (0x20-0x23) or a Pico pin
+// GPA7 and GPB7 of the MCP23017 are NOT used: newer chips (Microchip datasheet rev. C and later) have them as
+// outputs only. So every chip uses GPA0-6 (bits 0-6) and GPB0-6 (bits 8-14), and the last six switches go
+// straight to Pico pins GP16-GP21.
+//   0x20  encoders 1-3 on GPA0-5, encoders 4-6 on GPB0-5, push 1 = GPA6, push 2 = GPB6
+//   0x21  encoders 7-9 on GPA0-5, encoders 10-12 on GPB0-5, push 3 = GPA6, push 4 = GPB6
+//   0x22  pushes 5-11 on GPA0-6, push 12 = GPB0, HOME Play Rec Shift Prev Next on GPB1-6
+//   0x23  steps 1-7 on GPA0-6, steps 8-14 on GPB0-6
+//   Pico  step 15 = GP16, step 16 = GP17, Sound = GP18, Scene = GP19, Project = GP20, Chaos = GP21
 const uint8_t mcp[4] = { 0x20, 0x21, 0x22, 0x23 };
-// the buttons on 0x22 bits 4-13: what each one sends (CC number)
+const uint8_t pico = 4;                               // "chip" 4 = a Pico pin (bit = its GP number)
+struct Input { uint8_t chip, bit; };
+constexpr uint8_t A (int n) { return (uint8_t) n; }          // GPA n = bit n
+constexpr uint8_t B (int n) { return (uint8_t) (8 + n); }    // GPB n = bit 8 + n
+// encoder n: pin A on bit, pin B on the next bit
+const Input encA[12] = { { 0, A (0) }, { 0, A (2) }, { 0, A (4) }, { 0, B (0) }, { 0, B (2) }, { 0, B (4) },
+                         { 1, A (0) }, { 1, A (2) }, { 1, A (4) }, { 1, B (0) }, { 1, B (2) }, { 1, B (4) } };
+const Input pushIn[12] = { { 0, A (6) }, { 0, B (6) }, { 1, A (6) }, { 1, B (6) },
+                           { 2, A (0) }, { 2, A (1) }, { 2, A (2) }, { 2, A (3) }, { 2, A (4) }, { 2, A (5) }, { 2, A (6) },
+                           { 2, B (0) } };
+const Input stepIn[16] = { { 3, A (0) }, { 3, A (1) }, { 3, A (2) }, { 3, A (3) }, { 3, A (4) }, { 3, A (5) }, { 3, A (6) },
+                           { 3, B (0) }, { 3, B (1) }, { 3, B (2) }, { 3, B (3) }, { 3, B (4) }, { 3, B (5) }, { 3, B (6) },
+                           { pico, 16 }, { pico, 17 } };
+// the 10 buttons: HOME, Play, Rec, Shift, Prev, Next, Sound, Scene, Project, Chaos
 const int numButtons = 10;
+const Input buttonIn[numButtons] = { { 2, B (1) }, { 2, B (2) }, { 2, B (3) }, { 2, B (4) }, { 2, B (5) }, { 2, B (6) },
+                                     { pico, 18 }, { pico, 19 }, { pico, 20 }, { pico, 21 } };
+const uint8_t picoPins[6] = { 16, 17, 18, 19, 20, 21 };
+// what each button sends (CC number)
 const uint8_t buttonCC[numButtons] = {
     screenCC + 0,                                     // HOME
     firstButtonCC + 18, firstButtonCC + 17,           // Play, Rec
@@ -124,12 +145,14 @@ void setup()
     Wire.setSDA (sdaPin);
     Wire.setSCL (sclPin);
     Wire.begin();
-    Wire.setClock (1000000);           // the MCP23017 runs up to 1.7 MHz: fast polling, no lost encoder steps
+    Wire.setClock (400000);            // 400 kHz: safe over the long panel wires (needs the 4.7 k pull-ups on SDA / SCL)
     for (auto a : mcp)
     {
-        mcpWrite (a, 0x00, 0xFF); mcpWrite (a, 0x01, 0xFF);   // all inputs
-        mcpWrite (a, 0x0C, 0xFF); mcpWrite (a, 0x0D, 0xFF);   // pull-ups inside
+        mcpWrite (a, 0x00, 0x7F); mcpWrite (a, 0x01, 0x7F);   // GPA0-6 / GPB0-6 inputs, GPA7 / GPB7 outputs (low, unused)
+        mcpWrite (a, 0x0C, 0x7F); mcpWrite (a, 0x0D, 0x7F);   // pull-ups inside on the inputs
+        mcpWrite (a, 0x14, 0x00); mcpWrite (a, 0x15, 0x00);   // OLATA / OLATB: the unused pins low
     }
+    for (auto p : picoPins) pinMode (p, INPUT_PULLUP);
     for (auto p : muxSel) pinMode (p, OUTPUT);
     analogReadResolution (12);
     for (int i = 0; i < 28; ++i) potSent[i] = -1;
@@ -141,14 +164,19 @@ void setup()
 
 const int8_t quad[16] = { 0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0 };
 
+// true = the pin is high (a switch to GND that is pressed reads low)
+bool level (const Input& in)
+{
+    return in.chip == pico ? digitalRead (in.bit) != 0 : ((bits[in.chip] >> in.bit) & 1) != 0;
+}
+
 void readExpanders()
 {
     for (int c = 0; c < 4; ++c) bits[c] = mcpRead (mcp[c]);
     for (int k = 0; k < 12; ++k)
     {
-        const uint16_t src = k < 8 ? bits[0] : bits[1];
-        const int e = k < 8 ? k : k - 8;
-        const uint8_t s = (uint8_t) ((src >> (2 * e)) & 3);
+        const Input pinB { encA[k].chip, (uint8_t) (encA[k].bit + 1) };
+        const uint8_t s = (uint8_t) ((level (encA[k]) ? 1 : 0) | (level (pinB) ? 2 : 0));
         encAccum[k] += quad[(encState[k] << 2) | s];
         encState[k] = s;
         if (encAccum[k] >= stepsPerDetent) { encAccum[k] -= stepsPerDetent; ++clicks[k]; }
@@ -172,20 +200,19 @@ void sendControls()
             MIDI.sendControlChange (firstKnobCC + k, c > 0 ? c : 128 + c, channel);
             clicks[k] = 0;
         }
-    // pushes: 1-8 on 0x21 bits 8-15, 9-12 on 0x22 bits 0-3 (pressed = low)
     for (int k = 0; k < 12; ++k)
     {
-        const bool down = k < 8 ? ! ((bits[1] >> (8 + k)) & 1) : ! ((bits[2] >> (k - 8)) & 1);
+        const bool down = ! level (pushIn[k]);          // pressed = low
         if (debounced (down, pushDown[k], pushT[k])) MIDI.sendControlChange (firstPushCC + k, down ? 127 : 0, channel);
     }
     for (int b = 0; b < numButtons; ++b)
     {
-        const bool down = ! ((bits[2] >> (4 + b)) & 1);
+        const bool down = ! level (buttonIn[b]);
         if (debounced (down, buttonDown[b], buttonT[b])) MIDI.sendControlChange (buttonCC[b], down ? 127 : 0, channel);
     }
     for (int s = 0; s < 16; ++s)
     {
-        const bool down = ! ((bits[3] >> s) & 1);
+        const bool down = ! level (stepIn[s]);
         if (debounced (down, stepDown[s], stepT[s]))
         {
             if (down) MIDI.sendNoteOn (firstStepNote + s, 100, channel);

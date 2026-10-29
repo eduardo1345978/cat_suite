@@ -492,6 +492,18 @@ public:
                 lk.theme = 1; lk.accent = 4; lk.knobStyle = 1; lk.trackColours = true;
                 box.setLook (lk);
                 check (box.getDataDirectory().getChildFile ("look.json").existsAsFile(), "the look is remembered", {});
+                // Settings > Look: XY scope everywhere + Circle for every sound (global, remembered)
+                {
+                    auto l2 = box.getLook();
+                    l2.xyEverywhere = true; l2.circleAll = true;
+                    box.setLook (l2);
+                    const auto js = juce::JSON::parse (box.getDataDirectory().getChildFile ("look.json"));
+                    check (scopeCircleAll() && (bool) js.getProperty ("circleAll", false) && (bool) js.getProperty ("xyEverywhere", false),
+                           "Look: XY scope everywhere and Circle all are global and remembered", {});
+                    l2.circleAll = false; l2.xyEverywhere = false;
+                    box.setLook (l2);
+                    check (! scopeCircleAll(), "Look: Circle all off again", {});
+                }
                 box.setMode (ModeSound);
             }
 
@@ -569,6 +581,29 @@ public:
                     check (circ[0] > 0.02 && std::abs (circ[0] / circ[1] - 1.0) < 0.15 && std::abs (circ[2]) < 0.15, "Scope: Circle - left and right equal and a quarter apart",
                            "L " + juce::String (circ[0], 3) + " R " + juce::String (circ[1], 3) + " corr " + juce::String (circ[2], 3));
                     check (lis[0] > 0.02 && lis[1] > 0.02 && std::abs (lis[2]) < 0.3, "Scope: Lissajous 3 : 2 - two different oscillators left and right", juce::String (lis[2], 3));
+                    // Settings > Look "Circle all": a sound with Scope XY Off plays as Circle; off again = as it was
+                    auto corrOf = [&] (bool all)
+                    {
+                        float v2[maxParams];
+                        int pi = 0;
+                        for (size_t i = 0; i < sd.presets.size(); ++i) if (sd.presets[i].name == "Circle") pi = (int) i;
+                        sd.applyPreset (pi, v2);
+                        v2[sd.index ("xy")] = 0.0f;
+                        setScopeCircleAll (all);
+                        auto e2 = makeEngine (EngineSynth);
+                        e2->prepare (sr);
+                        e2->setParams (v2);
+                        e2->noteOn (57, 0.8f, false, false);
+                        std::vector<float> L ((size_t) 24000, 0.0f), R ((size_t) 24000, 0.0f);
+                        e2->render (L.data(), R.data(), 24000);
+                        setScopeCircleAll (false);
+                        double ll = 0, rr = 0, lr = 0;
+                        for (int i = 4800; i < 24000; ++i) { ll += (double) L[(size_t) i] * L[(size_t) i]; rr += (double) R[(size_t) i] * R[(size_t) i]; lr += (double) L[(size_t) i] * R[(size_t) i]; }
+                        return lr / std::sqrt (juce::jmax (1e-12, ll * rr));
+                    };
+                    const double cOff = corrOf (false), cAll = corrOf (true);
+                    check (cOff > 0.9 && std::abs (cAll) < 0.15, "Scope: Circle all - a sound with XY Off turns round, and back when off",
+                           "off " + juce::String (cOff, 3) + " on " + juce::String (cAll, 3));
                 }
                 check (poly3 > mono3 * 1.3f && uni > 0.02f, "Poly plays a chord, Mono one note, Unison stacks voices",
                        "poly " + juce::String (poly3, 3) + " mono " + juce::String (mono3, 3) + " unison " + juce::String (uni, 3));
@@ -906,6 +941,19 @@ public:
                     juce::PNGImageFormat png;
                     if (auto os = pngFile.createOutputStream()) png.writeImageToStream (img, *os);
                 }
+                {
+                    // XY scope everywhere: the SOUND page shows the round scope instead of the line
+                    Look lx; lx.xyEverywhere = true;
+                    box.setLook (lx);
+                    box.goSynth();
+                    box.setMode (ModeSound);
+                    const auto img = screen.snapshotScreen();
+                    check (img.isValid(), "the screen draws with XY scope everywhere", {});
+                    const auto pngFile = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + "-screen-xyall.png");
+                    pngFile.deleteFile();
+                    juce::PNGImageFormat png;
+                    if (auto os = pngFile.createOutputStream()) png.writeImageToStream (img, *os);
+                }
                 box.setLook (Look());
                 {
                     const auto& sdef = engineDef (EngineSynth);
@@ -997,6 +1045,37 @@ public:
                     check (box.getScreen() == Controller::ScreenSampler, "HOME again: back to the app you came from (SAMPLER)", juce::String (box.getScreen()));
                     box.goSampler();
                     savePng (screen.snapshotScreen(), "-sampler");
+                    // the sampler bug: playing in SAMPLER left the synth track's effect tail fading into tiny (denormal)
+                    // numbers - the CPU then needed many times longer for it and everything stuttered. Now SAMPLER costs
+                    // the audio thread about what SYNTH does.
+                    {
+                        auto cost = [&] (bool sampler)
+                        {
+                            if (sampler) box.goSampler(); else box.goSynth();
+                            box.setMode (ModeBrowse);
+                            if (sampler) box.browseTo (1, 1);
+                            if (! audio.isPlaying()) box.setPlaying (true);
+                            std::vector<float> l ((size_t) block), r ((size_t) block);
+                            double sum = 0.0; int blocks = 0;
+                            for (int k = 0; k < (int) (sr * 6.0) / block; ++k)
+                            {
+                                if (k % 40 == 0) { auto m = juce::MidiMessage::noteOn (1, 48 + (k / 40) % 12, (juce::uint8) 100); box.handleIncomingMidiMessage (nullptr, m); }
+                                if (k % 40 == 20) { auto m = juce::MidiMessage::noteOff (1, 48 + (k / 40) % 12); box.handleIncomingMidiMessage (nullptr, m); }
+                                if (k % 20 == 0) box.browseTo (2, (k / 20) % juce::jmax (1, box.browsePresets().size()));
+                                if (k % 10 == 0) wait (1);
+                                std::fill (l.begin(), l.end(), 0.0f); std::fill (r.begin(), r.end(), 0.0f);
+                                const auto t0 = juce::Time::getHighResolutionTicks();
+                                audio.render (l.data(), r.data(), block);
+                                if (k > 40) { sum += juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - t0); ++blocks; }
+                            }
+                            return sum / juce::jmax (1, blocks) * 1000.0;
+                        };
+                        const double synthMs = cost (false), samplerMs = cost (true);
+                        box.setPlaying (false);
+                        box.goSampler();
+                        check (samplerMs < synthMs * 1.5 + 0.05, "SAMPLER: playing and browsing costs the audio thread about what SYNTH does (no denormal slowdown)",
+                               "synth " + juce::String (synthMs, 3) + " ms, sampler " + juce::String (samplerMs, 3) + " ms per block");
+                    }
                     box.goSettings();
                     check (box.getMode() == ModeMenu, "SETTINGS: the menu tiles", {});
                     savePng (screen.snapshotScreen(), "-settings");

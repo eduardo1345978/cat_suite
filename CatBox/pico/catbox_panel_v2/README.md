@@ -43,24 +43,35 @@ buttons, Play (green), Rec (red).
 | Knobs for them (one bigger for Cutoff) | 28 | 12 EUR |
 | Rotary encoder EC11 with push switch, 20 mm shaft | 12 | 15 EUR |
 | Encoder knobs | 12 | 5 EUR |
-| MX-style key switches (or Kailh Choc) | 29 | 10 EUR |
-| Keycaps, transparent / light (to see the LEDs) | 29 | 10 EUR |
+| MX-style key switches (or Kailh Choc): 16 steps + 10 buttons, +4 spare | 30 | 10 EUR |
+| Keycaps, transparent / light (to see the LEDs) | 26 | 10 EUR |
 | SK6812 MINI-E LEDs (or a WS2812 strip, 60 / m, cut) | 19 | 5 EUR |
 | 5" HDMI screen 800 x 480 (Waveshare 5inch or similar) | 1 | 40 EUR |
-| Perfboard, wires (silicone, 24-26 AWG), headers, 100 nF capacitors, a 330 ohm resistor | | 12 EUR |
+| 74AHCT125 (DIP-14) level shifter for the LED data (3.3 V to 5 V) | 1 | 1 EUR |
+| Resistors: 4.7 k (I2C pull-ups) 2x, 330 ohm (LED data) 1x | 3 | 0.20 EUR |
+| Capacitors: 100 nF ceramic 8x (one per chip), 470 uF 10 V electrolytic 1x (LED 5 V), 10 uF 1x (3V3) | 10 | 1.50 EUR |
+| Perfboard, wires (silicone, 24-26 AWG), headers, IC sockets | | 10 EUR |
 | PLA / PETG for the case | | 10 EUR |
 
 ## Wiring
 
 **I2C** (GP4 = SDA, GP5 = SCL) to all four MCP23017 (SDA pin 13, SCL pin 12). VDD (pin 9) and RESET (pin 18) to 3V3,
-VSS (pin 10) to GND, a 100 nF capacitor across each chip. Addresses with A0-A2 (pins 15-17):
+VSS (pin 10) to GND, a 100 nF capacitor across each chip (as close to pins 9 / 10 as you can).
+**Pull-ups: one 4.7 k resistor from SDA to 3V3 and one from SCL to 3V3** (once, not per chip; MCP23017 modules
+often have them already - then leave these out). Without them I2C does not work. The firmware runs I2C at 400 kHz.
 
-| Chip | A2 A1 A0 | Address | Inputs |
-|---|---|---|---|
-| 1 | GND GND GND | 0x20 | encoders 1-8: encoder n = A on GPA/GPB bit 2(n-1), B on the next bit (GPA0+1 = enc 1 ... GPB6+7 = enc 8) |
-| 2 | GND GND 3V3 | 0x21 | encoders 9-12 on GPA0-7 (the same way); pushes 1-8 on GPB0-7 |
-| 3 | GND 3V3 GND | 0x22 | pushes 9-12 on GPA0-3; buttons on GPA4-GPB5 in this order: HOME, Play, Rec, Shift, Prev, Next, Sound, Scene, Project, Chaos (GPB6-7 free) |
-| 4 | GND 3V3 3V3 | 0x23 | the 16 step buttons: GPA0 = step 1 ... GPB7 = step 16 |
+**GPA7 and GPB7 (pins 28 and 8) stay unconnected.** Newer MCP23017 chips have them as outputs only
+(Microchip datasheet rev. C), so every chip uses only GPA0-6 and GPB0-6, and six switches go straight to the Pico.
+
+| Chip | A2 A1 A0 | Address | GPA0-6 (pins 21-27) | GPB0-6 (pins 1-7) |
+|---|---|---|---|---|
+| 1 | GND GND GND | 0x20 | enc 1 A/B = GPA0/1, enc 2 = GPA2/3, enc 3 = GPA4/5, push 1 = GPA6 | enc 4 = GPB0/1, enc 5 = GPB2/3, enc 6 = GPB4/5, push 2 = GPB6 |
+| 2 | GND GND 3V3 | 0x21 | enc 7 = GPA0/1, enc 8 = GPA2/3, enc 9 = GPA4/5, push 3 = GPA6 | enc 10 = GPB0/1, enc 11 = GPB2/3, enc 12 = GPB4/5, push 4 = GPB6 |
+| 3 | GND 3V3 GND | 0x22 | pushes 5-11 = GPA0-6 | push 12 = GPB0, HOME GPB1, Play GPB2, Rec GPB3, Shift GPB4, Prev GPB5, Next GPB6 |
+| 4 | GND 3V3 3V3 | 0x23 | steps 1-7 = GPA0-6 | steps 8-14 = GPB0-6 |
+
+Straight to the Pico (pull-ups inside the Pico): step 15 = GP16 (pin 21), step 16 = GP17 (pin 22), Sound = GP18
+(pin 24), Scene = GP19 (pin 25), Project = GP20 (pin 26), Chaos = GP21 (pin 27).
 
 Every encoder's middle pin (C) and the other leg of every switch go to GND (the pull-ups are inside the chips).
 If an encoder turns the wrong way, swap its A and B. If it jumps two steps per click, set `stepsPerDetent` to 2.
@@ -72,8 +83,17 @@ Pot order (multiplexer channels, in this order): Osc 1 wave, Osc 2 wave, Detune,
 Emphasis, Contour, Overload, High pass, F attack, F decay, F sustain, F release, A attack, A decay, A sustain,
 A release, LFO rate, LFO amount, Delay time, Feedback, Delay, Reverb size, Reverb, Glide, Volume.
 
-**LEDs**: one chain from GP15 (through a 330 ohm resistor) to DIN; 5 V from VBUS (pin 40), GND. Order along the chain:
-steps 1-16, HOME, Play, Rec.
+**LEDs**: the LEDs run on 5 V, the Pico's data is 3.3 V - too low for them to read reliably. So GP15 goes into a
+**74AHCT125** (pin 2 = 1A in, pin 3 = 1Y out, pin 1 = 1OE to GND, pin 14 = VCC to 5 V, pin 7 = GND; tie the unused
+inputs 2A / 3A / 4A = pins 5, 9, 12 to GND), then through the 330 ohm resistor to DIN of the first LED.
+5 V for the chain from VBUS (Pico pin 40), GND to GND, and a **470 uF capacitor across 5 V / GND at the first LED**
+(the stripe / minus side to GND). Order along the chain: steps 1-16, HOME, Play, Rec.
+19 LEDs at the firmware's brightness (80 of 255) take at most about 0.4 A.
+
+**Speaker (optional)**: a PAM8403 module, 5 V from the Pi's GPIO header (pin 2 or 4, GND pin 6) - not from a USB
+port. Its inputs L / R / GND on the same wires as the line jacks. The speaker (40 mm, 4 ohm, 3 W) on OUT+ and OUT- of one
+channel: **never connect OUT- to GND** - the amplifier is bridged and burns. About 80-85 dB at 1 m: enough for a room,
+little bass under about 200 Hz.
 
 **USB**: the Pico into the Pi 5. It shows up as **Cat Box Panel**.
 
