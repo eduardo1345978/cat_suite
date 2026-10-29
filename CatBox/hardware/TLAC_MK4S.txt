@@ -1,0 +1,53 @@
+CAT BOX 3 - DIELY NA TLAČ PRE PRUSA MK4S (STL, mm)
+Každý diel sa zmestí na MK4S (250 x 210 mm): v PrusaSlicer ho otoč o 90°, aby dlhá strana (221-222 mm) išla pozdĺž osi X.
+Panel v2, rozloženie A, USB zvuková karta, + JOYSTICK (vpravo nad Chaos) a SLIDER 60 mm (pod enkódermi 7-12).
+Celkovo 420 x 221 mm, vpredu 35 mm, vzadu 57 mm, + drevené bočnice 2 x 12 mm.
+
+DIELY (13 súborov)
+  Krabica:   CatBox3_case_1 / _2 / _3          150 / 120 / 150 x 221 x 54 mm
+  Panel:     CatBox3_panel_1 / _2 / _3          asi 146 / 135 / 145 x 222 x 3 mm
+  Spoje:     CatBox3_panel_splice_1 / _2        pásy pod švy panela
+  Gombíky:   CatBox3_knob_pot_11mm (27x), CatBox3_knob_cutoff_15mm (1x), CatBox3_cap_encoder_14mm (12x)
+  Čiapočky:  CatBox3_keycap_mx (26x, priehľadný PETG - alebo kúp hotové), CatBox3_cap_slider (1x)
+Filament spolu asi 750 g + svetlý na popisy (pár gramov).
+
+PANEL - TMAVÝ PANEL, SVETLÉ POPISY (jedna tryska, 2 farby)
+  1. V PrusaSlicer: pravý klik > "Place on face" a vyber LÍCE (stranu s popismi): panel leží lícom DOLE.
+  2. Vrstva 0,2 mm, PLA alebo PETG, začni TMAVÝM filamentom.
+  3. Posuvník vrstiev vpravo: vo výške 0,4 mm (nad 2. vrstvou) "+" = Color change -> SVETLÝ filament.
+     Vo výške 0,6 mm (nad 3. vrstvou) "+" znova -> späť TMAVÝ.
+     Popisy sú vygravírované 0,4 mm do líca: v nich uvidíš tú jednu svetlú vrstvu. Žiadna biela vrstva navrchu.
+  4. Podpery NETREBA (zápustky zospodu sú teraz hore). Prvá vrstva musí byť dokonalá (čistý plát, Z-offset).
+  5. Shift popisy (malé, nad menami potenciometrov) majú 2,2 mm: ak by boli rozmazané, zapni v PrusaSlicer
+     "Detect thin walls" a "Arachne" (je predvolené).
+  Otvory: potenciometre a enkódery 7,4 mm (M7, výstupok proti otáčaniu odlom), MX 14 x 14 mm (zospodu zápustka),
+  displej okno 110 x 66 mm (zápustka 121,6 x 76,6), reproduktor 5 štrbín (zápustka 40,6),
+  JOYSTICK otvor 24 mm, SLIDER štrbina 64 x 3 mm (zospodu zápustka 76 x 10 pre telo).
+  Spoj: diely zarovnaj na rovnom stole, spojovacie pásy vlep zospodu (epoxid), zaťaž.
+
+JOYSTICK A SLIDER (pozor na napätie!)
+  - KY-023: pin "+5V" pripoj na 3V3 Pica (NIE 5 V - ADC Pica znesie max. 3,3 V). GND na GND.
+    VRx -> multiplexer 2 kanál 13, VRy -> kanál 14. SW nezapájaj.
+    Montáž: 4 nylonové rozpery M3 x 11 mm, prilep ich epoxidom zospodu panela tak, aby páčka bola v strede otvoru
+    (najprv prišroubuj rozpery na modul, vlož páčku do otvoru, potom prilep). Kopula ide hore do otvoru.
+  - Slider: krajné vývody na 3V3 a GND, bežec -> multiplexer 2 kanál 12. Telo do zápustky, prilep alebo 2 skrutky M2.
+  - Firmware catbox_panel_v2 posiela slider CC 8, joystick CC 16 / 17. Prázdne kanály 15 multiplexera 2 daj na GND.
+
+GOMBÍKY A ČIAPOČKY
+  Súbory sú už otočené: vrch leží na podložke. Bez podpier, vrstva 0,15 mm, 3 obvody.
+  D-otvor: 6,15 mm s plôškou 4,6 mm (hriadeľ 6 mm D). Najprv vytlač 1 kus: tesný = prevŕtaj 6 mm vrtákom,
+  voľný = kvapka lepidla. Ryska na vrchu = ukazovateľ (môžeš ju zatrieť bielou farbou).
+  MX čiapočka: krížik 4,15 x 1,35 mm; tlač z priehľadného PETG, aby LED presvietila.
+
+KRABICA
+  Ako predtým: otvorenou stranou hore, bez podpier, 0,2 mm, 4 obvody, výplň 20 %, PETG (Pi hreje) alebo PLA.
+  Vzadu: USB-C napájanie, tlačidlo 12 mm, USB-A (Oxygen), slúchadlá 3,5 mm, výstupy L a R 6,3 mm.
+  Diely sa spoja cez vnútorné príruby: 5x M3 x 12 + matica na každý spoj. 8 vložiek M3 pre skrutky panela.
+
+SKRUTKY A DROBNOSTI
+  8x M3 x 8 ISO 7380 (panel), 8x závitová vložka M3, 10x M3 x 12 + matica (krabica), 4x M2.5 x 6 (Pi),
+  4x rozpera M3 x 11 + 8x M3 x 5 (joystick), 6x skrutka do dreva 3 x 10 (bočnice), 4 gumené nožičky.
+
+PRED TLAČOU PREMERAJ (odhady)
+  displej (121 x 76, okno 108 x 64,8), USB predlžovačky, závit M7, slider (telo 75 x 9, páčka max. 1,2 x 4 mm),
+  joystick (doska 34 x 26). Najprv vytlač skúšobný kúsok s 1 otvorom MX a 1 potenciometrom.

@@ -6,7 +6,7 @@
 #include <functional>
 
 /**
-    Cat Box 2: what every engine can be told. An engine has a list of parameters, knob pages
+    Cat Box 3: what every engine can be told. An engine has a list of parameters, knob pages
     (12 knobs, 12 more with Shift) and factory presets in categories.
 */
 namespace catbox

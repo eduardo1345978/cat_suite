@@ -1,4 +1,4 @@
-# Cat Box 2 - the synth panel (box version 2)
+# Cat Box 3 - the synth panel (box version 2)
 
 A front panel like an analog synth: **28 potentiometers** for the sound (one per job, nothing to page through),
 **12 push encoders** under the screen for everything else (they are the 12 knobs you see on the screen),
@@ -29,6 +29,10 @@ Buttons: **HOME** (the apps: then step 1-6 opens SYNTH, DRUMS, STUDIO, SCOPE, SA
 MENU) · Shift · ◀ ▶ · Chaos (Shift + Chaos = undo) · Play · Rec.
 Steps: HOME = the apps 1-6; DRUMS = the steps of the drum you picked (**Shift + step** = pick a drum and hear it); SYNTH = the synth's own
 steps; STUDIO + Shift = step 1-8 picks the track.
+**HOME held + step 1-4** = page 1-4 of the pattern (16 steps each, up to 64; a new page starts as a copy of the last);
+**HOME + Shift + step 1-4** = the pattern is that many pages long. While HOME is held the steps show the pages.
+HOME alone does its job when you let it go. **Encoder click** (push and let go without turning) = that knob back
+to its default (in the browser: take this sound; in SEQ: the step's setting back to normal).
 LEDs: a step that is on (dim, its group's colour), the step playing (white), the picked one (blue); the screen
 buttons, Play (green), Rec (red).
 
@@ -43,6 +47,8 @@ buttons, Play (green), Rec (red).
 | Knobs for them (one bigger for Cutoff) | 28 | 12 EUR |
 | Rotary encoder EC11 with push switch, 20 mm shaft | 12 | 15 EUR |
 | Encoder knobs | 12 | 5 EUR |
+| Slide potentiometer 60 mm travel, 10 k linear (B10K, e.g. Bourns PTA4543 or an "RSA0N11" module) | 1 | 3 EUR |
+| Joystick module KY-023 (two 10 k pots + a push, 3.3-5 V) | 1 | 2 EUR |
 | MX-style key switches (or Kailh Choc): 16 steps + 10 buttons, +4 spare | 30 | 10 EUR |
 | Keycaps, transparent / light (to see the LEDs) | 26 | 10 EUR |
 | SK6812 MINI-E LEDs (or a WS2812 strip, 60 / m, cut) | 19 | 5 EUR |
@@ -82,6 +88,16 @@ Each pot: one end to 3V3, the other to GND (ADC_GND, pin 33, is quieter), the wi
 Pot order (multiplexer channels, in this order): Osc 1 wave, Osc 2 wave, Detune, Osc 1, Osc 2, Osc 3, Cutoff,
 Emphasis, Contour, Overload, High pass, F attack, F decay, F sustain, F release, A attack, A decay, A sustain,
 A release, LFO rate, LFO amount, Delay time, Feedback, Delay, Reverb size, Reverb, Glide, Volume.
+**With Shift held** every pot turns its second knob (printed small above it): Osc 1 range, Osc 2 range, Osc 2 semitone,
+Sub, Noise, Ring, Key tracking, Filter type, Env > osc 1, Drive, Velocity > filter, LFO delay, LFO > pitch, LFO > shape,
+LFO > volume, Osc 1 shape, Cross mod, Velocity > volume, Unison detune, LFO wave, LFO sync, Delay type, Chorus, Width,
+Reverb type, Pre-delay, Voice mode, Model. A pot moved with Shift (or without) picks its knob up again when it passes it.
+
+**Slider and joystick**: on multiplexer 2 too (the same 3V3 / GND as the pots).
+Slider: ends to 3V3 and GND, the wiper to **channel 12** (sends CC 8 = the DJ filter, left = low pass, right = high pass).
+Joystick KY-023: +5V pin to **3V3** (not 5 V - the Pico's ADC takes at most 3.3 V), GND to GND, VRx to **channel 13**
+(CC 16, left / right = bend +-2 semitones), VRy to **channel 14** (CC 17, up = modulation). SW stays unconnected.
+The middle has a small dead zone, so a joystick that does not centre perfectly does nothing.
 
 **LEDs**: the LEDs run on 5 V, the Pico's data is 3.3 V - too low for them to read reliably. So GP15 goes into a
 **74AHCT125** (pin 2 = 1A in, pin 3 = 1Y out, pin 1 = 1OE to GND, pin 14 = VCC to 5 V, pin 7 = GND; tie the unused

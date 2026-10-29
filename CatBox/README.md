@@ -1,4 +1,4 @@
-# Cat Box 2
+# Cat Box 3
 
 A groovebox you play yourself: **8 equal tracks**, and each track picks its own **sound engine**, its
 own **note FX** and has its own **pattern** and **mixer strip**. Everything plays together at one tempo,
@@ -19,8 +19,8 @@ and the LIBRARY · 6. **SETTINGS** - save / load, new project, MIDI keyboard, he
 The synth draws on an XY oscilloscope (left = X, right = Y): the beam follows a picture once per note period, so the
 picture **is** the sound - play keys (low notes draw calmer) or **HOLD** a note. Pictures: Cat, Star, Heart, Smile,
 Note, Lightning, House, Spiral, Flower, Cube, Pyramid, Globe (3D), **Tesseract** (4D) and **Penteract** (5D, the
-hypercubes: the 4D/5D turn knob rotates them through the higher dimensions; every other picture it turns inside out), **Text** (TEXT: type a word, up
-to 3 lines with `|`) and **Drawing** (DRAW: draw on the scope with the mouse or a finger, every stroke is heard at
+hypercubes: the 4D/5D turn knob rotates them through the higher dimensions; every other picture it turns inside out), **Text** (TEXT: type a word on the screen keyboard, up
+to 3 lines with `#`) and **Drawing** (DRAW: draw on the scope with the mouse or a finger, every stroke is heard at
 once; CLEAR, UNDO). The 12 knobs: Picture, Size, Spin, 3D turn, 4D/5D turn, Wobble, Twist, Cutoff (below 19 kHz the
 filter bends the picture), Emphasis, Release, Tremolo, Volume (Shift: more). Prev / Next = picture; on the box the step
 buttons 1-16 pick the picture, Rec = HOLD. Your text and drawing are saved with the project.
@@ -53,7 +53,7 @@ buttons 1-16 pick the picture, Rec = HOLD. Your text and drawing are saved with 
 | **Synth** | the SYNTH screen's synthesizer (10 models, above) | 45 |
 | **Kit** | a drum kit of 16 samples, one per pad: sample, tune, level, pan, decay, tone per pad; drive, hat choke, stereo | 15 library kits |
 
-**499 factory sounds**, in categories, heard the moment you pick them. **FX Lab** sounds come with their own effect chains;
+**567 factory sounds** (with **Braindance**: 16 sounds inspired by 90s IDM - drill, detuned tape, acid, broken bells - and three new chains: Drill, Ambient tape, Detuned toy), in categories, heard the moment you pick them. **FX Lab** sounds come with their own effect chains;
 **Library** sounds use the free sample libraries (below).
 **Note FX** (any track): **Arp** (rate, order incl. bounce / random / chord, octaves, gate, swing,
 euclidean steps / hits / rotate, ratchet, chance, accents, hold), **Chords** (one key = one chord in
@@ -127,7 +127,7 @@ Everything can be touched: tracks, modes, pages, knobs (drag), Play.
 | **Note FX** | ◀ ▶ = Off / Arp / Chords / Orbit, the knobs edit it, **Shift + ◀ ▶** = its presets |
 | **Mix** | knobs 1-8 = volumes (Shift: pan), 9-12 = master, glue, tape, width; ◀ ▶ = SENDS, FX SEND, RETURNS (see *Sends*). Pads 1-8 = mute, 9-16 = solo · **Shift + Mix** = unmute all |
 | **Project** | tempo, swing, key, scale, click, master volume, DJ filter, pads (piano / scale), pad octave; **knob 12 = Factory reset** (turn it all the way right: a fresh project, scenes cleared; your saved sounds, samples and MIDI keyboard stay; Undo brings it all back; on the PC also right-click > *Factory reset...*); Shift: glue, tape, width, reverb, delay |
-| **Project again = MENU** | 16 big buttons on the screen, the pads press them: **Save / Load project** (8 places), **New project**, **Clear track**, **Clear all** (red = press twice), **Copy track**, **Drum pattern** (15: house, techno, trap, hip hop, breakbeat, d&b, reggaeton, disco ...), **Bass line** (12, in the key and scale), Click, Pads piano / scale, Learn keyboard, **Help**, Tap tempo, Save sound, Undo, Close |
+| **Project again = MENU** | 16 big buttons on the screen, the pads press them: **Save / Load project** (8 places), **New project**, **Clear track**, **Clear all** (red = press twice), **Copy track**, **Drum pattern** (15: house, techno, trap, hip hop, breakbeat, d&b, reggaeton, disco ...), **Bass line** (12, in the key and scale), **Song**, **Export**, Learn keyboard, **Help**, Tap tempo, Save sound, Undo, More (Click and Pads piano / scale: on the PROJECT page) |
 | **◀ Prev / Next ▶** | pages (see each mode) · **Shift + ◀ ▶** = pad octave |
 | **Shift** | the second layer of knobs and the Shift combinations |
 | **Scene** | the pads: 1-8 = scenes (recall at the next bar while playing), **Rec + pad** = save; 9-16 = mute tracks |
@@ -140,6 +140,26 @@ Everything can be touched: tracks, modes, pages, knobs (drag), Play.
 **Pads** (2 rows of 8): drums = the 16 drums (1 kick, 2 snare, 3 clap, 4 closed hat ...);
 other engines = like a piano: the bottom row the white keys C D E F G A B C, the top row the black keys
 (PROJECT: *Pads = Scale* puts the scale on them instead).
+
+## Song, export, typing
+
+- **Song** (MENU > Song): the scenes one after another. Touch (or press the pad of) a place to add a part; touching a part
+  again = the next scene, **Shift + touch** = how long (1, 2, 4, 8, 16 bars); the last part past scene 8 goes away.
+  Tile 15 = **Song on / off**. With the song on, Play plays it from the top and loops it; every scene comes in exactly
+  on its bar line (a chord that lasts the whole loop plays every time round). Save scenes first: **Scene, Rec + pad**.
+  A saved project carries its scenes and its song.
+- **Export** (MENU > Export): **WAV: the song** or **WAV: the loop** (8 bars), 48 kHz / 24 bit with 3 s for the echoes;
+  rendered faster than real time while the box keeps working (the screen shows the %). The WAV goes to `exports/`
+  and, when a **USB stick** is plugged into the Pi, also to `Cat Box 3/` on the stick. **All to USB** copies everything
+  (projects, scenes, song, your sounds, samples, MIDI map) to `Cat Box 3/backup <date>` on the stick.
+- **Typing without a keyboard**: naming a project or a sound and the scope's TEXT open a **keyboard on the screen**.
+  Touch the keys - or: **knob 1** = move along the keys, **click knob 1** = type it, **knob 2** = up / down a row,
+  **click knob 2** or **◀** = delete, **click knob 12** or **▶** = OK, **Shift** = abc / ABC, **HOME** = cancel. On the PC
+  just type (Enter = OK, Esc = cancel).
+- **Encoder click** (push and let go without turning): that knob back to its default; in the browser = take the sound;
+  in SEQ = the step's setting back to normal (knob 1: hear the step). On the SCOPE the 4D/5D turn and the other turns
+  go back upright.
+- **Patterns longer than 16 steps**: up to 64 (4 pages). ◀ ▶ in SEQ = the page; on the panel **HOME held + step 1-4**.
 
 ## The PC keyboard
 
@@ -182,7 +202,13 @@ The firmware and the wiring are in `CatBox/pico` (Arduino IDE, about 10 minutes 
 value up when they pass it, nothing jumps), 12 push encoders = the 12 knobs on the screen (push + turn = the second
 layer), 16 step buttons with LEDs, a HOME button (then step 1-6 = the app). Firmware, wiring, parts and the panel drawing:
 `CatBox/pico/catbox_panel_v2` and `CatBox/pico/panel_v2.svg`. MIDI channel 16: pots CC 40-67, pushes CC 70-81,
-HOME CC 85, steps notes 60-75 (the LEDs come back on the same notes).
+HOME CC 85, steps notes 60-75 (the LEDs come back on the same notes), slider CC 8, joystick CC 16 / 17.
+**Shift + pot** = the pot's second knob (printed small above it). **STUDIO: Shift + step 1-8** = the track,
+**Shift + step 9-13** = SOUND, SEQ, NOTE FX, MIX, PROJECT. **HOME held + step 1-4** = the pattern's page.
+**Slider** (60 mm) = the DJ filter; **joystick** (KY-023) = bend (left / right, +-2 semitones, glided - no zipper) and
+modulation (up), springs back to nothing in the middle (a small dead zone).
+Everything on the screen can also be touched: the FX chain (**<** **>** = the effect, **ON** = bypass), the mixer
+(**M** / **S** under every track, touch a fader = its level), the menu tiles, the browser lists.
 On the box's own screen (`--kiosk`) the SYNTH page doesn't repeat the labelled pots: it shows the sound alive - a
 **XY oscilloscope** (left channel = X, right = Y, green phosphor with afterglow - tap it for full screen), the wave
 and its spectrum,
@@ -196,7 +222,8 @@ Lissajous 3 : 2, Turning Knot, Octave Figure, Square Box, Spiral Pluck, Filter F
 
 ## Memory
 
-Everything is remembered: the project (`state2.json`), the 8 scenes (`scenes.json`), your sounds
+Everything is remembered: the project (`state2.json`), the 8 scenes (`scenes.json`), the song (`song.json`), the WAVs
+(`exports/`), your sounds
 (`sounds/<Engine>/*.json`) and the MIDI keyboard (`midimap2.json`) in `%APPDATA%\CatSuite\CatBox` on
 Windows, `~/.config/CatSuite/CatBox` on the Pi (or `--data <folder>`).
 

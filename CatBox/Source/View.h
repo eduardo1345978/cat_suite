@@ -4,7 +4,7 @@
 #include "Controller.h"
 
 /**
-    Cat Box 2's screen (800 x 480, the 5" display in the box) and, on the PC, the front panel
+    Cat Box 3's screen (800 x 480, the 5" display in the box) and, on the PC, the front panel
     around it: 12 knobs, 20 buttons, 16 pads, the slider and the joystick. Calm and readable:
     grey on black, one accent colour, big type; the 12 knobs are always on screen with their
     names and values. Everything on the screen can be touched (tracks, modes, pages, knobs).
@@ -100,7 +100,8 @@ private:
     void showTextDialog();
     static juce::Colour appColour (int app);
     static constexpr int ActHome = 100, ActApp0 = 200, ActMode0 = 300, ActAudioMidi = 400, ActPic0 = 500,
-                         ActHold = 600, ActText = 601, ActDraw = 602, ActClear = 603, ActBig = 604, ActUndoStroke = 605;
+                         ActHold = 600, ActText = 601, ActDraw = 602, ActClear = 603, ActBig = 604, ActUndoStroke = 605,
+                         ActFx0 = 700, ActMute0 = 800, ActSolo0 = 810, ActFader0 = 820;   // + slot * 4 + 0 pick / 1 previous effect / 2 next / 3 on-off
     bool drawMode = false;                 // SCOPE: the mouse / finger draws on the scope
     juce::Rectangle<int> drawPad;
     std::vector<float> drawPts;
@@ -142,6 +143,13 @@ private:
     int hoverColumn = -1, hoverIndex = -1;
     void mouseMove (const juce::MouseEvent&) override;
     juce::Rectangle<int> playHit, learnHit, skipHit, doneHit, knobArea;
+    juce::Array<juce::Rectangle<int>> keyHits;   // the screen keyboard's keys
+    std::array<juce::Rectangle<float>, 8> faderRects {};   // the mixer's faders (a touch sets the level)
+public:
+    const juce::Array<juce::Rectangle<int>>& keyRects() const { return keyHits; }   // the self test
+    bool touchAt (juce::Point<float> screenPos) { return screenTouch (screenPos, true); }
+private:
+    void drawKeyboard (juce::Graphics&, juce::Rectangle<int>);
 
     enum DragKind { DragNone, DragKnob, DragSlider, DragJoy, DragPad, DragButton, DragPanel, DragDraw };
     DragKind drag = DragNone;

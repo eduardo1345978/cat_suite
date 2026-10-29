@@ -106,6 +106,23 @@ const std::vector<Extra>& extras()
         { EngineGranular, "Frozen Shimmer", "FX Lab", "Frozen Vox", {}, "Shimmer up" },
         { EngineGranular, "Glitch Cloud", "FX Lab", "Stutter Break", {}, "Glitch" },
         { EngineGranular, "Deep Space Drone", "FX Lab", "Deep Drone", {}, "Underwater" },
+        // ---- Braindance: inspired by 90s IDM (Aphex Twin, Autechre, u-Ziq): drill, detuned tape, acid, bells
+        { EngineAcid, "Analog Squelch Box", "Braindance", "Squelch", { { "reso", 0.85f }, { "envamt", 0.8f } }, "Detuned toy" },
+        { EngineAcid, "Rubber Drill Acid", "Braindance", "Rubber", { { "reso", 0.75f } }, "Drill" },
+        { EngineAnalog, "Ambient Works Pad", "Braindance", "Warm Pad", { { "unison", 4.0f }, { "detune", 30.0f }, { "cutoff", 2200.0f } }, "Ambient tape" },
+        { EngineAnalog, "Detuned Toy Lead", "Braindance", "Square Lead", { { "detune", 40.0f } }, "Detuned toy" },
+        { EngineAnalog, "Window Bass", "Braindance", "Fat Saw Bass", { { "cutoff", 700.0f }, { "reso", 0.5f } }, "Destroy" },
+        { EngineFM, "Broken Glass Bells", "Braindance", "Glass Bell", {}, "Metal ring" },
+        { EngineFM, "Prepared Piano", "Braindance", "DX Piano", {}, "Drill" },
+        { EngineWavetable, "Braindance Growl", "Braindance", "Growl Bass", {}, "Drill" },
+        { EngineWavetable, "Selected Glass Pad", "Braindance", "Glass Pad", {}, "Ambient tape" },
+        { EngineKeys, "Detuned Music Box", "Braindance", "Music Box", {}, "Ambient tape" },
+        { EngineKeys, "Avril Piano", "Braindance", "Soft Piano", {}, "Ambient tape" },
+        { EngineDrums, "Drill Kit", "Braindance", "Minimal Click", {}, "Drill" },
+        { EngineDrums, "Bit Dust Kit", "Braindance", "808 Classic", {}, "Detuned toy" },
+        { EngineSampler, "Drill Break", "Braindance", "Break Chop", {}, "Drill" },
+        { EngineGranular, "Haze Choir Cloud", "Braindance", "Frozen Vox", {}, "Ambient tape" },
+        { EngineChoir, "Robot Lick Vox", "Braindance", "Soul Diva", {}, "Robot" },
     };
     return x;
 }

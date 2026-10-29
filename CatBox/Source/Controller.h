@@ -10,7 +10,7 @@
 #include <vector>
 
 /**
-    Cat Box 2: what the knobs, buttons, pads and keys do. Owns the project (message thread)
+    Cat Box 3: what the knobs, buttons, pads and keys do. Owns the project (message thread)
     and hands every change to the audio. The box's hardware (the Pico), any MIDI keyboard
     (learned once), the PC panel and the computer keyboard all end up here.
 
@@ -81,6 +81,34 @@ public:
     void turnKnob (int knob, float clicks);    // one click = the smallest step
     void turnKnobBy (int knob, float fraction); // an absolute knob / fader moved by this much of its travel
     void resetKnob (int knob);                 // back to its default (double-click on the PC)
+    /** An encoder clicked (pushed and let go without turning): back to the default (in SCOPE the turns go upright),
+        in the browser = take this sound, in SEQ = the step's setting back to normal (knob 1: hear the step). */
+    void knobPush (int knob);
+    /** HOME held + step 1-4: the pattern's page 1-4 (16 steps each; a new page starts as a copy of the last one).
+        HOME + Shift + step 1-4: the pattern is that many pages long. HOME alone (let go) = the home screen. */
+    void pageButton (int page, bool setLength);
+
+    // ---- typing text on the box (no keyboard): a keyboard on the screen
+    //      touch a key, or: knob 1 = move along the keys, knob 2 = up / down a row, click knob 1 = type it,
+    //      click knob 2 (or Prev) = delete, click knob 12 (or Next) = OK, HOME = cancel. A PC keyboard types too.
+    static const juce::String& textKeys();          // the letters; then DEL, ABC/abc, OK
+    static constexpr int textCols = 11;
+    int numTextKeys() const { return textKeys().length() + 3; }
+    int keyDel() const { return textKeys().length(); }
+    void startText (const juce::String& title, const juce::String& initial, std::function<void (const juce::String&)> done);
+    bool isTyping() const noexcept { return typing; }
+    const juce::String& typingTitle() const noexcept { return typeTitle; }
+    const juce::String& typingText() const noexcept { return typeText; }
+    int typingKey() const noexcept { return typeKey; }
+    bool typingLower() const noexcept { return typeLower; }
+    juce::String textKeyLabel (int i) const;
+    void textPress (int key);                        // a key of the screen keyboard
+    void textType (juce::juce_wchar c);              // a letter from a real keyboard
+    void textFinish (bool ok);
+    juce::String projectName (int slot) const;      // a saved project's name ("" = empty place)
+    void homeDown (bool down);
+    bool homeIsHeld() const noexcept { return homeHeld.load(); }
+    int barNow() const noexcept { return bar[(size_t) track.load()]; }   // the page of the pattern on the step buttons
     void padDown (int pad, int velocity);
     void padUp (int pad);
     void keyDown (int note, int velocity);     // a key of a MIDI keyboard
@@ -95,6 +123,26 @@ public:
     void setPlaying (bool);
     void setMute (int t, bool);
     void setSolo (int t, bool);
+    void setVolume (int t, float v);   // 0..1 (a touch on the mixer's fader)
+
+    // ---- SONG: the scenes one after another (MENU > Song). Play with the song on plays it from the top
+    struct SongStep { int scene = 0, bars = 4; };
+    static constexpr int maxSongSteps = 14;
+    const std::vector<SongStep>& getSong() const noexcept { return song; }
+    void setSong (const std::vector<SongStep>& s);
+    bool isSongOn() const noexcept { return songOn.load(); }
+    void setSongOn (bool on);
+    int songStepNow() const noexcept { return songEntry; }
+    int songBars() const;
+    // ---- EXPORT (MENU > Export): a WAV of the song (or 8 bars of the loop), everything onto a USB stick
+    void exportWav (bool wholeSong);
+    bool isExporting() const noexcept { return exportJob != nullptr; }
+    float exportProgress() const noexcept { return exportDone; }
+    void exportToUsb();
+    static juce::File usbStick();          // a USB stick plugged in (Linux / the Pi: /media/...), or none
+    juce::File exportFolder() const;       // where the WAVs go (and a copy onto the stick)
+    void songTick();                       // the timer calls these two (the self test too)
+    void exportTick();
     void loadSound (int track, int engine, int preset);
     void setParam (int track, int index, float value);
     void setFxParam (int track, int index, float value);
@@ -104,7 +152,8 @@ public:
     void saveScene (int s);
     bool loadScene (int s);
     bool sceneExists (int s) const { return scenes[(size_t) juce::jlimit (0, numScenes - 1, s)] != nullptr; }
-    void saveUserSound();
+    void saveUserSound();                      // asks a name (the screen keyboard), then saves
+    void saveUserSoundAs (const juce::String& name);
     void chaos();
     void factoryReset();   // a new project (undoable); your sounds, samples and the MIDI keyboard stay
     void undo();   // Shift + Chaos: back one step (up to 40)
@@ -159,7 +208,7 @@ public:
     void toggleHelp() { helpShown = ! helpShown.load(); if (onChange) onChange(); }
     juce::StringArray helpLines() const;         // for the mode on screen
     int selectedStep() const { return selStep[(size_t) track.load()]; }
-    void saveProject (int slot);
+    void saveProject (int slot, const juce::String& name = {});
     bool loadProject (int slot);
     bool projectExists (int slot) const;
 
@@ -168,6 +217,8 @@ public:
     enum SoundExtra { ExtraFx = 0, ExtraMacro, ExtraMod, ExtraMy };
     int soundExtraPage() const;                    // -1 = an engine page
     int fxSlotNow() const { return fxSlot[(size_t) track.load()]; }
+    /** A touch on the FX chain: 0 = pick the slot, -1 / 1 = the effect before / after, 2 = on / bypassed. */
+    void fxTouch (int slot, int what);
     int modSlotNow() const { return modSlot[(size_t) track.load()]; }
     juce::String destName (int track, int dest, bool shortForm = false) const;
     juce::String laneName (int track, int lane) const;   // a drum lane: "Kick", or the Kit's sample
@@ -227,9 +278,9 @@ public:
     void nextKit (int dir);               // the drum track's kit
     void toggleDrumStep (int lane, int step);
     // ---- the box v2
-    static const char* potId (int pot);   // which synth knob a potentiometer is ("cutoff", "#dtime" ...)
+    static const char* potId (int pot);   // which synth knob a potentiometer is ("cutoff", "#dtime" ...); pot + numPots = with Shift
     void potMoved (int pot, int value);    // 0..127
-    bool potHolds (int pot) const { return potGrab[(size_t) juce::jlimit (0, numPots - 1, pot)]; }
+    bool potHolds (int pot) const { return potGrab[(size_t) juce::jlimit (0, numPots * 2 - 1, pot)]; }
     void stepButton (int step, bool down);
     /** What the box's LEDs show: the 16 steps (0 off, 1 on, 2 the playing step, 3 picked), the screen, play, rec. */
     struct Leds { std::array<uint8_t, 16> steps {}; int screen = 0; bool home = false, playing = false, rec = false; };
@@ -288,9 +339,30 @@ private:
                 KModSel, KModField, KModAmt, KLook, KSendC, KSendFx, KSendFxPreset, KChain };
     Target destTarget (int dest) const;
     Target panelFxTarget (int code, int forTrack = -1) const;
-    std::array<float, numPots> potLast {}, potSet {};
-    std::array<bool, numPots> potGrab {};
+    std::array<float, numPots * 2> potLast {}, potSet {};     // [pot] = the main layer, [pot + numPots] = with Shift
+    std::array<bool, numPots * 2> potGrab {};
+    std::array<float, numPots> potPhys {};                     // where the pot really is
+    std::array<int8_t, numPots> potLayer {};                    // the layer it moved last
     std::array<std::atomic<bool>, numKnobs> encPush {};
+    std::vector<SongStep> song;
+    std::atomic<bool> songOn { false };
+    int songEntry = -1, songBarSeen = -1;
+    bool wasPlayingSong = false;
+    void saveSong() const;
+    void loadSong();
+    juce::var songVar() const;
+    void songFromVar (const juce::var&);
+    struct ExportJob;
+    std::unique_ptr<ExportJob> exportJob;
+    float exportDone = 0.0f;
+    bool typing = false, typeLower = false;
+    juce::String typeTitle, typeText;
+    int typeKey = 0;
+    std::function<void (const juce::String&)> typeDone;
+    std::atomic<bool> homeHeld { false };
+    bool homeUsed = false;                                       // a step was pressed while HOME was held
+    std::array<std::atomic<bool>, numKnobs> encTurned {};       // turned while pushed: that was push + turn, not a click
+    std::array<std::atomic<uint32_t>, numKnobs> encPushAt {};
     int targetDest (const Target&) const;
     bool tryAssign (const Target&);
     void loadLook();
@@ -341,6 +413,7 @@ private:
     int stepTargets (std::array<int, maxSteps>& out) const;   // the held steps, else the selected one
     int mixPage = 0, projectPage = 0;
     std::array<int, numTracks> fxSlot {}, modSlot {}, insPreset {};
+    std::array<bool, numTracks> chainFromSound {};   // the track's effects came with an FX Lab sound (the next sound takes them away)
     int sendFxPreset = 0, chainIdx = 0;
     std::atomic<int> screen { ScreenStudio };
     bool scopeHold = false;
@@ -398,6 +471,7 @@ private:
     enum { LearnKnob0 = 0, LearnButton0 = 100, LearnPad0 = 200, LearnKnobBank = 300, LearnSlider = 301 };
     std::vector<MidiCtl> midiMap;
     juce::SpinLock midiMapLock;
+    std::atomic<int> joyTrack { -1 };   // the track the joystick bends now (MIDI thread and screen)
     std::vector<int> learnTargets;
     std::atomic<int> learnIndex { -1 };
     std::atomic<bool> knobBank { false };

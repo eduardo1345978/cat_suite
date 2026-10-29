@@ -7,7 +7,7 @@
 #include <vector>
 
 /**
-    Cat Box 2: what each track can have after its sound engine.
+    Cat Box 3: what each track can have after its sound engine.
     - 4 insert effects in a chain (filter, drive, crusher, delay, chorus, phaser, flanger,
       compressor, EQ, tremolo / auto-pan, trance gate, ring mod, reverb, width, tape),
     - 8 macro knobs, 2 LFOs, a note envelope, random, and 16 modulation slots

@@ -4,10 +4,25 @@
 #include "Samples.h"
 #include "Templates.h"
 #include "Synth.h"
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <cmath>
 
 namespace catbox
 {
+struct Controller::ExportJob
+{
+    struct Part { Project p; int bars = 4; };
+    std::vector<Part> parts;
+    std::unique_ptr<Audio> audio;
+    std::unique_ptr<juce::AudioFormatWriter> writer;
+    juce::File file;
+    double sr = 48000.0, samplesPerBar = 0.0;
+    int64_t done = 0, total = 0, tail = 0;
+    std::vector<int> partOfBar;   // which part plays in each bar
+    int pushed = 0, barsDone = 0;
+    float peak = 0.0f;
+};
+
 const char* buttonName (int b)
 {
     static const char* n[NumButtons] = { "Track 1", "Track 2", "Track 3", "Track 4", "Track 5", "Track 6", "Track 7", "Track 8",
@@ -114,9 +129,11 @@ Controller::Controller (const juce::File& dir) : dataDir (dir)
     heldSteps.fill (-1);
     loadState();
     loadScenes();
+    loadSong();
     loadMidiMap();
     loadLook();
     potLast.fill (-1.0f);
+    potPhys.fill (-1.0f);
     prepareSamples(); audio.push (project);
     syncScope();
     startTimerHz (30);
@@ -125,6 +142,7 @@ Controller::Controller (const juce::File& dir) : dataDir (dir)
 Controller::~Controller()
 {
     stopTimer();
+    if (exportJob != nullptr && exportJob->writer != nullptr) exportJob->writer.reset();
 }
 
 void Controller::resetToDefaults()
@@ -206,6 +224,8 @@ juce::String Controller::flashText() const
 void Controller::timerCallback()
 {
     pump();
+    songTick();
+    exportTick();
     if (resetProgress > 0.0f && juce::Time::getMillisecondCounter() - resetTouched > 2500) { resetProgress = 0.0f; if (onChange) onChange(); }   // not turned all the way: back to 0
     // Chaos is a hold (0.6 s): a quick tap does nothing
     if (btnDown[BtnChaos] && ! chaosDone && ! shift.load() && juce::Time::getMillisecondCounter() - chaosDownAt > 600)
@@ -257,6 +277,13 @@ void Controller::buttonDown (int b)
     if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "button"); o->setProperty ("b", b); o->setProperty ("down", true); sendRemote (o); if (b == BtnShift) shift = true; return; }
     btnDown[(size_t) b] = true;
     const bool sh = shift.load();
+    if (typing)   // the screen keyboard: Prev = delete, Next = OK, Shift = abc / ABC
+    {
+        if (b == BtnPrev) textPress (keyDel());
+        else if (b == BtnNext) textFinish (true);
+        else if (b == BtnShift) { shift = true; textPress (keyDel() + 1); }
+        return;
+    }
 
     if (b >= BtnTrack1 && b <= BtnTrack8)
     {
@@ -538,6 +565,13 @@ void Controller::loadSound (int t, int engine, int preset)
     {
         applyChainPreset (tr.mods, chain);
         for (auto& sl : tr.mods.slots) if (dest::isInsert (sl.dest)) sl = ModSlot();
+        chainFromSound[(size_t) t] = true;
+    }
+    else if (chainFromSound[(size_t) t])   // the last sound's own effects go with it (your own chain stays)
+    {
+        for (auto& in : tr.mods.inserts) in = Insert();
+        for (auto& sl : tr.mods.slots) if (dest::isInsert (sl.dest)) sl = ModSlot();
+        chainFromSound[(size_t) t] = false;
     }
     if (wasDrums != tr.isDrums()) lane[(size_t) t] = 0;
     presetIdx[(size_t) t] = preset;
@@ -732,9 +766,16 @@ void Controller::browseApply (bool preview)
 
 void Controller::saveUserSound()
 {
+    // a name first (the screen keyboard), then it's saved
+    startText ("NAME THE SOUND", presetName (track.load()).upToFirstOccurrenceOf (" (", false, false), [this] (const juce::String& n) { saveUserSoundAs (n); });
+}
+
+void Controller::saveUserSoundAs (const juce::String& name)
+{
     const auto dir = dataDir.getChildFile ("sounds").getChildFile (engineDef (cur().engine).name);
     dir.createDirectory();
-    const auto base = presetName (track.load()).upToFirstOccurrenceOf (" (", false, false).replaceCharacters ("/\\:*?\"<>|", "---------");
+    auto base = name.replaceCharacters ("/\\:*?\"<>|", "---------").trim();
+    if (base.isEmpty()) base = presetName (track.load()).upToFirstOccurrenceOf (" (", false, false).replaceCharacters ("/\\:*?\"<>|", "---------");
     auto f = dir.getChildFile (base + ".json");
     for (int i = 2; f.existsAsFile(); ++i) f = dir.getChildFile (base + " " + juce::String (i) + ".json");
     f.replaceWithText (juce::JSON::toString (soundToVar (cur())));
@@ -1004,12 +1045,26 @@ bool Controller::projectExists (int slot) const
     return dataDir.getChildFile ("projects").getChildFile ("project" + juce::String (slot + 1) + ".json").existsAsFile();
 }
 
-void Controller::saveProject (int slot)
+void Controller::saveProject (int slot, const juce::String& name)
 {
     const auto f = dataDir.getChildFile ("projects").getChildFile ("project" + juce::String (slot + 1) + ".json");
     f.getParentDirectory().createDirectory();
-    f.replaceWithText (juce::JSON::toString (stateVar()));
-    setFlash ("Project " + juce::String (slot + 1) + " saved");
+    auto v = stateVar();
+    {
+        juce::Array<juce::var> sc;   // the scenes and the song go with the project
+        for (const auto& s : scenes) sc.add (s != nullptr ? s->toVar() : juce::var());
+        if (auto* o = v.getDynamicObject()) { o->setProperty ("scenes", sc); o->setProperty ("song", songVar()); }
+    }
+    f.replaceWithText (juce::JSON::toString (v));
+    if (name.isNotEmpty())
+    {
+        const auto nf = f.getParentDirectory().getChildFile ("names.json");
+        auto v = juce::JSON::parse (nf);
+        if (! v.isObject()) v = juce::var (new juce::DynamicObject());
+        v.getDynamicObject()->setProperty ("p" + juce::String (slot + 1), name);
+        nf.replaceWithText (juce::JSON::toString (v));
+    }
+    setFlash ("Project " + juce::String (slot + 1) + (name.isNotEmpty() ? " \"" + name + "\"" : juce::String()) + " saved");
 }
 
 bool Controller::loadProject (int slot)
@@ -1018,7 +1073,20 @@ bool Controller::loadProject (int slot)
     if (! f.existsAsFile()) { setFlash ("Project " + juce::String (slot + 1) + " is empty"); return false; }
     pushUndo ("Load project");
     audio.post ({ Event::AllOff, 0, 0, 0.0f });
-    applyStateVar (juce::JSON::parse (f));
+    const auto v = juce::JSON::parse (f);
+    applyStateVar (v);
+    if (auto* sc = v["scenes"].getArray())
+    {
+        for (int i = 0; i < numScenes; ++i)
+        {
+            scenes[(size_t) i].reset();
+            if (i < sc->size() && (*sc)[i].isObject()) { scenes[(size_t) i] = std::make_unique<Project> (Project::makeDefault()); scenes[(size_t) i]->fromVar ((*sc)[i]); }
+        }
+        saveScenes();
+        songFromVar (v["song"]);
+        saveSong();
+        songOn = false;
+    }
     mode = ModeSound;
     changed();
     setFlash ("Project " + juce::String (slot + 1) + " loaded");
@@ -1304,7 +1372,7 @@ void Controller::changeTarget (const Target& t, float amount, bool fraction)
         const int n = chainPresetNames().size();
         chainIdx = ((chainIdx + d) % n + n) % n;
         pushUndo ("FX chain", true);
-        applyChainPreset (cur().mods, chainIdx);
+        applyChainPreset (cur().mods, chainIdx); chainFromSound[(size_t) track.load()] = false;
         for (auto& sl : cur().mods.slots) if (dest::isInsert (sl.dest)) sl = ModSlot();
         setFlash ("FX chain: " + chainPresetNames()[chainIdx]);
         changed();
@@ -1393,6 +1461,7 @@ void Controller::changeTarget (const Target& t, float amount, bool fraction)
         case KInsType:
         {
             pushUndo ("FX", true);
+            chainFromSound[(size_t) track.load()] = false;   // now it's your chain
             auto& in = cur().mods.inserts[(size_t) t.index];
             const int nt = juce::roundToInt (v);
             if (nt == in.type) return;
@@ -1488,6 +1557,14 @@ void Controller::turnKnob (int k, float clicks)
 {
     if (k < 0 || k >= numKnobs || clicks == 0.0f) return;
     if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "knob"); o->setProperty ("k", k); o->setProperty ("c", clicks); sendRemote (o); return; }
+    if (typing)
+    {
+        const int n = numTextKeys(), c = (int) clicks;
+        if (k == 0) typeKey = ((typeKey + c) % n + n) % n;
+        else if (k == 1) typeKey = juce::jlimit (0, n - 1, typeKey + c * textCols);
+        if (onChange) onChange();
+        return;
+    }
     if (screen == ScreenHome) return;
     const int slot = k + (shift.load() || encPush[(size_t) k].load() ? numKnobs : 0);   // push + turn = the second layer
     if (mode.load() == ModeSeq) { seqKnob (slot, clicks); return; }
@@ -1515,6 +1592,73 @@ void Controller::resetKnob (int k)
     const float cur0 = targetValue (t);
     if (def->stepped()) changeTarget (t, def->def - cur0, false);
     else changeTarget (t, def->toNorm (def->def) - def->toNorm (cur0), true);
+}
+
+void Controller::knobPush (int k)
+{
+    if (k < 0 || k >= numKnobs) return;
+    if (typing)
+    {
+        if (k == 0) textPress (typeKey);
+        else if (k == 1) textPress (keyDel());
+        else if (k == numKnobs - 1) textFinish (true);
+        return;
+    }
+    if (screen == ScreenHome) return;
+    const int m = mode.load();
+    if (m == ModeBrowse) { setMode (ModeSound); setFlash ("Sound: " + presetName (track.load())); return; }
+    if (m == ModeSeq)
+    {
+        const int slot = k + (shift.load() ? numKnobs : 0);
+        auto& tr = cur();
+        auto& pat = tr.pat;
+        std::array<int, maxSteps> targets {};
+        const int numTargets = slot < numKnobs ? stepTargets (targets) : 0;
+        pushUndo ("Steps", true);
+        if (numTargets > 0)
+        {
+            for (int i = 0; i < numTargets; ++i)
+            {
+                const int s = targets[(size_t) i];
+                if (tr.isDrums())
+                {
+                    auto& hit = pat.drums[(size_t) lane[(size_t) track.load()]][(size_t) s];
+                    if (slot == 2) pat.rolls[(size_t) lane[(size_t) track.load()]][(size_t) s] = 0;
+                    if (slot == 1 && hit > 0) hit = 100;
+                    continue;
+                }
+                auto& st = pat.steps[(size_t) s];
+                const Step def;
+                switch (slot)
+                {
+                    case 0: for (auto n : st.notes) if (n >= 0) { audio.post ({ Event::NoteOn, (int8_t) track.load(), n, st.vel / 127.0f }); audio.post ({ Event::NoteOff, (int8_t) track.load(), n, 0.0f }); } break;
+                    case 1: st.vel = def.vel; break;
+                    case 2: st.len = def.len; break;
+                    case 3: st.slide = false; break;
+                    case 4: st.accent = false; break;
+                    case 5: st.chance = 100; break;
+                    case 6: st.nudge = 0; break;
+                    case 7: case 8: case 9: st.notes[(size_t) (slot - 6)] = -1; break;
+                    case 10: st.ratchet = 1; break;
+                    default: break;
+                }
+            }
+        }
+        else
+            switch (slot % numKnobs)
+            {
+                case 0: pat.length = 16; bar[(size_t) track.load()] = 0; break;
+                case 1: pat.rate = Rate16; break;
+                case 2: project.m.swing = 0.0f; break;
+                default: break;
+            }
+        changed();
+        setFlash (seqKnobView (slot).name + ": back to normal");
+        return;
+    }
+    resetKnob (k);
+    const auto v = knob (k);
+    if (v.used) setFlash (v.name + ": back to " + v.value);
 }
 
 KnobView Controller::knob (int k) const
@@ -1977,6 +2121,7 @@ bool Controller::padLit (int pad) const
 void Controller::padDown (int pad, int velocity)
 {
     if (pad < 0 || pad >= numPads) return;
+    if (typing) return;   // the screen keyboard is open
     if (isRemote())
     {
         runOnMessageThread ([this, pad, velocity] { auto* o = new juce::DynamicObject(); o->setProperty ("t", "pad"); o->setProperty ("p", pad); o->setProperty ("v", velocity); o->setProperty ("down", true); sendRemote (o); });
@@ -2105,8 +2250,14 @@ void Controller::setJoystick (float x, float y)
 {
     if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "joy"); o->setProperty ("x", x); o->setProperty ("y", y); sendRemote (o); return; }
     const int t = track.load();
-    audio.post ({ Event::Bend, (int8_t) t, 0, juce::jlimit (-1.0f, 1.0f, x) * 2.0f });
-    audio.post ({ Event::Mod, (int8_t) t, 0, juce::jlimit (-1.0f, 1.0f, y) });
+    // a joystick never rests exactly in the middle: a small dead zone, then the full range
+    auto dead = [] (float v) { v = juce::jlimit (-1.0f, 1.0f, v); const float a = std::abs (v); return a < 0.06f ? 0.0f : std::copysign ((a - 0.06f) / 0.94f, v); };
+    x = dead (x); y = dead (y);
+    // the track picked before still bent / modulated: it lets go
+    const int old = joyTrack.exchange (t);
+    if (old >= 0 && old != t) { audio.post ({ Event::Bend, (int8_t) old, 0, 0.0f }); audio.post ({ Event::Mod, (int8_t) old, 0, 0.0f }); }
+    audio.post ({ Event::Bend, (int8_t) t, 0, x * 2.0f });                  // left / right: +-2 semitones
+    audio.post ({ Event::Mod, (int8_t) t, 0, juce::jmax (0.0f, y) });       // up: modulation (down: none - never negative)
 }
 
 void Controller::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage& m)
@@ -2133,12 +2284,24 @@ void Controller::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMe
         {
             const int cc = m.getControllerNumber(), v = m.getControllerValue();
             if (cc >= firstPotCC && cc < firstPotCC + numPots) { runOnMessageThread ([this, p = cc - firstPotCC, v] { potMoved (p, v); }); return; }
-            if (cc >= firstPushCC && cc < firstPushCC + numKnobs) { encPush[(size_t) (cc - firstPushCC)] = v >= 64; return; }
+            if (cc >= firstPushCC && cc < firstPushCC + numKnobs)
+            {
+                const auto k = (size_t) (cc - firstPushCC);
+                const auto now = juce::Time::getMillisecondCounter();
+                if (v >= 64) { encPush[k] = true; encTurned[k] = false; encPushAt[k] = now; }
+                else
+                {
+                    encPush[k] = false;
+                    if (! encTurned[k].load() && now - encPushAt[k].load() < 700)   // a click, not push + turn
+                        runOnMessageThread ([this, k] { knobPush ((int) k); });
+                }
+                return;
+            }
             if (cc >= screenButtonCC && cc < screenButtonCC + 3)
             {
+                if (cc == screenButtonCC) { homeHeld = v >= 64; runOnMessageThread ([this, d = v >= 64] { homeDown (d); }); return; }   // HOME: acts when let go
                 if (v >= 64) runOnMessageThread ([this, s = cc - screenButtonCC]
                 {
-                    if (s == 0) { homeButton(); return; }   // HOME
                     // the first panel firmware also had DRUMS and STUDIO buttons
                     if (shift.load() || screen.load() == s) { goHome(); return; }
                     s == 1 ? goDrums() : goStudio();
@@ -2155,6 +2318,7 @@ void Controller::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMe
             const int cc = m.getControllerNumber(), v = m.getControllerValue();
             if (cc >= firstKnobCC && cc < firstKnobCC + numKnobs)
             {
+                if (encPush[(size_t) (cc - firstKnobCC)].load()) encTurned[(size_t) (cc - firstKnobCC)] = true;   // here, in order with the push
                 const int clicks = v == 0 || v == 64 ? 0 : (v < 64 ? v : v - 128);
                 runOnMessageThread ([this, k = cc - firstKnobCC, clicks] { turnKnob (k, (float) clicks); });
             }
@@ -2191,9 +2355,11 @@ void Controller::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMe
 namespace
 {
 enum MenuMain { MSave = 0, MLoad, MNew, MClearTrack, MClearAll, MCopyTrack, MDrumPattern, MBassLine,
-                MClick, MPadsMode, MLearn, MHelp, MTap, MSaveSound, MUndo, MMore };
+                MSong, MExport, MLearn, MHelp, MTap, MSaveSound, MUndo, MMore };   // Click and Pads: on the PROJECT page
 enum MenuMore { XPin = 0, XClearMy, XAssign, XClearMods, XRandomMods, XChain, XClearFx, XCopyFx, XLook, XTheme, XAccent, XText, XTrackColours, XInit, XClose };
-enum MenuPage { PageMain = 0, PageSave, PageLoad, PageCopy, PageDrums, PageBass, PageMore, PageMacro, PageChain, PageCopyFx };
+enum MenuPage { PageMain = 0, PageSave, PageLoad, PageCopy, PageDrums, PageBass, PageMore, PageMacro, PageChain, PageCopyFx, PageSong, PageExport };
+enum SongTiles { SongOnOff = Controller::maxSongSteps };   // tiles 1-14 = the song's parts, 15 = on / off, 16 = back
+enum ExportTiles { EWavSong = 0, EWavLoop, EUsb, EWhere };
 }
 
 juce::String Controller::menuTitle() const
@@ -2209,6 +2375,8 @@ juce::String Controller::menuTitle() const
         case PageMacro: return "WHICH MACRO? (then turn a knob)";
         case PageChain: return "FX CHAIN FOR TRACK " + juce::String (track.load() + 1);
         case PageCopyFx: return "COPY THE FX OF TRACK " + juce::String (track.load() + 1) + " TO";
+        case PageSong:  return "SONG - touch a part: the next scene | Shift + touch: how many bars | the last part, past scene 8: gone";
+        case PageExport: return "EXPORT - a WAV of your music, or everything onto a USB stick";
         default:        return "MENU";
     }
 }
@@ -2230,7 +2398,8 @@ std::array<Controller::MenuTile, numPads> Controller::menuTiles() const
             {
                 const bool has = projectExists (i);
                 const auto f = dataDir.getChildFile ("projects").getChildFile ("project" + juce::String (i + 1) + ".json");
-                m[(size_t) i] = { "Project " + juce::String (i + 1), has ? f.getLastModificationTime().formatted ("%d.%m. %H:%M") : juce::String ("empty"),
+                const auto nm = has ? projectName (i) : juce::String();
+                m[(size_t) i] = { nm.isNotEmpty() ? nm : "Project " + juce::String (i + 1), has ? f.getLastModificationTime().formatted ("%d.%m. %H:%M") : juce::String ("empty"),
                                   menuPage == PageSave || has, menuPage == PageSave && has, false };
             }
             back();
@@ -2300,6 +2469,34 @@ std::array<Controller::MenuTile, numPads> Controller::menuTiles() const
             back();
             return m;
         }
+        case PageSong:
+        {
+            for (int i = 0; i < maxSongSteps; ++i)
+            {
+                if (i < (int) song.size())
+                {
+                    const auto& e = song[(size_t) i];
+                    const bool has = scenes[(size_t) e.scene] != nullptr;
+                    m[(size_t) i] = { juce::String (i + 1) + ": scene " + juce::String (e.scene + 1), juce::String (e.bars) + (e.bars == 1 ? " bar" : " bars") + (has ? juce::String() : juce::String (" (scene empty!)")),
+                                      true, false, songOn.load() && songEntry == i };
+                }
+                else if (i == (int) song.size())
+                    m[(size_t) i] = { "+ add", "a part", true, false, false };
+            }
+            m[SongOnOff] = { songOn.load() ? "Song: ON" : "Song: off", juce::String (songBars()) + " bars", ! song.empty(), false, songOn.load() };
+            back();
+            return m;
+        }
+        case PageExport:
+        {
+            const auto usb = usbStick();
+            m[EWavSong] = { "WAV: the song", song.empty() ? juce::String ("(make a song first)") : juce::String (songBars()) + " bars", ! song.empty() && ! isExporting(), false, false };
+            m[EWavLoop] = { "WAV: the loop", "8 bars of what plays now", ! isExporting(), false, false };
+            m[EUsb] = { "All to USB", usb.isDirectory() ? usb.getFileName() : juce::String ("no stick found"), usb.isDirectory(), false, false };
+            m[EWhere] = { "Where?", "WAVs: exports + the stick", true, false, false };
+            back();
+            return m;
+        }
         default: break;
     }
     const bool drums = cur().isDrums();
@@ -2311,8 +2508,8 @@ std::array<Controller::MenuTile, numPads> Controller::menuTiles() const
     m[MCopyTrack] = { "Copy track", "sound + steps to ...", true, false, false };
     m[MDrumPattern] = { "Drum pattern", drums ? "house, trap, breaks ..." : "(on a drum track)", drums, false, false };
     m[MBassLine] = { "Bass line", ! drums ? "acid, octaves, walking ..." : "(on a melody track)", ! drums, false, false };
-    m[MClick] = { "Click", project.m.metronome ? "on" : "off", true, false, project.m.metronome };
-    m[MPadsMode] = { "Pads", scalePads.load() ? "scale" : "piano", true, false, scalePads.load() };
+    m[MSong] = { "Song", song.empty() ? juce::String ("scenes in a row") : juce::String ((int) song.size()) + " parts" + (songOn.load() ? ", on" : ""), true, false, songOn.load() };
+    m[MExport] = { "Export", "WAV, USB stick", true, false, isExporting() };
     m[MLearn] = { "Learn keyboard", juce::String (numLearned()) + " controls learned", true, false, false };
     m[MHelp] = { "Help", "how it works", true, false, helpShown.load() };
     m[MTap] = { "Tap tempo", juce::String (juce::roundToInt (project.m.tempo)) + " BPM", true, false, false };
@@ -2342,7 +2539,37 @@ void Controller::menuPress (int tile)
         if (tile == 15) { menuPage = PageMain; if (onChange) onChange(); return; }
         switch (page)
         {
-            case PageSave: saveProject (tile); break;
+            case PageSong:
+            {
+                auto sg = song;
+                if (tile == SongOnOff) { setSongOn (! songOn.load()); break; }
+                if (tile < (int) sg.size())
+                {
+                    auto& e = sg[(size_t) tile];
+                    if (shift.load()) { int nb = 1; for (int l : { 1, 2, 4, 8, 16 }) if (l > e.bars) { nb = l; break; } e.bars = nb; }   // 1 2 4 8 16 bars
+                    else if (e.scene + 1 < numScenes) ++e.scene;
+                    else if (tile == (int) sg.size() - 1) sg.pop_back();   // past scene 8, the last part goes
+                    else e.scene = 0;
+                }
+                else if (tile == (int) sg.size() && (int) sg.size() < maxSongSteps)
+                    sg.push_back ({ loadedScene >= 0 ? loadedScene : 0, 4 });
+                setSong (sg);
+                if (sg.empty() && songOn.load()) songOn = false;
+                break;
+            }
+            case PageExport:
+                if (tile == EWavSong) exportWav (true);
+                else if (tile == EWavLoop) exportWav (false);
+                else if (tile == EUsb) exportToUsb();
+                else if (tile == EWhere) setFlash ("WAVs: " + exportFolder().getFullPathName() + " (and Cat Box 3/ on a USB stick)");
+                break;
+            case PageSave:
+            {
+                const auto old = projectName (tile);
+                startText ("NAME PROJECT " + juce::String (tile + 1), old.isNotEmpty() ? old : "Song " + juce::String (tile + 1),
+                           [this, tile] (const juce::String& n) { saveProject (tile, n); });
+                break;
+            }
             case PageLoad: loadProject (tile); break;
             case PageCopy:
             {
@@ -2370,7 +2597,7 @@ void Controller::menuPress (int tile)
                 return;
             case PageChain:
                 pushUndo ("FX chain");
-                applyChainPreset (cur().mods, tile);
+                applyChainPreset (cur().mods, tile); chainFromSound[(size_t) track.load()] = false;
                 for (auto& sl : cur().mods.slots) if (dest::isInsert (sl.dest)) sl = ModSlot();
                 fxSlot[(size_t) track.load()] = 0;
                 changed();
@@ -2425,8 +2652,8 @@ void Controller::menuPress (int tile)
         case MCopyTrack:   menuPage = PageCopy; break;
         case MDrumPattern: menuPage = PageDrums; break;
         case MBassLine:    menuPage = PageBass; break;
-        case MClick:       project.m.metronome = ! project.m.metronome; changed(); break;
-        case MPadsMode:    scalePads = ! scalePads.load(); break;
+        case MSong:        menuPage = PageSong; break;
+        case MExport:      menuPage = PageExport; break;
         case MLearn:       mode = ModeProject; startLearn(); return;
         case MHelp:        toggleHelp(); break;
         case MTap:         tapTempo(); break;
@@ -3229,6 +3456,352 @@ void Controller::homeButton()
     goHome();
 }
 
+const juce::String& Controller::textKeys()
+{
+    static const juce::String k ("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,-!?'#&+");
+    return k;
+}
+
+juce::String Controller::textKeyLabel (int i) const
+{
+    const int n = textKeys().length();
+    if (i == n) return "DEL";
+    if (i == n + 1) return typeLower ? "ABC" : "abc";
+    if (i == n + 2) return "OK";
+    if (i < 0 || i > n) return {};
+    const auto c = textKeys()[i];
+    if (c == ' ') return "SPACE";
+    return juce::String::charToString (typeLower ? juce::CharacterFunctions::toLowerCase (c) : c);
+}
+
+void Controller::startText (const juce::String& title, const juce::String& initial, std::function<void (const juce::String&)> done)
+{
+    typing = true; typeTitle = title; typeText = initial; typeDone = std::move (done);
+    typeKey = 0; typeLower = false;
+    if (onChange) onChange();
+}
+
+void Controller::textPress (int key)
+{
+    if (! typing) return;
+    const int n = textKeys().length();
+    key = juce::jlimit (0, n + 2, key);
+    if (key < n) typeKey = key;   // DEL / abc / OK leave the knob's place alone
+    if (key == n) typeText = typeText.dropLastCharacters (1);
+    else if (key == n + 1) typeLower = ! typeLower;
+    else if (key == n + 2) { textFinish (true); return; }
+    else if (typeText.length() < 40)
+    {
+        const auto c = textKeys()[key];
+        typeText << juce::String::charToString (typeLower ? juce::CharacterFunctions::toLowerCase (c) : c);
+    }
+    if (onChange) onChange();
+}
+
+void Controller::textType (juce::juce_wchar c)
+{
+    if (! typing || c < 32 || typeText.length() >= 40) return;
+    typeText << juce::String::charToString (c);
+    if (onChange) onChange();
+}
+
+void Controller::textFinish (bool ok)
+{
+    if (! typing) return;
+    typing = false;
+    auto done = std::move (typeDone);
+    typeDone = nullptr;
+    if (ok && done) done (typeText.trim());
+    if (onChange) onChange();
+}
+
+juce::String Controller::projectName (int slot) const
+{
+    const auto f = dataDir.getChildFile ("projects").getChildFile ("names.json");
+    const auto v = juce::JSON::parse (f);
+    return v.getProperty ("p" + juce::String (slot + 1), {}).toString();
+}
+
+void Controller::fxTouch (int slot, int what)
+{
+    slot = juce::jlimit (0, numInserts - 1, slot);
+    const int t = track.load();
+    fxSlot[(size_t) t] = slot;
+    insPreset[(size_t) t] = 0;
+    auto& in = cur().mods.inserts[(size_t) slot];
+    if (what == 1 || what == -1)
+    {
+        changeTarget ({ KInsType, slot }, (float) what, false);
+        setFlash ("FX " + juce::String (slot + 1) + ": " + (in.type == InsOff ? juce::String ("empty") : insertDef (in.type).name));
+    }
+    else if (what == 2 && in.type != InsOff)
+    {
+        pushUndo ("FX");
+        in.on = ! in.on;
+        changed();
+        setFlash ("FX " + juce::String (slot + 1) + " " + insertDef (in.type).name + (in.on ? ": on" : ": bypassed"));
+    }
+    if (onChange) onChange();
+}
+
+//==============================================================================
+// SONG
+juce::var Controller::songVar() const
+{
+    juce::Array<juce::var> a;
+    for (const auto& s : song) { auto* o = new juce::DynamicObject(); o->setProperty ("scene", s.scene); o->setProperty ("bars", s.bars); a.add (juce::var (o)); }
+    return a;
+}
+
+void Controller::songFromVar (const juce::var& v)
+{
+    song.clear();
+    if (auto* a = v.getArray())
+        for (const auto& e : *a)
+            if (e.isObject() && (int) song.size() < maxSongSteps)
+                song.push_back ({ juce::jlimit (0, numScenes - 1, (int) e.getProperty ("scene", 0)), juce::jlimit (1, 64, (int) e.getProperty ("bars", 4)) });
+}
+
+void Controller::saveSong() const
+{
+    if (isRemote()) return;
+    dataDir.getChildFile ("song.json").replaceWithText (juce::JSON::toString (songVar()));
+}
+
+void Controller::loadSong()
+{
+    const auto f = dataDir.getChildFile ("song.json");
+    if (f.existsAsFile()) songFromVar (juce::JSON::parse (f));
+}
+
+void Controller::setSong (const std::vector<SongStep>& s)
+{
+    song = s;
+    if ((int) song.size() > maxSongSteps) song.resize ((size_t) maxSongSteps);
+    for (auto& e : song) { e.scene = juce::jlimit (0, numScenes - 1, e.scene); e.bars = juce::jlimit (1, 64, e.bars); }
+    saveSong();
+    if (onChange) onChange();
+}
+
+int Controller::songBars() const
+{
+    int n = 0;
+    for (const auto& s : song) n += s.bars;
+    return n;
+}
+
+void Controller::setSongOn (bool on)
+{
+    if (on && song.empty()) { setFlash ("The song is empty: MENU > Song, touch a place to add a scene"); return; }
+    songOn = on;
+    songEntry = -1; songBarSeen = -1;
+    if (on && ! audio.isPlaying() && loadScene (song[0].scene)) songEntry = 0;   // ready at the top
+    setFlash (on ? "Song on: " + juce::String ((int) song.size()) + " parts, " + juce::String (songBars()) + " bars (Play = from the top)" : juce::String ("Song off"));
+    if (onChange) onChange();
+}
+
+/** Every timer tick: the scene for the next bar gets queued (it comes in exactly on the bar line). */
+void Controller::songTick()
+{
+    const bool playing = audio.isPlaying();
+    if (! songOn.load() || song.empty()) { wasPlayingSong = playing; return; }
+    if (! playing) { songBarSeen = -1; wasPlayingSong = false; return; }
+    if (! wasPlayingSong) { wasPlayingSong = true; songBarSeen = -1; }
+    const int barNow = (int) std::floor (audio.songBeats.load() / 4.0);
+    if (barNow == songBarSeen) return;
+    songBarSeen = barNow;
+    const int total = juce::jmax (1, songBars());
+    auto entryAt = [this, total] (int bar)
+    {
+        bar = ((bar % total) + total) % total;   // the song loops
+        for (int i = 0; i < (int) song.size(); ++i) { if (bar < song[(size_t) i].bars) return i; bar -= song[(size_t) i].bars; }
+        return 0;
+    };
+    const int cur = entryAt (barNow), next = entryAt (barNow + 1);
+    if (songEntry != cur && barNow == 0) { songEntry = cur; }   // started: the first scene is already there
+    if (next != songEntry || song[(size_t) next].scene != loadedScene)
+    {
+        if (scenes[(size_t) song[(size_t) next].scene] != nullptr)
+        {
+            const auto keep = flash;   // quiet: no "Scene n" message every few bars
+            loadScene (song[(size_t) next].scene);
+            setFlash ("Song: part " + juce::String (next + 1) + " - scene " + juce::String (song[(size_t) next].scene + 1));
+            juce::ignoreUnused (keep);
+        }
+        songEntry = next;
+    }
+}
+
+//==============================================================================
+// EXPORT
+juce::File Controller::usbStick()
+{
+   #if JUCE_LINUX
+    const auto user = juce::SystemStats::getLogonName();
+    for (const auto& base : { juce::File ("/media/" + user), juce::File ("/run/media/" + user), juce::File ("/media"), juce::File ("/mnt/usb") })
+    {
+        if (! base.isDirectory()) continue;
+        if (base.getFullPathName() == "/mnt/usb") return base.hasWriteAccess() ? base : juce::File();
+        for (const auto& d : base.findChildFiles (juce::File::findDirectories, false))
+            if (d.hasWriteAccess() && d.getFileName() != user) return d;
+    }
+   #endif
+    return {};
+}
+
+juce::File Controller::exportFolder() const
+{
+    auto d = dataDir.getChildFile ("exports");
+    d.createDirectory();
+    return d;
+}
+
+
+void Controller::exportWav (bool wholeSong)
+{
+    if (exportJob != nullptr || isRemote()) return;
+    auto job = std::make_unique<ExportJob>();
+    const auto m = project.m;
+    if (wholeSong)
+    {
+        for (const auto& s : song)
+            if (scenes[(size_t) s.scene] != nullptr)
+            {
+                ExportJob::Part pt { *scenes[(size_t) s.scene], s.bars };
+                pt.p.m.tempo = m.tempo; pt.p.m.key = m.key; pt.p.m.scale = m.scale; pt.p.m.volume = m.volume; pt.p.m.djFilter = m.djFilter;
+                job->parts.push_back (std::move (pt));
+            }
+        if (job->parts.empty()) { setFlash ("No song to export (MENU > Song, and save scenes: Scene + Rec + pad)"); return; }
+    }
+    else
+        job->parts.push_back ({ project, 8 });
+    for (auto& pt : job->parts) pt.p.m.metronome = false;
+    job->audio = std::make_unique<Audio>();
+    job->audio->prepare (job->sr, 512);
+    job->audio->push (job->parts[0].p);
+    job->audio->post ({ Event::Play, 0, 0, 0.0f });
+    job->samplesPerBar = 4.0 * 60.0 / juce::jmax (20.0, (double) m.tempo) * job->sr;
+    int bars = 0;
+    for (const auto& pt : job->parts) bars += pt.bars;
+    job->tail = (int64_t) (job->sr * 3.0);   // the echoes and reverb ring out
+    job->total = (int64_t) std::ceil (bars * job->samplesPerBar) + job->tail;
+    for (int i = 0; i < (int) job->parts.size(); ++i) for (int b = 0; b < job->parts[(size_t) i].bars; ++b) job->partOfBar.push_back (i);
+    job->file = exportFolder().getChildFile ("Cat Box " + juce::Time::getCurrentTime().formatted ("%Y-%m-%d %H-%M-%S") + (wholeSong ? " song" : " loop") + ".wav");
+    job->file.deleteFile();
+    juce::WavAudioFormat wav;
+    std::unique_ptr<juce::OutputStream> os (job->file.createOutputStream());
+    if (os != nullptr)
+        job->writer = wav.createWriterFor (os, juce::AudioFormatWriterOptions{}.withSampleRate (job->sr).withNumChannels (2).withBitsPerSample (24));
+    if (job->writer == nullptr) { setFlash ("Could not write " + job->file.getFullPathName()); return; }
+    exportDone = 0.0f;
+    exportJob = std::move (job);
+    setFlash ("Exporting a WAV ... (" + juce::String (bars) + " bars)");
+}
+
+/** A piece of the export each timer tick (faster than real time, and the box keeps working). */
+void Controller::exportTick()
+{
+    if (exportJob == nullptr) return;
+    auto& j = *exportJob;
+    const auto until = juce::Time::getMillisecondCounterHiRes() + 18.0;
+    std::vector<float> l (512), r (512);
+    while (j.done < j.total && juce::Time::getMillisecondCounterHiRes() < until)
+    {
+        // the next part comes in on the bar line: hand it over during the bar before
+        const int64_t barNow = (int64_t) std::floor ((double) j.done / j.samplesPerBar);
+        if (barNow >= j.barsDone)
+        {
+            j.barsDone = (int) barNow + 1;
+            const auto nextBar = (size_t) (barNow + 1);
+            if (nextBar < j.partOfBar.size() && j.partOfBar[nextBar] != j.pushed)
+            {
+                j.pushed = j.partOfBar[nextBar];
+                j.audio->push (j.parts[(size_t) j.pushed].p, true);   // waits for that bar line
+            }
+        }
+        if (j.done >= j.total - j.tail && j.audio->isPlaying()) j.audio->post ({ Event::Stop, 0, 0, 0.0f });
+        const int n = (int) juce::jmin ((int64_t) 512, j.total - j.done);
+        std::fill (l.begin(), l.end(), 0.0f); std::fill (r.begin(), r.end(), 0.0f);
+        j.audio->render (l.data(), r.data(), n);
+        for (int i = 0; i < n; ++i) j.peak = juce::jmax (j.peak, std::abs (l[(size_t) i]), std::abs (r[(size_t) i]));
+        const float* ch[] = { l.data(), r.data() };
+        j.writer->writeFromFloatArrays (ch, 2, n);
+        j.done += n;
+    }
+    exportDone = (float) j.done / (float) juce::jmax ((int64_t) 1, j.total);
+    if (j.done < j.total) { setFlash ("Exporting a WAV ... " + juce::String (juce::roundToInt (exportDone * 100.0f)) + "%"); return; }
+    j.writer.reset();   // closes the file
+    juce::String where = "exports/" + j.file.getFileName();
+    if (const auto usb = usbStick(); usb.isDirectory())
+    {
+        const auto dst = usb.getChildFile ("Cat Box 3").getChildFile (j.file.getFileName());
+        dst.getParentDirectory().createDirectory();
+        if (j.file.copyFileTo (dst)) where = "the USB stick: Cat Box 3/" + j.file.getFileName();
+    }
+    setFlash ("Saved " + where + (j.peak > 1.0f ? " (it clips: turn the master down)" : juce::String()));
+    exportJob.reset();
+    exportDone = 1.0f;
+}
+
+void Controller::exportToUsb()
+{
+    const auto usb = usbStick();
+    if (! usb.isDirectory()) { setFlash ("No USB stick found - plug one in (FAT32 / exFAT) and try again"); return; }
+    saveState();
+    const auto dst = usb.getChildFile ("Cat Box 3").getChildFile ("backup " + juce::Time::getCurrentTime().formatted ("%Y-%m-%d %H-%M"));
+    dst.createDirectory();
+    bool ok = true;
+    for (const auto& f : dataDir.findChildFiles (juce::File::findFilesAndDirectories, false))
+    {
+        if (f.getFileName() == "exports") continue;   // the WAVs are already there
+        ok = (f.isDirectory() ? f.copyDirectoryTo (dst.getChildFile (f.getFileName())) : f.copyFileTo (dst.getChildFile (f.getFileName()))) && ok;
+    }
+    setFlash (ok ? "Everything copied to the USB stick: Cat Box 3/" + dst.getFileName() : juce::String ("Copying to the USB stick failed (full? read only?)"));
+}
+
+void Controller::setVolume (int t, float v)
+{
+    if (t < 0 || t >= numTracks) return;
+    pushUndo ("Mix", true);
+    project.tracks[(size_t) t].volume = juce::jlimit (0.0f, 1.0f, v);
+    changed();
+}
+
+void Controller::homeDown (bool down)
+{
+    if (down) { homeHeld = true; homeUsed = false; if (onChange) onChange(); return; }
+    homeHeld = false;
+    if (typing) { textFinish (false); homeUsed = false; return; }
+    if (! homeUsed) homeButton();
+    homeUsed = false;
+    if (onChange) onChange();
+}
+
+void Controller::pageButton (int page, bool setLength)
+{
+    page = juce::jlimit (0, maxSteps / 16 - 1, page);
+    const int t = track.load();
+    auto& pat = cur().pat;
+    const int pages = juce::jmax (1, (pat.length + 15) / 16);
+    if (setLength || page >= pages)
+    {
+        pushUndo ("Pages");
+        for (int p = pages; p <= page; ++p)   // a new page: a copy of the last one (clear it if you want it empty)
+            for (int i = 0; i < 16; ++i)
+            {
+                const auto from = (size_t) ((pages - 1) * 16 + i), to = (size_t) (p * 16 + i);
+                pat.steps[to] = pat.steps[from];
+                pat.locks[to] = pat.locks[from];
+                for (int l = 0; l < numLanes; ++l) { pat.drums[(size_t) l][to] = pat.drums[(size_t) l][from]; pat.rolls[(size_t) l][to] = pat.rolls[(size_t) l][from]; }
+            }
+        if (setLength || pat.length < (page + 1) * 16) pat.length = (page + 1) * 16;
+        changed();
+    }
+    bar[(size_t) t] = page;
+    const int now = (pat.length + 15) / 16;
+    setFlash ("Page " + juce::String (page + 1) + " of " + juce::String (now) + " (" + juce::String (pat.length) + " steps)");
+}
+
 void Controller::goHome()
 {
     if (isRemote()) return;
@@ -3605,7 +4178,16 @@ const char* Controller::potId (int pot)
         "lforate", "lfofilter",                                              // LFO
         "#dtime", "#dfb", "#dsend", "#rsize", "#rsend",                      // EFFECTS
         "glide", "volume" };
-    return ids[juce::jlimit (0, numPots - 1, pot)];
+    static const char* shifted[numPots] = {                              // Shift + the pot (printed small above it)
+        "o1range", "o2range", "o2semi", "sub", "noise", "ring",
+        "keytrack", "fmode", "pmenv", "drive", "velfilt",
+        "lfodelay", "lfopitch", "lfopw", "lfoamp",
+        "o1pw", "cross", "velamp", "unidetune",
+        "lfoshape", "lfosync",
+        "#dtype", "chorus", "width", "#rtype", "#rpre",
+        "mode", "model" };
+    pot = juce::jlimit (0, numPots * 2 - 1, pot);
+    return pot < numPots ? ids[pot] : shifted[pot - numPots];
 }
 
 void Controller::potMoved (int pot, int value)
@@ -3614,6 +4196,17 @@ void Controller::potMoved (int pot, int value)
     const int t = synthTrack();
     if (t < 0) return;
     const float want = juce::jlimit (0.0f, 1.0f, value / 127.0f);
+    // Shift held: the pot's second knob. The pot moved on the other layer = that layer lets go (pick-up again from where it is)
+    const int layer = shift.load() ? 1 : 0;
+    if (potLayer[(size_t) pot] != layer)
+    {
+        potLayer[(size_t) pot] = (int8_t) layer;
+        const auto vp = (size_t) (pot + layer * numPots);
+        potGrab[vp] = false;
+        potLast[vp] = potPhys[(size_t) pot];   // -1 = not known yet
+    }
+    potPhys[(size_t) pot] = want;
+    pot += layer * numPots;
     const juce::String id (potId (pot));
     const auto& d = engineDef (EngineSynth);
     const int code = panelFxCode (id);
@@ -3662,8 +4255,14 @@ void Controller::stepButton (int k, bool down)
 {
     if (k < 0 || k >= 16) return;
     const int t = track.load();
+    if (typing) return;
+    if (homeHeld.load())   // HOME + step 1-4: the pattern's pages
+    {
+        if (down) { homeUsed = true; if (k < maxSteps / 16) pageButton (k, shift.load()); }
+        return;
+    }
     if (screen == ScreenHome) { if (down && k < NumApps) openApp (k); return; }
-    if (screen == ScreenSettings) return;
+    if (screen == ScreenSettings) { down ? padDown (k, 100) : padUp (k); return; }   // the tiles (like touching them)
     if (screen == ScreenScope)   // steps 1-16: the pictures (Rec: hold)
     {
         if (down && k < scopePictureNames().size()) setPicture (k);
@@ -3684,8 +4283,20 @@ void Controller::stepButton (int k, bool down)
         if (step < cur().pat.length) clickStep (step);
         return;
     }
-    // the STUDIO: Shift + step 1-8 picks the track, else the step buttons are the pads
-    if (shift.load()) { if (down && k < numTracks) selectTrack (k); return; }
+    // the STUDIO: Shift + step 1-8 picks the track, Shift + step 9-13 = SOUND, SEQ, NOTE FX, MIX, PROJECT
+    // (the panel has no buttons for them), else the step buttons are the pads
+    if (shift.load())
+    {
+        if (! down) return;
+        if (k < numTracks) selectTrack (k);
+        else if (k < numTracks + 5)
+        {
+            static const int modes[] = { ModeSound, ModeSeq, ModeFx, ModeMix, ModeProject };
+            setMode (modes[k - numTracks]);
+            setFlash (modeName (modes[k - numTracks]));
+        }
+        return;
+    }
     down ? padDown (k, 100) : padUp (k);
 }
 
@@ -3715,6 +4326,14 @@ Controller::Leds Controller::leds() const
     const auto& tr = cur();
     const auto& pat = tr.pat;
     const int b = bar[(size_t) t] * 16;
+    if (homeHeld.load())   // HOME held: steps 1-4 = the pages (this one bright, the one playing blinks)
+    {
+        const int pages = (pat.length + 15) / 16;
+        for (int k = 0; k < maxSteps / 16; ++k) l.steps[(size_t) k] = k == bar[(size_t) t] ? 3 : (k < pages ? 1 : 0);
+        const int playPage = audio.stepNow[(size_t) t].load() / 16;
+        if (l.playing && playPage >= 0 && playPage < pages && playPage != bar[(size_t) t]) l.steps[(size_t) playPage] = 2;
+        return l;
+    }
     const bool steps = scr == ScreenSynth || scr == ScreenDrums || (scr == ScreenStudio && mode.load() == ModeSeq);
     if (steps)
     {

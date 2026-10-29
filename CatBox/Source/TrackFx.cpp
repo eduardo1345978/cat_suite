@@ -320,6 +320,10 @@ const std::vector<ChainPreset>& chains()
         { "Punchy",       { { { InsTransient, "Punchy & dry" }, { InsComp, "Drum bus" }, { InsEq, "Smile" }, { InsOff, "" } } } },
         { "Megaphone",    { { { InsCabinet, "Megaphone" }, { InsDelay, "Slapback" }, { InsOff, "" }, { InsOff, "" } } } },
         { "Underwater",   { { { InsFilter, "Dark" }, { InsChorus, "Seasick" }, { InsPhaser, "Slow swirl" }, { InsReverb, "Hall" } } } },
+        // braindance (the 90s Warp / Rephlex sound): ratchets, bit dust, detuned tape and drill
+        { "Drill",        { { { InsStutter, "Glitchy" }, { InsComp, "Squash" }, { InsCrusher, "Dust" }, { InsDelay, "Ping-pong" } } } },
+        { "Ambient tape", { { { InsTape, "Worn VHS" }, { InsChorus, "Juno" }, { InsReverb, "Huge" }, { InsWidth, "Wide" } } } },
+        { "Detuned toy",  { { { InsCrusher, "8 bit" }, { InsTape, "Cassette" }, { InsDelay, "Dotted" }, { InsOff, "" } } } },
     };
     return c;
 }

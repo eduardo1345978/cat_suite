@@ -220,6 +220,8 @@ void View::drawScreen (juce::Graphics& g)
     }
     if (box.isLearning()) drawLearn (g, juce::Rectangle<int> (0, 52, screenW, screenH - 52));
     if (box.isHelpShown()) drawHelp (g, juce::Rectangle<int> (0, 0, screenW, screenH));
+    keyHits.clearQuick();
+    if (box.isTyping()) { drawKeyboard (g, juce::Rectangle<int> (0, 0, screenW, screenH)); return; }
 
     // the knob turned last on the box: big on the box's screen, a line on the PC
     drawTouch (g, juce::Rectangle<int> (0, 86, screenW, screenH - 86 - 134), kiosk && box.getScreen() != Controller::ScreenStudio);
@@ -903,8 +905,16 @@ void View::drawMix (juce::Graphics& g, juce::Rectangle<int> r)
         g.fillRoundedRectangle (c.toFloat(), 6.0f);
         auto in = c.reduced (8, 6);
         text1 (g, juce::String (t + 1) + " " + shortEngine (tr.engine), in.removeFromTop (18), 13.0f, tr.mute ? faint : text, juce::Justification::centredLeft, true);
-        auto bottom = in.removeFromBottom (18);
-        text1 (g, tr.mute ? "MUTE" : (tr.solo ? "SOLO" : ""), bottom, 12.0f, tr.solo ? accent : dim, juce::Justification::centredLeft, true);
+        // M and S: touch to mute / solo (the pads do the same)
+        auto bottom = in.removeFromBottom (28);
+        auto mB = bottom.removeFromLeft (bottom.getWidth() / 2).reduced (1, 1), soloB = bottom.reduced (1, 1);
+        g.setColour (tr.mute ? recRed : line); g.fillRoundedRectangle (mB.toFloat(), 5.0f);
+        g.setColour (tr.solo ? accent : line); g.fillRoundedRectangle (soloB.toFloat(), 5.0f);
+        text1 (g, "M", mB, 14.0f, tr.mute ? bg : text, juce::Justification::centred, true);
+        text1 (g, "S", soloB, 14.0f, tr.solo ? bg : text, juce::Justification::centred, true);
+        actionHits.add ({ mB, ActMute0 + t });
+        actionHits.add ({ soloB, ActSolo0 + t });
+        in.removeFromBottom (4);
         // pan
         auto pan = in.removeFromBottom (12).toFloat().reduced (2, 3);
         g.setColour (line); g.fillRect (pan);
@@ -922,6 +932,8 @@ void View::drawMix (juce::Graphics& g, juce::Rectangle<int> r)
         in.removeFromBottom (4);
         // volume (wide) and the level meter (thin) next to it
         auto fader = in.removeFromLeft (in.getWidth() / 2).toFloat().reduced (4, 0);
+        actionHits.add ({ fader.toNearestInt().expanded (4, 0), ActFader0 + t });
+        faderRects[(size_t) t] = fader;
         g.setColour (line); g.fillRoundedRectangle (fader, 3.0f);
         g.setColour (tr.mute ? faint : text.withAlpha (0.8f));
         g.fillRoundedRectangle (fader.withTop (fader.getBottom() - fader.getHeight() * tr.volume), 3.0f);
@@ -1011,11 +1023,28 @@ void View::drawChain (juce::Graphics& g, juce::Rectangle<int> r)
             a.addTriangle (x - 4.0f, y - 5.0f, x - 4.0f, y + 5.0f, x + 3.0f, y);
             g.setColour (faint); g.fillPath (a);
         }
+        actionHits.add ({ c, ActFx0 + k * 4 });   // touch the card: this slot
         auto inr = c.reduced (10, 8);
-        text1 (g, juce::String (k + 1), inr.removeFromTop (16), 13.0f, k == sel ? accent : dim, juce::Justification::centredLeft, true);
+        // touch buttons: < > = the effect before / after, ON = on / bypassed
+        auto head = inr.removeFromTop (30);
+        auto nextB = head.removeFromRight (34), prevB = head.removeFromRight (34);
+        for (auto [b, lbl, act] : { std::tuple { prevB, "<", 1 }, std::tuple { nextB, ">", 2 } })
+        {
+            g.setColour (k == sel ? accent.withAlpha (0.25f) : line);
+            g.fillRoundedRectangle (b.reduced (2).toFloat(), 6.0f);
+            text1 (g, lbl, b, 18.0f, text, juce::Justification::centred, true);
+            actionHits.add ({ b, ActFx0 + k * 4 + act });
+        }
+        text1 (g, juce::String (k + 1), head, 15.0f, k == sel ? accent : dim, juce::Justification::centredLeft, true);
         text1 (g, off ? juce::String ("empty") : d.name, inr.removeFromTop (26), off ? 16.0f : 19.0f, off ? faint : (in.on ? text : dim), juce::Justification::centredLeft, true);
-        if (off) { text1 (g, "knob 2 picks one", inr.removeFromTop (18), 12.0f, faint, juce::Justification::centredLeft); continue; }
-        if (! in.on) text1 (g, "BYPASSED", inr.removeFromTop (16), 12.0f, recRed, juce::Justification::centredLeft, true);
+        if (off) { text1 (g, "> or knob 2 picks one", inr.removeFromTop (18), 12.0f, faint, juce::Justification::centredLeft); continue; }
+        {
+            auto onB = inr.removeFromBottom (30).reduced (0, 2);
+            g.setColour (in.on ? accent : recRed.withAlpha (0.8f));
+            g.fillRoundedRectangle (onB.toFloat(), 6.0f);
+            text1 (g, in.on ? "ON  (touch = bypass)" : "BYPASSED  (touch = on)", onB, 12.5f, bg, juce::Justification::centred, true);
+            actionHits.add ({ onB, ActFx0 + k * 4 + 3 });
+        }
         inr.removeFromTop (4);
         for (size_t q = 0; q < d.params.size() && inr.getHeight() >= 15; ++q)
         {
@@ -1764,6 +1793,46 @@ void View::drawLearn (juce::Graphics& g, juce::Rectangle<int> r)
     }
 }
 
+void View::drawKeyboard (juce::Graphics& g, juce::Rectangle<int> r)
+{
+    g.setColour (bg.withAlpha (0.98f));
+    g.fillRect (r);
+    auto in = r.reduced (16, 10);
+    text1 (g, box.typingTitle(), in.removeFromTop (22), 14.0f, dim, juce::Justification::centredLeft, true);
+    // what is typed so far, with a cursor
+    auto field = in.removeFromTop (54).reduced (0, 4);
+    g.setColour (panel); g.fillRoundedRectangle (field.toFloat(), 8.0f);
+    g.setColour (accent); g.drawRoundedRectangle (field.toFloat(), 8.0f, 2.0f);
+    const bool blink = (juce::Time::getMillisecondCounter() / 500) % 2 == 0;
+    text1 (g, box.typingText() + (blink ? "|" : " "), field.reduced (14, 0), 26.0f, text, juce::Justification::centredLeft, true);
+    auto help = in.removeFromBottom (20);
+    text1 (g, kiosk ? "Touch the keys | knob 1: pick a key, click = type it | knob 2: rows, click = delete | knob 12 click or Next = OK | HOME = cancel"
+                    : "Type on your keyboard or click the keys | Enter = OK | Esc = cancel | Backspace = delete",
+           help, 11.5f, dim, juce::Justification::centredLeft);
+    in.removeFromTop (6);
+    const int n = box.numTextKeys(), cols = Controller::textCols;
+    const int rows = (n + cols - 1) / cols;
+    const int kw = in.getWidth() / cols, kh = juce::jmin (64, in.getHeight() / rows);
+    for (int i = 0; i < n; ++i)
+    {
+        auto c = juce::Rectangle<int> (in.getX() + (i % cols) * kw, in.getY() + (i / cols) * kh, kw, kh).reduced (3);
+        if (i >= box.keyDel())   // DEL, abc and OK sit at the end of the last row, wider
+        {
+            const int k = i - box.keyDel();
+            const int lastRow = (n - 1) / cols;
+            const int startCol = cols - 3 * 2;
+            c = juce::Rectangle<int> (in.getX() + (startCol + k * 2) * kw, in.getY() + lastRow * kh, kw * 2, kh).reduced (3);
+        }
+        const bool sel = i == box.typingKey();
+        const bool ok = i == box.keyDel() + 2;
+        g.setColour (ok ? accent : (sel ? text.withAlpha (0.18f) : panel));
+        g.fillRoundedRectangle (c.toFloat(), 7.0f);
+        if (sel) { g.setColour (accent); g.drawRoundedRectangle (c.toFloat(), 7.0f, 2.5f); }
+        text1 (g, box.textKeyLabel (i), c, i >= box.keyDel() || box.textKeyLabel (i) == "SPACE" ? 15.0f : 22.0f, ok ? bg : text, juce::Justification::centred, true);
+        keyHits.add (c);
+    }
+}
+
 void View::drawHelp (juce::Graphics& g, juce::Rectangle<int> r)
 {
     g.setColour (bg.withAlpha (0.97f));
@@ -1936,7 +2005,7 @@ void View::drawHome (juce::Graphics& g, juce::Rectangle<int> r)
     g.fillRect (r);
     auto top = r.removeFromTop (58).reduced (20, 8);
     // the name, with a cat's ears on the C
-    text1 (g, "CAT BOX", top.removeFromLeft (220), 30.0f, text, juce::Justification::centredLeft, true);
+    text1 (g, "CAT BOX 3", top.removeFromLeft (220), 30.0f, text, juce::Justification::centredLeft, true);
     {
         juce::Path ears;
         const float x = (float) top.getX() - 220.0f + 2.0f, y = (float) top.getCentreY() - 19.0f;
@@ -2075,15 +2144,9 @@ void View::drawScopeApp (juce::Graphics& g, juce::Rectangle<int> r)
 
 void View::showTextDialog()
 {
-    auto* w = new juce::AlertWindow ("Text on the scope", "What should the beam write? Up to 3 lines (a | starts a new line).", juce::MessageBoxIconType::NoIcon, this);
-    w->addTextEditor ("text", box.scopeTextNow().replace ("\n", "|"));
-    w->addButton ("Write", 1, juce::KeyPress (juce::KeyPress::returnKey));
-    w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
-    juce::Component::SafePointer<View> safe (this);
-    w->enterModalState (true, juce::ModalCallbackFunction::create ([safe, w] (int r)
-    {
-        if (r == 1 && safe != nullptr) safe->box.setScopeText (w->getTextEditorContents ("text").replace ("|", "\n"));
-    }), true);
+    // the screen keyboard (works on the box without a keyboard); # starts a new line
+    box.startText ("TEXT ON THE SCOPE (# = a new line, up to 3 lines)", box.scopeTextNow().replace ("\n", "#"),
+                   [this] (const juce::String& s) { box.setScopeText (s.replace ("#", "\n")); });
 }
 
 void View::drawStroke (const std::vector<juce::Point<float>>& pts)
@@ -2273,6 +2336,11 @@ bool View::screenTouch (juce::Point<float> sp, bool down)
         return true;
     }
     if (box.isHelpShown()) { box.toggleHelp(); return true; }
+    if (box.isTyping())   // the screen keyboard takes every touch
+    {
+        for (int i = keyHits.size(); --i >= 0;) if (keyHits[i].contains (p)) { box.textPress (i); return true; }
+        return true;
+    }
     if (bigScope && box.getScreen() == Controller::ScreenScope) { bigScope = false; return true; }   // a touch on the big scope: back
     for (const auto& h : screenHits)
         if (h.r.contains (p))
@@ -2290,8 +2358,8 @@ bool View::screenTouch (juce::Point<float> sp, bool down)
         }
     if (modelHit.contains (p)) { box.nextModel (1); return true; }
     if (scopeHit.contains (p) && synthPanelShown() && kiosk) { bigScope = ! bigScope; return true; }   // a touch on the scope: big / small
-    for (const auto& h : actionHits)
-        if (h.r.contains (p))
+    for (int hi = actionHits.size(); --hi >= 0;)   // the last drawn (on top) first
+        if (const auto& h = actionHits.getReference (hi); h.r.contains (p))
         {
             switch (h.action)
             {
@@ -2312,6 +2380,19 @@ bool View::screenTouch (juce::Point<float> sp, bool down)
                 default:
                     if (h.action >= ActApp0 && h.action < ActApp0 + Controller::NumApps) box.openApp (h.action - ActApp0);
                     if (h.action >= ActPic0 && h.action < ActPic0 + 32) box.setPicture (h.action - ActPic0);
+                    if (h.action >= ActMute0 && h.action < ActMute0 + numTracks) { const int t = h.action - ActMute0; box.setMute (t, ! box.getProject().tracks[(size_t) t].mute); }
+                    if (h.action >= ActSolo0 && h.action < ActSolo0 + numTracks) { const int t = h.action - ActSolo0; box.setSolo (t, ! box.getProject().tracks[(size_t) t].solo); }
+                    if (h.action >= ActFader0 && h.action < ActFader0 + numTracks)
+                    {
+                        const auto& f = faderRects[(size_t) (h.action - ActFader0)];
+                        box.selectTrack (h.action - ActFader0);
+                        box.setVolume (h.action - ActFader0, (f.getBottom() - sp.y) / juce::jmax (1.0f, f.getHeight()));
+                    }
+                    if (h.action >= ActFx0 && h.action < ActFx0 + numInserts * 4)
+                    {
+                        const int what = (h.action - ActFx0) % 4;
+                        box.fxTouch ((h.action - ActFx0) / 4, what == 0 ? 0 : what == 1 ? -1 : what == 2 ? 1 : 2);
+                    }
                     break;
             }
             return true;
@@ -2326,9 +2407,9 @@ bool View::screenTouch (juce::Point<float> sp, bool down)
                 return true;
             }
     for (int i = 0; i < menuHits.size(); ++i) if (menuHits[i].contains (p)) { box.menuPress (i); return true; }
-    for (int i = 0; i < trackHits.size(); ++i) if (trackHits[i].contains (p)) { box.selectTrack (i); return true; }
+    for (int i = 0; i < trackHits.size(); ++i) if (trackHits[i].withTrimmedTop (-8).contains (p)) { box.selectTrack (i); return true; }   // a little taller than drawn: easy for a finger
     for (int i = 0; i < modeHits.size(); ++i)
-        if (modeHits[i].contains (p))
+        if (modeHits[i].expanded (0, 5).contains (p))
         {
             const int m = modeOrder[i];
             if (m == ModeSound && (box.getMode() == ModeSound || box.getMode() == ModeBrowse)) { box.buttonDown (BtnSound); box.buttonUp (BtnSound); }
@@ -2336,7 +2417,7 @@ bool View::screenTouch (juce::Point<float> sp, bool down)
             return true;
         }
     for (int i = 0; i < pageHits.size(); ++i)
-        if (pageHits[i].contains (p))
+        if (pageHits[i].expanded (2, 5).contains (p))
         {
             const int steps = i - box.pageIndex();
             const int b = steps > 0 ? BtnNext : BtnPrev;
@@ -2622,6 +2703,14 @@ bool View::keyPressed (const juce::KeyPress& k)
     const int code = k.getKeyCode();
     const auto mods = k.getModifiers();
     auto press = [this] (int b) { box.buttonDown (b); box.buttonUp (b); };
+    if (box.isTyping())   // the screen keyboard is open: the PC keyboard types into it
+    {
+        if (code == juce::KeyPress::returnKey) box.textFinish (true);
+        else if (code == juce::KeyPress::escapeKey) box.textFinish (false);
+        else if (code == juce::KeyPress::backspaceKey) box.textPress (box.keyDel());
+        else box.textType (k.getTextCharacter());
+        return true;
+    }
     if (code == juce::KeyPress::F1Key) { box.toggleHelp(); return true; }
     if (code == juce::KeyPress::F7Key) { bigScope = ! bigScope; repaint(); return true; }   // the XY scope over the screen
     if (code == juce::KeyPress::spaceKey) { press (BtnPlay); return true; }

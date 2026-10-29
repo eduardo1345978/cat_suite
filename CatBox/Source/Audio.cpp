@@ -181,6 +181,8 @@ void Audio::syncTrack (int t)
         rt.engineType = tr.engine;
         rt.engine = rt.engines[(size_t) juce::jlimit (0, NumEngineTypes - 1, tr.engine)].get();
         rt.engine->allOff();
+        rt.engine->setBend (rt.bendNow);
+        rt.engine->setMod (rt.modNow);
         rt.applied.fill (std::numeric_limits<float>::quiet_NaN());
         rt.locked = false;
         rt.trackDrums = engineDef (tr.engine).drums;
@@ -252,7 +254,8 @@ void Audio::refreshEngine (TrackRt& rt, const Track& tr, bool force)
 void Audio::queueNote (TrackRt& rt, double ppq, int note, float vel, bool on, bool slide, bool accent)
 {
     if (rt.numQueued >= (int) rt.queue.size()) return;
-    rt.queue[(size_t) rt.numQueued++] = { ppq, (int16_t) juce::jlimit (0, 127, note), vel, on, slide, accent };
+    if (on) ++rt.nextId;   // every caller queues a note-on, then its note-off: they share the id
+    rt.queue[(size_t) rt.numQueued++] = { ppq, (int16_t) juce::jlimit (0, 127, note), vel, on, slide, accent, rt.nextId };
 }
 
 void Audio::runQueue (TrackRt& rt, double upTo)
@@ -269,6 +272,21 @@ void Audio::runQueue (TrackRt& rt, double upTo)
         if (best < 0) return;
         const auto q = rt.queue[(size_t) best];
         rt.queue[(size_t) best] = rt.queue[(size_t) --rt.numQueued];
+        if (q.on)
+        {
+            // the same note still held from before (a note as long as the loop, a chord over the whole pattern):
+            // its old note-off goes now, BEFORE the new note - not after it, which would cut the new one
+            for (int i = 0; i < rt.numQueued;)
+            {
+                const auto& o = rt.queue[(size_t) i];
+                if (! o.on && o.note == q.note && o.id != q.id && o.ppq >= q.ppq - 1.0e-6)
+                {
+                    rt.fx.noteOff (o.note, q.ppq, rt);
+                    rt.queue[(size_t) i] = rt.queue[(size_t) --rt.numQueued];
+                }
+                else ++i;
+            }
+        }
         if (q.on) rt.fx.noteOn (q.note, q.vel, q.slide, q.accent, q.ppq, rt);
         else rt.fx.noteOff (q.note, q.ppq, rt);
     }
@@ -471,8 +489,8 @@ void Audio::handleEvents()
                     x.liveCount = 0;
                 }
                 break;
-            case Event::Bend:    if (rt.engine != nullptr) rt.engine->setBend (e.value); break;
-            case Event::Mod:     rt.modWheel = e.value; if (rt.engine != nullptr) rt.engine->setMod (e.value); break;
+            case Event::Bend:    rt.bendTarget = juce::jlimit (-24.0f, 24.0f, e.value); break;   // glided in render (no zipper steps)
+            case Event::Mod:     rt.modTarget = juce::jlimit (0.0f, 1.0f, e.value); break;
             case Event::Preview:
             {
                 // a short phrase while browsing sounds (when it isn't playing)
@@ -542,6 +560,23 @@ void Audio::render (float* outL, float* outR, int n)
             rt.fx.advance (from, to, playing.load() ? playStart : 0.0, live.m.tempo, rt);
 
             // modulation: the sources move, the engine follows (every 64 samples)
+            // bend and mod glide to where the joystick / wheel is (about 15 ms): moving it never steps or clicks
+            {
+                const float k = 1.0f - std::exp (-(float) m / (0.015f * (float) sr));
+                if (rt.bendNow != rt.bendTarget)
+                {
+                    rt.bendNow += (rt.bendTarget - rt.bendNow) * k;
+                    if (std::abs (rt.bendNow - rt.bendTarget) < 1.0e-4f) rt.bendNow = rt.bendTarget;
+                    rt.engine->setBend (rt.bendNow);
+                }
+                if (rt.modNow != rt.modTarget)
+                {
+                    rt.modNow += (rt.modTarget - rt.modNow) * k;
+                    if (std::abs (rt.modNow - rt.modTarget) < 1.0e-4f) rt.modNow = rt.modTarget;
+                    rt.modWheel = rt.modNow;
+                    rt.engine->setMod (rt.modNow);
+                }
+            }
             rt.mod.advance (m, sr, from, ppqPerSample, playing.load(), from - playStart, rt.modWheel, tr.mods.set, tr.mods.macros);
             if (rt.engineMods && (++rt.modTick & 1) == 0) refreshEngine (rt, tr, false);
 

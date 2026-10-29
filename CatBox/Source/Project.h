@@ -10,7 +10,7 @@
 #include <cstdint>
 
 /**
-    Cat Box 2: everything a song is. Eight equal tracks; each has a sound engine, a note FX,
+    Cat Box 3: everything a song is. Eight equal tracks; each has a sound engine, a note FX,
     a mixer strip and a pattern (melodic steps with up to 4 notes, or 16 drum lanes).
     Plain data (no pointers, no strings) so the audio thread can take a copy at any time.
 */

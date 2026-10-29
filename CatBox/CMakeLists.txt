@@ -1,4 +1,4 @@
-# Cat Box 2: the Cat Suite groovebox (8 tracks: engines, steps, note FX, mixer) for the PC and the Raspberry Pi in the box.
+# Cat Box 3: the Cat Suite groovebox (8 tracks: engines, steps, note FX, mixer) for the PC and the Raspberry Pi in the box.
 juce_add_gui_app(CatBox
     PRODUCT_NAME "Cat-Box"
     COMPANY_NAME "Cat Suite"

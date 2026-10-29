@@ -1,4 +1,4 @@
-// Cat Box 2 - the front panel controller (Raspberry Pi Pico, USB MIDI)
+// Cat Box 3 - the front panel controller (Raspberry Pi Pico, USB MIDI)
 //
 // 12 encoders (on two MCP23017 port expanders), 20 buttons (on the Pico's own pins),
 // a slider and a joystick (the Pico's three analog pins). The Pico shows up as a USB MIDI

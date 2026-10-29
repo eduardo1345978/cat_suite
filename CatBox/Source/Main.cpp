@@ -1,4 +1,4 @@
-// Cat Box 2: the Cat Suite groovebox (8 tracks, 5 sound engines, steps, note FX, mixer) - on the
+// Cat Box 3: the Cat Suite groovebox (8 tracks, 5 sound engines, steps, note FX, mixer) - on the
 // PC as an app, on the Raspberry Pi inside the box as the whole instrument.
 //
 //   Cat-Box                     window with the screen + a clickable front panel
@@ -48,6 +48,17 @@ public:
             check (std::abs (p.m.tempo - (tempo0 + 5.0f)) < 0.01f, "encoder 1 (CC 20) turns the tempo on the PROJECT page", juce::String (p.m.tempo));
             box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (controllerChannel, firstKnobCC, 123));
             check (std::abs (p.m.tempo - tempo0) < 0.01f, "and back (two's complement)", {});
+            {
+                auto cc = [&box] (int n, int v) { box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (controllerChannel, n, v)); };
+                cc (firstKnobCC, 10);
+                cc (firstPushCC, 127); cc (firstPushCC, 0);   // a click: back to the start
+                const float tR = p.m.tempo;
+                check (std::abs (tR - (tempo0 + 10.0f)) > 1.0f, "encoder click = the knob back to its default", juce::String (tempo0 + 10.0f) + " > " + juce::String (tR));
+                cc (firstKnobCC, 10);
+                cc (firstPushCC, 127); cc (firstKnobCC, 1); cc (firstKnobCC, 127); cc (firstPushCC, 0);   // push + turn is not a click
+                check (std::abs (p.m.tempo - (tR + 10.0f)) < 0.01f, "push + turn is not a click (no reset)", juce::String (p.m.tempo));
+                if (const int d = (int) std::round (tempo0 - p.m.tempo); d != 0) cc (firstKnobCC, d & 127);
+            }
             box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (controllerChannel, firstButtonCC + BtnSeq, 127));
             box.handleIncomingMidiMessage (nullptr, juce::MidiMessage::controllerEvent (controllerChannel, firstButtonCC + BtnSeq, 0));
             check (box.getMode() == ModeSeq, "the Seq button (CC 111) opens SEQ", modeName (box.getMode()));
@@ -107,7 +118,9 @@ public:
             check (box.presetName (3) != name0, "knob 3 picks the next sound", name0 + " > " + box.presetName (3));
             const auto pre = renderSeconds (audio, 0.5, nullptr);
             check (pre.rms > 0.005f, "a new sound is heard at once (preview)", "rms " + juce::String (pre.rms, 4));
-            press (BtnRec);   // in the browser: save as a User sound
+            press (BtnRec);   // in the browser: save as a User sound (a name first: the screen keyboard)
+            check (box.isTyping(), "Rec in the browser asks a name for the sound", {});
+            press (BtnNext);   // Next = OK
             check (box.browseCategories().contains ("User"), "Rec in the browser saves a User sound", box.flashText());
             press (BtnSound);
 
@@ -288,6 +301,38 @@ public:
             check (audio.sceneWaiting.load(), "while playing it waits for the next bar", {});
             renderSeconds (audio, 2.4, nullptr);
             check (! audio.sceneWaiting.load(), "and then it plays", {});
+            {
+                // ---- SONG: scene 3 (1 bar), then scene 1 (1 bar), round and round; then a WAV of it
+                const auto kickKeep = box.getProject().tracks[0].pat.drums;
+                box.clearPattern (0);
+                box.buttonDown (BtnRec); box.padDown (0, 100); box.padUp (0); box.buttonUp (BtnRec);   // scene 1: no kick
+                box.setSong ({ { 2, 1 }, { 0, 1 } });
+                box.setSongOn (true);
+                bool saw0 = false, saw1 = false, kickOn = false, kickOff = false;
+                for (int i = 0; i < 60; ++i)
+                {
+                    renderSeconds (audio, 0.1, nullptr);
+                    box.songTick();
+                    saw0 = saw0 || box.songStepNow() == 0; saw1 = saw1 || box.songStepNow() == 1;
+                    const bool k = box.getProject().tracks[0].pat.drums[0] == kickKeep[0];
+                    kickOn = kickOn || k; kickOff = kickOff || ! k;
+                }
+                check (box.isSongOn() && saw0 && saw1 && kickOn && kickOff, "Song: scene 3, then scene 1, then again (each 1 bar)", {});
+                box.exportWav (true);
+                for (int i = 0; i < 4000 && box.isExporting(); ++i) box.exportTick();
+                const auto wavs = box.exportFolder().findChildFiles (juce::File::findFiles, false, "*song.wav");
+                juce::File newest;
+                for (const auto& f : wavs) if (newest == juce::File() || f.getLastModificationTime() > newest.getLastModificationTime()) newest = f;
+                juce::WavAudioFormat wf;
+                std::unique_ptr<juce::AudioFormatReader> rd (newest.existsAsFile() ? wf.createReaderFor (newest.createInputStream().release(), true) : nullptr);
+                const double secs = rd != nullptr ? (double) rd->lengthInSamples / rd->sampleRate : 0.0;
+                const double want = 2 * 4 * 60.0 / box.getProject().m.tempo + 3.0;
+                float lo = 0, hi = 0;
+                if (rd != nullptr) { float l1, h1; rd->readMaxLevels (0, rd->lengthInSamples, lo, hi, l1, h1); hi = juce::jmax (hi, -lo, h1, -l1); }
+                check (! box.isExporting() && std::abs (secs - want) < 0.1 && hi > 0.05f && hi <= 1.0f, "Export: a WAV of the song (2 bars + 3 s of tail), not silent", juce::String (secs, 2) + " s, peak " + juce::String (hi, 3));
+                box.setSongOn (false);
+                box.setSong ({});
+            }
             press (BtnScene);
 
             // ---- Chaos (hold) and Shift + Chaos (back)
@@ -605,6 +650,86 @@ public:
                     check (cOff > 0.9 && std::abs (cAll) < 0.15, "Scope: Circle all - a sound with XY Off turns round, and back when off",
                            "off " + juce::String (cOff, 3) + " on " + juce::String (cAll, 3));
                 }
+                // the joystick: bend glides to +2 semitones, a negative mod is ignored, a small move in the middle does nothing
+                {
+                    Audio a3;
+                    a3.prepare (sr, block);
+                    Project p = Project::makeDefault();
+                    for (auto& t : p.tracks) { t.mute = true; t.pat.clear(); }
+                    auto& t3 = p.tracks[3];
+                    t3.mute = false; t3.engine = EngineSynth; t3.mods = TrackMods(); t3.sendA = t3.sendB = t3.sendC = 0.0f;
+                    sd.applyPreset (0, t3.params.data());
+                    t3.params[(size_t) sd.index ("o1wave")] = 6.0f; t3.params[(size_t) sd.index ("o2lvl")] = 0.0f; t3.params[(size_t) sd.index ("o3lvl")] = 0.0f;
+                    t3.params[(size_t) sd.index ("cutoff")] = 20000.0f; t3.params[(size_t) sd.index ("lfopitch")] = 0.0f; t3.params[(size_t) sd.index ("drift")] = 0.0f;
+                    t3.params[(size_t) sd.index ("a")] = 0.005f; t3.params[(size_t) sd.index ("s")] = 1.0f;
+                    for (auto id : { "pmenv", "glide", "unidetune", "lfoamp", "envamt", "reso" })
+                        if (sd.index (id) >= 0) t3.params[(size_t) sd.index (id)] = 0.0f;
+                    t3.params[(size_t) sd.index ("fs")] = 1.0f;
+                    a3.push (p);
+                    a3.post ({ Event::NoteOn, 3, 57, 0.8f });
+                    auto freq = [&] (double secs)
+                    {
+                        std::vector<float> l ((size_t) block), r ((size_t) block);
+                        int zc = 0, n = 0; float prev = 0.0f; double first = -1.0, last = 0.0;
+                        for (int pos = 0; pos < (int) (sr * secs); pos += block)
+                        {
+                            std::fill (l.begin(), l.end(), 0.0f); std::fill (r.begin(), r.end(), 0.0f);
+                            a3.render (l.data(), r.data(), block);
+                            if (pos > (int) (sr * 0.1))
+                                for (int i = 0; i < block; ++i, ++n)
+                                {
+                                    const float x = l[(size_t) i];
+                                    if (prev <= 0.0f && x > 0.0f && n > 0)
+                                    {
+                                        const double at = n - 1 + (double) (-prev / (x - prev));   // between the two samples
+                                        if (first < 0.0) first = at; else ++zc;
+                                        last = at;
+                                    }
+                                    prev = x;
+                                }
+                        }
+                        return zc > 0 ? zc * sr / (last - first) : 0.0;
+                    };
+                    freq (0.5);   // the envelopes settle first
+                    const double f0 = freq (0.4);
+                    a3.post ({ Event::Bend, 3, 0, 2.0f });
+                    const double f1 = freq (0.4);
+                    a3.post ({ Event::Mod, 3, 0, -1.0f });
+                    a3.post ({ Event::Bend, 3, 0, 0.0f });
+                    const double f2 = freq (0.4);
+                    check (std::abs (f1 / f0 - std::pow (2.0, 2.0 / 12.0)) < 0.02 && std::abs (f2 / f0 - 1.0) < 0.02,
+                           "Joystick: bend glides to +2 semitones and back, a negative mod does nothing odd",
+                           juce::String (f0, 1) + " Hz > " + juce::String (f1, 1) + " > " + juce::String (f2, 1));
+                }
+                // a chord as long as the whole loop must sound on EVERY pass (it used to play once: the old note-off
+                // came after the new note-on at the loop start and cut it)
+                {
+                    Audio a2;
+                    a2.prepare (sr, block);
+                    Project p = Project::makeDefault();
+                    for (auto& t : p.tracks) { t.mute = true; t.pat.clear(); }
+                    auto& t3 = p.tracks[3];
+                    t3.mute = false; t3.engine = EngineSynth; t3.mods = TrackMods(); t3.sendA = t3.sendB = t3.sendC = 0.0f;
+                    sd.applyPreset (0, t3.params.data());
+                    t3.params[(size_t) sd.index ("a")] = 0.005f; t3.params[(size_t) sd.index ("s")] = 1.0f; t3.params[(size_t) sd.index ("r")] = 0.05f;
+                    t3.pat.length = 16; t3.pat.rate = Rate16;
+                    auto& st0 = t3.pat.steps[0]; st0.add (60); st0.add (64); st0.add (67); st0.len = 1600;
+                    a2.push (p);
+                    a2.post ({ Event::Play, 0, 0, 0.0f });
+                    const int loopN = (int) (sr * 4.0 * 60.0 / p.m.tempo);   // 16 sixteenths = 4 beats
+                    std::vector<float> l ((size_t) block), r ((size_t) block);
+                    std::array<double, 4> e {};
+                    for (int pos = 0; pos < loopN * 4; pos += block)
+                    {
+                        std::fill (l.begin(), l.end(), 0.0f); std::fill (r.begin(), r.end(), 0.0f);
+                        a2.render (l.data(), r.data(), block);
+                        const int lp = pos / loopN, in = pos % loopN;
+                        if (in > loopN / 4 && in < loopN * 3 / 4) for (int i = 0; i < block; ++i) e[(size_t) lp] += (double) l[(size_t) i] * l[(size_t) i];
+                    }
+                    a2.post ({ Event::Stop, 0, 0, 0.0f });
+                    check (e[0] > 1.0 && e[1] > e[0] * 0.5 && e[2] > e[0] * 0.5 && e[3] > e[0] * 0.5, "a chord as long as the loop plays on every pass",
+                           juce::String (e[0], 1) + " / " + juce::String (e[1], 1) + " / " + juce::String (e[2], 1) + " / " + juce::String (e[3], 1));
+                }
                 check (poly3 > mono3 * 1.3f && uni > 0.02f, "Poly plays a chord, Mono one note, Unison stacks voices",
                        "poly " + juce::String (poly3, 3) + " mono " + juce::String (mono3, 3) + " unison " + juce::String (uni, 3));
             }
@@ -685,6 +810,20 @@ public:
                 check (box.getScreen() == Controller::ScreenHome && box.leds().home, "v2: the HOME button (its LED lit)", {});
                 note (firstStepNote + 0, true); note (firstStepNote + 0, false);
                 check (box.getScreen() == Controller::ScreenSynth && ! box.leds().home, "v2: on HOME, step 1 = SYNTH", {});
+                {
+                    const auto& pt = box.getProject().tracks[(size_t) box.getTrack()].pat;
+                    const int len0 = pt.length;
+                    cc (screenButtonCC, 127);
+                    check (box.leds().steps[0] == 3, "v2: HOME held = the step LEDs show the pages", {});
+                    note (firstStepNote + 1, true); note (firstStepNote + 1, false);
+                    cc (screenButtonCC, 0);
+                    check (box.getScreen() == Controller::ScreenSynth && pt.length == juce::jmax (len0, 32) && box.barNow() == 1,
+                           "v2: HOME + step 2 = page 2 (32 steps), and HOME does not go home", juce::String (pt.length));
+                    cc (screenButtonCC, 127); cc (firstButtonCC + BtnShift, 127);
+                    note (firstStepNote + 0, true); note (firstStepNote + 0, false);
+                    cc (firstButtonCC + BtnShift, 0); cc (screenButtonCC, 0);
+                    check (pt.length == 16 && box.barNow() == 0, "v2: HOME + Shift + step 1 = one page again", juce::String (pt.length));
+                }
                 const int stk = box.synthTrack();
                 const auto& sdef2 = engineDef (EngineSynth);
                 const int cutI = sdef2.index ("cutoff");
@@ -697,6 +836,23 @@ public:
                 check (box.getProject().tracks[(size_t) stk].params[(size_t) cutI] == cut0, "v2: a pot far from the value doesn't jump", box.flashText());
                 for (int v = far; v != at + (far < at ? 3 : -3); v += far < at ? 1 : -1) cc (firstPotCC + potCut, v);   // turned through it
                 check (box.potHolds (potCut) && box.getProject().tracks[(size_t) stk].params[(size_t) cutI] != cut0, "v2: when it passes the value it takes over", box.flashText());
+                {
+                    const auto& prm = box.getProject().tracks[(size_t) stk].params;
+                    const int keyI = sdef2.index ("keytrack");
+                    const float cut1 = prm[(size_t) cutI], key0 = prm[(size_t) keyI];
+                    check (juce::String (Controller::potId (potCut + numPots)) == "keytrack", "v2: Shift + pot 7 = keyboard tracking", {});
+                    cc (firstButtonCC + BtnShift, 127);
+                    for (int v = 0; v <= 127; v += 4) cc (firstPotCC + potCut, v);
+                    cc (firstPotCC + potCut, 127);
+                    cc (firstButtonCC + BtnShift, 0);
+                    check (prm[(size_t) cutI] == cut1 && prm[(size_t) keyI] != key0, "v2: Shift + pot turns the pot's second knob (the first stays)",
+                           juce::String (key0) + " > " + juce::String (prm[(size_t) keyI]));
+                    const bool farAway = std::abs (sdef2.params[(size_t) cutI].toNorm (cut1) - 126.0f / 127.0f) > 0.06f;
+                    cc (firstPotCC + potCut, 126);
+                    check (! farAway || prm[(size_t) cutI] == cut1, "v2: back without Shift the pot picks the cutoff up again (no jump)", {});
+                    for (int v = 126; v >= 0; v -= 2) cc (firstPotCC + potCut, v);   // through it: it takes over again
+                    check (prm[(size_t) cutI] != cut1, "v2: and takes over when it passes it", {});
+                }
                 cc (firstPotCC + 23, 127);   // reverb size up
                 check (box.getProject().m.revSize > 0.9f || box.lastTouch().waiting, "v2: an EFFECTS pot (reverb size)", juce::String (box.getProject().m.revSize));
                 const auto& pg = engineDef (EngineSynth).pages[0];
@@ -706,6 +862,24 @@ public:
                 check (box.getProject().tracks[(size_t) stk].params[(size_t) pg.slot[12]] != b4, "v2: push + turn = the knob's second layer", {});
                 cc (screenButtonCC + 2, 127); cc (screenButtonCC + 2, 0);
                 check (box.getScreen() == Controller::ScreenStudio && box.leds().screen == Controller::ScreenStudio, "v2: the STUDIO button (the first panel firmware, and its LED)", {});
+                cc (firstButtonCC + BtnShift, 127); note (firstStepNote + 9, true); note (firstStepNote + 9, false); cc (firstButtonCC + BtnShift, 0);
+                check (box.getMode() == ModeSeq, "v2: STUDIO, Shift + step 10 = SEQ (no button for it on the panel)", modeName (box.getMode()));
+                cc (firstButtonCC + BtnShift, 127); note (firstStepNote + 11, true); note (firstStepNote + 11, false); cc (firstButtonCC + BtnShift, 0);
+                check (box.getMode() == ModeMix, "v2: Shift + step 12 = MIX", modeName (box.getMode()));
+                {
+                    const int tt = box.getTrack();
+                    const int ty0 = box.getProject().tracks[(size_t) tt].mods.inserts[3].type;
+                    box.fxTouch (3, 1);
+                    const int ty1 = box.getProject().tracks[(size_t) tt].mods.inserts[3].type;
+                    box.fxTouch (3, 2);
+                    check (ty1 != ty0 && box.fxSlotNow() == 3 && ! box.getProject().tracks[(size_t) tt].mods.inserts[3].on, "touch on the FX chain: > = the next effect, ON = bypass", juce::String (ty0) + " > " + juce::String (ty1));
+                    box.fxTouch (3, -1);
+                    check (box.getProject().tracks[(size_t) tt].mods.inserts[3].type == ty0, "< = back", {});
+                    const float v0 = box.getProject().tracks[(size_t) tt].volume;
+                    box.setVolume (tt, 0.3f);
+                    check (std::abs (box.getProject().tracks[(size_t) tt].volume - 0.3f) < 1e-4f, "touch on a mixer fader sets the level", {});
+                    box.setVolume (tt, v0);
+                }
                 box.setMode (ModeSound);
             }
 
@@ -745,6 +919,29 @@ public:
                 box.loadSound (0, EngineKit, presetOf (EngineKit, "TR-808"));
                 const auto kitSt = renderSeconds (audio, 1.0, nullptr);
                 check (kitSt.finite && kitSt.rms > 0.002f && box.laneName (0, 0).startsWith ("BD"), "Kit: the TR-808 plays the beat", box.laneName (0, 0) + " rms " + juce::String (kitSt.rms, 4));
+                // note names: only capital letters are notes ("d1" in a drum folder, "snare_f3" are not)
+                check (SampleBank::noteFromName ("Dirt-Samples/d/000_d1") < 0 && SampleBank::noteFromName ("VSCO-2-CE/Percussion/snare_f3") < 0
+                       && SampleBank::noteFromName ("Dirt-Samples/pluck/BS A#2 PI") == 46 && SampleBank::noteFromName ("Dirt-Samples/moog/001_Mighty Moog C3") == 48
+                       && SampleBank::noteFromName ("x/Bass_Eb3") == 51,
+                       "Sampler: note names are read only from real notes (a drum take is not a note)", {});
+                {
+                    // a drum folder from the library on the sampler: it plays as recorded at the key it was put on (C4)
+                    const int dslot = bank.find ("Dirt-Samples/d/000_d1");
+                    if (dslot >= 0)
+                    {
+                        box.selectTrack (7);
+                        box.loadSound (7, EngineSampler, 0);
+                        box.setMode (ModeBrowse);
+                        box.browseTo (0, EngineSampler);
+                        const int ci = box.browseCategories().indexOf ("LIB Dirt-Samples/d");
+                        if (ci >= 0) { box.browseTo (1, ci); box.browseTo (2, 0); }
+                        box.setMode (ModeSound);
+                        const auto& sdd = engineDef (EngineSampler);
+                        const auto& t7 = box.getProject().tracks[7];
+                        check ((int) t7.params[(size_t) sdd.index ("root")] == 60 && t7.params[(size_t) sdd.index ("multi")] < 0.5f,
+                               "Sampler: a drum take plays as it is (root C4, not a multi-sample)", juce::String ((int) t7.params[(size_t) sdd.index ("root")]));
+                    }
+                }
                 box.loadSound (7, EngineSampler, presetOf (EngineSampler, "Violins"));
                 const auto& d = engineDef (EngineSampler);
                 check ((int) box.getProject().tracks[7].params[(size_t) d.index ("root")] == SampleBank::noteFromName (bank.name ((int) box.getProject().tracks[7].params[(size_t) d.index ("sample")])),
@@ -859,7 +1056,13 @@ public:
                 box.setMode (ModeMenu);
                 box.padDown (0, 100); box.padUp (0);   // Save project
                 box.padDown (2, 100); box.padUp (2);   // into place 3
-                check (box.projectExists (2), "Save project into place 3", {});
+                check (box.isTyping() && box.typingText() == "Song 3", "Save project asks a name (the screen keyboard)", box.typingText());
+                box.knobPush (1); box.knobPush (1);                     // click knob 2 = delete (twice)
+                box.turnKnob (0, 25.0f); box.knobPush (0);               // knob 1 to Z, click = type it
+                box.textPress (box.keyDel() + 1); box.textPress (0);     // abc, then a
+                box.padDown (5, 100); box.padUp (5);                     // the pads do nothing while typing
+                box.knobPush (numKnobs - 1);                             // click knob 12 = OK
+                check (box.projectExists (2) && box.projectName (2) == "SongZa" && ! box.isTyping(), "typed with the knobs and saved into place 3", box.projectName (2));
                 box.clearPattern (5);
                 box.padDown (1, 100); box.padUp (1);   // Load project
                 box.padDown (2, 100); box.padUp (2);
@@ -940,6 +1143,23 @@ public:
                     pngFile.deleteFile();
                     juce::PNGImageFormat png;
                     if (auto os = pngFile.createOutputStream()) png.writeImageToStream (img, *os);
+                }
+                {
+                    // the screen keyboard: drawn, and a touch on a key types it
+                    juce::String got;
+                    box.startText ("NAME THE SOUND", "Fat", [&got] (const juce::String& t) { got = t; });
+                    auto img = screen.snapshotScreen();
+                    const auto pngFile = wavOut.getSiblingFile (wavOut.getFileNameWithoutExtension() + "-keyboard.png");
+                    pngFile.deleteFile();
+                    juce::PNGImageFormat png;
+                    if (auto os = pngFile.createOutputStream()) png.writeImageToStream (img, *os);
+                    const auto keys = screen.keyRects();
+                    if (keys.size() > box.keyDel() + 2)
+                    {
+                        screen.touchAt (keys[1].getCentre().toFloat());                  // B
+                        screen.touchAt (keys[box.keyDel() + 2].getCentre().toFloat());   // OK
+                    }
+                    check (keys.size() == box.numTextKeys() && got == "FatB" && ! box.isTyping(), "the screen keyboard: touch B, then OK", got);
                 }
                 {
                     // XY scope everywhere: the SOUND page shows the round scope instead of the line
@@ -1401,7 +1621,7 @@ class MainWindow : public juce::DocumentWindow
 {
 public:
     MainWindow (Controller& box, juce::AudioDeviceManager& dm, bool kiosk, LinkClient* link, std::function<juce::String()> info)
-        : DocumentWindow ("Cat Box", juce::Colour (0xff0b0d12), kiosk ? 0 : DocumentWindow::allButtons),
+        : DocumentWindow ("Cat Box 3", juce::Colour (0xff0b0d12), kiosk ? 0 : DocumentWindow::allButtons),
           deviceManager (dm)
     {
         auto* view = new View (box, kiosk);

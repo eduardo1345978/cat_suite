@@ -67,6 +67,9 @@ int SampleBank::noteFromName (const juce::String& name)
         const juce::juce_wchar c = juce::CharacterFunctions::toUpperCase (t[0]);
         static const int base[] = { 9, 11, 0, 2, 4, 5, 7 };   // A B C D E F G
         if (c < 'A' || c > 'G') continue;
+        // a note is written with a capital letter (C4, A#2, Eb3). Lower case is something else: "d1" / "e3" are
+        // takes of a drum folder, "snare_f3" is a loudness - read as notes they pitched drums octaves away
+        if (! juce::CharacterFunctions::isUpperCase (t[0])) continue;
         int i = 1, semi = base[c - 'A'];
         if (t[i] == '#') { ++semi; ++i; }
         else if (t[i] == 'b' && t.length() > 2) { --semi; ++i; }

@@ -11,7 +11,7 @@
 #include <memory>
 
 /**
-    Cat Box 2's sound: the clock and the eight tracks (sequencer > note FX > engine > mixer),
+    Cat Box 3's sound: the clock and the eight tracks (sequencer > note FX > engine > mixer),
     the sends and the master. The controller hands over the whole project (a copy) whenever
     it changes, and posts the notes played live; the audio thread reports back what it plays
     and what Rec wrote. Used by the sound card and by the self test (render()).
@@ -95,7 +95,7 @@ public:
 
 private:
     std::atomic<bool> rtAsked { false };   // the audio thread asked for real-time priority (Linux: the Pi)
-    struct Queued { double ppq; int16_t note; float vel; bool on, slide, accent; };
+    struct Queued { double ppq; int16_t note; float vel; bool on, slide, accent; uint32_t id; };   // id: a note-off belongs to its own note-on
 
     struct TrackRt : public NoteSink
     {
@@ -109,6 +109,7 @@ private:
         const std::array<float, numModSet>* modSet = nullptr;
         bool engineMods = false, anyMods = false;
         float modWheel = 0.0f;
+        float bendTarget = 0.0f, bendNow = 0.0f, modTarget = 0.0f, modNow = 0.0f;   // the joystick / wheels, glided (no steps)
         int modTick = 0;
         std::array<float, numFxParams> fxApplied {};
         int fxType = -1, fxKey = -1, fxScale = -1;
@@ -116,6 +117,7 @@ private:
         NoteFx fx;
         std::array<Queued, 128> queue {};
         int numQueued = 0;
+        uint32_t nextId = 0;
         // sequencer
         double nextStep = 0.0;
         int step = 0;

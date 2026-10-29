@@ -1,10 +1,12 @@
-// Cat Box 2 - the synth panel (box version 2) on a Raspberry Pi Pico, USB MIDI "Cat Box Panel"
+// Cat Box 3 - the synth panel (box version 2) on a Raspberry Pi Pico, USB MIDI "Cat Box Panel"
 //
 //   28 potentiometers  CC 40-67 (absolute 0-127)          two CD74HC4067 multiplexers into ADC0 / ADC1
 //   12 push encoders   CC 20-31 (relative: 1 = one click right, 127 = one click left), pushes CC 70-81
 //   16 step buttons    notes 60-75 (on / off)               LEDs: the same notes come back (velocity = what to show)
 //   HOME               CC 85 (to the apps; on HOME: back)  LED: note 85 (lit on HOME)
 //   Play Rec Shift Prev Next Sound Scene Project Chaos       the box's button CCs (102 + button number)
+//   slider (60 mm slide pot)  CC 8  (absolute: the DJ filter / what the box gives it)   multiplexer 2, channel 12
+//   joystick X / Y (KY-023)   CC 16 / 17 (absolute, 64 = the middle): bend / modulation   multiplexer 2, channels 13 / 14
 //   (LEDs: Play note 88, Rec note 89)
 // everything on MIDI channel 16 - exactly what Cat Box expects (CatBox/README.md, "The box, version 2").
 //
@@ -76,8 +78,11 @@ int8_t encAccum[12] {};
 int clicks[12] {};
 bool pushDown[12] {}, buttonDown[numButtons] {}, stepDown[16] {};
 uint32_t pushT[12] {}, buttonT[numButtons] {}, stepT[16] {};
-float potF[28] {};
-int potSent[28];
+const int numAnalog = 31;                            // 28 pots + the slider + joystick X + Y
+float potF[numAnalog] {};
+int potSent[numAnalog];
+// what each analog input sends: the pots CC 40-67, then the slider and the joystick
+uint8_t analogCC (int i) { return i < 28 ? (uint8_t) (firstPotCC + i) : (uint8_t) (i == 28 ? 8 : 16 + (i - 29)); }
 uint8_t stepLed[16] {}, screenLed[3] {}, playLed = 0, recLed = 0;
 bool ledsDirty = true;
 
@@ -155,7 +160,7 @@ void setup()
     for (auto p : picoPins) pinMode (p, INPUT_PULLUP);
     for (auto p : muxSel) pinMode (p, OUTPUT);
     analogReadResolution (12);
-    for (int i = 0; i < 28; ++i) potSent[i] = -1;
+    for (int i = 0; i < numAnalog; ++i) potSent[i] = -1;
     leds.begin();
     leds.setBrightness (80);
     showLeds();
@@ -230,7 +235,7 @@ void readPots()
     for (int m = 0; m < 2; ++m)
     {
         const int pot = m * 16 + ch;
-        if (pot >= 28) continue;
+        if (pot >= numAnalog) continue;
         const float raw = (float) analogRead (m == 0 ? muxA : muxB);
         potF[pot] += (raw - potF[pot]) * 0.25f;
         // hysteresis: a new value only when it is clearly past the old one (no flicker between two values)
@@ -239,7 +244,7 @@ void readPots()
         if (sent < 0 || pos > sent + 0.7f || pos < sent - 0.7f)
         {
             const int v = constrain ((int) (pos + 0.5f), 0, 127);
-            if (v != sent) { MIDI.sendControlChange (firstPotCC + pot, v, channel); potSent[pot] = v; }
+            if (v != sent) { MIDI.sendControlChange (analogCC (pot), v, channel); potSent[pot] = v; }
         }
     }
     ch = (ch + 1) & 15;
