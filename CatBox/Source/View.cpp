@@ -2023,16 +2023,7 @@ void View::drawHome (juce::Graphics& g, juce::Rectangle<int> r)
     g.setColour (bg);
     g.fillRect (r);
     auto top = r.removeFromTop (58).reduced (20, 8);
-    // the name, with a cat's ears on the C
-    text1 (g, "CAT BOX 3", top.removeFromLeft (220), 30.0f, text, juce::Justification::centredLeft, true);
-    {
-        juce::Path ears;
-        const float x = (float) top.getX() - 220.0f + 2.0f, y = (float) top.getCentreY() - 19.0f;
-        ears.addTriangle (x, y + 8.0f, x + 5.0f, y, x + 10.0f, y + 6.0f);
-        ears.addTriangle (x + 13.0f, y + 6.0f, x + 18.0f, y, x + 23.0f, y + 8.0f);
-        g.setColour (accent);
-        g.fillPath (ears);
-    }
+    // no name on top: just the tempo and Play on the right
     auto right = top.removeFromRight (250);
     const bool playing = box.getAudio().isPlaying();
     auto icon = right.removeFromRight (40).toFloat().reduced (9, 9);
