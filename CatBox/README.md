@@ -158,6 +158,9 @@ other engines = like a piano: the bottom row the white keys C D E F G A B C, the
   just type (Enter = OK, Esc = cancel).
 - **Sampler**: three big buttons on top of its screen - **KEYS** (the sample in tones on the keys), **CHOP** (slices on
   the pads, knob Slices = 2-16), **ONE SHOT** (the whole sample); touch one, or click the **Play** knob.
+  **Time-stretch** (Sampler, page FILTER: Stretch = To tempo): the sample - or each slice - lasts as many beats as
+  **Beats** says (auto: guessed from its length) at the project's tempo, and its pitch stays; Grain = how it sounds
+  (short = crisp drums, long = smooth pads).
 - **Encoder click** (push and let go without turning): that knob back to its default (a switch or a choice - Play,
   a wave, a filter type - goes to its next position instead); in the browser = take the sound;
   in SEQ = the step's setting back to normal (knob 1: hear the step). On the SCOPE the 4D/5D turn and the other turns

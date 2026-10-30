@@ -935,6 +935,35 @@ public:
                        && SampleBank::noteFromName ("x/Bass_Eb3") == 51,
                        "Sampler: note names are read only from real notes (a drum take is not a note)", {});
                 {
+                    // time-stretch: the piano sample (3 s) at 2 beats, 60 BPM = 2 s, then at 240 BPM = 0.5 s; the pitch stays
+                    const auto& sd = engineDef (EngineSampler);
+                    auto run = [&] (bool stretch, double bpm, int& audible, double& zcr)
+                    {
+                        std::vector<float> v (sd.params.size());
+                        for (size_t i = 0; i < sd.params.size(); ++i) v[i] = sd.params[i].def;
+                        v[(size_t) sd.index ("sample")] = 1.0f;                  // Piano C4
+                        v[(size_t) sd.index ("root")] = 60.0f;
+                        v[(size_t) sd.index ("mode")] = 2.0f;                    // one shot
+                        v[(size_t) sd.index ("stretch")] = stretch ? 1.0f : 0.0f;
+                        v[(size_t) sd.index ("beats")] = 2.0f;
+                        auto e = makeEngine (EngineSampler);
+                        e->prepare (48000.0); e->setParams (v.data()); e->setTempo (bpm);
+                        e->noteOn (60, 0.9f, false, false);
+                        std::vector<float> l (48000 * 5), r (48000 * 5);
+                        for (int pos = 0; pos < (int) l.size(); pos += 256) e->render (l.data() + pos, r.data() + pos, 256);
+                        audible = 0; int zc = 0;
+                        for (size_t i = 1; i < l.size(); ++i) { if (std::abs (l[i]) > 1e-4f) audible = (int) i; }
+                        for (int i = 1; i < juce::jmin (audible, 24000); ++i) if ((l[(size_t) i - 1] <= 0.0f) != (l[(size_t) i] <= 0.0f)) ++zc;
+                        zcr = zc / (double) juce::jmax (1, juce::jmin (audible, 24000));
+                    };
+                    int aPlain = 0, aSlow = 0, aFast = 0; double zPlain = 0, zSlow = 0, zFast = 0;
+                    run (false, 120.0, aPlain, zPlain); run (true, 60.0, aSlow, zSlow); run (true, 240.0, aFast, zFast);
+                    check (std::abs (aSlow / 48000.0 - 2.0) < 0.1 && std::abs (aFast / 48000.0 - 0.5) < 0.05 && aPlain > 2.5 * 48000
+                           && std::abs (zSlow / zPlain - 1.0) < 0.2 && std::abs (zFast / zPlain - 1.0) < 0.2,
+                           "Sampler time-stretch: 2 beats = 2 s at 60 BPM, 0.5 s at 240 BPM, the pitch stays",
+                           juce::String (aSlow / 48000.0, 2) + " s, " + juce::String (aFast / 48000.0, 2) + " s, pitch x" + juce::String (zSlow / zPlain, 2) + " / x" + juce::String (zFast / zPlain, 2));
+                }
+                {
                     // a drum folder from the library on the sampler: it plays as recorded at the key it was put on (C4)
                     const int dslot = bank.find ("Dirt-Samples/d/000_d1");
                     if (dslot >= 0)

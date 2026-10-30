@@ -19,7 +19,7 @@ enum
     sSample = 0, sMode, sRoot, sStart, sEnd, sLoop, sLoopStart, sTune, sFine, sReverse, sSlices, sVolume,
     sA, sD, sS, sR, sCutoff, sReso, sDrive, sCrush, sGlide, sVelAmp, sSpread, sWidth,
     sFType, sEnvAmt, sFA, sFD, sFS, sFR, sKeyTrack, sDown, sPitchEnv, sPitchDecay, sChoke, sHp,
-    sMulti,
+    sMulti, sStretch, sBeats, sGrain,
     sCount
 };
 enum { ModeKeys = 0, ModeChop, ModeOneShot };
@@ -59,13 +59,16 @@ EngineDef makeSamplerDef()
         pct ("keytrack", "Key track", 0.0f), pct ("down", "Lo-fi", 0.0f), semi ("penv", "Pitch env", -24, 24, 0), sec ("pdecay", "Pitch decay", 0.005f, 1.0f, 0.05f),
         toggle ("choke", "Mono (choke)", false), hz ("hp", "Low cut", 20.0f, 2000.0f, 20.0f),
         toggle ("multi", "Multi-sample", false),
+        // time-stretch: the sample (or each slice) lasts as long as the tempo says, the pitch stays
+        choice ("stretch", "Stretch", { "Off", "To tempo" }, 0), num ("beats", "Beats", 0, 64, 0), sec ("grain", "Grain", 0.02f, 0.2f, 0.06f),
     };
+    e.params[(size_t) sBeats].formatFn = [] (float v) { const int b = juce::roundToInt (v); return b == 0 ? juce::String ("auto") : juce::String (b) + (b == 1 ? " beat" : " beats"); };
     jassert ((int) e.params.size() == sCount);
     e.pages = {
         page ("SAMPLE", { sSample, sMode, sRoot, sStart, sEnd, sLoop, sLoopStart, sTune, sFine, sReverse, sSlices, sVolume,
                           sA, sD, sS, sR, sCutoff, sReso, sDrive, sCrush, sGlide, sVelAmp, sSpread, sWidth }),
         page ("FILTER", { sFType, sCutoff, sReso, sEnvAmt, sFA, sFD, sFS, sFR, sKeyTrack, sDrive, sDown, sHp,
-                          sPitchEnv, sPitchDecay, sChoke, sCrush, sMulti }),
+                          sPitchEnv, sPitchDecay, sChoke, sCrush, sMulti, sStretch, sBeats, sGrain }),
     };
     using V = std::vector<std::pair<juce::String, float>>;
     auto add = [&e] (const char* name, const char* cat, V v) { e.presets.push_back ({ name, cat, std::move (v) }); };
@@ -106,6 +109,27 @@ public:
         for (auto& vo : voices) { vo.amp.set (p[sA], p[sD], p[sS], p[sR], sr); vo.fenv.set (p[sFA], p[sFD], p[sFS], p[sFR], sr); }
     }
     void setBend (float s) override { bend = s; }
+    void setTempo (double bpm) override { tempo = (float) juce::jlimit (20.0, 400.0, bpm); }
+    /** How many beats the stretched part lasts: the Beats knob, or (auto) the count of 1-64 beats
+        that puts the whole sample nearest to 120 BPM between 80 and 160. */
+    float beatsFor (double samples, double rate, int slices) const
+    {
+        const int set = juce::roundToInt (p[sBeats]);
+        float whole = (float) set;
+        if (set <= 0)
+        {
+            const double secs = samples / rate;
+            whole = 1.0f;
+            double best = 1e9;
+            for (int b : { 1, 2, 4, 8, 16, 32, 64 })
+            {
+                const double bpm = b * 60.0 / juce::jmax (0.01, secs);
+                const double score = bpm < 80.0 || bpm > 160.0 ? 1000.0 + std::abs (bpm - 120.0) : std::abs (bpm - 120.0);
+                if (score < best) { best = score; whole = (float) b; }
+            }
+        }
+        return whole / (float) juce::jmax (1, slices);
+    }
     void setMod (float m) override { mod = m; }
 
     void noteOn (int note, float vel, bool slide, bool) override
@@ -172,8 +196,21 @@ public:
             v->loopB = v->to - 1.0;
         }
         v->reverse = p[sReverse] > 0.5f;
+        v->stretch = p[sStretch] > 0.5f && ! (juce::roundToInt (p[sLoop]) > 0 && mode == ModeKeys);
+        if (v->stretch)
+        {
+            // the read head crosses the part in the time the tempo gives it
+            const double whole = (mode == ModeChop ? (b - a) : (v->to - v->from));
+            const int slices = mode == ModeChop ? juce::jlimit (2, 16, juce::roundToInt (p[sSlices])) : 1;
+            const double beats = beatsFor (whole, smp->sampleRate, slices);
+            const double want = beats * 60.0 / tempo * smp->sampleRate;   // source samples' worth of that time
+            v->timeScale = (v->to - v->from) / juce::jmax (1.0, want);
+        }
         if (! legato)
         {
+            v->head = v->reverse ? v->to - 1.0 : v->from;
+            v->gPhase[0] = 0.0f; v->gPhase[1] = 0.5f;
+            v->gPos[0] = v->gPos[1] = v->head;
             v->pos = v->reverse ? v->to - 1.0 : v->from;
             v->dir = v->reverse ? -1.0 : 1.0;
             v->vel = vel;
@@ -237,6 +274,42 @@ public:
                                       * s->sampleRate / sr;
                     const float a = v.amp.process();
                     v.fenv.process();
+                    if (v.stretch)
+                    {
+                        // two overlapping grains (Hann windows half a grain apart sum to 1) read at the pitch;
+                        // the head they start from moves at the tempo's speed
+                        const float gInc = 1.0f / juce::jmax (16.0f, p[sGrain] * sr);
+                        float l = 0.0f, r = 0.0f;
+                        for (int gI = 0; gI < 2; ++gI)
+                        {
+                            float& ph = v.gPhase[(size_t) gI];
+                            double& gp = v.gPos[(size_t) gI];
+                            const int j1 = juce::jlimit (0, s->length() - 2, (int) gp);
+                            const float jf = (float) juce::jlimit (0.0, 1.0, gp - j1);
+                            const float w = 0.5f - 0.5f * std::cos (6.2831853f * ph);
+                            l += w * (s->l[(size_t) j1] + (s->l[(size_t) (j1 + 1)] - s->l[(size_t) j1]) * jf);
+                            r += w * (s->r[(size_t) j1] + (s->r[(size_t) (j1 + 1)] - s->r[(size_t) j1]) * jf);
+                            gp += rate * v.dir;
+                            ph += gInc;
+                            if (ph >= 1.0f) { ph -= 1.0f; gp = v.head; }   // a new grain where the head is now
+                        }
+                        v.head += v.timeScale * (double) s->sampleRate / sr * v.dir;
+                        const bool ended = v.dir > 0.0 ? v.head >= v.to - 1.0 : v.head <= v.from;
+                        const double left = v.dir > 0.0 ? (v.to - v.head) : (v.head - v.from);
+                        const float edge = (float) juce::jlimit (0.0, 1.0, left / (0.003 * s->sampleRate));
+                        if (filt)
+                        {
+                            if (ftype == 0) { l = v.fl.process (l).low; r = v.fr.process (r).low; }
+                            else if (ftype == 1) { l = v.fl.process (l).band; r = v.fr.process (r).band; }
+                            else { l = v.fl.process (l).high; r = v.fr.process (r).high; }
+                        }
+                        l = v.hpl.process (l).high; r = v.hpr.process (r).high;
+                        const float g = a * velGain * edge;
+                        v.lastL = l * g * gl; v.lastR = r * g * gr;
+                        bl[i] += v.lastL; br[i] += v.lastR;
+                        if (ended || ! v.amp.active()) { v.active = v.gate = false; v.lastL = v.lastR = 0.0f; break; }
+                        continue;
+                    }
                     // read (linear) and move
                     const int i1 = (int) v.pos;
                     const double frac = v.pos - i1;
@@ -313,7 +386,10 @@ private:
         double pos = 0.0, from = 0.0, to = 0.0, dir = 1.0;
         float vel = 0.8f, pitch = 60.0f, target = 60.0f, pitchEnv = 0.0f, pan = 0.0f, lastL = 0.0f, lastR = 0.0f, root = -1.0f;
         double loopA = 0.0, loopB = 0.0;
-        bool canLoop = true;
+        bool canLoop = true, stretch = false;
+        double head = 0.0, timeScale = 1.0;
+        std::array<double, 2> gPos {};
+        std::array<float, 2> gPhase {};
         uint64_t age = 0;
         dsp::Adsr amp, fenv;
         dsp::Svf fl, fr, hpl, hpr;
@@ -321,7 +397,7 @@ private:
     std::array<float, sCount> p {};
     std::array<Voice, 12> voices;
     uint64_t counter = 0;
-    float sr = 48000.0f, bend = 0.0f, mod = 0.0f, declickL = 0.0f, declickR = 0.0f, hl = 0.0f, hr = 0.0f;
+    float sr = 48000.0f, tempo = 120.0f, bend = 0.0f, mod = 0.0f, declickL = 0.0f, declickR = 0.0f, hl = 0.0f, hr = 0.0f;
     int downCount = 0;
     dsp::Smooth volume;
 };
