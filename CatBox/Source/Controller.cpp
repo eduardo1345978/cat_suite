@@ -502,6 +502,11 @@ void Controller::setMode (int m)
 void Controller::setPlaying (bool p)
 {
     if (isRemote()) return;
+    if (p && songOn.load() && ! song.empty() && ! audio.isPlaying())   // the song always starts at its top
+    {
+        loadScene (song[0].scene, true);
+        songEntry = 0; songQueued = 0; songBarSeen = -1;
+    }
     audio.post ({ p ? Event::Play : Event::Stop, 0, 0, 0.0f });
     if (onChange) onChange();
 }
@@ -942,11 +947,11 @@ void Controller::saveScene (int s)
     setFlash ("Scene " + juce::String (s + 1) + " saved");
 }
 
-bool Controller::loadScene (int s)
+bool Controller::loadScene (int s, bool quiet)
 {
     s = juce::jlimit (0, numScenes - 1, s);
-    if (scenes[(size_t) s] == nullptr) { setFlash ("Scene " + juce::String (s + 1) + " is empty (Rec + pad saves it)"); return false; }
-    pushUndo ("Scene " + juce::String (s + 1));
+    if (scenes[(size_t) s] == nullptr) { if (! quiet) setFlash ("Scene " + juce::String (s + 1) + " is empty (Rec + pad saves it)"); return false; }
+    if (! quiet) pushUndo ("Scene " + juce::String (s + 1));
     const auto m = project.m;
     project = *scenes[(size_t) s];
     project.m.tempo = m.tempo;   // the tempo, key and master stay where they are
@@ -957,7 +962,7 @@ bool Controller::loadScene (int s)
     loadedScene = s;
     for (int t = 0; t < numTracks; ++t) { edited[(size_t) t] = false; }
     changed (true);
-    setFlash ("Scene " + juce::String (s + 1) + (audio.isPlaying() ? " (at the next bar)" : juce::String()));
+    if (! quiet) setFlash ("Scene " + juce::String (s + 1) + (audio.isPlaying() ? " (at the next bar)" : juce::String()));
     return true;
 }
 
@@ -3594,8 +3599,8 @@ void Controller::setSongOn (bool on)
 {
     if (on && song.empty()) { setFlash ("The song is empty: MENU > Song, touch a place to add a scene"); return; }
     songOn = on;
-    songEntry = -1; songBarSeen = -1;
-    if (on && ! audio.isPlaying() && loadScene (song[0].scene)) songEntry = 0;   // ready at the top
+    songEntry = -1; songQueued = -1; songBarSeen = -1;
+    if (on && ! audio.isPlaying() && loadScene (song[0].scene, true)) songEntry = songQueued = 0;   // ready at the top
     setFlash (on ? "Song on: " + juce::String ((int) song.size()) + " parts, " + juce::String (songBars()) + " bars (Play = from the top)" : juce::String ("Song off"));
     if (onChange) onChange();
 }
@@ -3618,17 +3623,15 @@ void Controller::songTick()
         return 0;
     };
     const int cur = entryAt (barNow), next = entryAt (barNow + 1);
-    if (songEntry != cur && barNow == 0) { songEntry = cur; }   // started: the first scene is already there
-    if (next != songEntry || song[(size_t) next].scene != loadedScene)
+    songEntry = cur;
+    if (songQueued < 0 || songQueued >= (int) song.size()) songQueued = cur;   // the song was edited meanwhile
+    if (next != songQueued)
     {
-        if (scenes[(size_t) song[(size_t) next].scene] != nullptr)
-        {
-            const auto keep = flash;   // quiet: no "Scene n" message every few bars
-            loadScene (song[(size_t) next].scene);
-            setFlash ("Song: part " + juce::String (next + 1) + " - scene " + juce::String (song[(size_t) next].scene + 1));
-            juce::ignoreUnused (keep);
-        }
-        songEntry = next;
+        // the next part's scene goes to the sound now and comes in exactly on the bar line
+        if (song[(size_t) next].scene != song[(size_t) songQueued].scene && scenes[(size_t) song[(size_t) next].scene] != nullptr)
+            loadScene (song[(size_t) next].scene, true);   // no undo step every few bars
+        setFlash ("Song: part " + juce::String (next + 1) + " - scene " + juce::String (song[(size_t) next].scene + 1));
+        songQueued = next;
     }
 }
 

@@ -150,7 +150,7 @@ public:
     void clearPattern (int track);
     void editPattern (int track, std::function<void (Pattern&)> change);
     void saveScene (int s);
-    bool loadScene (int s);
+    bool loadScene (int s, bool quiet = false);   // quiet: the song changing parts (no undo step, no message)
     bool sceneExists (int s) const { return scenes[(size_t) juce::jlimit (0, numScenes - 1, s)] != nullptr; }
     void saveUserSound();                      // asks a name (the screen keyboard), then saves
     void saveUserSoundAs (const juce::String& name);
@@ -346,7 +346,7 @@ private:
     std::array<std::atomic<bool>, numKnobs> encPush {};
     std::vector<SongStep> song;
     std::atomic<bool> songOn { false };
-    int songEntry = -1, songBarSeen = -1;
+    int songEntry = -1, songQueued = -1, songBarSeen = -1;   // the part playing, the part handed to the sound for the next bar
     bool wasPlayingSong = false;
     void saveSong() const;
     void loadSong();

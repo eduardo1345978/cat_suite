@@ -1,0 +1,21 @@
+CAT BOX 3 - STEP SÚBORY PRE ONSHAPE (mm)
+
+Ako otvoriť v Onshape:
+ 1. Documents > Create > Import (alebo v dokumente "+" > Import) a vyber .step súbory.
+ 2. Otvor Part Studio s importom. Každý diel je z 2-17 telies naukladaných na seba (vrstvy, ako sa tlačí).
+    Vyber všetky telesá dielu > Boolean > Union = jeden diel.
+ 3. Teraz môžeš: kliknúť na otvor a zmeniť ho (Move face / Offset face, alebo Delete face = zaplniť),
+    nakresliť na plochu nový sketch a Extrude Remove (nový otvor), merať, posúvať.
+
+Súbory:
+ - CatBox3_panel_full.step   celý panel 420 x 222 x 3 mm v jednom kuse, ležiaci lícom hore.
+                             Otvory sú presné kruhy a obdĺžniky (pot. 7,4 mm, joystick 30 mm, MX 14 mm, ...),
+                             zospodu zápustky 1,5 mm. Popisy v ňom nie sú (sú v STL na tlač).
+                             Na MK4S ho po úprave rozdeľ: Split > rovina (napr. x = 145 a x = 276 mm)
+                             alebo použi hotové STL kusy so schodovým švom.
+ - CatBox3_case_1/_2/_3      krabica v 3 kusoch. Steny, porty, vetranie a stĺpiky sú z mnohouholníkov
+                             (otvory sú z rovných úsekov, nie presné kruhy) - na posun a zväčšenie stačí.
+ - CatBox3_knob_*, _cap_*,   gombíky a čiapočky v polohe ako na krabici (spodok na z = 0), D-otvor 6,15 mm
+   _keycap_mx                s plôškou 4,6 mm, MX krížik 4,15 x 1,35 mm.
+
+Generuje ich CatBox/hardware/make_step.py (z rovnakých údajov ako STL), takže sa dajú vždy vyrobiť znova.

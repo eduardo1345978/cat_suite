@@ -330,6 +330,16 @@ public:
                 float lo = 0, hi = 0;
                 if (rd != nullptr) { float l1, h1; rd->readMaxLevels (0, rd->lengthInSamples, lo, hi, l1, h1); hi = juce::jmax (hi, -lo, h1, -l1); }
                 check (! box.isExporting() && std::abs (secs - want) < 0.1 && hi > 0.05f && hi <= 1.0f, "Export: a WAV of the song (2 bars + 3 s of tail), not silent", juce::String (secs, 2) + " s, peak " + juce::String (hi, 3));
+                box.setPlaying (false);
+                renderSeconds (audio, 0.2, nullptr);
+                const int undo0 = box.undoSteps();
+                box.setPlaying (true);
+                const bool topScene = box.getProject().tracks[0].pat.drums[0] == kickKeep[0];   // scene 3 is there before the first bar
+                renderSeconds (audio, 0.1, nullptr);
+                box.songTick();   // (the next part is handed over now, for the bar line)
+                check (box.songStepNow() == 0 && topScene && box.undoSteps() == undo0,
+                       "Song: Play starts it at its top (scene 3), and parts changing leave no undo steps",
+                       juce::String (box.songStepNow()) + " kick " + juce::String ((int) topScene) + " undo " + juce::String (undo0) + " > " + juce::String (box.undoSteps()));
                 box.setSongOn (false);
                 box.setSong ({});
             }
