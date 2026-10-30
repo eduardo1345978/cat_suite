@@ -627,6 +627,25 @@ void View::drawSampler (juce::Graphics& g, juce::Rectangle<int> r)
     auto par = [&] (const char* id) { const int i = d.index (id); return i >= 0 ? tr.params[(size_t) i] : 0.0f; };
     const int slot = juce::roundToInt (par ("sample"));
     const Sample* smp = SampleBank::get().at (slot);
+    if (tr.engine == EngineSampler)   // the three ways to play it: big, touch one (or click the Play knob)
+    {
+        auto tabs = in.removeFromTop (44);
+        const int modeNow = juce::roundToInt (par ("mode"));
+        const char* names[] = { "KEYS", "CHOP", "ONE SHOT" };
+        const char* what[] = { "in tones on the keys", "slices on the pads", "the whole sample" };
+        const int tw = tabs.getWidth() / 3;
+        for (int i = 0; i < 3; ++i)
+        {
+            auto c = juce::Rectangle<int> (tabs.getX() + i * tw, tabs.getY(), tw, tabs.getHeight()).reduced (3, 0);
+            const bool on = i == modeNow;
+            g.setColour (on ? accent : line);
+            g.fillRoundedRectangle (c.toFloat(), 7.0f);
+            text1 (g, names[i], c.removeFromTop (26).translated (0, 3), 18.0f, on ? bg : text, juce::Justification::centred, true);
+            text1 (g, what[i], c, 11.5f, on ? bg : dim, juce::Justification::centred);
+            actionHits.add ({ juce::Rectangle<int> (tabs.getX() + i * tw, tabs.getY(), tw, tabs.getHeight()), ActSampleMode0 + i });
+        }
+        in.removeFromTop (8);
+    }
     text1 (g, "SAMPLE  " + SampleBank::get().name (slot) + (smp != nullptr ? "   " + juce::String ((float) smp->length() / (float) smp->sampleRate, 1) + " s" : juce::String()),
            in.removeFromTop (18), 13.0f, dim, juce::Justification::centredLeft, true);
     in.removeFromTop (6);
@@ -2380,6 +2399,12 @@ bool View::screenTouch (juce::Point<float> sp, bool down)
                 default:
                     if (h.action >= ActApp0 && h.action < ActApp0 + Controller::NumApps) box.openApp (h.action - ActApp0);
                     if (h.action >= ActPic0 && h.action < ActPic0 + 32) box.setPicture (h.action - ActPic0);
+                    if (h.action >= ActSampleMode0 && h.action < ActSampleMode0 + 3)
+                    {
+                        const auto& d = engineDef (box.getProject().tracks[(size_t) box.getTrack()].engine);
+                        const int mi = d.index ("mode");
+                        if (mi >= 0) box.cycleParam (mi, (h.action - ActSampleMode0) - juce::roundToInt (box.getProject().tracks[(size_t) box.getTrack()].params[(size_t) mi]));
+                    }
                     if (h.action >= ActMute0 && h.action < ActMute0 + numTracks) { const int t = h.action - ActMute0; box.setMute (t, ! box.getProject().tracks[(size_t) t].mute); }
                     if (h.action >= ActSolo0 && h.action < ActSolo0 + numTracks) { const int t = h.action - ActSolo0; box.setSolo (t, ! box.getProject().tracks[(size_t) t].solo); }
                     if (h.action >= ActFader0 && h.action < ActFader0 + numTracks)

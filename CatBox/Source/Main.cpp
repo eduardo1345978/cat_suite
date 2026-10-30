@@ -1135,6 +1135,13 @@ public:
                     juce::PNGImageFormat png;
                     if (auto os = pngFile.createOutputStream()) png.writeImageToStream (img, *os);
                     check (img.isValid(), "the screen draws the sampler", {});
+                    int playK = -1;
+                    for (int k = 0; k < numKnobs; ++k) if (box.knob (k).name == "Play") playK = k;
+                    const auto m0 = playK >= 0 ? box.knob (playK).value : juce::String();
+                    if (playK >= 0) box.knobPush (playK);
+                    const auto m1 = playK >= 0 ? box.knob (playK).value : juce::String();
+                    if (playK >= 0) { box.knobPush (playK); box.knobPush (playK); }
+                    check (playK >= 0 && m1 != m0 && box.knob (playK).value == m0, "Sampler: a click on the Play knob = Keys > Chop > One shot > Keys", m0 + " > " + m1);
                 }
                 const juce::StringArray extraPages { "FX", "MACRO", "MOD", "MY" };
                 for (int e = 0; e < 6; ++e)   // 10-13: the FX, MACRO, MOD, MY pages (light theme, rings); 14: RETURNS; 15: LOOK

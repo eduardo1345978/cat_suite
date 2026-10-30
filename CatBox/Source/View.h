@@ -101,7 +101,7 @@ private:
     static juce::Colour appColour (int app);
     static constexpr int ActHome = 100, ActApp0 = 200, ActMode0 = 300, ActAudioMidi = 400, ActPic0 = 500,
                          ActHold = 600, ActText = 601, ActDraw = 602, ActClear = 603, ActBig = 604, ActUndoStroke = 605,
-                         ActFx0 = 700, ActMute0 = 800, ActSolo0 = 810, ActFader0 = 820;   // + slot * 4 + 0 pick / 1 previous effect / 2 next / 3 on-off
+                         ActFx0 = 700, ActMute0 = 800, ActSolo0 = 810, ActFader0 = 820, ActSampleMode0 = 830;   // + slot * 4 + 0 pick / 1 previous effect / 2 next / 3 on-off
     bool drawMode = false;                 // SCOPE: the mouse / finger draws on the scope
     juce::Rectangle<int> drawPad;
     std::vector<float> drawPts;

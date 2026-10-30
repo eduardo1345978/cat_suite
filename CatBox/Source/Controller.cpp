@@ -1661,6 +1661,17 @@ void Controller::knobPush (int k)
         setFlash (seqKnobView (slot).name + ": back to normal");
         return;
     }
+    // a switch or a choice (Play: Keys / Chop / One shot, a wave, a filter type ...): a click = the next one
+    if (const auto t = targetFor (k + (shift.load() ? numKnobs : 0)); const auto* def = targetDef (t))
+        if (def->unit == ParamDef::Choice || def->unit == ParamDef::Toggle)
+        {
+            const float now = targetValue (t);
+            const float next = now + 1.0f > def->hi + 0.5f ? def->lo : std::round (now) + 1.0f;
+            changeTarget (t, next - now, false);
+            const auto v = knob (k);
+            if (v.used) setFlash (v.name + ": " + v.value);
+            return;
+        }
     resetKnob (k);
     const auto v = knob (k);
     if (v.used) setFlash (v.name + ": back to " + v.value);

@@ -156,7 +156,10 @@ other engines = like a piano: the bottom row the white keys C D E F G A B C, the
   Touch the keys - or: **knob 1** = move along the keys, **click knob 1** = type it, **knob 2** = up / down a row,
   **click knob 2** or **◀** = delete, **click knob 12** or **▶** = OK, **Shift** = abc / ABC, **HOME** = cancel. On the PC
   just type (Enter = OK, Esc = cancel).
-- **Encoder click** (push and let go without turning): that knob back to its default; in the browser = take the sound;
+- **Sampler**: three big buttons on top of its screen - **KEYS** (the sample in tones on the keys), **CHOP** (slices on
+  the pads, knob Slices = 2-16), **ONE SHOT** (the whole sample); touch one, or click the **Play** knob.
+- **Encoder click** (push and let go without turning): that knob back to its default (a switch or a choice - Play,
+  a wave, a filter type - goes to its next position instead); in the browser = take the sound;
   in SEQ = the step's setting back to normal (knob 1: hear the step). On the SCOPE the 4D/5D turn and the other turns
   go back upright.
 - **Patterns longer than 16 steps**: up to 64 (4 pages). ◀ ▶ in SEQ = the page; on the panel **HOME held + step 1-4**.
