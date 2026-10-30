@@ -22,7 +22,7 @@ PANEL - TMAVÝ PANEL, SVETLÉ POPISY (jedna tryska, 2 farby)
      "Detect thin walls" a "Arachne" (je predvolené).
   Otvory: potenciometre a enkódery 7,4 mm (M7, výstupok proti otáčaniu odlom), MX 14 x 14 mm (zospodu zápustka),
   displej okno 110 x 66 mm (zápustka 121,6 x 76,6), reproduktor 5 štrbín (zápustka 40,6),
-  JOYSTICK otvor 24 mm, SLIDER štrbina 64 x 3 mm (zospodu zápustka 76 x 10 pre telo).
+  JOYSTICK otvor 30 mm (gumená čiapočka ~26 mm sa pri vychýlení nesmie zaseknúť), SLIDER štrbina 64 x 3 mm (zospodu zápustka 76 x 10 pre telo).
   Spoj: diely zarovnaj na rovnom stole, spojovacie pásy vlep zospodu (epoxid), zaťaž.
 
 JOYSTICK A SLIDER (pozor na napätie!)
