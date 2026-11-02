@@ -203,15 +203,6 @@ void LinkClient::publishTuning (const std::array<float, 128>& pitches, bool acti
     }
 }
 
-float LinkClient::tuned (float semis) const noexcept
-{
-    if (! tuningActive.load (std::memory_order_relaxed) || ! std::isfinite (semis)) return semis;
-    const float s = juce::jlimit (0.0f, 127.0f, semis);
-    const int k = juce::jmin (126, (int) std::floor (s));
-    const float frac = s - (float) k;
-    const float a = tunedPitch[(size_t) k].load (std::memory_order_relaxed), b = tunedPitch[(size_t) k + 1].load (std::memory_order_relaxed);
-    return a + (b - a) * frac + (semis - s);   // beyond the MIDI range: keep the distance
-}
 
 juce::String LinkClient::tuningText() const
 {

@@ -65,7 +65,15 @@ public:
     void publishTuning (const std::array<float, 128>& pitches, bool active);
     /** Followers (audio thread, real-time safe): a pitch in MIDI semitones (may be fractional: glides, bends)
         moved into the linked tuning; unchanged when no tuning is linked. */
-    float tuned (float semis) const noexcept;
+    float tuned (float semis) const noexcept   // (inline: engines built without the rest of Cat Link, e.g. in Cat Box, still link)
+    {
+        if (! tuningActive.load (std::memory_order_relaxed) || ! std::isfinite (semis)) return semis;
+        const float s = juce::jlimit (0.0f, 127.0f, semis);
+        const int k = juce::jmin (126, (int) std::floor (s));
+        const float frac = s - (float) k;
+        const float a = tunedPitch[(size_t) k].load (std::memory_order_relaxed), b = tunedPitch[(size_t) k + 1].load (std::memory_order_relaxed);
+        return a + (b - a) * frac + (semis - s);   // beyond the MIDI range: keep the distance
+    }
     bool followingTuning() const noexcept { return tuningActive.load (std::memory_order_relaxed); }
     juce::String tuningText() const;
 
