@@ -38,7 +38,13 @@ jobs:
           -DCAT_BUILD_TESTS=ON -DCAT_PLUGIN_FORMATS=VST3 -DCAT_SOUND_STANDALONE=OFF
 
       - name: Build all plug-ins and the test host
-        run: cmake --build build --config Release --parallel 4 --target CatSuiteHostTest MuseCat_VST3
+        run: |
+          set +e
+          cmake --build build --config Release --parallel 4 --target CatSuiteHostTest MuseCat_VST3 2>&1 | tee build.log
+          code=${PIPESTATUS[0]}
+          # compiler errors as annotations (readable on the run page without the full log)
+          grep -E "error:|Error [0-9]+|undefined symbol|ld: " build.log | sort -u | head -40 | sed 's/^/::error::/'
+          exit $code
 
       - name: Run the tests (they load the Mac .vst3 files)
         run: |
