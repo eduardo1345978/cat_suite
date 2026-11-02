@@ -183,6 +183,9 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
 - Cat Hub must not become a soulless quick-music generator either.
 - Cat Ocean, Cat Hub, new Cats sections were left unanswered (no preference now).
 
+## Asked later
+- [x] Micro-Cat: microtonal tunings for Cubase like Ableton (2 Nov): MPE pitch bend to any synth, 37 tunings (equal, just & historical, world), browser + tuning circle editor, Scala .scl in / out
+
 ## Answers that mean "no"
 - Vertical Shorts picture: no, YouTube Auto is fine
 - Chat games, fish pets/houses/friends, seasons other than Halloween/Christmas: no preference / not now

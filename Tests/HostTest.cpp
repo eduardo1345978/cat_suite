@@ -1765,6 +1765,34 @@ void testEchoCat()
     echo->releaseResources();
 }
 
+/** Micro-Cat: loads as a VST3, its programs are the tunings, a note comes out as an MPE note with the tuning's bend. */
+void testMicroCat()
+{
+    std::cout << "\n== Micro-Cat ==" << std::endl;
+    auto micro = loadPlugin (MICROCAT_VST3);
+    if (micro == nullptr) { ++failures; return; }
+    check (micro->acceptsMidi() && micro->producesMidi(), "Micro-Cat takes and sends MIDI");
+    int ji = -1;
+    for (int i = 0; i < micro->getNumPrograms(); ++i) if (micro->getProgramName (i) == "Just intonation (5-limit)") ji = i;
+    check (micro->getNumPrograms() >= 35 && ji >= 0, "Micro-Cat has its tunings as programs (" + juce::String (micro->getNumPrograms()) + ")");
+    if (ji >= 0) micro->setCurrentProgram (ji);
+    micro->prepareToPlay (sampleRate, blockSize);
+    juce::AudioBuffer<float> audio (juce::jmax (1, micro->getTotalNumOutputChannels()), blockSize);
+    juce::MidiBuffer midi;
+    midi.addEvent (juce::MidiMessage::noteOn (1, 64, (juce::uint8) 100), 10);
+    micro->processBlock (audio, midi);
+    int channel = -1, bend = -1, noteCh = -1;
+    for (const auto meta : midi)
+    {
+        const auto m = meta.getMessage();
+        if (m.isPitchWheel() && m.getChannel() >= 2) { channel = m.getChannel(); bend = m.getPitchWheelValue(); }
+        if (m.isNoteOn() && m.getNoteNumber() == 64) noteCh = m.getChannel();
+    }
+    std::cout << "  E4 in just intonation: channel " << noteCh << ", bend " << bend << std::endl;
+    check (noteCh >= 2 && noteCh == channel && bend > 8100 && bend < 8192, "Micro-Cat: E4 goes out on its own MPE channel, 13.7 cents low");
+    micro->releaseResources();
+}
+
 int main()
 {
     juce::ScopedJuceInitialiser_GUI juceInit;
@@ -1785,6 +1813,7 @@ int main()
     testLifeCat();
     testCatLink2();
     testEchoCat();
+    testMicroCat();
 
     std::cout << "\n" << (failures == 0 ? "ALL TESTS PASSED" : juce::String (failures) + " TEST(S) FAILED") << std::endl;
     return failures == 0 ? 0 : 1;

@@ -17,3 +17,4 @@ What is inside (folder VST3):
     Muse-Cat   - writes whole songs (your own words and chords too)
     Life-Cat   - a living ecosystem that makes music
     Echo-Cat   - echo and shimmer space for vocals and instruments (an audio effect)
+    Micro-Cat  - microtonal tunings (37 + your own) for any MPE synth

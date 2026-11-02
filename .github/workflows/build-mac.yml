@@ -65,7 +65,7 @@ jobs:
             echo "packed $(basename "$b")"
           done
           count=$(find "$pkg/VST3" -maxdepth 1 -type d -name "*.vst3" | wc -l | tr -d ' ')
-          if [ "$count" -lt 12 ]; then echo "::error::Only $count plug-ins were packed"; exit 1; fi
+          if [ "$count" -lt 13 ]; then echo "::error::Only $count plug-ins were packed"; exit 1; fi
           # both kinds of Mac in every plug-in, then an ad-hoc signature (Apple Silicon only runs signed code)
           for b in "$pkg"/VST3/*.vst3; do
             exe="$b/Contents/MacOS/$(basename "$b" .vst3)"
