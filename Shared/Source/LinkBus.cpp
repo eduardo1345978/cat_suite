@@ -9,8 +9,40 @@ namespace
     constexpr int maxMembers = 32;
     constexpr int numEvents = 64;
 
+   #if defined (_MSC_VER)
     template <typename T>
     std::atomic_ref<T> at (T& v) noexcept { return std::atomic_ref<T> (v); }
+   #else
+    // Atomic access to a plain value in the shared memory. Apple's C++ library has no std::atomic_ref
+    // yet, so on clang / gcc this uses the compiler's own atomic built-ins (the same machine code).
+    constexpr int order (std::memory_order o) noexcept
+    {
+        switch (o)
+        {
+            case std::memory_order_relaxed: return __ATOMIC_RELAXED;
+            case std::memory_order_consume: return __ATOMIC_CONSUME;
+            case std::memory_order_acquire: return __ATOMIC_ACQUIRE;
+            case std::memory_order_release: return __ATOMIC_RELEASE;
+            case std::memory_order_acq_rel: return __ATOMIC_ACQ_REL;
+            default:                        return __ATOMIC_SEQ_CST;
+        }
+    }
+    template <typename T>
+    struct AtomicRef
+    {
+        T* v;
+        T load (std::memory_order o = std::memory_order_seq_cst) const noexcept { return __atomic_load_n (v, order (o)); }
+        void store (T x, std::memory_order o = std::memory_order_seq_cst) const noexcept { __atomic_store_n (v, x, order (o)); }
+        T fetch_add (T d, std::memory_order o = std::memory_order_seq_cst) const noexcept { return __atomic_fetch_add (v, d, order (o)); }
+        bool compare_exchange_weak (T& expected, T desired, std::memory_order o = std::memory_order_seq_cst) const noexcept
+        {
+            const int failOrder = o == std::memory_order_release ? __ATOMIC_RELAXED : (o == std::memory_order_acq_rel ? __ATOMIC_ACQUIRE : order (o));
+            return __atomic_compare_exchange_n (v, &expected, desired, true, order (o), failOrder);
+        }
+    };
+    template <typename T>
+    AtomicRef<T> at (T& v) noexcept { return AtomicRef<T> { &v }; }
+   #endif
 
     juce::int64 nowMs() noexcept { return juce::Time::currentTimeMillis(); }
 }
