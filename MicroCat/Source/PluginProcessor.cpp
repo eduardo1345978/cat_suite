@@ -25,6 +25,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout MicroCatProcessor::createLay
     layout.add (std::make_unique<AudioParameterInt> (ParameterID { "voices", 1 }, "Voices", 1, 15, 15));
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "sendConfig", 1 }, "Send MPE Set-up", true));
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "bypass", 1 }, "Bypass (normal tuning)", false));
+    layout.add (std::make_unique<AudioParameterBool> (ParameterID { "mtsEsp", 1 }, "MTS-ESP Master", false));
     return layout;
 }
 
@@ -43,6 +44,70 @@ MicroCatProcessor::MicroCatProcessor()
     previewBuffer.ensureSize (512);
     preview.reset (48000.0);
     applyPreset (0);
+
+    cat::LinkClient::Caps caps;
+    caps.sendTuning = true;
+    presetManager.enableLink (apvts, caps);
+    startTimerHz (10);
+}
+
+std::array<float, 128> MicroCatProcessor::keyPitches() const
+{
+    TuningData d;
+    {
+        const juce::SpinLock::ScopedLockType sl (tuningLock);
+        d = pendingData;
+    }
+    d.mapping = effectiveMapping();
+    const auto s = currentSettings();
+    std::array<float, 128> out {};
+    for (int k = 0; k < 128; ++k)
+    {
+        const auto kp = pitchFor (d, k, s.rootKey, s.rootHz);
+        out[(size_t) k] = kp.valid && kp.hz > 0.0 ? (float) (69.0 + 12.0 * std::log2 (kp.hz / 440.0)) : (float) k;
+    }
+    return out;
+}
+
+void MicroCatProcessor::timerCallback()
+{
+    const bool mtsOn = p ("mtsEsp") > 0.5f;
+    if (mtsOn != mts.isEnabled()) { mts.setEnabled (mtsOn); publishedKey = {}; }
+    if (mtsOn && mts.state() != micro::MtsMaster::State::Connected && ++mtsPollCount % 10 == 0)
+    {
+        mts.poll();                                            // the other master may have gone
+        if (mts.state() == micro::MtsMaster::State::Connected) publishedKey = {};
+    }
+
+    mtsConnected = mts.state() == micro::MtsMaster::State::Connected;
+    const auto s = currentSettings();
+    const juce::String key = juce::String (tuningVersion.load()) + "/" + juce::String (s.rootKey) + "/" + juce::String (s.rootHz, 4)
+                           + "/" + juce::String (effectiveMapping()) + "/" + juce::String ((int) s.bypass) + "/" + juce::String ((int) mtsOn);
+    if (key == publishedKey) return;
+    publishedKey = key;
+    const auto pitches = keyPitches();
+    if (auto* link = presetManager.linkClient.get())
+    {
+        link->publishTuning (pitches, ! s.bypass);
+        ++linkPublishes;
+    }
+    if (mtsOn)
+    {
+        std::array<double, 128> hz {};
+        std::array<bool, 128> valid {};
+        TuningData d;
+        {
+            const juce::SpinLock::ScopedLockType sl (tuningLock);
+            d = pendingData;
+        }
+        d.mapping = effectiveMapping();
+        for (int k = 0; k < 128; ++k)
+        {
+            valid[(size_t) k] = s.bypass || pitchFor (d, k, s.rootKey, s.rootHz).valid;
+            hz[(size_t) k] = 440.0 * std::pow (2.0, ((s.bypass ? (double) k : (double) pitches[(size_t) k]) - 69.0) / 12.0);
+        }
+        mts.send (hz, valid, s.bypass ? juce::String ("12-EDO") : getTuning().name);
+    }
 }
 
 float MicroCatProcessor::p (const char* id) const
@@ -182,7 +247,9 @@ void MicroCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     if (! previewBuffer.isEmpty()) midi.addEvents (previewBuffer, 0, n, 0);
 
     outBuffer.clear();
-    engine.process (midi, outBuffer, currentSettings());
+    auto settings = currentSettings();
+    if (mtsConnected.load (std::memory_order_relaxed)) settings.bypass = true;   // MTS-ESP tunes the synths: the notes go out as they are
+    engine.process (midi, outBuffer, settings);
     midi.swapWith (outBuffer);
 }
 

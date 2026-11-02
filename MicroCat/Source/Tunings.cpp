@@ -178,8 +178,14 @@ bool parseScl (const juce::String& text, Tuning& out, juce::String* error)
 {
     juce::StringArray lines;
     lines.addLines (text);
-    juce::StringArray body;
-    for (auto& l : lines) if (! l.trimStart().startsWithChar ('!')) body.add (l);   // ! = a comment
+    juce::StringArray body, abl;
+    for (auto& l : lines)
+    {
+        const auto tl = l.trim();
+        if (! tl.startsWithChar ('!')) { body.add (l); continue; }                 // ! = a comment
+        const auto rest = tl.substring (1).trimStart();                              // "!! @ABL" = switched off
+        if (rest.startsWith ("@ABL ")) abl.add (rest.substring (5).trim());
+    }
     if (body.size() < 2) { if (error) *error = "not a Scala file"; return false; }
     Tuning t;
     t.description = body[0].trim();
@@ -196,6 +202,29 @@ bool parseScl (const juce::String& text, Tuning& out, juce::String* error)
     t.mapping = count == 12 && std::abs (t.period() - 1200.0) < 1e-6 ? MapTwelve : MapPerStep;
     juce::String why;
     if (! t.isValid (&why)) { if (error) *error = why; return false; }
+
+    // Ableton .ascl directives
+    for (auto& d : abl)
+    {
+        juce::StringArray tok;
+        tok.addTokens (d, " \t", "\"");
+        tok.removeEmptyStrings();
+        for (auto& s : tok) s = s.unquoted();
+        if (tok.isEmpty()) continue;
+        if (tok[0] == "REFERENCE_PITCH" && tok.size() >= 4)
+        {
+            const int degree = tok[2].getIntValue();
+            const double hz = tok[3].getDoubleValue();
+            if (degree >= 0 && degree < count && hz > 0.0 && std::isfinite (hz))
+                t.referenceHz = hz / std::pow (2.0, t.degreeCents (degree) / 1200.0);   // the first note of that octave
+        }
+        else if (tok[0] == "NOTE_NAMES")
+        {
+            tok.remove (0);
+            if (tok.size() == count) t.noteNames = tok;
+        }
+        else if (tok[0] == "SOURCE" && t.description.isEmpty()) t.description = d.substring (6).trim();
+    }
     out = t;
     return true;
 }
@@ -211,6 +240,21 @@ juce::String toScl (const Tuning& t)
     return s;
 }
 
+bool rootFromReference (const Tuning& t, int& rootKey, double& rootHz)
+{
+    if (! (t.referenceHz > 0.0) || ! t.isValid()) return false;
+    double hz = t.referenceHz;
+    const double period = std::pow (2.0, t.period() / 1200.0);
+    // the first note's octave nearest middle C (C4 = 261.63 Hz), so the root key is where you'd expect it
+    while (hz < 261.6255653 / std::sqrt (period)) hz *= period;
+    while (hz > 261.6255653 * std::sqrt (period)) hz /= period;
+    // 12 notes to the octave: the key it's nearest to (a C stays on C); other tunings start on middle C
+    const bool twelve = t.notesPerPeriod() == 12 && std::abs (t.period() - 1200.0) < 1e-6;
+    rootKey = twelve ? juce::jlimit (0, 127, juce::roundToInt (69.0 + 12.0 * std::log2 (hz / 440.0))) : 60;
+    rootHz = juce::jlimit (20.0, 2000.0, hz);
+    return true;
+}
+
 juce::File userFolder()
 {
     return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
@@ -220,7 +264,7 @@ juce::File userFolder()
 std::vector<Tuning> loadUserTunings()
 {
     std::vector<Tuning> v;
-    for (auto& f : userFolder().findChildFiles (juce::File::findFiles, false, "*.scl"))
+    for (auto& f : userFolder().findChildFiles (juce::File::findFiles, false, "*.scl;*.ascl"))
     {
         Tuning t;
         if (parseScl (f.loadFileAsString(), t))

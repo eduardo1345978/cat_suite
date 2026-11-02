@@ -6,6 +6,7 @@ namespace
 {
     constexpr float twoPi = juce::MathConstants<float>::twoPi;
     constexpr double maxDelaySeconds = 4.0;
+    constexpr double lineSeconds = 8.4;           // reverse reads up to 2 echo times back
 
     inline float onePole (double fc, double sr) { return (float) (1.0 - std::exp (-2.0 * juce::MathConstants<double>::pi * fc / sr)); }
 
@@ -37,6 +38,8 @@ double divisionBeats (int index)
     return beats[juce::jlimit (0, numDivisions - 1, index)];
 }
 
+juce::StringArray modeNames() { return { "Normal", "Reverse", "Steps" }; }
+
 double Settings::delaySeconds() const
 {
     const double s = sync ? divisionBeats (division) * 60.0 / juce::jlimit (30.0, 300.0, bpm) : timeMs / 1000.0;
@@ -44,31 +47,33 @@ double Settings::delaySeconds() const
 }
 
 //==============================================================================
-void OctaveUp::prepare (double sampleRate)
+void PitchShifter::prepare (double sampleRate)
 {
     grain = juce::jlimit (512, 8192, (int) (sampleRate * 0.045));
     buf.assign ((size_t) grain * 2 + 8, 0.0f);
     reset();
 }
 
-void OctaveUp::reset()
+void PitchShifter::reset()
 {
     std::fill (buf.begin(), buf.end(), 0.0f);
     w = 0;
     phase = 0.0f;
 }
 
-float OctaveUp::process (float x) noexcept
+float PitchShifter::process (float x) noexcept
 {
     const int size = (int) buf.size();
     buf[(size_t) w] = x;
-    // two read heads half a grain apart; each sweeps its delay from one grain down to nothing (= double speed)
+    // two read heads half a grain apart; each sweeps its delay from one grain down to nothing (faster:
+    // higher) or from nothing up to one grain (slower: lower)
+    const bool up = ratio >= 1.0f;
     float out = 0.0f;
     for (int k = 0; k < 2; ++k)
     {
         float ph = phase + 0.5f * (float) k;
         if (ph >= 1.0f) ph -= 1.0f;
-        const float d = (1.0f - ph) * (float) grain + 2.0f;
+        const float d = (up ? 1.0f - ph : ph) * (float) grain + 2.0f;
         float rp = (float) w - d;
         while (rp < 0.0f) rp += (float) size;
         const int i0 = ((int) rp) % size;
@@ -77,7 +82,7 @@ float OctaveUp::process (float x) noexcept
         const float win = std::sin (juce::MathConstants<float>::pi * ph);
         out += v * win * win;
     }
-    phase += 1.0f / (float) grain;
+    phase += std::abs (ratio - 1.0f) / (float) grain;
     if (phase >= 1.0f) phase -= 1.0f;
     w = (w + 1) % size;
     return out;
@@ -87,14 +92,15 @@ float OctaveUp::process (float x) noexcept
 void Engine::prepare (double sampleRate, int maxBlock)
 {
     sr = sampleRate > 0.0 ? sampleRate : 48000.0;
-    const auto len = (size_t) (sr * (maxDelaySeconds + 0.2)) + 16;
+    const auto len = (size_t) (sr * lineSeconds) + 16;
     lineL.assign (len, 0.0f);
     lineR.assign (len, 0.0f);
     const auto mb = (size_t) juce::jmax (32, maxBlock);
     revL.assign (mb, 0.0f); revR.assign (mb, 0.0f);
     shimL.assign (mb, 0.0f); shimR.assign (mb, 0.0f);
     reverb.setSampleRate (sr);
-    for (auto& s : shifters) s.prepare (sr);
+    for (auto& s : shifters) { s.prepare (sr); s.setRatio (2.0f); }
+    for (auto& s : loopShifters) s.prepare (sr);
     reset();
 }
 
@@ -112,6 +118,9 @@ void Engine::reset()
     shimLp = shimLpR = 0.0f;
     reverb.reset();
     for (auto& s : shifters) s.reset();
+    for (auto& s : loopShifters) s.reset();
+    revPhase = 0.0;
+    fbLpL = fbLpR = fbHpL = fbHpR = 0.0f;
 }
 
 void Engine::process (float* l, float* r, int n, const Settings& s)
@@ -140,6 +149,12 @@ void Engine::process (float* l, float* r, int n, const Settings& s)
     const float duck = juce::jlimit (0.0f, 1.0f, s.duck);
     const float space = juce::jlimit (0.0f, 1.0f, s.space);
     const float targetGain = juce::Decibels::decibelsToGain (juce::jlimit (-24.0f, 6.0f, s.outputDb));
+    const int mode = juce::jlimit (0, 2, s.mode);
+    const float semis = juce::jlimit (-12.0f, 12.0f, s.pitch);
+    const bool pitched = std::abs (semis) > 0.01f;
+    if (pitched) for (auto& ls : loopShifters) ls.setRatio (std::pow (2.0f, semis / 12.0f));
+    std::array<float, numSteps> stepLevel {};
+    for (int k = 0; k < numSteps; ++k) stepLevel[(size_t) k] = juce::jlimit (0.0f, 1.0f, s.steps[(size_t) k]);
     float inPeak = 0.0f, echoPeak = 0.0f, duckShown = 0.0f;
 
     for (int i = 0; i < n; ++i)
@@ -155,8 +170,50 @@ void Engine::process (float* l, float* r, int n, const Settings& s)
         wobPhase1 += wobInc1; if (wobPhase1 >= 1.0) wobPhase1 -= 1.0;
         wobPhase2 += wobInc2; if (wobPhase2 >= 1.0) wobPhase2 -= 1.0;
         const float mod = wobDepth * (0.8f * (1.0f + std::sin (twoPi * (float) wobPhase1)) + 0.12f * std::sin (twoPi * (float) wobPhase2));
-        const float d = juce::jlimit (4.0f, (float) size - 8.0f, delaySmooth + mod);
-        const float dL = readAt (lineL, w, d), dR = readAt (lineR, w, d);
+        // the taps: dL/dR = what the echoes play, gL/gR = what goes round the loop again
+        float dL, dR, gL, gR;
+        if (mode == ModeReverse)
+        {
+            // two heads half a chunk apart, each reading the last echo-time backwards (its delay grows
+            // from 0 to 2 echo-times while it plays), faded in and out so the turns don't click
+            const float D = juce::jlimit (16.0f, (float) size * 0.5f - 16.0f, delaySmooth + mod);
+            revPhase += 1.0 / (double) D;
+            if (revPhase >= 1.0) revPhase -= 1.0;
+            dL = dR = 0.0f;
+            for (int h = 0; h < 2; ++h)
+            {
+                float ph = (float) revPhase + 0.5f * (float) h;
+                if (ph >= 1.0f) ph -= 1.0f;
+                const float win = std::sin (juce::MathConstants<float>::pi * ph);
+                const float rd = 2.0f * ph * D + 4.0f;
+                dL += readAt (lineL, w, rd) * win * win;
+                dR += readAt (lineR, w, rd) * win * win;
+            }
+            gL = dL; gR = dR;
+        }
+        else if (mode == ModeSteps)
+        {
+            // 8 echoes in a row, each at its own level; the 8th goes round again (the pattern repeats)
+            const float D = juce::jmax (16.0f, delaySmooth + mod);
+            dL = dR = gL = gR = 0.0f;
+            for (int t = 1; t <= numSteps; ++t)
+            {
+                const float td = D * (float) t;
+                if (td > (float) size - 8.0f) break;
+                const float tl = readAt (lineL, w, td), tr = readAt (lineR, w, td);
+                const float lv = stepLevel[(size_t) t - 1];
+                const float side = (t % 2 == 0) ? pp : 0.0f;          // ping-pong: every 2nd echo on the other side
+                dL += lv * (tl + (tr - tl) * side);
+                dR += lv * (tr + (tl - tr) * side);
+                gL = tl; gR = tr;                                      // the last echo that fits
+            }
+        }
+        else
+        {
+            const float d = juce::jlimit (4.0f, (float) size - 8.0f, delaySmooth + mod);
+            dL = gL = readAt (lineL, w, d);
+            dR = gR = readAt (lineR, w, d);
+        }
 
         // each time round: darker, thinner, warmer (not while frozen: then the loop holds as it is)
         float fL = dL, fR = dR;
@@ -166,13 +223,36 @@ void Engine::process (float* l, float* r, int n, const Settings& s)
         if (s.drive > 0.002f) { cL = std::tanh (k * cL) * driveNorm; cR = std::tanh (k * cR) * driveNorm; }
         fL = cL + (dL - cL) * freezeMix;
         fR = cR + (dR - cR) * freezeMix;
+        float bL = fL, bR = fR;                                       // the loop's signal
+        if (mode == ModeSteps)
+        {
+            fbLpL += aLp * (gL - fbLpL); fbLpR += aLp * (gR - fbLpR);
+            fbHpL += aHp * (fbLpL - fbHpL); fbHpR += aHp * (fbLpR - fbHpR);
+            float qL = fbLpL - fbHpL, qR = fbLpR - fbHpR;
+            if (s.drive > 0.002f) { qL = std::tanh (k * qL) * driveNorm; qR = std::tanh (k * qR) * driveNorm; }
+            bL = qL + (gL - qL) * freezeMix;
+            bR = qR + (gR - qR) * freezeMix;
+        }
 
         const float loopFb = fb + (1.0f - fb) * freezeMix;
         const float inGain = 1.0f - freezeMix;
-        const float crossL = fL + (fR - fL) * pp, crossR = fR + (fL - fR) * pp;
-        float wL = (inL + (mono - inL) * pp) * inGain + crossL * loopFb;
-        float wR = inR * (1.0f - pp) * inGain + crossR * loopFb;
-        if (! std::isfinite (wL) || ! std::isfinite (wR)) { wL = wR = 0.0f; lpL = lpR = hpL = hpR = 0.0f; }
+        const float ppLoop = mode == ModeSteps ? 0.0f : pp;            // (Steps: the ping-pong is in the taps)
+        const float crossL = bL + (bR - bL) * ppLoop, crossR = bR + (bL - bR) * ppLoop;
+        float wL = (inL + (mono - inL) * ppLoop) * inGain + crossL * loopFb;
+        float wR = inR * (1.0f - ppLoop) * inGain + crossR * loopFb;
+        if (pitched)
+        {
+            // every echo higher / lower: what goes into the line is shifted, so each time round once more
+            // (not while frozen: a frozen loop stays as it is)
+            const float sL = loopShifters[0].process (wL), sR = loopShifters[1].process (wR);
+            wL = sL + (wL - sL) * freezeMix;
+            wR = sR + (wR - sR) * freezeMix;
+        }
+        if (! std::isfinite (wL) || ! std::isfinite (wR))
+        {
+            wL = wR = 0.0f; lpL = lpR = hpL = hpR = 0.0f; fbLpL = fbLpR = fbHpL = fbHpR = 0.0f;
+            for (auto& ls : loopShifters) ls.reset();
+        }
         // never let the loop run away (a soft ceiling far above normal levels)
         wL = 2.0f * std::tanh (0.5f * wL);
         wR = 2.0f * std::tanh (0.5f * wR);

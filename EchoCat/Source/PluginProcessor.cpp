@@ -35,6 +35,26 @@ const std::vector<EchoCatProcessor::Preset>& EchoCatProcessor::presets()
         { "Starlight Plucks",   "Space",  { { "division", 3 }, { "feedback", 0.55f }, { "mix", 0.35f }, { "pingpong", 1.0f }, { "tone", 0.9f }, { "lowcut", 0.5f },
                                             { "space", 0.45f }, { "shimmer", 0.6f } } },
         { "Just the Room",      "Space",  { { "feedback", 0.0f }, { "mix", 0.0f }, { "space", 0.5f } } },
+        // mode: 0 normal, 1 reverse, 2 steps; pitch in semitones per echo
+        { "Backwards Dream",    "Reverse", { { "mode", 1 }, { "division", 7 }, { "feedback", 0.35f }, { "mix", 0.45f }, { "pingpong", 0.5f }, { "tone", 0.6f },
+                                             { "lowcut", 0.3f }, { "space", 0.4f } } },
+        { "Reverse Vocal Swell", "Reverse", { { "mode", 1 }, { "division", 9 }, { "feedback", 0.2f }, { "mix", 0.55f }, { "tone", 0.55f }, { "lowcut", 0.45f },
+                                             { "space", 0.5f }, { "duck", 0.5f } } },
+        { "Rising Stairs",      "Pitch",  { { "pitch", 12 }, { "division", 4 }, { "feedback", 0.5f }, { "mix", 0.35f }, { "pingpong", 0.6f }, { "tone", 0.75f },
+                                            { "lowcut", 0.35f }, { "space", 0.3f } } },
+        { "Falling Fifths",     "Pitch",  { { "pitch", -7 }, { "division", 5 }, { "feedback", 0.55f }, { "mix", 0.35f }, { "pingpong", 0.4f }, { "tone", 0.6f },
+                                            { "lowcut", 0.15f } } },
+        { "Octave Down Dub",    "Pitch",  { { "pitch", -12 }, { "division", 7 }, { "feedback", 0.5f }, { "mix", 0.4f }, { "tone", 0.4f }, { "drive", 0.4f },
+                                            { "wobble", 0.2f } } },
+        { "Gallop Steps",       "Steps",  { { "mode", 2 }, { "division", 1 }, { "feedback", 0.3f }, { "mix", 0.4f }, { "pingpong", 0.5f }, { "tone", 0.7f },
+                                            { "step1", 1.0f }, { "step2", 0.0f }, { "step3", 0.8f }, { "step4", 0.8f }, { "step5", 0.0f }, { "step6", 0.6f },
+                                            { "step7", 0.0f }, { "step8", 0.4f } } },
+        { "Clave Echoes",       "Steps",  { { "mode", 2 }, { "division", 1 }, { "feedback", 0.25f }, { "mix", 0.4f }, { "pingpong", 0.8f }, { "tone", 0.75f },
+                                            { "lowcut", 0.3f }, { "step1", 0.0f }, { "step2", 0.0f }, { "step3", 1.0f }, { "step4", 0.0f }, { "step5", 0.0f },
+                                            { "step6", 0.8f }, { "step7", 0.0f }, { "step8", 0.6f } } },
+        { "Bouncing Ball",      "Steps",  { { "mode", 2 }, { "division", 1 }, { "feedback", 0.0f }, { "mix", 0.45f }, { "tone", 0.8f },
+                                            { "step1", 1.0f }, { "step2", 0.85f }, { "step3", 0.7f }, { "step4", 0.55f }, { "step5", 0.42f }, { "step6", 0.3f },
+                                            { "step7", 0.2f }, { "step8", 0.1f } } },
     };
     return list;
 }
@@ -44,7 +64,8 @@ namespace
     const std::pair<const char*, float> defaults[] = {
         { "sync", 1 }, { "division", 5 }, { "timeMs", 350 }, { "feedback", 0.4f }, { "mix", 0.35f }, { "dry", 1.0f }, { "pingpong", 0.0f },
         { "tone", 0.7f }, { "lowcut", 0.15f }, { "wobble", 0.0f }, { "drive", 0.0f }, { "space", 0.0f }, { "shimmer", 0.0f }, { "duck", 0.0f },
-        { "freeze", 0 }, { "output", 0.0f },
+        { "freeze", 0 }, { "output", 0.0f }, { "mode", 0 }, { "pitch", 0 },
+        { "step1", 1.0f }, { "step2", 0.0f }, { "step3", 0.8f }, { "step4", 0.0f }, { "step5", 0.6f }, { "step6", 0.6f }, { "step7", 0.0f }, { "step8", 0.4f },
     };
 }
 
@@ -75,6 +96,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout EchoCatProcessor::createLayo
     pct ("shimmer", "Shimmer", 0.0f);
     pct ("duck", "Duck", 0.0f);
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "freeze", 1 }, "Freeze", false));
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "mode", 1 }, "Echo Mode", modeNames(), 0));
+    layout.add (std::make_unique<AudioParameterInt> (ParameterID { "pitch", 1 }, "Pitch per Echo", -12, 12, 0,
+                                                     AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int) { return v == 0 ? String ("0 st") : (v > 0 ? "+" : "") + String (v) + " st"; })));
+    {
+        const float def[] = { 1.0f, 0.0f, 0.8f, 0.0f, 0.6f, 0.6f, 0.0f, 0.4f };
+        for (int i = 0; i < numSteps; ++i)
+        {
+            const String id = "step" + String (i + 1);
+            layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, "Step " + String (i + 1), NormalisableRange<float> (0.0f, 1.0f), def[i], percent()));
+        }
+    }
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "output", 1 }, "Output", NormalisableRange<float> (-24.0f, 6.0f), 0.0f,
                                                        AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String (v, 1) + " dB"; })
                                                                                       .withValueFromStringFunction ([] (const String& t) { return t.getFloatValue(); })));
@@ -89,6 +121,7 @@ EchoCatProcessor::EchoCatProcessor()
     for (auto* prm : getParameters())
         if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (prm))
             refs[r->getParameterID().toStdString()] = apvts.getRawParameterValue (r->getParameterID());
+    for (int i = 0; i < numSteps; ++i) stepRefs[(size_t) i] = apvts.getRawParameterValue ("step" + juce::String (i + 1));
     applyPreset (0);
 }
 
@@ -118,6 +151,9 @@ Settings EchoCatProcessor::readSettings (double bpm) const
     s.duck = p ("duck");
     s.freeze = p ("freeze") > 0.5f;
     s.outputDb = p ("output");
+    s.mode = juce::jlimit (0, 2, juce::roundToInt (p ("mode")));
+    s.pitch = (float) juce::roundToInt (p ("pitch"));
+    for (int i = 0; i < numSteps; ++i) s.steps[(size_t) i] = stepRefs[(size_t) i] != nullptr ? stepRefs[(size_t) i]->load() : 0.0f;
     return s;
 }
 

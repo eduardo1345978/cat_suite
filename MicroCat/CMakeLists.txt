@@ -20,4 +20,11 @@ cat_add_midi_plugin(MicroCat
         Source/Tunings.cpp
         Source/MicroEngine.cpp
         Source/PluginProcessor.cpp
-        Source/PluginEditor.cpp)
+        Source/PluginEditor.cpp
+        Source/MtsEsp.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../ThirdParty/MTS-ESP/Master/libMTSMaster.cpp)
+# ODDSound's file as it is: no warnings from it
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/../ThirdParty/MTS-ESP/Master/libMTSMaster.cpp PROPERTIES COMPILE_OPTIONS "$<IF:$<CXX_COMPILER_ID:MSVC>,/w,-w>")
+if(UNIX AND NOT APPLE)
+    target_link_libraries(MicroCat PRIVATE ${CMAKE_DL_LIBS})
+endif()

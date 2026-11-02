@@ -64,7 +64,8 @@ GlideCatProcessor::GlideCatProcessor()
         cat::LinkClient::Caps caps;
         caps.receiveChords = true;
         caps.receiveChordsText = "Play Chord-Cat's chords";
-        presetManager.enableLink (apvts, caps);
+        caps.receiveTuning = true;
+        synth.link = &presetManager.enableLink (apvts, caps);
     }
     for (auto* prm : getParameters())
         if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (prm))

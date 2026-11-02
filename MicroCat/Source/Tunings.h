@@ -24,6 +24,9 @@ struct Tuning
     std::vector<double> cents;          // steps above the first note; the last = the period
     int mapping = MapPerStep;
     int categoryId = CatEqual;
+    /** From an Ableton .ascl file: the frequency of the first note (degree 0) and the note names. 0 = not set. */
+    double referenceHz = 0.0;
+    juce::StringArray noteNames;
 
     int notesPerPeriod() const noexcept { return (int) cents.size(); }
     double period() const noexcept { return cents.empty() ? 1200.0 : cents.back(); }
@@ -36,9 +39,14 @@ struct Tuning
 const std::vector<Tuning>& library();
 juce::StringArray categoryNames();
 
-/** Scala .scl text <-> a tuning ("Name", "description" lines, then pitches in cents or ratios). */
+/** Scala .scl text <-> a tuning ("Name", "description" lines, then pitches in cents or ratios).
+    Ableton .ascl files are Scala files with "! @ABL ..." lines: REFERENCE_PITCH (octave, degree, Hz) sets
+    referenceHz, NOTE_NAMES the names; the range lines are ignored (Micro-Cat centres on the root key). */
 bool parseScl (const juce::String& text, Tuning& out, juce::String* error = nullptr);
 juce::String toScl (const Tuning&);
+/** Where an .ascl file's reference pitch puts the root: the MIDI key nearest its first note (around middle C)
+    and that note's frequency. false = the tuning has no reference pitch. */
+bool rootFromReference (const Tuning&, int& rootKey, double& rootHz);
 /** A pitch in a .scl file: "386.31" (cents, has a dot), "5/4" or "2" (a ratio). */
 bool parsePitch (const juce::String& token, double& cents);
 

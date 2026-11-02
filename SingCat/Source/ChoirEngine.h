@@ -13,6 +13,8 @@
     small random traits (tract size, tuning, vibrato, drift, timing) and sings through its own
     glottis + vocal tract. Singers stand on a stage (pan / depth) in a modelled room.
 */
+namespace cat { class LinkClient; }
+
 namespace singcat
 {
 constexpr int maxSingers = 64;
@@ -91,6 +93,8 @@ struct SingerView
 class Engine
 {
 public:
+    /** Cat Link: plays in Micro-Cat's tuning when linked (set by the processor; may be null). */
+    const cat::LinkClient* link = nullptr;
     Engine();
 
     void prepare (double sampleRate, int maxBlock);

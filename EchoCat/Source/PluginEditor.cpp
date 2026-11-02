@@ -4,7 +4,7 @@ using namespace echocat;
 
 namespace
 {
-    constexpr int designW = 1000, designH = 620;
+    constexpr int designW = 1100, designH = 620;
 
     juce::String timeText (double seconds)
     {
@@ -115,15 +115,33 @@ void EchoView::paint (juce::Graphics& g)
     const auto echoCol = (frozen ? juce::Colour (0xffbfe6ff) : dark.interpolatedWith (bright, st.tone)).interpolatedWith (juce::Colour (0xffff7a6a), st.drive * 0.5f);
     const double phase = std::fmod (clock, delay) / delay;
     float amp = 1.0f;
+    const bool stepsMode = st.mode == ModeSteps, reverse = st.mode == ModeReverse;
     for (int k = 1; k <= 24; ++k)
     {
         const float x = x0 + (float) (k * delay) * pxPerSec;
         if (x > x1 + 10.0f) break;
-        const float side = (k % 2 == 1 ? -1.0f : 1.0f) * st.pingpong;
+        // Steps: each echo at its step's level, the pattern fading with the feedback every 8
+        float stepAmp = 1.0f;
+        if (stepsMode)
+        {
+            stepAmp = st.steps[(size_t) ((k - 1) % numSteps)];
+            amp = std::pow (fb, (float) ((k - 1) / numSteps));
+        }
+        const float side = (stepsMode ? (k % 2 == 0 ? 1.0f : -1.0f) * 0.5f : (k % 2 == 1 ? -1.0f : 1.0f)) * st.pingpong;
         const float wob = st.wobble * 6.0f * std::sin ((float) clock * 1.7f + (float) k * 0.9f);
-        const float y = midY + side * 48.0f + wob;
-        const float a = amp * (st.mix > 0.001f ? 1.0f : 0.25f);
-        const float r = 10.0f + 22.0f * amp;
+        // pitch: each echo drawn that much higher / lower
+        const float lift = juce::jlimit (-90.0f, 90.0f, -st.pitch * 2.2f * (float) k);
+        const float y = juce::jlimit (b.getY() + 40.0f, b.getBottom() - 30.0f, midY + side * 48.0f + wob + lift);
+        const float shownAmp = amp * stepAmp;
+        if (stepsMode && stepAmp < 0.02f)
+        {
+            g.setColour (echoCol.withAlpha (0.18f * amp));
+            g.fillEllipse (juce::Rectangle<float> (5.0f, 5.0f).withCentre ({ x, midY }));       // a rest
+            if (amp < 0.02f) break;
+            continue;
+        }
+        const float a = shownAmp * (st.mix > 0.001f ? 1.0f : 0.25f);
+        const float r = 10.0f + 22.0f * shownAmp;
         if (a > 0.02f)
         {
             // a ring that breathes in time
@@ -131,9 +149,10 @@ void EchoView::paint (juce::Graphics& g)
             g.setColour (echoCol.withAlpha (juce::jlimit (0.0f, 1.0f, a * 0.25f * pulse)));
             g.drawEllipse (juce::Rectangle<float> (r * 2.0f + 14.0f * (1.0f - pulse), r * 2.0f + 14.0f * (1.0f - pulse)).withCentre ({ x, y }), 2.0f);
             g.setColour (echoCol.withAlpha (juce::jlimit (0.0f, 1.0f, a * 0.75f)));
-            g.drawEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre ({ x, y }), 2.0f + 2.0f * amp);
-            g.setFont (cat::catFont (8.0f + 12.0f * amp, true));
-            g.drawText (k == 1 ? "MEOW" : "meow", juce::Rectangle<float> (90.0f, 24.0f).withCentre ({ x, y }), juce::Justification::centred);
+            g.drawEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre ({ x, y }), 2.0f + 2.0f * shownAmp);
+            g.setFont (cat::catFont (8.0f + 12.0f * shownAmp, true));
+            const juce::String word = reverse ? (k == 1 ? "WOEM" : "woem") : (k == 1 ? "MEOW" : "meow");
+            g.drawText (word, juce::Rectangle<float> (90.0f, 24.0f).withCentre ({ x, y }), juce::Justification::centred);
             // lines from the cat (left / right)
             if (st.pingpong > 0.05f && k <= 2)
             {
@@ -141,7 +160,7 @@ void EchoView::paint (juce::Graphics& g)
                 g.drawLine (catX + 40.0f, midY, x - r, y, 1.0f);
             }
         }
-        amp *= fb;
+        if (! stepsMode) amp *= fb;
         if (amp < 0.02f) break;
     }
     // shimmer sparkles rising out of the echoes
@@ -164,6 +183,9 @@ void EchoView::paint (juce::Graphics& g)
     g.setFont (cat::catFont (15.0f, true));
     juce::String t = st.sync ? divisionNames()[st.division] + "  =  " + timeText (st.delaySeconds()) : timeText (st.delaySeconds());
     t << "     " << juce::roundToInt (processor.getBpm()) << " BPM" << (processor.isHostSynced() ? "" : " (no host tempo)");
+    if (st.mode == ModeReverse) t << "     REVERSE";
+    if (st.mode == ModeSteps) t << "     STEPS";
+    if (std::abs (st.pitch) > 0.5f) t << "     " << (st.pitch > 0 ? "+" : "") << juce::roundToInt (st.pitch) << " semitones each echo";
     g.drawText (t, b.reduced (16.0f, 10.0f).removeFromTop (20.0f), juce::Justification::topLeft);
     if (frozen)
     {
@@ -196,6 +218,84 @@ void EchoView::paint (juce::Graphics& g)
         g.setColour (mc[i]);
         g.fillRoundedRectangle (bar.removeFromBottom (h), 2.0f);
     }
+}
+
+//==============================================================================
+//==============================================================================
+StepsEditor::StepsEditor (EchoCatProcessor& p) : processor (p)
+{
+    setTooltip ("The rhythm of the echoes: 8 echoes in a row, each bar is one echo's level (0 = a rest). "
+                "Drag up / down, or across to draw. The pattern repeats with the feedback");
+    startTimerHz (15);
+}
+
+StepsEditor::~StepsEditor()
+{
+    stopTimer();
+    for (int i = 0; i < numSteps; ++i)
+        if (gesture[(size_t) i])
+            if (auto* prm = processor.apvts.getParameter ("step" + juce::String (i + 1))) prm->endChangeGesture();
+}
+
+juce::Rectangle<float> StepsEditor::barArea (int step) const
+{
+    auto b = getLocalBounds().toFloat().reduced (10.0f, 8.0f);
+    b.removeFromLeft (64.0f);
+    const float w = b.getWidth() / (float) numSteps;
+    return { b.getX() + w * (float) step + 3.0f, b.getY(), w - 6.0f, b.getHeight() };
+}
+
+void StepsEditor::paint (juce::Graphics& g)
+{
+    const auto b = getLocalBounds().toFloat();
+    g.setColour (juce::Colour (0xcc0d1018));
+    g.fillRoundedRectangle (b, 8.0f);
+    g.setColour (cat::Colours::textDim);
+    g.setFont (cat::catFont (11.5f, true));
+    g.drawFittedText ("ECHO\nSTEPS", b.reduced (10.0f, 8.0f).removeFromLeft (60.0f).toNearestInt(), juce::Justification::centredLeft, 2);
+    const auto st = processor.shownSettings();
+    const double delay = juce::jmax (0.01, processor.engine.shownDelay.load());
+    const int playing = (int) std::fmod (juce::Time::getMillisecondCounterHiRes() * 0.001 / delay, (double) numSteps);
+    for (int i = 0; i < numSteps; ++i)
+    {
+        const auto a = barArea (i);
+        g.setColour (juce::Colours::white.withAlpha (0.07f));
+        g.fillRoundedRectangle (a, 4.0f);
+        const float v = juce::jlimit (0.0f, 1.0f, st.steps[(size_t) i]);
+        g.setColour (cat::Colours::red.withAlpha (i == playing ? 1.0f : 0.75f));
+        g.fillRoundedRectangle (a.withTrimmedTop (a.getHeight() * (1.0f - v)), 4.0f);
+        g.setColour (cat::Colours::text.withAlpha (0.8f));
+        g.setFont (cat::catFont (10.5f, true));
+        g.drawText (juce::String (i + 1), a.withTrimmedTop (a.getHeight() - 14.0f), juce::Justification::centred);
+    }
+}
+
+void StepsEditor::setFrom (juce::Point<float> pt)
+{
+    for (int i = 0; i < numSteps; ++i)
+    {
+        const auto a = barArea (i);
+        if (pt.x < a.getX() - 3.0f || pt.x > a.getRight() + 3.0f) continue;
+        const float v = juce::jlimit (0.0f, 1.0f, (a.getBottom() - pt.y) / a.getHeight());
+        if (auto* prm = processor.apvts.getParameter ("step" + juce::String (i + 1)))
+        {
+            if (! gesture[(size_t) i]) { prm->beginChangeGesture(); gesture[(size_t) i] = true; }
+            prm->setValueNotifyingHost (v < 0.04f ? 0.0f : v);
+        }
+    }
+    repaint();
+}
+
+void StepsEditor::mouseDown (const juce::MouseEvent& e) { setFrom (e.position); }
+void StepsEditor::mouseDrag (const juce::MouseEvent& e) { setFrom (e.position); }
+void StepsEditor::mouseUp (const juce::MouseEvent&)
+{
+    for (int i = 0; i < numSteps; ++i)
+        if (gesture[(size_t) i])
+        {
+            if (auto* prm = processor.apvts.getParameter ("step" + juce::String (i + 1))) prm->endChangeGesture();
+            gesture[(size_t) i] = false;
+        }
 }
 
 //==============================================================================
@@ -248,7 +348,8 @@ EchoCatEditor::EchoCatEditor (EchoCatProcessor& p) : processor (p)
     const K colourKnobs[] = { { "tone", "Tone", "Each echo gets darker (left) or stays bright (right)" },
                               { "lowcut", "Low Cut", "Each echo gets thinner: keeps the mix clean under vocals" },
                               { "wobble", "Wobble", "Old tape: the echoes waver in pitch" },
-                              { "drive", "Drive", "Warm tape saturation each time round" } };
+                              { "drive", "Drive", "Warm tape saturation each time round" },
+                              { "pitch", "Pitch", "Each echo this many semitones higher (right) or lower (left) than the last" } };
     for (auto& k : colourKnobs) { auto* kn = knob (k.id, k.caption, cat::Colours::red); kn->getSlider().setTooltip (k.tip); colourSection.addKnob (kn); }
     const K spaceKnobs[] = { { "space", "Space", "A big soft room around the sound and its echoes" },
                              { "shimmer", "Shimmer", "The space rings an octave higher - like a choir of glass" },
@@ -259,10 +360,14 @@ EchoCatEditor::EchoCatEditor (EchoCatProcessor& p) : processor (p)
                            { "output", "Output", "The level going out" } };
     for (auto& k : mixKnobs) { auto* kn = knob (k.id, k.caption, cat::Colours::green); kn->getSlider().setTooltip (k.tip); mixSection.addKnob (kn); }
 
-    for (juce::Component* c : { (juce::Component*) &presetBar, (juce::Component*) &freezeButton, (juce::Component*) &view,
+    modeBox.getCombo().setTooltip ("Normal echoes, Reverse (each echo plays backwards), or Steps (draw a rhythm of 8 echoes)");
+    for (juce::Component* c : { (juce::Component*) &presetBar, (juce::Component*) &freezeButton, (juce::Component*) &view, (juce::Component*) &modeBox,
                                 (juce::Component*) &timeSection, (juce::Component*) &colourSection, (juce::Component*) &spaceSection,
                                 (juce::Component*) &mixSection })
         addAndMakeVisible (c);
+    addChildComponent (stepsEditor);                     // over the picture (shown in Steps mode)
+    shownMode = processor.shownSettings().mode;
+    stepsEditor.setVisible (shownMode == ModeSteps);
     resized();
     startTimerHz (10);
 }
@@ -278,6 +383,12 @@ void EchoCatEditor::timerCallback()
         timeKnob->setAlpha (sync ? 0.35f : 1.0f);
         divisionBox.setAlpha (sync ? 1.0f : 0.35f);
     }
+    const int mode = processor.shownSettings().mode;
+    if (mode != shownMode)
+    {
+        shownMode = mode;
+        stepsEditor.setVisible (mode == ModeSteps);
+    }
 }
 
 void EchoCatEditor::paint (juce::Graphics& g)
@@ -292,21 +403,24 @@ void EchoCatEditor::paint (juce::Graphics& g)
 
 void EchoCatEditor::resized()
 {
-    if (knobs.size() < 13) return;   // still being built
+    if (knobs.size() < 14) return;   // still being built
     auto r = getLocalBounds().reduced (14, 10);
     auto top = r.removeFromTop (40);
     logoArea = top.removeFromLeft (150);
     top.removeFromLeft (12);
     presetBar.setBounds (top.removeFromLeft (440));
     freezeButton.setBounds (top.removeFromRight (110));
+    top.removeFromRight (10);
+    modeBox.setBounds (top.removeFromRight (200));
     infoArea = getLocalBounds().removeFromBottom (22).reduced (16, 0);
     r.removeFromBottom (16);
     r.removeFromTop (10);
     auto bottom = r.removeFromBottom (232);
     r.removeFromBottom (10);
     view.setBounds (r);
+    stepsEditor.setBounds (r.removeFromBottom (86).reduced (12, 8).withTrimmedLeft (60).withTrimmedRight (34));
     const int gap = 10;
-    const int w1 = 330, w2 = (bottom.getWidth() - w1 - 3 * gap) * 4 / 10, w3 = (bottom.getWidth() - w1 - 3 * gap) * 3 / 10;
+    const int w1 = 330, w2 = (bottom.getWidth() - w1 - 3 * gap) * 5 / 11, w3 = (bottom.getWidth() - w1 - 3 * gap) * 3 / 11;
     timeSection.setBounds (bottom.removeFromLeft (w1)); bottom.removeFromLeft (gap);
     colourSection.setBounds (bottom.removeFromLeft (w2)); bottom.removeFromLeft (gap);
     spaceSection.setBounds (bottom.removeFromLeft (w3)); bottom.removeFromLeft (gap);

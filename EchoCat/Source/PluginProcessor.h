@@ -68,6 +68,7 @@ private:
     echocat::Settings readSettings (double bpm) const;
     float p (const char* id) const;
 
+    std::array<std::atomic<float>*, echocat::numSteps> stepRefs {};
     std::map<std::string, std::atomic<float>*> refs;
     cat::SafetyLimiter limiter;
     std::vector<float> monoRight;

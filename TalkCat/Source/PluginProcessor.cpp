@@ -272,7 +272,9 @@ TalkCatProcessor::TalkCatProcessor()
     {
         cat::LinkClient::Caps caps;
         caps.key = true;
+        caps.receiveTuning = true;
         auto& link = presetManager.enableLink (apvts, caps);
+        engine.link = &link;
         link.getKey = [this]
         {
             const int root = juce::roundToInt (apvts.getRawParameterValue ("key")->load());

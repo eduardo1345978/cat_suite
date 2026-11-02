@@ -349,10 +349,10 @@ MicroCatEditor::MicroCatEditor (MicroCatProcessor& p) : processor (p)
         else status = "Couldn't save the tuning";
         repaint();
     };
-    loadButton.setTooltip ("Open a Scala .scl tuning file");
+    loadButton.setTooltip ("Open a Scala .scl or Ableton .ascl tuning file (an .ascl also sets the root pitch)");
     loadButton.onClick = [this]
     {
-        chooser = std::make_unique<juce::FileChooser> ("Open a Scala tuning", juce::File::getSpecialLocation (juce::File::userDocumentsDirectory), "*.scl");
+        chooser = std::make_unique<juce::FileChooser> ("Open a tuning (Scala .scl or Ableton .ascl)", juce::File::getSpecialLocation (juce::File::userDocumentsDirectory), "*.scl;*.ascl");
         chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
                               [sp = juce::Component::SafePointer<MicroCatEditor> (this)] (const juce::FileChooser& fc)
         {
@@ -363,7 +363,10 @@ MicroCatEditor::MicroCatEditor (MicroCatProcessor& p) : processor (p)
             {
                 t.name = fc.getResult().getFileNameWithoutExtension();
                 sp->processor.setTuning (t, true);
-                sp->status = "Opened " + fc.getResult().getFileName();
+                int key = 60; double hz = 0.0;
+                if (rootFromReference (t, key, hz)) sp->processor.setRoot (key, hz);   // .ascl: its reference pitch
+                sp->status = "Opened " + fc.getResult().getFileName()
+                           + (hz > 0.0 ? " (root " + juce::MidiMessage::getMidiNoteName (key, true, true, 4) + " = " + juce::String (hz, 2) + " Hz)" : juce::String());
             }
             else sp->status = "Couldn't read " + fc.getResult().getFileName() + ": " + err;
             sp->repaint();
@@ -409,13 +412,19 @@ MicroCatEditor::MicroCatEditor (MicroCatProcessor& p) : processor (p)
     rangeBox.getCombo().setTooltip ("Must be the same as your synth's MPE pitch-bend range (MPE synths: 48)");
     configToggle.setTooltip ("Tells the synth it gets MPE and the bend range (MPE Configuration Message + RPN 0)");
     bypassToggle.setTooltip ("Play the notes as they come in (normal tuning)");
+    mtsToggle.setTooltip ("Tune every MTS-ESP synth in the project (Surge XT, Vital, Pigments, Serum 2, u-he, Kontakt ...) - "
+                          "no MIDI routing, no MPE, like Ableton's tuning. The MIDI out then plays the notes as they are");
+    mtsResetButton.setTooltip ("A crashed program left MTS-ESP thinking another master runs: reset it and take over");
+    mtsResetButton.onClick = [this] { processor.mts.reset(); };
+    addChildComponent (mtsResetButton);
 
     for (juce::Component* c : { (juce::Component*) &presetBar, (juce::Component*) &nameBox, (juce::Component*) &centsBox,
                                 (juce::Component*) &downButton, (juce::Component*) &upButton, (juce::Component*) &addButton,
                                 (juce::Component*) &removeButton, (juce::Component*) &saveButton, (juce::Component*) &loadButton,
                                 (juce::Component*) &exportButton, (juce::Component*) &newButton, (juce::Component*) &concertButton,
                                 (juce::Component*) &keyboard, (juce::Component*) &rootBox, (juce::Component*) &mapBox, (juce::Component*) &rangeBox,
-                                (juce::Component*) &rootHz, (juce::Component*) &voices, (juce::Component*) &configToggle, (juce::Component*) &bypassToggle })
+                                (juce::Component*) &rootHz, (juce::Component*) &voices, (juce::Component*) &configToggle, (juce::Component*) &bypassToggle,
+                                (juce::Component*) &mtsToggle })
         addAndMakeVisible (c);
 
     userTunings = loadUserTunings();
@@ -537,6 +546,14 @@ void MicroCatEditor::showTuning()
 
 void MicroCatEditor::timerCallback()
 {
+    const auto ms = processor.mts.statusText();
+    const bool showReset = processor.mts.canReset();
+    if (ms != mtsStatus || showReset != mtsResetButton.isVisible())
+    {
+        mtsStatus = ms;
+        mtsResetButton.setVisible (showReset);
+        repaint (mtsStatusArea);
+    }
     if (processor.tuningVersion.load() != shownVersion)
     {
         shownVersion = processor.tuningVersion.load();
@@ -573,8 +590,13 @@ void MicroCatEditor::paint (juce::Graphics& g)
     g.drawText ("Voices", voices.getBounds().withX (settingsArea.getX() + 14).withWidth (60), juce::Justification::centredLeft);
     g.drawFittedText ("IN CUBASE: put Micro-Cat on a MIDI track, set the track's MIDI Out (or a MIDI Send) to your synth. "
                       "In the synth turn MPE on and set its pitch-bend range to the Bend range here (48 for MPE synths).\n"
-                      "Synths with MPE: Vital, Surge XT, Serum, Pigments, Phase Plant, Equator, Cubase's own Retrologue / Padshop in MPE mode, Glide-Cat.",
-                      helpArea, juce::Justification::topLeft, 12);
+                      "Synths with MPE: Vital, Surge XT, Serum, Pigments, Phase Plant, Equator, Cubase's own Retrologue / Padshop in MPE mode.\n"
+                      "GLIDE-, SING- AND TALK-CAT need no routing: they play in this tuning over Cat Link (switch in their Link panel). "
+                      "Don't also send Micro-Cat's MIDI to them, or they are tuned twice.",
+                      helpArea, juce::Justification::topLeft, 14);
+    g.setColour (processor.mts.state() == micro::MtsMaster::State::Connected ? cat::Colours::accent : cat::Colours::textDim);
+    g.setFont (cat::catFont (11.0f));
+    g.drawFittedText (mtsStatus, mtsStatusArea, juce::Justification::topLeft, 2);
     if (status.isNotEmpty())
     {
         g.setColour (cat::Colours::accent);
@@ -620,7 +642,13 @@ void MicroCatEditor::resized()
     auto vr = s.removeFromTop (30);
     vr.removeFromLeft (60);
     voices.setBounds (vr.removeFromLeft (130)); s.removeFromTop (6);
-    configToggle.setBounds (s.removeFromTop (30)); s.removeFromTop (12);
+    configToggle.setBounds (s.removeFromTop (30)); s.removeFromTop (8);
+    auto mr = s.removeFromTop (30);
+    mtsToggle.setBounds (mr.removeFromLeft (150));
+    mr.removeFromLeft (6);
+    mtsResetButton.setBounds (mr);
+    mtsStatusArea = s.removeFromTop (30);
+    s.removeFromTop (6);
     helpArea = s;
 
     // the middle: the circle, then the selected note and the tuning's name

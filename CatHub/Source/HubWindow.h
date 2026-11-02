@@ -92,16 +92,25 @@ private:
 };
 
 /** A Cat's own window inside a tab, centred and scaled to fit. */
-class CatTab : public juce::Component
+class CatTab : public juce::Component, private juce::ComponentListener, private juce::Timer
 {
 public:
     explicit CatTab (juce::AudioPluginInstance&);
     ~CatTab() override;
     void resized() override;
     void paint (juce::Graphics&) override;
+    void visibilityChanged() override { refitSoon(); }
+    void parentHierarchyChanged() override { refitSoon(); }
+    /** The size the Cat's window should have now (fits the tab, aspect kept). */
+    juce::Rectangle<int> targetBounds() const;
 private:
+    void fit();
+    void refitSoon() { tries = 0; startTimer (60); }
+    void componentMovedOrResized (juce::Component&, bool wasMoved, bool wasResized) override;
+    void timerCallback() override;
     std::unique_ptr<juce::AudioProcessorEditor> editor;
-    int naturalW = 0, naturalH = 0;
+    int naturalW = 0, naturalH = 0;                // only the shape (aspect) is used: plug-ins remember their own size
+    int tries = 0;
 };
 
 /** Compose: the song writer. Genre, mood, seed, song / endless, "new ..." for each part,
@@ -290,6 +299,16 @@ public:
 
     // for the tests
     bool selectTab (int index) { if (index >= tabs.getNumTabs()) return false; tabs.setCurrentTabIndex (index); return true; }
+    int numTabs() const { return tabs.getNumTabs(); }
+    juce::String tabName (int i) const { return tabs.getTabNames()[i]; }
+    /** The current tab's Cat window: its bounds inside the tab (empty if it is not a Cat tab), and the tab's size. */
+    juce::Rectangle<int> catEditorBounds (juce::Rectangle<int>* tabArea = nullptr) const
+    {
+        auto* page = tabs.getCurrentContentComponent();
+        if (tabArea != nullptr && page != nullptr) *tabArea = page->getLocalBounds();
+        if (page == nullptr || page->getNumChildComponents() == 0) return {};
+        return page->getChildComponent (0)->getBounds();
+    }
     ComposePage* getComposePage() { return composePage; }
     void tickForSnapshot() { timerCallback(); }
     void restoreStateSafely (const juce::ValueTree& t) { changeCats ([this, t] { engine.restoreState (t); }); }

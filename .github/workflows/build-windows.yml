@@ -52,6 +52,9 @@ jobs:
             Where-Object { $_.FullName -match '_artefacts\\Release\\VST3\\[^\\]+\.vst3$' } |
             ForEach-Object { Copy-Item $_.FullName "$pkg\VST3\" -Recurse; Write-Host "packed $($_.Name)" }
           Copy-Item packaging\Install-Cat-Suite.bat $pkg
+          New-Item -ItemType Directory -Force "$pkg\MTS-ESP" | Out-Null
+          Copy-Item ThirdParty\MTS-ESP\libMTS\Win\libMTSWin_v1.03.exe "$pkg\MTS-ESP\"
+          Copy-Item ThirdParty\MTS-ESP\LICENSE "$pkg\MTS-ESP\LICENSE.txt"
           Copy-Item packaging\README-install.txt $pkg
           Compress-Archive -Path "$pkg\*" -DestinationPath Cat-Suite-Windows.zip -Force
           $count = (Get-ChildItem "$pkg\VST3" -Directory).Count

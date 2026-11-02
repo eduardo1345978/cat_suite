@@ -84,6 +84,9 @@ jobs:
           cp "packaging/Install Cat Suite.command" "$pkg/"
           chmod +x "$pkg/Install Cat Suite.command"
           cp packaging/README-mac.txt "$pkg/"
+          mkdir -p "$pkg/MTS-ESP"
+          cp ThirdParty/MTS-ESP/libMTS/Mac/libMTSMac_v1.03.pkg "$pkg/MTS-ESP/"
+          cp ThirdParty/MTS-ESP/LICENSE "$pkg/MTS-ESP/LICENSE.txt"
           (cd pkg && ditto -c -k --sequesterRsrc --keepParent Cat-Suite ../Cat-Suite-Mac.zip)
           ls -la Cat-Suite-Mac.zip
 

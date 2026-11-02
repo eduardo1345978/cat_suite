@@ -32,7 +32,7 @@ then copy changed files to the PC (D:\Projekty\vst_plugin) and run build_and_ins
 - [ ] Crashes: hunt them (stress tests, Hub + Muse-Cat PresetBar menu under no display)
 
 ## 4. Echo-Cat
-- [ ] More presets, reverse echo, pitch echo (each echo higher / lower), echo steps (draw a rhythm of echoes)
+- [x] More presets, reverse echo, pitch echo (each echo higher / lower), echo steps (draw a rhythm of echoes) (2 Nov)
 
 ## 5. New plug-ins
 - [ ] Tune-Cat: vocal tuner - natural correction, hard T-Pain effect, follows Chord-Cat's key (Cat Link), harmony voices
@@ -185,6 +185,12 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
 
 ## Asked later
 - [x] Micro-Cat: microtonal tunings for Cubase like Ableton (2 Nov): MPE pitch bend to any synth, 37 tunings (equal, just & historical, world), browser + tuning circle editor, Scala .scl in / out
+- [x] Micro-Cat: Glide-, Sing- and Talk-Cat play in its tuning over Cat Link (no MPE, no routing) (2 Nov)
+- [x] Micro-Cat: Ableton .ascl files (reference pitch sets the root) (2 Nov)
+- [x] Micro-Cat: MTS-ESP master (one tuning for every MTS-ESP synth); the installers offer the free MTS-ESP library (2 Nov)
+- [x] Cat Hub: the Cats' windows follow the Hub's window size (they were stuck at their first size) (2 Nov)
+- [x] Crash hunt: every Cat 2 x 45 s UI + audio stress under AddressSanitizer, Hub UI stress + self test, Ocean self test (2 Nov)
+- [x] Mac: Cat Link works between the Cats (each Mac plug-in had its own temp folder) (2 Nov)
 
 ## Answers that mean "no"
 - Vertical Shorts picture: no, YouTube Auto is fine

@@ -1,4 +1,5 @@
 #include "LinkBus.h"
+#include "CatLink.h"
 
 namespace cat
 {
@@ -72,11 +73,16 @@ struct alignas (16) LinkBus::Shared
     double transportBpm;
     juce::int64 transportStartTicks;
     juce::uint64 transportSource;
+
+    // Micro-Cat's tuning (added at the end: older Cats simply don't read it)
+    juce::uint32 tuningSeq, tuningActive;
+    juce::uint64 tuningSource;
+    float tuningPitch[128];
 };
 
 juce::File LinkBus::busFile()
 {
-    return juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("CatSuiteLink.bus");
+    return CatLink::sharedFolder().getChildFile ("CatSuiteLink.bus");     // the same folder for every Cat (Mac too)
 }
 
 LinkBus::LinkBus()
@@ -219,6 +225,39 @@ bool LinkBus::readKey (juce::uint32& seq, int& root, juce::uint16& absMask, juce
         std::atomic_thread_fence (std::memory_order_acquire);
         if (at (shared->keySeq).load (std::memory_order_relaxed) != s1) continue;
         seq = s1; root = r; absMask = m; source = src;
+        return true;
+    }
+    return false;
+}
+
+//==============================================================================
+void LinkBus::publishTuning (const float* pitches, bool active, juce::uint64 source)
+{
+    if (! lock()) return;
+    auto seq = at (shared->tuningSeq);
+    seq.fetch_add (1u, std::memory_order_acq_rel);
+    for (int k = 0; k < 128; ++k) shared->tuningPitch[k] = pitches != nullptr ? pitches[k] : (float) k;
+    shared->tuningActive = active ? 1u : 0u;
+    shared->tuningSource = source;
+    seq.fetch_add (1u, std::memory_order_release);
+    unlock();
+}
+
+bool LinkBus::readTuning (juce::uint32& seq, std::array<float, 128>& pitches, bool& active, juce::uint64& source) const
+{
+    if (shared == nullptr) return false;
+    for (int tries = 0; tries < 8; ++tries)
+    {
+        const auto s1 = at (shared->tuningSeq).load (std::memory_order_acquire);
+        if (s1 == seq) return false;
+        if ((s1 & 1u) != 0u) continue;
+        std::array<float, 128> p;
+        for (int k = 0; k < 128; ++k) p[(size_t) k] = shared->tuningPitch[k];
+        const bool a = shared->tuningActive != 0u;
+        const auto src = shared->tuningSource;
+        std::atomic_thread_fence (std::memory_order_acquire);
+        if (at (shared->tuningSeq).load (std::memory_order_relaxed) != s1) continue;
+        seq = s1; pitches = p; active = a; source = src;
         return true;
     }
     return false;

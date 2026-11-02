@@ -6,6 +6,17 @@
 #include <map>
 #include <set>
 
+/** Cat Link's shared folder (as in Shared/Source/CatLink.cpp: on a Mac JUCE's temp folder is per program). */
+juce::File catLinkFolder()
+{
+   #if JUCE_MAC
+    return juce::File ("~/Library/Caches/CatSuite");
+   #else
+    return juce::File::getSpecialLocation (juce::File::tempDirectory);
+   #endif
+}
+
+
 namespace
 {
 constexpr double sampleRate = 48000.0;
@@ -1007,14 +1018,14 @@ void testCatLink()
     // A chain picked in "another Cat": written straight into the link file
     {
         juce::XmlElement x ("CATLINK");
-        if (auto old = juce::XmlDocument::parse (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("CatSuiteLink.xml")))
+        if (auto old = juce::XmlDocument::parse (catLinkFolder().getChildFile ("CatSuiteLink.xml")))
             x = *old;
         auto* c = x.getChildByName ("CHAIN");
         if (c == nullptr) c = x.createNewChildElement ("CHAIN");
         c->setAttribute ("name", "Trap Night");
         c->setAttribute ("stamp", juce::String (juce::Time::currentTimeMillis() + 10));
         c->setAttribute ("source", "host-test");
-        x.writeTo (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("CatSuiteLink.xml"));
+        x.writeTo (catLinkFolder().getChildFile ("CatSuiteLink.xml"));
     }
     juce::MessageManager::getInstance()->runDispatchLoopUntil (1200);
     auto now = [] (juce::AudioPluginInstance& p) { return p.getProgramName (p.getCurrentProgram()); };

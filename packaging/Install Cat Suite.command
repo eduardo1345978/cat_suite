@@ -34,5 +34,17 @@ else
     echo
     echo "  In Cubase: Studio > VST Plug-in Manager > Rescan."
 fi
+
+# Micro-Cat's MTS-ESP mode needs ODDSound's free MTS-ESP library (one tuning for every MTS-ESP synth)
+if [ ! -f "/Library/Application Support/MTS-ESP/libMTS.dylib" ] && [ -f "MTS-ESP/libMTSMac_v1.03.pkg" ]; then
+    echo
+    echo "  Micro-Cat can tune every MTS-ESP synth at once (Surge XT, Vital, Pigments, Serum 2 ...)."
+    echo "  For that it needs the free MTS-ESP library by ODDSound."
+    printf "  Install the MTS-ESP library now? [y/N] "
+    read -r answer
+    case "$answer" in
+        [yY]*) open -W "MTS-ESP/libMTSMac_v1.03.pkg" ;;
+    esac
+fi
 echo
 echo "  You can close this window."

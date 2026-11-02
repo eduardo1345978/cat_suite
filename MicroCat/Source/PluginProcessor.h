@@ -5,6 +5,7 @@
 #include <map>
 #include "PresetBar.h"
 #include "MicroEngine.h"
+#include "MtsEsp.h"
 
 /**
     Micro-Cat: microtonal tunings for Cubase. Like Ableton's tuning systems, but for any synth: it sits on a
@@ -12,11 +13,11 @@
     its own channel with the pitch bend that tunes it. About 40 tunings (equal, just & historical, world),
     your own in the editor, saved as Scala .scl files.
 */
-class MicroCatProcessor : public juce::AudioProcessor
+class MicroCatProcessor : public juce::AudioProcessor, private juce::Timer
 {
 public:
     MicroCatProcessor();
-    ~MicroCatProcessor() override = default;
+    ~MicroCatProcessor() override { stopTimer(); }
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -70,10 +71,20 @@ public:
 
     micro::Engine engine;
 
+    /** Cat Link: the pitch (MIDI semitones, fractional) every key plays now; out-of-range keys keep k. */
+    std::array<float, 128> keyPitches() const;
+    int linkPublishes = 0;                        // for the tests
+    /** MTS-ESP master: the tuning goes to every MTS-ESP synth (the MIDI then passes through untouched). */
+    micro::MtsMaster mts;
+    std::atomic<bool> mtsConnected { false };
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
     float p (const char* id) const;
     void syncEngineTuning();
+    void timerCallback() override;              // sends the tuning to Glide / Sing / Talk-Cat over Cat Link
+    juce::String publishedKey;
+    int mtsPollCount = 0;
 
     std::map<std::string, std::atomic<float>*> refs;
     mutable juce::SpinLock tuningLock;            // the editor writes, the audio thread copies (try-lock)

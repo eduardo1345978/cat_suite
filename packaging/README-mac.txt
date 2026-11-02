@@ -28,3 +28,5 @@ What is inside (folder VST3):
     Life-Cat   - a living ecosystem that makes music
     Echo-Cat   - echo and shimmer space for vocals and instruments (an audio effect)
     Micro-Cat  - microtonal tunings (37 + your own) for any MPE synth
+                 (Glide/Sing/Talk-Cat follow it over Cat Link; MTS-ESP synths too, with
+                 the free MTS-ESP library the installer offers)

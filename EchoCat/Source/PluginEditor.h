@@ -22,6 +22,24 @@ private:
     double clock = 0.0;
 };
 
+/** Steps mode: the 8 echoes' levels as bars - drag up / down (or across) to draw the rhythm. */
+class StepsEditor : public juce::Component, public juce::SettableTooltipClient, private juce::Timer
+{
+public:
+    explicit StepsEditor (EchoCatProcessor&);
+    ~StepsEditor() override;
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
+    juce::Rectangle<float> barArea (int step) const;
+private:
+    void timerCallback() override { repaint(); }
+    void setFrom (juce::Point<float>);
+    EchoCatProcessor& processor;
+    std::array<bool, echocat::numSteps> gesture {};
+};
+
 /** A titled glass group with its controls. */
 class EchoSection : public juce::Component
 {
@@ -52,7 +70,9 @@ private:
     EchoCatProcessor& processor;
     cat::PresetBar presetBar { processor.presetManager, "Preset" };
     cat::ParamToggle freezeButton { processor.apvts, "freeze", "Freeze" }, syncButton { processor.apvts, "sync", "In time with Cubase" };
-    cat::ParamCombo divisionBox { processor.apvts, "division", "Echo", nullptr, 44 };
+    cat::ParamCombo divisionBox { processor.apvts, "division", "Echo", nullptr, 44 },
+                    modeBox { processor.apvts, "mode", "Mode", nullptr, 50 };
+    StepsEditor stepsEditor { processor };
     EchoView view { processor };
     EchoSection timeSection { "TIME", cat::Colours::accent }, colourSection { "EACH ECHO", cat::Colours::red },
                 spaceSection { "SPACE", cat::Colours::purple }, mixSection { "MIX", cat::Colours::green };
@@ -61,6 +81,7 @@ private:
     juce::Rectangle<int> logoArea, infoArea;
     juce::String info;
     bool shownSync = true;
+    int shownMode = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EchoCatEditor)
 };

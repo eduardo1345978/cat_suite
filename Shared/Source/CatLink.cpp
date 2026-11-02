@@ -26,9 +26,22 @@ CatLink::~CatLink()
     stopTimer();
 }
 
+juce::File CatLink::sharedFolder()
+{
+   #if JUCE_MAC
+    // (JUCE's temp folder on a Mac is different for every plug-in - ~/Library/Caches/<plug-in name> -
+    // so the Cats would never find each other there)
+    auto dir = juce::File ("~/Library/Caches/CatSuite");
+    dir.createDirectory();
+    return dir;
+   #else
+    return juce::File::getSpecialLocation (juce::File::tempDirectory);
+   #endif
+}
+
 juce::File CatLink::linkFile()
 {
-    return juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("CatSuiteLink.xml");
+    return sharedFolder().getChildFile ("CatSuiteLink.xml");
 }
 
 void CatLink::write (const std::function<void (juce::XmlElement&)>& modify)

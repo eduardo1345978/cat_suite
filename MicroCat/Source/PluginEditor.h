@@ -91,7 +91,7 @@ private:
     TuningCircle circle;
     juce::TextEditor nameBox, centsBox;
     juce::TextButton downButton { "-1" }, upButton { "+1" }, addButton { "Add note" }, removeButton { "Remove note" },
-                     saveButton { "Save as mine" }, loadButton { "Load .scl..." }, exportButton { "Export .scl..." },
+                     saveButton { "Save as mine" }, loadButton { "Open file..." }, exportButton { "Export .scl..." },
                      newButton { "New equal..." }, concertButton { "A4 = 440 Hz" };
     TuningKeyboard keyboard { processor };
 
@@ -100,7 +100,11 @@ private:
                     rangeBox { processor.apvts, "bendRange", "Bend", nullptr, 44 };
     juce::Slider rootHz, voices;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> rootHzAttach, voicesAttach;
-    cat::ParamToggle configToggle { processor.apvts, "sendConfig", "Send MPE set-up" }, bypassToggle { processor.apvts, "bypass", "Bypass" };
+    cat::ParamToggle configToggle { processor.apvts, "sendConfig", "Send MPE set-up" }, bypassToggle { processor.apvts, "bypass", "Bypass" },
+                     mtsToggle { processor.apvts, "mtsEsp", "MTS-ESP master" };
+    juce::TextButton mtsResetButton { "Reset MTS-ESP" };
+    juce::Rectangle<int> mtsStatusArea;
+    juce::String mtsStatus;
 
     std::unique_ptr<juce::FileChooser> chooser;
     juce::Rectangle<int> logoArea, listHeader, infoArea, noteLabelArea, settingsArea, helpArea;

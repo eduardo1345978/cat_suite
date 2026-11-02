@@ -1,4 +1,5 @@
 #include "VoiceEngine.h"
+#include "LinkClient.h"
 
 namespace talkcat
 {
@@ -737,7 +738,7 @@ void Engine::controlUpdate (Voice& v, int group, int index, float dt)
     const float elder = juce::jmax (0.0f, settings.age - 0.5f) * 2.0f, child = juce::jmax (0.0f, 0.5f - settings.age) * 2.0f;
     const float cat = juce::jlimit (0.0f, 1.0f, settings.cat + e.cat);
 
-    v.f0 = juce::jlimit (25.0f, 3000.0f, 440.0f * std::pow (2.0f, (semis + offset - 69.0f) / 12.0f));
+    v.f0 = juce::jlimit (25.0f, 3000.0f, 440.0f * std::pow (2.0f, ((link != nullptr ? link->tuned (semis + offset) : semis + offset) - 69.0f) / 12.0f));
     v.voicing = hiss ? 0.0f : dyn;
     v.consVoiceTarget = ar.voice;
     v.aspExtra = ar.asp + (hiss ? 1.2f : 0.0f);
