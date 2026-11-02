@@ -50,7 +50,13 @@ jobs:
         run: |
           host=$(find build/Tests -type f -name CatSuiteHostTest -perm -u+x | head -1)
           echo "test host: $host"
-          "$host"
+          set +e
+          "$host" 2>&1 | tee test.log
+          code=${PIPESTATUS[0]}
+          # failed checks (and a crash) as annotations, readable on the run page
+          grep -E "FAIL|Could not|TEST\(S\) FAILED|Segmentation|Abort|exception" test.log | head -40 | sed 's/^/::error::/'
+          [ $code -ne 0 ] && echo "::error::test host exit code $code (last lines: $(tail -3 test.log | tr '\n' ' '))"
+          exit $code
 
       - name: Package
         run: |
