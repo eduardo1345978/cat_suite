@@ -62,7 +62,7 @@ then copy changed files to the PC (D:\Projekty\vst_plugin) and run build_and_ins
 - [ ] One-click installer .exe where you tick what you want - MODERN and nice to use (user asked): a real window
       with the Cat look, cards with icons for each Cat / app, a progress bar, "Open Cubase" / "Start Cat Hub" at the end, also uninstall
 - [ ] Auto update: the apps tell you a new version is out, you click Update
-- [ ] Mac version: later
+- [x] Mac version: universal VST3s (Apple Silicon + Intel) built and tested on GitHub, Cat-Suite-Mac.zip in the release (2 Nov). Apps for Mac: later
 - [ ] Linux: publish Linux builds too (VST3 + apps) on GitHub (user asked 21 Oct; everything already builds and is tested on Linux)
 
 ## 10. Cat Box (hardware groovebox) - TOP PRIORITY (questionnaires 4 + 5, 22 Oct 2026)

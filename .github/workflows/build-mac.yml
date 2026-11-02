@@ -1,0 +1,97 @@
+# Builds every Cat Suite plug-in for macOS as universal VST3s (Apple Silicon + Intel, macOS 11+),
+# runs the host tests on the real Mac binaries, and adds Cat-Suite-Mac.zip to the "latest" release
+# (next to the Windows downloads):
+#   Cat-Suite-Mac.zip   VST3/*.vst3 + "Install Cat Suite.command" + README-mac.txt
+name: Build Mac plug-ins
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:        # "Run workflow" button on the Actions page
+
+permissions:
+  contents: write           # needed to add the zip to the release
+
+concurrency:
+  group: mac-build-${{ github.ref }}
+  cancel-in-progress: false  # a running build always finishes (and publishes); newer pushes wait their turn
+
+jobs:
+  mac:
+    runs-on: macos-14
+    timeout-minutes: 180
+
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Reuse the JUCE download
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: mac-juce-8.0.15-${{ hashFiles('cmake/JuceSetup.cmake') }}
+
+      - name: Configure (universal VST3, macOS 11+, with tests)
+        run: >
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+          -DCAT_BUILD_TESTS=ON -DCAT_PLUGIN_FORMATS=VST3 -DCAT_SOUND_STANDALONE=OFF
+
+      - name: Build all plug-ins and the test host
+        run: cmake --build build --config Release --parallel 4 --target CatSuiteHostTest MuseCat_VST3
+
+      - name: Run the tests (they load the Mac .vst3 files)
+        run: |
+          host=$(find build/Tests -type f -name CatSuiteHostTest -perm -u+x | head -1)
+          echo "test host: $host"
+          "$host"
+
+      - name: Package
+        run: |
+          set -e
+          pkg="pkg/Cat-Suite"
+          mkdir -p "$pkg/VST3"
+          # every built plug-in bundle (not the copies inside other bundles)
+          find build -type d -name "*.vst3" -path "*_artefacts/Release/VST3/*" -prune | while read -r b; do
+            case "$b" in *_artefacts/Release/VST3/*.vst3) ;; *) continue ;; esac
+            [ "$(basename "$(dirname "$b")")" = "VST3" ] || continue
+            ditto "$b" "$pkg/VST3/$(basename "$b")"
+            echo "packed $(basename "$b")"
+          done
+          count=$(find "$pkg/VST3" -maxdepth 1 -type d -name "*.vst3" | wc -l | tr -d ' ')
+          if [ "$count" -lt 12 ]; then echo "::error::Only $count plug-ins were packed"; exit 1; fi
+          # both kinds of Mac in every plug-in, then an ad-hoc signature (Apple Silicon only runs signed code)
+          for b in "$pkg"/VST3/*.vst3; do
+            exe="$b/Contents/MacOS/$(basename "$b" .vst3)"
+            archs=$(lipo -archs "$exe")
+            echo "$(basename "$b"): $archs"
+            case "$archs" in *arm64*x86_64*|*x86_64*arm64*) ;; *) echo "::error::$(basename "$b") is not universal ($archs)"; exit 1 ;; esac
+            codesign --force --deep --sign - "$b"
+            codesign --verify --deep --strict "$b"
+          done
+          cp "packaging/Install Cat Suite.command" "$pkg/"
+          chmod +x "$pkg/Install Cat Suite.command"
+          cp packaging/README-mac.txt "$pkg/"
+          (cd pkg && ditto -c -k --sequesterRsrc --keepParent Cat-Suite ../Cat-Suite-Mac.zip)
+          ls -la Cat-Suite-Mac.zip
+
+      - name: Keep the zip on the Actions page
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cat-Suite-Mac
+          path: Cat-Suite-Mac.zip
+          retention-days: 30
+
+      - name: Add to the "latest" release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # the Windows build creates / updates the release; wait for it to exist, then add (or replace) the Mac zip
+          for try in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            if gh release view latest > /dev/null 2>&1 && gh release upload latest Cat-Suite-Mac.zip --clobber; then
+              echo "Cat-Suite-Mac.zip is on the release"; exit 0
+            fi
+            echo "release not ready (try $try), waiting"; sleep 300
+          done
+          echo "::error::Could not add Cat-Suite-Mac.zip to the release"; exit 1

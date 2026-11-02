@@ -6,6 +6,16 @@
 2. Unzip it, close Cubase and double-click **Install-Cat-Suite.bat**.
 3. In Cubase: **Studio > VST Plug-in Manager > Rescan**.
 
+## Download (Mac)
+
+Every plug-in also comes for **macOS 11 or newer**, on **Apple Silicon (M1-M4) and Intel** Macs.
+
+1. Open **[Releases > latest](../../releases/tag/latest)** and download **Cat-Suite-Mac.zip**, then unzip it.
+2. Quit Cubase. **Right-click** *Install Cat Suite.command* > **Open** > **Open**. macOS asks the first time because the Cats aren't from the App Store. It copies the Cats into `~/Library/Audio/Plug-Ins/VST3`.
+3. In Cubase: **Studio > VST Plug-in Manager > Rescan**.
+
+The Mac download has the 12 VST3 plug-ins. The apps (Cat Hub, Cat Ocean ...) are Windows-only for now.
+
 **Only the instruments that make sound, as apps** (Sing-Cat, Talk-Cat, Glide-Cat, Life-Cat): download **[Get-Cat-Sound-Apps.bat](../../releases/download/latest/Get-Cat-Sound-Apps.bat)** and double-click it (if Windows warns, click *More info > Run anyway*). It downloads just those four, installs them as standalone apps with Start menu and Desktop shortcuts, and also as VST3 plug-ins. In the apps you can play with a MIDI keyboard or your **computer keyboard**: `A S D F G H J K L` = white keys, `W E T Y U O P` = black keys (Z works as Y on Slovak / German keyboards), Left / Right arrow = octave, Down / Up arrow = velocity.
 
 **Cat Hub** (comes with Get-Cat-Sound-Apps.bat): one window where **all the Cats jam together** without Cubase. Press **Play**: the Hub walks through Chord-Cat's pads, Bass-Cat plays a bass line to the chords, Drum-Cat the drums and Life-Cat's creatures sing along, all at one tempo.
