@@ -195,7 +195,8 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
 ## Experimental music (questionnaire 3 Nov, "najprv najrýchlejšie")
 - [x] Micro-Cat: live just intonation (held chord tuned pure around its lowest note, 5- / 7-limit, notes glide)
 - [x] Micro-Cat: tuning B + Morph knob (held notes glide; Cat Link / MTS-ESP follow)
-- [ ] Echo-Cat: resonator echo (strings tuned to Micro-Cat's tuning)
+- [x] Echo-Cat: resonator echo (strings tuned to Micro-Cat's tuning, or on Chord-Cat's chord)
+- [x] Echo-Cat sound fixes (user: "sounds bad"): shimmer ran away into noise, drive made the loop louder each time round, space too loud (limiter)
 - [ ] New experimental rhythm VST: phasing (Reich), polymeters, Risset rhythm, metric modulation
 - [ ] Shepard tone (endless glissando)
 - [ ] Micro-Cat: tuning from a sound (its partials)

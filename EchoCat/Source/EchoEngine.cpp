@@ -38,7 +38,19 @@ double divisionBeats (int index)
     return beats[juce::jlimit (0, numDivisions - 1, index)];
 }
 
-juce::StringArray modeNames() { return { "Normal", "Reverse", "Steps" }; }
+juce::StringArray modeNames() { return { "Normal", "Reverse", "Steps", "Resonator" }; }
+juce::StringArray chordNames() { return { "One note", "Octaves", "Fifths", "Major", "Minor", "Sus 4", "Major 7", "Minor 7", "Cluster", "Chord-Cat's chord" }; }
+
+int chordShape (int index, std::array<int, maxStrings>& out)
+{
+    static const std::vector<std::vector<int>> shapes = { { 0, 12 }, { 0, 12, 24, -12 }, { 0, 7, 12, 19 }, { 0, 4, 7, 12, 16, 19 },
+                                                          { 0, 3, 7, 12, 15, 19 }, { 0, 5, 7, 12, 17, 19 }, { 0, 4, 7, 11, 12, 16 },
+                                                          { 0, 3, 7, 10, 12, 15 }, { 0, 1, 2, 3, 5, 7 } };
+    const auto& v = shapes[(size_t) juce::jlimit (0, (int) shapes.size() - 1, index)];
+    int n = 0;
+    for (auto x : v) if (n < maxStrings) out[(size_t) n++] = x;
+    return n;
+}
 
 double Settings::delaySeconds() const
 {
@@ -101,6 +113,7 @@ void Engine::prepare (double sampleRate, int maxBlock)
     reverb.setSampleRate (sr);
     for (auto& s : shifters) { s.prepare (sr); s.setRatio (2.0f); }
     for (auto& s : loopShifters) s.prepare (sr);
+    for (auto& st : strings) st.buf.assign ((size_t) (sr / 18.0) + 16, 0.0f);
     reset();
 }
 
@@ -119,6 +132,7 @@ void Engine::reset()
     reverb.reset();
     for (auto& s : shifters) s.reset();
     for (auto& s : loopShifters) s.reset();
+    for (auto& st : strings) { std::fill (st.buf.begin(), st.buf.end(), 0.0f); st.w = 0; st.lp = 0.0f; st.delay = -1.0f; }
     revPhase = 0.0;
     fbLpL = fbLpR = fbHpL = fbHpR = 0.0f;
 }
@@ -143,16 +157,33 @@ void Engine::process (float* l, float* r, int n, const Settings& s)
     const float aHp = onePole (20.0 * std::pow (40.0, (double) juce::jlimit (0.0f, 1.0f, s.lowcut)), sr);
     const float wobDepth = juce::jlimit (0.0f, 1.0f, s.wobble) * 0.0045f * (float) sr;
     const double wobInc1 = 0.55 / sr, wobInc2 = 5.7 / sr;
-    const float k = 1.0f + 5.0f * s.drive, driveNorm = 1.0f / std::tanh (k * 0.5f) * 0.5f;
+    // drive: tape saturation that never makes the loop louder (unity gain for quiet sounds, loud ones squashed),
+    // else each time round the echoes would grow and run into the limiter
+    const float k = 1.0f + 5.0f * s.drive, driveNorm = 1.0f / k;
     const float att = 1.0f - std::exp (-1.0f / (0.005f * (float) sr)), rel = 1.0f - std::exp (-1.0f / (0.25f * (float) sr));
     const float pp = juce::jlimit (0.0f, 1.0f, s.pingpong);
     const float duck = juce::jlimit (0.0f, 1.0f, s.duck);
     const float space = juce::jlimit (0.0f, 1.0f, s.space);
     const float targetGain = juce::Decibels::decibelsToGain (juce::jlimit (-24.0f, 6.0f, s.outputDb));
-    const int mode = juce::jlimit (0, 2, s.mode);
+    const int mode = juce::jlimit (0, 3, s.mode);
     const float semis = juce::jlimit (-12.0f, 12.0f, s.pitch);
     const bool pitched = std::abs (semis) > 0.01f;
     if (pitched) for (auto& ls : loopShifters) ls.setRatio (std::pow (2.0f, semis / 12.0f));
+    // resonator: the strings' pitches (set by the processor: a chord, tuned by Micro-Cat over Cat Link)
+    const int numRes = mode == ModeResonator ? juce::jlimit (1, maxStrings, s.numStrings) : 0;
+    const float t60 = 0.15f + 9.0f * std::pow (juce::jlimit (0.0f, 1.0f, s.feedback), 2.0f);
+    const float resDamp = onePole (800.0 * std::pow (20.0, (double) juce::jlimit (0.0f, 1.0f, s.tone)), sr);
+    std::array<float, maxStrings> resG {};
+    for (int j = 0; j < numRes; ++j)
+    {
+        auto& st = strings[(size_t) j];
+        const double hz = 440.0 * std::pow (2.0, ((double) s.stringPitch[(size_t) j] - 69.0) / 12.0);
+        // (minus the damping filter's own delay, so the string stays in tune)
+        const double lpDelay = (1.0 - resDamp) / juce::jmax (0.01f, resDamp);
+        st.targetDelay = (float) juce::jlimit (4.0, (double) st.buf.size() - 8.0, sr / juce::jlimit (20.0, 4000.0, hz) - lpDelay);
+        if (st.delay <= 0.0f) st.delay = st.targetDelay;
+        resG[(size_t) j] = std::pow (10.0f, -3.0f * st.targetDelay / (t60 * (float) sr));
+    }
     std::array<float, numSteps> stepLevel {};
     for (int k = 0; k < numSteps; ++k) stepLevel[(size_t) k] = juce::jlimit (0.0f, 1.0f, s.steps[(size_t) k]);
     float inPeak = 0.0f, echoPeak = 0.0f, duckShown = 0.0f;
@@ -170,6 +201,35 @@ void Engine::process (float* l, float* r, int n, const Settings& s)
         wobPhase1 += wobInc1; if (wobPhase1 >= 1.0) wobPhase1 -= 1.0;
         wobPhase2 += wobInc2; if (wobPhase2 >= 1.0) wobPhase2 -= 1.0;
         const float mod = wobDepth * (0.8f * (1.0f + std::sin (twoPi * (float) wobPhase1)) + 0.12f * std::sin (twoPi * (float) wobPhase2));
+        float fL = 0.0f, fR = 0.0f;
+        const float inGain = 1.0f - freezeMix;
+        if (mode == ModeResonator)
+        {
+            // tuned strings: short combs ringing at the chord's notes, the input plucks them
+            const float excite = mono * inGain;
+            float sL = 0.0f, sR = 0.0f;
+            for (int j = 0; j < numRes; ++j)
+            {
+                auto& st = strings[(size_t) j];
+                st.delay += (st.targetDelay - st.delay) * 0.002f;      // retune smoothly (a chord change slides)
+                const float x = readAt (st.buf, st.w, st.delay);
+                st.lp += resDamp * (x - st.lp);
+                const float y = st.lp;
+                float wv = excite * 0.6f + y * (resG[(size_t) j] + (0.9995f - resG[(size_t) j]) * freezeMix);
+                wv = 1.5f * std::tanh (wv * (1.0f / 1.5f));
+                if (! std::isfinite (wv)) { wv = 0.0f; st.lp = 0.0f; }
+                st.buf[(size_t) st.w] = wv;
+                st.w = (st.w + 1) % (int) st.buf.size();
+                const float side = (j % 2 == 0 ? -1.0f : 1.0f) * pp * 0.8f;
+                sL += y * (1.0f - side);
+                sR += y * (1.0f + side);
+            }
+            const float norm = 0.9f / std::sqrt ((float) juce::jmax (1, numRes));
+            fL = sL * norm;
+            fR = sR * norm;
+        }
+        else
+        {
         // the taps: dL/dR = what the echoes play, gL/gR = what goes round the loop again
         float dL, dR, gL, gR;
         if (mode == ModeReverse)
@@ -216,7 +276,7 @@ void Engine::process (float* l, float* r, int n, const Settings& s)
         }
 
         // each time round: darker, thinner, warmer (not while frozen: then the loop holds as it is)
-        float fL = dL, fR = dR;
+        fL = dL; fR = dR;
         lpL += aLp * (fL - lpL); lpR += aLp * (fR - lpR);
         hpL += aHp * (lpL - hpL); hpR += aHp * (lpR - hpR);
         float cL = lpL - hpL, cR = lpR - hpR;
@@ -235,7 +295,6 @@ void Engine::process (float* l, float* r, int n, const Settings& s)
         }
 
         const float loopFb = fb + (1.0f - fb) * freezeMix;
-        const float inGain = 1.0f - freezeMix;
         const float ppLoop = mode == ModeSteps ? 0.0f : pp;            // (Steps: the ping-pong is in the taps)
         const float crossL = bL + (bR - bL) * ppLoop, crossR = bR + (bL - bR) * ppLoop;
         float wL = (inL + (mono - inL) * ppLoop) * inGain + crossL * loopFb;
@@ -259,6 +318,7 @@ void Engine::process (float* l, float* r, int n, const Settings& s)
         lineL[(size_t) w] = wL;
         lineR[(size_t) w] = wR;
         w = (w + 1) % size;
+        }
 
         // ducking: the echoes step back while the input is loud
         const float duckGain = 1.0f - duck * 0.85f * juce::jmin (1.0f, env * 4.0f);
@@ -285,19 +345,21 @@ void Engine::process (float* l, float* r, int n, const Settings& s)
         rp.freezeMode = 0.0f;
         reverb.setParameters (rp);
         reverb.processStereo (revL.data(), revR.data(), n);
-        const float shimGain = juce::jlimit (0.0f, 1.0f, s.shimmer) * 0.5f;
+        // (the octave-up tail goes round the room again: its loop gain must stay well below 1, and a soft
+        // ceiling keeps it from ever running away into a wall of noise)
+        const float shimGain = juce::jlimit (0.0f, 1.0f, s.shimmer) * 0.22f;
         const float aShim = onePole (6000.0, sr);
         for (int i = 0; i < n; ++i)
         {
-            const float wl = revL[(size_t) i] * 0.9f, wr = revR[(size_t) i] * 0.9f;
+            const float wl = revL[(size_t) i] * 0.75f, wr = revR[(size_t) i] * 0.75f;
             l[i] += wl;
             r[i] += wr;
             spacePeak = juce::jmax (spacePeak, std::abs (wl), std::abs (wr));
             // shimmer: the tail an octave up, fed back into the space next block
             shimLp += aShim * (shifters[0].process (revL[(size_t) i]) - shimLp);
             shimLpR += aShim * (shifters[1].process (revR[(size_t) i]) - shimLpR);
-            shimL[(size_t) i] = std::isfinite (shimLp) ? shimLp * shimGain : 0.0f;
-            shimR[(size_t) i] = std::isfinite (shimLpR) ? shimLpR * shimGain : 0.0f;
+            shimL[(size_t) i] = std::isfinite (shimLp) ? 0.25f * std::tanh (4.0f * shimLp * shimGain) : 0.0f;
+            shimR[(size_t) i] = std::isfinite (shimLpR) ? 0.25f * std::tanh (4.0f * shimLpR * shimGain) : 0.0f;
         }
         for (int i = n; i < (int) shimL.size(); ++i) shimL[(size_t) i] = shimR[(size_t) i] = 0.0f;
         if (! std::isfinite (shimLp) || ! std::isfinite (shimLpR)) { shimLp = shimLpR = 0.0f; reverb.reset(); }

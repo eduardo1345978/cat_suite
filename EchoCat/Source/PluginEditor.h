@@ -73,6 +73,33 @@ private:
     cat::ParamCombo divisionBox { processor.apvts, "division", "Echo", nullptr, 44 },
                     modeBox { processor.apvts, "mode", "Mode", nullptr, 50 };
     StepsEditor stepsEditor { processor };
+    /** Resonator mode: the strings' note and chord. */
+    struct ResonatorPanel : public juce::Component
+    {
+        explicit ResonatorPanel (EchoCatProcessor& p) : note (p.apvts, "resNote", "Note", nullptr, 50), chord (p.apvts, "resChord", "Chord", nullptr, 54)
+        {
+            addAndMakeVisible (note);
+            addAndMakeVisible (chord);
+        }
+        void paint (juce::Graphics& g) override
+        {
+            g.setColour (juce::Colour (0xcc0d1018));
+            g.fillRoundedRectangle (getLocalBounds().toFloat(), 8.0f);
+            g.setColour (cat::Colours::textDim);
+            g.setFont (cat::catFont (11.5f, true));
+            g.drawFittedText ("TUNED\nSTRINGS", getLocalBounds().reduced (10, 6).removeFromLeft (64), juce::Justification::centredLeft, 2);
+        }
+        void resized() override
+        {
+            auto r = getLocalBounds().reduced (10, 8);
+            r.removeFromLeft (70);
+            note.setBounds (r.removeFromLeft (r.getWidth() / 2 - 5));
+            r.removeFromLeft (10);
+            chord.setBounds (r);
+        }
+        cat::BarSlider note;
+        cat::ParamCombo chord;
+    } resonatorPanel { processor };
     EchoView view { processor };
     EchoSection timeSection { "TIME", cat::Colours::accent }, colourSection { "EACH ECHO", cat::Colours::red },
                 spaceSection { "SPACE", cat::Colours::purple }, mixSection { "MIX", cat::Colours::green };

@@ -185,6 +185,18 @@ void EchoView::paint (juce::Graphics& g)
     t << "     " << juce::roundToInt (processor.getBpm()) << " BPM" << (processor.isHostSynced() ? "" : " (no host tempo)");
     if (st.mode == ModeReverse) t << "     REVERSE";
     if (st.mode == ModeSteps) t << "     STEPS";
+    if (st.mode == ModeResonator)
+    {
+        t = "RESONATOR:";
+        for (int j = 0; j < st.numStrings; ++j)
+        {
+            const float pv = st.stringPitch[(size_t) j];
+            const int nn = juce::roundToInt (pv);
+            t << "  " << juce::MidiMessage::getMidiNoteName (nn, true, true, 4);
+            const int c = juce::roundToInt ((pv - (float) nn) * 100.0f);
+            if (c != 0) t << (c > 0 ? "+" : "") << c;
+        }
+    }
     if (std::abs (st.pitch) > 0.5f) t << "     " << (st.pitch > 0 ? "+" : "") << juce::roundToInt (st.pitch) << " semitones each echo";
     g.drawText (t, b.reduced (16.0f, 10.0f).removeFromTop (20.0f), juce::Justification::topLeft);
     if (frozen)
@@ -360,14 +372,18 @@ EchoCatEditor::EchoCatEditor (EchoCatProcessor& p) : processor (p)
                            { "output", "Output", "The level going out" } };
     for (auto& k : mixKnobs) { auto* kn = knob (k.id, k.caption, cat::Colours::green); kn->getSlider().setTooltip (k.tip); mixSection.addKnob (kn); }
 
-    modeBox.getCombo().setTooltip ("Normal echoes, Reverse (each echo plays backwards), or Steps (draw a rhythm of 8 echoes)");
+    modeBox.getCombo().setTooltip ("Normal echoes, Reverse (each echo plays backwards), Steps (draw a rhythm of 8 echoes), "
+                                   "or Resonator (the sound rings on tuned strings: Feedback = how long, Tone = how bright)");
     for (juce::Component* c : { (juce::Component*) &presetBar, (juce::Component*) &freezeButton, (juce::Component*) &view, (juce::Component*) &modeBox,
                                 (juce::Component*) &timeSection, (juce::Component*) &colourSection, (juce::Component*) &spaceSection,
                                 (juce::Component*) &mixSection })
         addAndMakeVisible (c);
     addChildComponent (stepsEditor);                     // over the picture (shown in Steps mode)
+    addChildComponent (resonatorPanel);                  // (shown in Resonator mode)
+    resonatorPanel.chord.getCombo().setTooltip ("The strings' chord - or Chord-Cat's chord over Cat Link. Micro-Cat's tuning tunes them too");
     shownMode = processor.shownSettings().mode;
     stepsEditor.setVisible (shownMode == ModeSteps);
+    resonatorPanel.setVisible (shownMode == ModeResonator);
     resized();
     startTimerHz (10);
 }
@@ -388,6 +404,7 @@ void EchoCatEditor::timerCallback()
     {
         shownMode = mode;
         stepsEditor.setVisible (mode == ModeSteps);
+        resonatorPanel.setVisible (mode == ModeResonator);
     }
 }
 
@@ -419,6 +436,7 @@ void EchoCatEditor::resized()
     r.removeFromBottom (10);
     view.setBounds (r);
     stepsEditor.setBounds (r.removeFromBottom (86).reduced (12, 8).withTrimmedLeft (60).withTrimmedRight (34));
+    resonatorPanel.setBounds (stepsEditor.getBounds().withHeight (54).withY (stepsEditor.getBottom() - 54));
     const int gap = 10;
     const int w1 = 330, w2 = (bottom.getWidth() - w1 - 3 * gap) * 5 / 11, w3 = (bottom.getWidth() - w1 - 3 * gap) * 3 / 11;
     timeSection.setBounds (bottom.removeFromLeft (w1)); bottom.removeFromLeft (gap);

@@ -230,6 +230,35 @@ int main()
         check (again > 0.25f * s1 && again < 0.75f * s1, "steps: the pattern comes round again, quieter (" + String (again / s1, 2) + ")");
     }
 
+    // resonator: a click rings on tuned strings (C3 + C4), longer with more feedback
+    {
+        auto ringOf = [&] (float fb)
+        {
+            Rig r;
+            plainRig (r, 300.0f, fb);
+            r.set ("mode", 3.0f); r.set ("resNote", 48.0f); r.set ("resChord", 0.0f); r.set ("tone", 0.6f);
+            AudioBuffer<float> in (2, (int) (r.sr * 2.0)); in.clear();
+            for (int i = 100; i < 110; ++i) { in.setSample (0, i, 0.8f); in.setSample (1, i, 0.8f); }
+            return r.run (in);
+        };
+        const auto out = ringOf (0.6f);
+        // the period by autocorrelation (around 0.3 - 0.5 s)
+        const int from = (int) (0.3 * 48000), len = 9600;
+        int bestLag = 0; double best = -1.0;
+        for (int lag = 100; lag < 800; ++lag)
+        {
+            double sum = 0.0;
+            for (int i = 0; i < len; ++i) sum += out.getSample (0, from + i) * out.getSample (0, from + i + lag);
+            if (sum > best) { best = sum; bestLag = lag; }
+        }
+        const double f0 = 48000.0 / bestLag;
+        check (std::abs (1200.0 * std::log2 (f0 / 130.81)) < 8.0 && out.getRMSLevel (0, from, len) > 0.003f,
+               "resonator: a click rings at C3 (" + String (f0, 1) + " Hz)");
+        const auto shortRing = ringOf (0.1f);
+        const float late = out.getRMSLevel (0, 48000, 24000), lateShort = shortRing.getRMSLevel (0, 48000, 24000);
+        check (late > 4.0f * lateShort, "resonator: more feedback = the strings ring longer (" + String (late, 4) + " vs " + String (lateShort, 4) + ")");
+    }
+
     // the new presets never blow up either (noise in)
     {
         Rig r;
@@ -245,7 +274,7 @@ int main()
                 for (int i = 0; i < out.getNumSamples(); ++i)
                     if (! std::isfinite (out.getSample (ch, i)) || std::abs (out.getSample (ch, i)) > 1.5f) ok = false;
         }
-        check (ok && r.p.getNumPrograms() >= 24, "reverse / pitch / steps presets: finite and bounded (" + String (r.p.getNumPrograms()) + " presets)");
+        check (ok && r.p.getNumPrograms() >= 28, "reverse / pitch / steps presets: finite and bounded (" + String (r.p.getNumPrograms()) + " presets)");
     }
 
     // state: a saved project keeps the settings

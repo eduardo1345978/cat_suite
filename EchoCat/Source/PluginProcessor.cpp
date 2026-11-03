@@ -30,8 +30,8 @@ const std::vector<EchoCatProcessor::Preset>& EchoCatProcessor::presets()
                                             { "space", 0.85f }, { "shimmer", 0.7f } } },
         { "Dreamy Haze",        "Space",  { { "division", 5 }, { "feedback", 0.5f }, { "mix", 0.3f }, { "pingpong", 0.8f }, { "tone", 0.5f }, { "lowcut", 0.3f },
                                             { "wobble", 0.3f }, { "space", 0.7f }, { "shimmer", 0.35f } } },
-        { "Ambient Wash",       "Space",  { { "division", 9 }, { "feedback", 0.65f }, { "mix", 0.35f }, { "pingpong", 1.0f }, { "tone", 0.45f }, { "lowcut", 0.4f },
-                                            { "wobble", 0.2f }, { "space", 1.0f }, { "shimmer", 0.5f }, { "dry", 0.8f } } },
+        { "Ambient Wash",       "Space",  { { "division", 9 }, { "feedback", 0.65f }, { "mix", 0.28f }, { "pingpong", 1.0f }, { "tone", 0.45f }, { "lowcut", 0.4f },
+                                            { "wobble", 0.2f }, { "space", 0.85f }, { "shimmer", 0.5f }, { "dry", 0.8f } } },
         { "Starlight Plucks",   "Space",  { { "division", 3 }, { "feedback", 0.55f }, { "mix", 0.35f }, { "pingpong", 1.0f }, { "tone", 0.9f }, { "lowcut", 0.5f },
                                             { "space", 0.45f }, { "shimmer", 0.6f } } },
         { "Just the Room",      "Space",  { { "feedback", 0.0f }, { "mix", 0.0f }, { "space", 0.5f } } },
@@ -46,7 +46,7 @@ const std::vector<EchoCatProcessor::Preset>& EchoCatProcessor::presets()
                                             { "lowcut", 0.15f } } },
         { "Octave Down Dub",    "Pitch",  { { "pitch", -12 }, { "division", 7 }, { "feedback", 0.5f }, { "mix", 0.4f }, { "tone", 0.4f }, { "drive", 0.4f },
                                             { "wobble", 0.2f } } },
-        { "Gallop Steps",       "Steps",  { { "mode", 2 }, { "division", 1 }, { "feedback", 0.3f }, { "mix", 0.4f }, { "pingpong", 0.5f }, { "tone", 0.7f },
+        { "Gallop Steps",       "Steps",  { { "mode", 2 }, { "division", 1 }, { "feedback", 0.3f }, { "mix", 0.3f }, { "pingpong", 0.5f }, { "tone", 0.7f },
                                             { "step1", 1.0f }, { "step2", 0.0f }, { "step3", 0.8f }, { "step4", 0.8f }, { "step5", 0.0f }, { "step6", 0.6f },
                                             { "step7", 0.0f }, { "step8", 0.4f } } },
         { "Clave Echoes",       "Steps",  { { "mode", 2 }, { "division", 1 }, { "feedback", 0.25f }, { "mix", 0.4f }, { "pingpong", 0.8f }, { "tone", 0.75f },
@@ -55,6 +55,14 @@ const std::vector<EchoCatProcessor::Preset>& EchoCatProcessor::presets()
         { "Bouncing Ball",      "Steps",  { { "mode", 2 }, { "division", 1 }, { "feedback", 0.0f }, { "mix", 0.45f }, { "tone", 0.8f },
                                             { "step1", 1.0f }, { "step2", 0.85f }, { "step3", 0.7f }, { "step4", 0.55f }, { "step5", 0.42f }, { "step6", 0.3f },
                                             { "step7", 0.2f }, { "step8", 0.1f } } },
+        { "Singing Strings",    "Resonator", { { "mode", 3 }, { "resNote", 48 }, { "resChord", 3 }, { "feedback", 0.55f }, { "mix", 0.5f }, { "tone", 0.6f },
+                                               { "pingpong", 0.6f }, { "space", 0.35f } } },
+        { "Dark Drone Box",     "Resonator", { { "mode", 3 }, { "resNote", 36 }, { "resChord", 2 }, { "feedback", 0.85f }, { "mix", 0.45f }, { "tone", 0.25f },
+                                               { "pingpong", 0.4f }, { "space", 0.5f } } },
+        { "Metal Cluster",      "Resonator", { { "mode", 3 }, { "resNote", 60 }, { "resChord", 8 }, { "feedback", 0.7f }, { "mix", 0.4f }, { "tone", 0.9f },
+                                               { "pingpong", 0.8f }, { "shimmer", 0.3f }, { "space", 0.3f } } },
+        { "Follow the Chords",  "Resonator", { { "mode", 3 }, { "resNote", 48 }, { "resChord", 9 }, { "feedback", 0.6f }, { "mix", 0.45f }, { "tone", 0.55f },
+                                               { "pingpong", 0.5f }, { "space", 0.4f } } },
     };
     return list;
 }
@@ -64,7 +72,7 @@ namespace
     const std::pair<const char*, float> defaults[] = {
         { "sync", 1 }, { "division", 5 }, { "timeMs", 350 }, { "feedback", 0.4f }, { "mix", 0.35f }, { "dry", 1.0f }, { "pingpong", 0.0f },
         { "tone", 0.7f }, { "lowcut", 0.15f }, { "wobble", 0.0f }, { "drive", 0.0f }, { "space", 0.0f }, { "shimmer", 0.0f }, { "duck", 0.0f },
-        { "freeze", 0 }, { "output", 0.0f }, { "mode", 0 }, { "pitch", 0 },
+        { "freeze", 0 }, { "output", 0.0f }, { "mode", 0 }, { "pitch", 0 }, { "resNote", 48 }, { "resChord", 3 },
         { "step1", 1.0f }, { "step2", 0.0f }, { "step3", 0.8f }, { "step4", 0.0f }, { "step5", 0.6f }, { "step6", 0.6f }, { "step7", 0.0f }, { "step8", 0.4f },
     };
 }
@@ -97,6 +105,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout EchoCatProcessor::createLayo
     pct ("duck", "Duck", 0.0f);
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "freeze", 1 }, "Freeze", false));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "mode", 1 }, "Echo Mode", modeNames(), 0));
+    layout.add (std::make_unique<AudioParameterInt> (ParameterID { "resNote", 1 }, "Resonator Note", 24, 84, 48,
+                                                     AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int) { return MidiMessage::getMidiNoteName (v, true, true, 4); })));
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "resChord", 1 }, "Resonator Chord", chordNames(), 3));
     layout.add (std::make_unique<AudioParameterInt> (ParameterID { "pitch", 1 }, "Pitch per Echo", -12, 12, 0,
                                                      AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int) { return v == 0 ? String ("0 st") : (v > 0 ? "+" : "") + String (v) + " st"; })));
     {
@@ -123,6 +134,14 @@ EchoCatProcessor::EchoCatProcessor()
             refs[r->getParameterID().toStdString()] = apvts.getRawParameterValue (r->getParameterID());
     for (int i = 0; i < numSteps; ++i) stepRefs[(size_t) i] = apvts.getRawParameterValue ("step" + juce::String (i + 1));
     applyPreset (0);
+
+    // Cat Link: the resonator can ring on Chord-Cat's chord, in Micro-Cat's tuning
+    cat::LinkClient::Caps caps;
+    caps.receiveChords = true;
+    caps.receiveChordsText = "Resonate on Chord-Cat's chords";
+    caps.receiveTuning = true;
+    presetManager.enableLink (apvts, caps);
+    linkMidi.ensureSize (512);
 }
 
 float EchoCatProcessor::p (const char* id) const
@@ -151,7 +170,29 @@ Settings EchoCatProcessor::readSettings (double bpm) const
     s.duck = p ("duck");
     s.freeze = p ("freeze") > 0.5f;
     s.outputDb = p ("output");
-    s.mode = juce::jlimit (0, 2, juce::roundToInt (p ("mode")));
+    s.mode = juce::jlimit (0, 3, juce::roundToInt (p ("mode")));
+    // resonator strings: a chord shape on the note, or Chord-Cat's chord; Micro-Cat's tuning on top (Cat Link)
+    {
+        const int root = juce::roundToInt (p ("resNote"));
+        const int chord = juce::roundToInt (p ("resChord"));
+        std::array<int, maxStrings> notes {};
+        int count = 0;
+        if (chord == chordFollow)
+            for (int k = 0; k < 128 && count < maxStrings; ++k)
+                if (linkChord[(size_t) k].load (std::memory_order_relaxed)) notes[(size_t) count++] = k;
+        if (count == 0)
+        {
+            count = chordShape (chord == chordFollow ? 3 : chord, notes);
+            for (int i = 0; i < count; ++i) notes[(size_t) i] += root;
+        }
+        auto* link = presetManager.linkClient.get();
+        for (int i = 0; i < count; ++i)
+        {
+            const float semis = (float) juce::jlimit (12, 108, notes[(size_t) i]);
+            s.stringPitch[(size_t) i] = link != nullptr ? link->tuned (semis) : semis;
+        }
+        s.numStrings = count;
+    }
     s.pitch = (float) juce::roundToInt (p ("pitch"));
     for (int i = 0; i < numSteps; ++i) s.steps[(size_t) i] = stepRefs[(size_t) i] != nullptr ? stepRefs[(size_t) i]->load() : 0.0f;
     return s;
@@ -211,6 +252,18 @@ void EchoCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     uiBpm = bpm;
     uiHostBpm = fromHost;
 
+    // Chord-Cat's chord over Cat Link (as note-ons / note-offs): which notes are held
+    if (auto* link = presetManager.linkClient.get())
+    {
+        linkMidi.clear();
+        link->processInput (linkMidi, n);
+        for (const auto meta : linkMidi)
+        {
+            const auto m = meta.getMessage();
+            if (m.isNoteOn()) linkChord[(size_t) m.getNoteNumber()] = true;
+            else if (m.isNoteOff()) linkChord[(size_t) m.getNoteNumber()] = false;
+        }
+    }
     float* l = buffer.getWritePointer (0);
     float* r = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : nullptr;
     if (r != nullptr && ins == 1) juce::FloatVectorOperations::copy (r, l, n);   // mono in -> stereo out
