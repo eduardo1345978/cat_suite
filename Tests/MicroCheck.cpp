@@ -4,6 +4,7 @@
 #include "PluginProcessor.h"
 #include <cstdio>
 #include <thread>
+#include <map>
 #include "LinkClient.h"
 #include "../ThirdParty/MTS-ESP/Client/libMTSClient.h"
 
@@ -259,6 +260,80 @@ int main()
         m.setTuning (*find ("Just intonation (5-limit)"));
         const auto ji = m.keyPitches();
         check (std::abs ((ji[64] - 64.0f) * 100.0f + 13.686f) < 0.02f, "Cat Link pitches: just E4 is 13.7 cents low");
+    }
+
+    // live just intonation and the morph to tuning B (held notes glide to their new pitches)
+    {
+        check (std::abs (justSemis (4, Just5) * 100.0 - 386.31) < 0.01 && std::abs (justSemis (7, Just5) * 100.0 - 701.96) < 0.01
+               && std::abs (justSemis (10, Just7) * 100.0 - 968.83) < 0.01, "just ratios: 5/4 = 386.31, 3/2 = 701.96, 7/4 = 968.83 cents");
+        MicroCatProcessor m;
+        m.setPlayConfigDetails (0, 2, 48000.0, 256);
+        m.prepareToPlay (48000.0, 256);
+        auto set = [&m] (const char* id, float v) { if (auto* prm = m.apvts.getParameter (id)) prm->setValueNotifyingHost (prm->convertTo0to1 (v)); };
+        std::map<int, int> bendOf, chanOf;                          // channel -> last bend; key -> channel
+        auto run = [&] (MidiBuffer in, int blocks)
+        {
+            AudioBuffer<float> buf (2, 256);
+            for (int b = 0; b < blocks; ++b)
+            {
+                MidiBuffer mb;
+                if (b == 0) mb = in;
+                m.processBlock (buf, mb);
+                for (auto e : mb)
+                {
+                    const auto msg = e.getMessage();
+                    if (msg.isPitchWheel()) bendOf[msg.getChannel()] = msg.getPitchWheelValue();
+                    if (msg.isNoteOn()) chanOf[msg.getNoteNumber()] = msg.getChannel();
+                }
+            }
+        };
+        auto centsOn = [&] (int note) { return (bendOf[chanOf[note]] - 8192) / 8192.0 * 48.0 * 100.0; };   // bend range 48
+        m.setTuning (*find ("12-EDO (normal)"));
+        set ("liveJust", 1.0f);
+        MidiBuffer chord;
+        chord.addEvent (MidiMessage::noteOn (1, 60, (uint8) 90), 0);
+        chord.addEvent (MidiMessage::noteOn (1, 64, (uint8) 90), 1);
+        chord.addEvent (MidiMessage::noteOn (1, 67, (uint8) 90), 2);
+        run (chord, 4);
+        const double c0 = centsOn (60), e0 = centsOn (64), g0 = centsOn (67);
+        check (std::abs (c0) < 1.0 && std::abs (e0 + 13.69) < 1.0 && std::abs (g0 - 1.96) < 1.0,
+               "live just: C major held - C " + String (c0, 1) + ", E " + String (e0, 1) + ", G " + String (g0, 1) + " cents (pure third and fifth)");
+        MidiBuffer bass;
+        bass.addEvent (MidiMessage::noteOn (1, 57, (uint8) 90), 0);    // A3 below: now A minor 7 over A
+        run (bass, 40);
+        const double c1 = centsOn (60), e1 = centsOn (64);
+        check (std::abs (c1 - 15.64) < 1.5 && std::abs (e1 - 1.96) < 1.5 && m.engine.justRoot.load() == 57,
+               "live just: A added under it - the held C glides to a pure minor third (" + String (c1, 1) + "), E to a pure fifth (" + String (e1, 1) + ")");
+        set ("liveJust", 0.0f);
+        run ({}, 40);
+        check (std::abs (centsOn (64)) < 1.0, "live just off: the held notes glide back to the tuning");
+
+        // morph: 12-EDO -> 24-EDO, the held C#4 goes a quarter tone down while it rings
+        MidiBuffer offs;
+        for (int k : { 57, 60, 64, 67 }) offs.addEvent (MidiMessage::noteOff (1, k), 0);
+        run (offs, 2);
+        m.setTuningB (*find ("24-EDO"));
+        set ("mapping", 1.0f);                                        // one key per step for both
+        run ({}, 2);
+        MidiBuffer one; one.addEvent (MidiMessage::noteOn (1, 61, (uint8) 90), 0);
+        run (one, 2);
+        const double before = centsOn (61);
+        set ("morph", 1.0f);
+        run ({}, 60);
+        const double after = centsOn (61);
+        set ("morph", 0.5f);
+        run ({}, 60);
+        const double half = centsOn (61);
+        check (std::abs (before) < 1.0 && std::abs (after + 50.0) < 1.0 && std::abs (half + 25.0) < 1.0 && m.engine.bendUpdates.load() > 5,
+               "morph: a held C#4 glides from 12-EDO (" + String (before, 1) + ") to 24-EDO (" + String (after, 1) + "), half way " + String (half, 1) + " cents");
+        const auto kp = m.keyPitches();
+        check (std::abs (kp[61] - 60.75f) < 0.01f, "morph: Cat Link / MTS-ESP get the morphed pitches too (key 61 = " + String (kp[61], 3) + ")");
+
+        MemoryBlock mb;
+        m.getStateInformation (mb);
+        MicroCatProcessor r;
+        r.setStateInformation (mb.getData(), (int) mb.getSize());
+        check (r.getTuningB().name == "24-EDO" && std::abs (r.currentSettings().morph - 0.5f) < 1e-3f, "a saved project keeps tuning B and the morph");
     }
 
     // a real Micro-Cat sends its tuning, a follower gets it (needs the message loop: the Cat Link timers)

@@ -192,6 +192,17 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
 - [x] Crash hunt: every Cat 2 x 45 s UI + audio stress under AddressSanitizer, Hub UI stress + self test, Ocean self test (2 Nov)
 - [x] Mac: Cat Link works between the Cats (each Mac plug-in had its own temp folder) (2 Nov)
 
+## Experimental music (questionnaire 3 Nov, "najprv najrýchlejšie")
+- [x] Micro-Cat: live just intonation (held chord tuned pure around its lowest note, 5- / 7-limit, notes glide)
+- [x] Micro-Cat: tuning B + Morph knob (held notes glide; Cat Link / MTS-ESP follow)
+- [ ] Echo-Cat: resonator echo (strings tuned to Micro-Cat's tuning)
+- [ ] New experimental rhythm VST: phasing (Reich), polymeters, Risset rhythm, metric modulation
+- [ ] Shepard tone (endless glissando)
+- [ ] Micro-Cat: tuning from a sound (its partials)
+- [ ] Melody from speech (a sentence becomes a riff)
+- [ ] Spectro-Cat: standalone .exe spectrogram app (see sound as a picture, a picture becomes sound)
+- [ ] Then the "normal" new VSTs (section 5): Tune-Cat, compressor, filter / wobble, lo-fi, Piano, Sampler
+
 ## Answers that mean "no"
 - Vertical Shorts picture: no, YouTube Auto is fine
 - Chat games, fish pets/houses/friends, seasons other than Halloween/Christmas: no preference / not now

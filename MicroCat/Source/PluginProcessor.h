@@ -73,6 +73,11 @@ public:
 
     /** Cat Link: the pitch (MIDI semitones, fractional) every key plays now; out-of-range keys keep k. */
     std::array<float, 128> keyPitches() const;
+    /** Everything that decides the pitches now (tunings A and B, morph, root, live just + its anchor). */
+    micro::PitchMap currentMap() const;
+    /** Tuning B: what the Morph knob moves towards (message thread). */
+    micro::Tuning getTuningB() const;
+    void setTuningB (const micro::Tuning&);
     int linkPublishes = 0;                        // for the tests
     /** MTS-ESP master: the tuning goes to every MTS-ESP synth (the MIDI then passes through untouched). */
     micro::MtsMaster mts;
@@ -89,7 +94,9 @@ private:
     std::map<std::string, std::atomic<float>*> refs;
     mutable juce::SpinLock tuningLock;            // the editor writes, the audio thread copies (try-lock)
     micro::Tuning tuning;                         // message thread
-    micro::TuningData pendingData;                // under tuningLock
+    micro::TuningData pendingData, pendingDataB;  // under tuningLock
+    micro::Tuning tuningB;
+    int mappingFor (const micro::TuningData&) const;
     int engineVersion = 0, lastForced = -1;
     juce::MidiMessageCollector preview;
     juce::MidiBuffer previewBuffer, outBuffer;

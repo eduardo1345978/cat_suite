@@ -13,6 +13,41 @@ void Engine::reset()
     for (auto& h : held) h = false;
     notesPlaying = 0;
     configPending = true;
+    sentBend.fill (0.0);
+    map.justRoot = -1;
+    justRoot = -1;
+}
+
+void Engine::updateJustRoot() noexcept
+{
+    int low = 128;
+    for (auto id : channelNote) if (id >= 0) low = juce::jmin (low, id % 128);
+    map.justRoot = low < 128 ? low : -1;
+    justRoot = map.justRoot;
+}
+
+void Engine::retune (juce::MidiBuffer& out, int pos, const Settings& s)
+{
+    // held notes follow the tuning as it moves (morph knob, live just intonation's anchor): a short glide
+    const double a = 1.0 - std::exp (-juce::jmax (0.0005, s.blockSeconds) / 0.04);
+    for (int i = 0; i < 15; ++i)
+    {
+        const int id = channelNote[(size_t) i];
+        if (id < 0) continue;
+        bool valid = true;
+        const double target = keySemis (map, id % 128, valid) - noteOut[(size_t) id];
+        if (! valid || ! std::isfinite (target)) continue;
+        double& cur = sentBend[(size_t) i];
+        if (std::abs (target - cur) < 1e-4) continue;
+        const double next = std::abs (target - cur) < 0.002 ? target : cur + (target - cur) * a;
+        const int before = bendValue (cur, s.bendRange), after = bendValue (next, s.bendRange);
+        cur = next;
+        if (after != before)
+        {
+            out.addEvent (juce::MidiMessage::pitchWheel (i + 2, after), pos);
+            ++bendUpdates;
+        }
+    }
 }
 
 int Engine::bendValue (double semitones, double range) noexcept
@@ -96,6 +131,10 @@ void Engine::process (const juce::MidiBuffer& in, juce::MidiBuffer& out, const S
         lastRange = s.bendRange; lastVoices = s.voices; lastBypass = s.bypass;
         configPending = true;
     }
+    map.morph = s.morph;
+    map.just = s.just;
+    map.rootKey = s.rootKey;
+    map.rootHz = s.rootHz;
     if (configPending && ! s.bypass)
     {
         if (s.sendConfig) sendConfig (out, 0, s);
@@ -117,7 +156,14 @@ void Engine::process (const juce::MidiBuffer& in, juce::MidiBuffer& out, const S
         {
             const int key = m.getNoteNumber();
             const int id = (m.getChannel() - 1) * 128 + key;
-            const auto kp = pitchFor (tuning, key, s.rootKey, s.rootHz);
+            if (s.just != JustOff)                             // the new note may be the chord's new lowest
+            {
+                int low = key;
+                for (auto other : channelNote) if (other >= 0) low = juce::jmin (low, other % 128);
+                map.justRoot = low;
+                justRoot = low;
+            }
+            const auto kp = keyPitch (map, key);
             if (! kp.valid) continue;                          // above / below what MIDI can play
             if (noteChannel[(size_t) id] >= 2)                 // the same key again while held: end the old one
             {
@@ -129,6 +175,7 @@ void Engine::process (const juce::MidiBuffer& in, juce::MidiBuffer& out, const S
             if (stolen >= 0) out.addEvent (juce::MidiMessage::noteOff (ch, noteOut[(size_t) stolen]), pos);
             out.addEvent (juce::MidiMessage::pitchWheel (ch, bendValue (kp.bend, s.bendRange)), pos);
             out.addEvent (juce::MidiMessage::noteOn (ch, kp.note, m.getVelocity()), pos);
+            sentBend[(size_t) ch - 2] = kp.bend;
             noteOut[(size_t) id] = (int8_t) kp.note;
             held[(size_t) key] = true;
         }
@@ -141,6 +188,7 @@ void Engine::process (const juce::MidiBuffer& in, juce::MidiBuffer& out, const S
             if (ch < 2) continue;
             out.addEvent (juce::MidiMessage::noteOff (ch, noteOut[(size_t) id], m.getVelocity()), pos);
             release (id);
+            if (s.just != JustOff) updateJustRoot();          // the chord's anchor may move up
         }
         else if (m.isAftertouch())
         {
@@ -155,6 +203,16 @@ void Engine::process (const juce::MidiBuffer& in, juce::MidiBuffer& out, const S
             out.addEvent (copy, pos);
         }
         else out.addEvent (m, pos);
+    }
+    if (! s.bypass)
+    {
+        map.morph = s.morph;
+        map.just = s.just;
+        map.rootKey = s.rootKey;
+        map.rootHz = s.rootHz;
+        if (s.just == JustOff) { map.justRoot = -1; justRoot = -1; }
+        else updateJustRoot();
+        retune (out, juce::jmax (0, s.blockSize - 1), s);
     }
     int playing = 0;
     for (auto c : channelNote) playing += c >= 0 ? 1 : 0;

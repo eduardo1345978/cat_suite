@@ -206,8 +206,10 @@ int TuningKeyboard::keyAt (juce::Point<float> pt) const
 
 void TuningKeyboard::timerCallback()
 {
-    bool changed = processor.tuningVersion.load() != shownVersion || processor.currentSettings().rootKey != shownRoot
-                || processor.effectiveMapping() != shownMap;
+    const auto st = processor.currentSettings();
+    const int mapKey = processor.effectiveMapping() * 100000 + st.just * 10000 + juce::roundToInt (st.morph * 1000.0f)
+                     + (st.just != 0 ? (processor.engine.justRoot.load() + 1) * 1000000 : 0);
+    bool changed = processor.tuningVersion.load() != shownVersion || st.rootKey != shownRoot || mapKey != shownMap;
     for (int k = 0; k < 128; ++k)
     {
         const bool h = processor.engine.held[(size_t) k].load();
@@ -217,7 +219,7 @@ void TuningKeyboard::timerCallback()
     {
         shownVersion = processor.tuningVersion.load();
         shownRoot = processor.currentSettings().rootKey;
-        shownMap = processor.effectiveMapping();
+        shownMap = mapKey;
         repaint();
     }
 }
@@ -225,9 +227,7 @@ void TuningKeyboard::timerCallback()
 void TuningKeyboard::paint (juce::Graphics& g)
 {
     cat::CatLookAndFeel::drawGlassPanel (g, getLocalBounds().toFloat(), 8.0f);
-    const auto s = processor.currentSettings();
-    auto data = TuningData::from (processor.getTuning());
-    data.mapping = processor.effectiveMapping();
+    const auto pm = processor.currentMap();      // morph and live just intonation included
     const float w = (float) getWidth() / numKeys;
     const int first = firstKey();
     for (int i = 0; i < numKeys; ++i)
@@ -239,7 +239,7 @@ void TuningKeyboard::paint (juce::Graphics& g)
         const bool held = shownHeld[(size_t) key];
         g.setColour (held ? cat::Colours::accent : (black ? juce::Colour (0xff2a2d36) : juce::Colour (0xffe9ecf2)));
         g.fillRoundedRectangle (r, 4.0f);
-        const auto kp = pitchFor (data, key, s.rootKey, s.rootHz);
+        const auto kp = keyPitch (pm, key);
         const auto ink = held ? juce::Colours::white : (black ? cat::Colours::text : juce::Colour (0xff23262e));
         g.setColour (ink);
         g.setFont (cat::catFont (11.0f, true));
@@ -255,7 +255,7 @@ void TuningKeyboard::paint (juce::Graphics& g)
         g.setColour (ink.withAlpha (0.55f));
         g.setFont (cat::catFont (9.0f));
         g.drawFittedText (kp.hz < 100.0 ? juce::String (std::round (kp.hz * 10.0) / 10.0, 1) : juce::String ((int) std::lround (kp.hz)), lower.toNearestInt(), juce::Justification::centredTop, 1);
-        if (key == s.rootKey)
+        if (key == pm.rootKey)
         {
             g.setColour (cat::Colours::green);
             g.fillEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ i * w + w * 0.5f, (float) getHeight() - 10.0f }));
@@ -416,6 +416,21 @@ MicroCatEditor::MicroCatEditor (MicroCatProcessor& p) : processor (p)
                           "no MIDI routing, no MPE, like Ableton's tuning. The MIDI out then plays the notes as they are");
     mtsResetButton.setTooltip ("A crashed program left MTS-ESP thinking another master runs: reset it and take over");
     mtsResetButton.onClick = [this] { processor.mts.reset(); };
+    justBox.getCombo().setTooltip ("Live just intonation: the chord you hold is tuned pure, right now, around its lowest note "
+                                   "(5-limit: glowing thirds and fifths; 7-limit: bluesy 7ths). Change the chord and the notes glide to their new pure places");
+    for (size_t i = 0; i < library().size(); ++i) tuningBBox.addItem (library()[i].name, (int) i + 1);
+    tuningBBox.setTooltip ("Tuning B: the Morph knob melts tuning A into this one");
+    tuningBBox.onChange = [this]
+    {
+        const int i = tuningBBox.getSelectedId() - 1;
+        if (juce::isPositiveAndBelow (i, (int) library().size())) processor.setTuningB (library()[(size_t) i]);
+    };
+    morph.setSliderStyle (juce::Slider::LinearBar);
+    morph.setTooltip ("Morph: 0% = tuning A, 100% = tuning B. Turn it while notes ring: they glide (automate it in Cubase!)");
+    morphAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.apvts, "morph", morph);
+    addAndMakeVisible (justBox);
+    addAndMakeVisible (tuningBBox);
+    addAndMakeVisible (morph);
     addChildComponent (mtsResetButton);
 
     for (juce::Component* c : { (juce::Component*) &presetBar, (juce::Component*) &nameBox, (juce::Component*) &centsBox,
@@ -546,6 +561,15 @@ void MicroCatEditor::showTuning()
 
 void MicroCatEditor::timerCallback()
 {
+    const auto bName = processor.getTuningB().name;
+    if (bName != shownB)
+    {
+        shownB = bName;
+        int id = 0;
+        for (size_t i = 0; i < library().size(); ++i) if (library()[i].name == bName) id = (int) i + 1;
+        if (id > 0) tuningBBox.setSelectedId (id, juce::dontSendNotification);
+        else tuningBBox.setText (bName, juce::dontSendNotification);
+    }
     const auto ms = processor.mts.statusText();
     const bool showReset = processor.mts.canReset();
     if (ms != mtsStatus || showReset != mtsResetButton.isVisible())
@@ -588,11 +612,10 @@ void MicroCatEditor::paint (juce::Graphics& g)
     g.setColour (cat::Colours::textDim);
     g.setFont (cat::catFont (11.5f));
     g.drawText ("Voices", voices.getBounds().withX (settingsArea.getX() + 14).withWidth (60), juce::Justification::centredLeft);
-    g.drawFittedText ("IN CUBASE: put Micro-Cat on a MIDI track, set the track's MIDI Out (or a MIDI Send) to your synth. "
-                      "In the synth turn MPE on and set its pitch-bend range to the Bend range here (48 for MPE synths).\n"
-                      "Synths with MPE: Vital, Surge XT, Serum, Pigments, Phase Plant, Equator, Cubase's own Retrologue / Padshop in MPE mode.\n"
-                      "GLIDE-, SING- AND TALK-CAT need no routing: they play in this tuning over Cat Link (switch in their Link panel). "
-                      "Don't also send Micro-Cat's MIDI to them, or they are tuned twice.",
+    g.drawText ("Morph to", morphLabelArea, juce::Justification::centredLeft);
+    g.drawFittedText ("IN CUBASE: Micro-Cat on a MIDI track, its MIDI Out to an MPE synth (Vital, Surge XT, Serum, Pigments, "
+                      "Retrologue in MPE mode) with the same Bend range. Or MTS-ESP: no routing at all.\n"
+                      "GLIDE-, SING-, TALK-CAT follow over Cat Link - don't also send them Micro-Cat's MIDI.",
                       helpArea, juce::Justification::topLeft, 14);
     g.setColour (processor.mts.state() == micro::MtsMaster::State::Connected ? cat::Colours::accent : cat::Colours::textDim);
     g.setFont (cat::catFont (11.0f));
@@ -643,6 +666,12 @@ void MicroCatEditor::resized()
     vr.removeFromLeft (60);
     voices.setBounds (vr.removeFromLeft (130)); s.removeFromTop (6);
     configToggle.setBounds (s.removeFromTop (30)); s.removeFromTop (8);
+    justBox.setBounds (s.removeFromTop (30)); s.removeFromTop (6);
+    auto br = s.removeFromTop (30);
+    morphLabelArea = br.removeFromLeft (60);
+    tuningBBox.setBounds (br.removeFromLeft (118)); br.removeFromLeft (6);
+    morph.setBounds (br);
+    s.removeFromTop (8);
     auto mr = s.removeFromTop (30);
     mtsToggle.setBounds (mr.removeFromLeft (150));
     mr.removeFromLeft (6);

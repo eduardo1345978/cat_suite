@@ -311,4 +311,55 @@ KeyPitch pitchFor (const TuningData& d, int key, int rootKey, double rootHz) noe
     if (! k.valid) k.note = juce::jlimit (0, 127, k.note);
     return k;
 }
+
+double justSemis (int interval, int limit) noexcept
+{
+    // 5-limit: 1/1 16/15 9/8 6/5 5/4 4/3 45/32 3/2 8/5 5/3 9/5 15/8;  7-limit: 7/6 minor third, 7/5 tritone, 7/4 seventh
+    static const double r5[12] = { 1.0, 16.0 / 15.0, 9.0 / 8.0, 6.0 / 5.0, 5.0 / 4.0, 4.0 / 3.0, 45.0 / 32.0, 3.0 / 2.0, 8.0 / 5.0, 5.0 / 3.0, 9.0 / 5.0, 15.0 / 8.0 };
+    static const double r7[12] = { 1.0, 16.0 / 15.0, 9.0 / 8.0, 7.0 / 6.0, 5.0 / 4.0, 4.0 / 3.0, 7.0 / 5.0, 3.0 / 2.0, 8.0 / 5.0, 5.0 / 3.0, 7.0 / 4.0, 15.0 / 8.0 };
+    const int i = ((interval % 12) + 12) % 12;
+    return 12.0 * std::log2 (limit == Just7 ? r7[i] : r5[i]);
+}
+
+namespace
+{
+    double plainSemis (const PitchMap& m, int key, bool& valid) noexcept
+    {
+        const auto ka = pitchFor (m.a, key, m.rootKey, m.rootHz);
+        double s = ka.note + ka.bend;
+        valid = ka.valid;
+        if (m.morph > 0.0005f)
+        {
+            const auto kb = pitchFor (m.b, key, m.rootKey, m.rootHz);
+            const double sb = kb.note + kb.bend;
+            s += (sb - s) * juce::jlimit (0.0f, 1.0f, m.morph);
+            valid = valid && kb.valid;
+        }
+        return s;
+    }
+}
+
+double keySemis (const PitchMap& m, int key, bool& valid) noexcept
+{
+    if (m.just == JustOff || m.justRoot < 0 || m.justRoot > 127 || key == m.justRoot) return plainSemis (m, key, valid);
+    bool rootValid = true;
+    const double base = plainSemis (m, m.justRoot, rootValid);
+    const int d = key - m.justRoot;
+    const int oct = (int) std::floor (d / 12.0);
+    const double s = base + 12.0 * oct + justSemis (d - 12 * oct, m.just);
+    valid = rootValid && std::isfinite (s) && s > -0.5 && s < 127.5;
+    return s;
+}
+
+KeyPitch keyPitch (const PitchMap& m, int key) noexcept
+{
+    KeyPitch k;
+    bool valid = true;
+    const double s = keySemis (m, key, valid);
+    k.note = juce::jlimit (0, 127, (int) std::lround (s));
+    k.bend = s - k.note;
+    k.hz = 440.0 * std::pow (2.0, (s - 69.0) / 12.0);
+    k.valid = valid && std::abs (k.bend) < 0.51;
+    return k;
+}
 } // namespace micro

@@ -97,7 +97,13 @@ private:
 
     cat::ParamCombo rootBox { processor.apvts, "rootKey", "Root", nullptr, 44 },
                     mapBox { processor.apvts, "mapping", "Keys", nullptr, 44 },
-                    rangeBox { processor.apvts, "bendRange", "Bend", nullptr, 44 };
+                    rangeBox { processor.apvts, "bendRange", "Bend", nullptr, 44 },
+                    justBox { processor.apvts, "liveJust", "Live just", nullptr, 60 };
+    juce::ComboBox tuningBBox;
+    juce::Slider morph;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> morphAttach;
+    juce::Rectangle<int> morphLabelArea;
+    juce::String shownB;
     juce::Slider rootHz, voices;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> rootHzAttach, voicesAttach;
     cat::ParamToggle configToggle { processor.apvts, "sendConfig", "Send MPE set-up" }, bypassToggle { processor.apvts, "bypass", "Bypass" },

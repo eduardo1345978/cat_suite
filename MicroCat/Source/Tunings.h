@@ -72,4 +72,27 @@ struct KeyPitch { int note = 60; double bend = 0.0; double hz = 261.63; bool val
 
 /** rootKey sounds at rootHz; the scale goes up and down from there. */
 KeyPitch pitchFor (const TuningData&, int key, int rootKey, double rootHz) noexcept;
+
+//==============================================================================
+/** Live just intonation: off, 5-limit (pure thirds and fifths), 7-limit (with the bluesy 7:4 and 7:5). */
+enum LiveJust { JustOff = 0, Just5, Just7 };
+/** A 12-key interval (0..11) as a pure ratio, in semitones. */
+double justSemis (int interval, int limit) noexcept;
+
+/** Everything that decides where a key sounds: tuning A, tuning B and the morph between them, the root,
+    and live just intonation (the held chord's lowest note is the anchor; the others are pure intervals
+    above it, counted on 12 keys an octave). */
+struct PitchMap
+{
+    TuningData a, b;
+    float morph = 0.0f;           // 0 = A, 1 = B
+    int rootKey = 60;
+    double rootHz = 261.6255653;
+    int just = JustOff;
+    int justRoot = -1;            // the lowest held key (-1 = none: plain tuning)
+};
+/** The key's pitch in MIDI semitones (fractional; 69 = A4 = 440 Hz). valid = false: out of range (silent). */
+double keySemis (const PitchMap&, int key, bool& valid) noexcept;
+/** The same as a note to play + its bend. */
+KeyPitch keyPitch (const PitchMap&, int key) noexcept;
 } // namespace micro
