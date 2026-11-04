@@ -8,11 +8,11 @@ EnvelopePanel::EnvelopePanel (BendCatProcessor& p)
     : playMode (p.apvts, "envPlayMode", "PlayMode", &p.midiLearn, 66),
       length (p.apvts, "envLength", "Length", &p.midiLearn, 52),
       palette (p), editor (p),
-      depth (p.apvts, "envDepth", "Depth", &p.midiLearn, 50),
-      random (p.apvts, "envRandom", "Random", &p.midiLearn, 56),
-      chance (p.apvts, "envChance", "Chance", &p.midiLearn, 56),
+      depth (p.apvts, "envDepth", "Depth", &p.midiLearn),
+      random (p.apvts, "envRandom", "Random", &p.midiLearn),
+      chance (p.apvts, "envChance", "Chance", &p.midiLearn),
       loop (p.apvts, "envLoop", "Loop", &p.midiLearn),
-      duration (p.apvts, "envDuration", "Free Time", &p.midiLearn, C::blue)
+      duration (p.apvts, "envDuration", "Free Time", &p.midiLearn)
 {
     cycles = cat::Stepper::forParameter (p.apvts, "envCycles", "Cycle");
     cycles->setCaptionWidth (44);
@@ -27,31 +27,27 @@ EnvelopePanel::EnvelopePanel (BendCatProcessor& p)
 
 void EnvelopePanel::resized()
 {
-    auto r = getLocalBounds().reduced (8);
-    auto bottom = r.removeFromBottom (28);
+    // Liquid Chrome: a row of settings, the big chrome curve, a row of chrome knobs
+    auto r = getLocalBounds().reduced (8, 6);
+    auto top = r.removeFromTop (30);
+    playMode.setBounds (top.removeFromLeft (200));
+    top.removeFromLeft (10);
+    length.setBounds (top.removeFromLeft (190));
+    top.removeFromLeft (10);
+    cycles->setBounds (top.removeFromLeft (118));
+    top.removeFromLeft (10);
+    loop.setBounds (top.removeFromLeft (70));
+    r.removeFromTop (8);
+
+    auto knobs = r.removeFromBottom (104);
     r.removeFromBottom (8);
-
-    auto left = r.removeFromLeft (170);
-    playMode.setBounds (left.removeFromTop (28));
-    left.removeFromTop (6);
-    length.setBounds (left.removeFromBottom (28));
-    left.removeFromBottom (6);
-    palette.setBounds (left);
-    r.removeFromLeft (8);
-
-    auto knobArea = r.removeFromRight (78);
-    duration.setBounds (knobArea.removeFromTop (88));
-    r.removeFromRight (6);
+    palette.setBounds (r.removeFromLeft (150));
+    r.removeFromLeft (10);
     editor.setBounds (r);
 
-    juce::FlexBox fb;
-    fb.alignItems = juce::FlexBox::AlignItems::stretch;
-    fb.items.add (juce::FlexItem (*cycles).withWidth (118.0f).withMargin ({ 0, 4, 0, 0 }));
-    fb.items.add (juce::FlexItem (depth).withFlex (1.0f).withMargin ({ 0, 4, 0, 4 }));
-    fb.items.add (juce::FlexItem (random).withFlex (0.8f).withMargin ({ 0, 4, 0, 4 }));
-    fb.items.add (juce::FlexItem (chance).withFlex (1.0f).withMargin ({ 0, 4, 0, 4 }));
-    fb.items.add (juce::FlexItem (loop).withWidth (60.0f).withMargin ({ 0, 0, 0, 4 }));
-    fb.performLayout (bottom);
+    const int kw = knobs.getWidth() / 4;
+    for (auto* k : std::initializer_list<juce::Component*> { &depth, &random, &chance, &duration })
+        k->setBounds (knobs.removeFromLeft (kw).withSizeKeepingCentre (juce::jmin (kw, 120), knobs.getHeight()));
 }
 
 //==============================================================================
@@ -347,8 +343,8 @@ BendCatEditor::BendCatEditor (BendCatProcessor& p)
                                                              presetStepper.get() })
         addAndMakeVisible (c);
 
-    tabs.addTab ("BEND", C::panel, new BendTab (p), true);
-    tabs.addTab ("DETUNE", C::panel, new DetuneTab (p), true);
+    tabs.addTab ("BEND", juce::Colours::transparentBlack, new BendTab (p), true);
+    tabs.addTab ("DETUNE", juce::Colours::transparentBlack, new DetuneTab (p), true);
     tabs.addTab ("VISUALIZER", C::panel, new BendVisualizer (p), true);
     tabs.setTabBarDepth (30);
     tabs.setOutline (0);
@@ -361,7 +357,7 @@ BendCatEditor::BendCatEditor (BendCatProcessor& p)
     addAndMakeVisible (surpriseControls);
     addAndMakeVisible (bootScreen);   // last: drawn over everything until it fades out
 
-    setSize (980, 660);
+    setSize (1000, 700);
 }
 
 BendCatEditor::~BendCatEditor()
@@ -372,49 +368,33 @@ BendCatEditor::~BendCatEditor()
 void BendCatEditor::paint (juce::Graphics& g)
 {
     cat::paintBackdrop (g, getLocalBounds());
-    cat::CatLookAndFeel::drawLogo (g, juce::Rectangle<float> (14.0f, 10.0f, 170.0f, 32.0f), "BEND", "-cat");
-    g.setColour (C::textDim);
-    g.setFont (cat::catFont (11.0f, true));
-    g.drawText ("MPE PITCH-BEND MODULATOR", 16, 42, 220, 16, juce::Justification::centredLeft);
+    cat::CatLookAndFeel::drawLogo (g, juce::Rectangle<float> (22.0f, 10.0f, 260.0f, 52.0f), "BEND", "-cat");
 }
 
 void BendCatEditor::resized()
 {
-    auto r = getLocalBounds().reduced (8);
-    auto header = r.removeFromTop (70);
-    {
-        auto logoZone = header.removeFromLeft (230);
-        catView.setBounds (logoZone.removeFromRight (54));
-    }
-
-    {
-        auto col0 = header.removeFromLeft (150);
-        range->setBounds (col0.removeFromTop (30).reduced (0, 2));
-        col0.removeFromTop (6);
-        amount->setBounds (col0.removeFromTop (28));
-    }
-    header.removeFromLeft (8);
-    auto col = header.removeFromLeft (120);
-    mpe.setBounds (col.removeFromTop (30).reduced (0, 2));
-    col.removeFromTop (6);
-    voices->setBounds (col.removeFromTop (28));
-    header.removeFromLeft (8);
-    auto col2 = header.removeFromLeft (120);
-    sendConfig.setBounds (col2.removeFromTop (30).reduced (0, 2));
-    col2.removeFromTop (6);
-    resolution.setBounds (col2.removeFromTop (28));
-    header.removeFromLeft (8);
-    {
-        auto col3 = header.removeFromLeft (270);
-        surpriseControls.setBounds (col3.removeFromTop (30).reduced (0, 2).removeFromLeft (122));
-        col3.removeFromTop (6);
-        presetStepper->setBounds (col3.removeFromTop (28));
-    }
+    auto r = getLocalBounds().reduced (16, 10);
+    auto header = r.removeFromTop (56);
+    header.removeFromLeft (230);
+    catView.setBounds (header.removeFromLeft (56));
     header.removeFromLeft (12);
-    miniScope.setBounds (header.reduced (0, 2));
+    presetStepper->setBounds (header.removeFromRight (290).withSizeKeepingCentre (290, 32));
+    header.removeFromRight (10);
+    surpriseControls.setBounds (header.removeFromRight (122).withSizeKeepingCentre (122, 32));
+    header.removeFromRight (10);
+    miniScope.setBounds (header.reduced (0, 6));
 
     r.removeFromTop (8);
-    keyboard.setBounds (r.removeFromBottom (50));
+    auto bar = r.removeFromTop (30);
+    range->setBounds (bar.removeFromLeft (150));     bar.removeFromLeft (8);
+    amount->setBounds (bar.removeFromLeft (140));    bar.removeFromLeft (8);
+    voices->setBounds (bar.removeFromLeft (120));    bar.removeFromLeft (8);
+    resolution.setBounds (bar.removeFromLeft (170)); bar.removeFromLeft (14);
+    mpe.setBounds (bar.removeFromLeft (80));         bar.removeFromLeft (8);
+    sendConfig.setBounds (bar.removeFromLeft (100));
+
+    r.removeFromTop (6);
+    keyboard.setBounds (r.removeFromBottom (44));
     r.removeFromBottom (8);
     tabs.setBounds (r);
 

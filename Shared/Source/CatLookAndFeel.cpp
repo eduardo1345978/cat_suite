@@ -105,6 +105,27 @@ void CatLookAndFeel::drawTriangle (juce::Graphics& g, juce::Rectangle<float> r, 
 void CatLookAndFeel::drawLogo (juce::Graphics& g, juce::Rectangle<float> b, const juce::String& first, const juce::String& second)
 {
     const bool themed = theme().fontData != nullptr;
+    if (theme().backdrop == Backdrop::ChromeSheen)
+    {
+        // liquid chrome lettering: "bend·cat"
+        const auto word = first.toLowerCase() + juce::String::charToString ((juce::juce_wchar) 0x00b7) + second.trimCharactersAtStart ("-").toLowerCase();
+        juce::GlyphArrangement ga;
+        ga.addLineOfText (displayFont (b.getHeight() * 0.8f), word, b.getX(), 0.0f);
+        juce::Path text;
+        ga.createPath (text);
+        const auto tb = text.getBounds();
+        text.applyTransform (juce::AffineTransform::translation (0.0f, b.getCentreY() - tb.getCentreY()));
+        const auto r = text.getBounds();
+        juce::ColourGradient chrome (juce::Colours::white, 0.0f, r.getY(), juce::Colour (0xff8c95a6), 0.0f, r.getBottom(), false);
+        chrome.addColour (0.38, juce::Colour (0xffb9c2d3));
+        chrome.addColour (0.52, juce::Colour (0xff4e5566));
+        chrome.addColour (0.70, juce::Colour (0xffdde3ee));
+        g.setColour (juce::Colours::black.withAlpha (0.45f));
+        g.fillPath (text, juce::AffineTransform::translation (0.0f, 2.0f));
+        g.setGradientFill (chrome);
+        g.fillPath (text);
+        return;
+    }
     auto f1 = themed ? displayFont (b.getHeight() * 0.62f) : catFont (b.getHeight() * 0.72f, true);
     auto f2 = themed ? displayFont (b.getHeight() * 0.62f) : catFont (b.getHeight() * 0.72f, false);
     juce::GlyphArrangement ga;

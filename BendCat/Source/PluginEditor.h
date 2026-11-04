@@ -21,7 +21,7 @@ private:
     ShapePalette palette;
     EnvelopeEditor editor;
     std::unique_ptr<cat::Stepper> cycles;
-    cat::BarSlider depth, random, chance;
+    cat::Knob depth, random, chance;
     cat::ParamToggle loop;
     cat::Knob duration;
 };
