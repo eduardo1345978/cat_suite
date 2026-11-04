@@ -34,7 +34,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout MicroCatProcessor::createLay
     // its own sound: like an instrument in Ableton, it plays the tuning itself (no other synth needed)
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "ownSound", 1 }, "Own Sound", true));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "sound", 1 }, "Sound", hub::KeysSynth::soundNames(), 6));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "volume", 1 }, "Volume", NormalisableRange<float> (-40.0f, 6.0f), -6.0f,
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "volume", 1 }, "Volume", NormalisableRange<float> (-40.0f, 6.0f), 0.0f,
                                                        AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String (v, 1) + " dB"; })));
     return layout;
 }
@@ -322,7 +322,7 @@ void MicroCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         }
         if (n > pos) synth.render (l + pos, r + pos, n - pos);
 
-        const float target = juce::Decibels::decibelsToGain (p ("volume"));
+        const float target = juce::Decibels::decibelsToGain (p ("volume")) * 1.4f;   // same level as Cat Box's keys
         for (int ch = 0; ch < juce::jmin (2, buffer.getNumChannels()); ++ch)
             buffer.applyGainRamp (ch, 0, n, synthGain, target);
         synthGain = target;

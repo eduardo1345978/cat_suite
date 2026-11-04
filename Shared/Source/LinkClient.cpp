@@ -459,7 +459,16 @@ void LinkClient::showPanel (juce::Component& nextTo)
     // Owned here (not by JUCE's launchAsynchronously helper), so the pop-up, its timer and
     // its parameter attachment are always deleted before the plug-in is.
     panelContent = createLinkPanel (*this);
-    panelBox = std::make_unique<juce::CallOutBox> (*panelContent, nextTo.getScreenBounds(), nullptr);
+    // a button off every screen (window half outside the display) has no display: JUCE's CallOutBox
+    // would crash looking one up, so then the pop-up opens inside the plug-in window instead
+    const auto screen = nextTo.getScreenBounds();
+    if (juce::Desktop::getInstance().getDisplays().getDisplayForRect (screen) == nullptr)
+    {
+        auto* top = nextTo.getTopLevelComponent();
+        panelBox = std::make_unique<juce::CallOutBox> (*panelContent, top->getLocalArea (&nextTo, nextTo.getLocalBounds()), top);
+    }
+    else
+        panelBox = std::make_unique<juce::CallOutBox> (*panelContent, screen, nullptr);
     panelBox->setVisible (true);
     panelBox->enterModalState (true, nullptr, false);
 }

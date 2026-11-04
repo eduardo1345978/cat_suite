@@ -51,6 +51,9 @@ public:
     void drawButtonText (juce::Graphics&, juce::TextButton&, bool isMouseOverButton, bool isButtonDown) override;
     juce::Font getTextButtonFont (juce::TextButton&, int buttonHeight) override;
 
+    /** A combo box off every screen (window larger than the display) opens its menu inside the window
+        (JUCE would crash looking up a display for it). */
+    juce::PopupMenu::Options getOptionsForComboBoxPopupMenu (juce::ComboBox&, juce::Label&) override;
     void drawComboBox (juce::Graphics&, int width, int height, bool isButtonDown, int buttonX, int buttonY,
                        int buttonW, int buttonH, juce::ComboBox&) override;
     juce::Font getComboBoxFont (juce::ComboBox&) override;

@@ -548,3 +548,15 @@ void CatLookAndFeel::drawScrollbar (juce::Graphics& g, juce::ScrollBar&, int x, 
 }
 
 } // namespace cat
+
+namespace cat
+{
+juce::PopupMenu::Options CatLookAndFeel::getOptionsForComboBoxPopupMenu (juce::ComboBox& box, juce::Label& label)
+{
+    auto options = LookAndFeel_V4::getOptionsForComboBoxPopupMenu (box, label);
+    if (box.isShowing() && juce::Desktop::getInstance().getDisplays().getDisplayForRect (box.getScreenBounds()) == nullptr)
+        if (auto* top = box.getTopLevelComponent(); top != nullptr && top != &box)
+            options = options.withParentComponent (top);
+    return options;
+}
+} // namespace cat
