@@ -269,7 +269,6 @@ void paintBackdrop (juce::Graphics& g, juce::Rectangle<int> bounds)
             break;
         case Backdrop::Silver:
             vertical (juce::Colour (0xffe7e8ea), juce::Colour (0xffc4c6ca));   // (Bass-Cat draws its own stripe)
-            }
             break;
         case Backdrop::Amber:
             vertical (juce::Colour (0xff2a2622), juce::Colour (0xff17140f));
