@@ -178,8 +178,8 @@ void EchoView::paint (juce::Graphics& g)
     }
     drawCat (g, { catX, midY }, 52.0f, juce::jlimit (0.0f, 1.0f, std::sqrt (in) * 1.6f), frozen);
 
-    // the time and tempo
-    g.setColour (cat::Colours::text);
+    // the time and tempo (the display is always dark)
+    g.setColour (juce::Colour (0xffe8ecf5));
     g.setFont (cat::catFont (15.0f, true));
     juce::String t = st.sync ? divisionNames()[st.division] + "  =  " + timeText (st.delaySeconds()) : timeText (st.delaySeconds());
     t << "     " << juce::roundToInt (processor.getBpm()) << " BPM" << (processor.isHostSynced() ? "" : " (no host tempo)");

@@ -67,7 +67,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout PhaseCatProcessor::createLay
         layout.add (std::make_unique<AudioParameterBool> (ParameterID { lid (l, "Risset"), 1 }, n + "Risset", false));
     }
     layout.add (std::make_unique<AudioParameterInt> (ParameterID { "channel", 1 }, "MIDI Channel", 1, 16, 10));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "gate", 1 }, "Gate", NormalisableRange<float> (0.05f, 1.0f), 0.5f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "gate", 1 }, "Gate", NormalisableRange<float> (0.05f, 1.0f), 0.5f,
+        AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v * 100.0f)) + " %"; })));
     layout.add (std::make_unique<AudioParameterInt> (ParameterID { "rissetBars", 1 }, "Risset Turn (bars)", 1, 16, 4));
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "rissetDown", 1 }, "Risset Down", false));
     return layout;

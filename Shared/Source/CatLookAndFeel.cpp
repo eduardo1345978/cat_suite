@@ -478,7 +478,8 @@ void CatLookAndFeel::drawLabel (juce::Graphics& g, juce::Label& label)
     {
         const float alpha = label.isEnabled() ? 1.0f : 0.5f;
         const auto font = sliderBox ? catFont (12.0f) : getLabelFont (label);
-        g.setColour ((sliderBox ? Colours::text : label.findColour (juce::Label::textColourId)).withMultipliedAlpha (alpha));
+        g.setColour ((sliderBox ? static_cast<juce::Slider*> (label.getParentComponent())->findColour (juce::Slider::textBoxTextColourId)
+                                : label.findColour (juce::Label::textColourId)).withMultipliedAlpha (alpha));
         g.setFont (font);
         const auto area = getLabelBorderSize (label).subtractedFrom (label.getLocalBounds());
         g.drawFittedText (label.getText(), area, label.getJustificationType(),
