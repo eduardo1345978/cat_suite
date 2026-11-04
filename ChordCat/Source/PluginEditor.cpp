@@ -1295,7 +1295,7 @@ juce::Colour ChordCatEditor::colourForChord (const ChordDefinition& c)
 
 void ChordCatEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (C::background);
+    cat::paintBackdrop (g, getLocalBounds());
     cat::CatLookAndFeel::drawLogo (g, juce::Rectangle<float> (242.0f, 6.0f, 170.0f, 32.0f), "CHORD", "-cat");
 }
 

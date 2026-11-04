@@ -548,7 +548,7 @@ void MuseCatEditor::exportSong (int what)
 
 void MuseCatEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (cat::Colours::background);
+    cat::paintBackdrop (g, getLocalBounds());
     cat::CatLookAndFeel::drawLogo (g, logoArea.toFloat(), "MUSE", "CAT");
 
     auto s = shownSong;

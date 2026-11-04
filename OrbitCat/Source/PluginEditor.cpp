@@ -258,7 +258,7 @@ void OrbitCatEditor::timerCallback()
 
 void OrbitCatEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (C::background);
+    cat::paintBackdrop (g, getLocalBounds());
     cat::CatLookAndFeel::drawLogo (g, juce::Rectangle<float> (14.0f, 8.0f, 160.0f, 32.0f), "ORBIT", "-cat");
 
     g.setColour (C::textDim);

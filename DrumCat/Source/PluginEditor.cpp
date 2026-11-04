@@ -87,11 +87,14 @@ void DrumGrid::paint (juce::Graphics& g)
     const double L = pattern.lengthPpq();
     const float pxPerPpq = bounds.getWidth() / (float) L;
 
+    const bool light = cat::theme().light;
+    const auto ink = light ? juce::Colours::black : juce::Colours::white;
+
     // Rows
     for (int l = 0; l < NumLanes; ++l)
         if (l % 2 == 1)
         {
-            g.setColour (juce::Colours::white.withAlpha (0.018f));
+            g.setColour (ink.withAlpha (light ? 0.03f : 0.018f));
             g.fillRect (rowBounds (l));
         }
 
@@ -100,7 +103,7 @@ void DrumGrid::paint (juce::Graphics& g)
     {
         const float x = (float) s * 0.25f * pxPerPpq;
         const float alpha = s % 16 == 0 ? 0.16f : (s % 4 == 0 ? 0.08f : 0.035f);
-        g.setColour (juce::Colours::white.withAlpha (alpha));
+        g.setColour (ink.withAlpha (light ? alpha * 1.3f : alpha));
         g.drawVerticalLine (juce::roundToInt (x), 0.0f, bounds.getBottom());
     }
 
@@ -111,6 +114,7 @@ void DrumGrid::paint (juce::Graphics& g)
         const bool muted = processor.apvts.getRawParameterValue (muteParam (h.lane))->load() > 0.5f;
         auto colour = laneColour (h.lane);
         if (h.lane == Tom) colour = colour.brighter (0.15f * (float) (h.variant - 1));
+        if (light) colour = colour.withMultipliedSaturation (1.6f).darker (0.35f);
         g.setColour (colour.withAlpha (muted ? 0.2f : (i == hoverHit ? 1.0f : 0.85f)));
         g.fillRoundedRectangle (hitBounds (h), 2.0f);
     }
@@ -319,7 +323,7 @@ void DrumCatEditor::timerCallback()
 
 void DrumCatEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (C::background);
+    cat::paintBackdrop (g, getLocalBounds());
     cat::CatLookAndFeel::drawLogo (g, juce::Rectangle<float> (14.0f, 8.0f, 150.0f, 32.0f), "DRUM", "-cat");
 
     g.setColour (C::textDim);

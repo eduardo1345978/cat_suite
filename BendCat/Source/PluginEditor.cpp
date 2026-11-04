@@ -371,7 +371,7 @@ BendCatEditor::~BendCatEditor()
 
 void BendCatEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (C::background);
+    cat::paintBackdrop (g, getLocalBounds());
     cat::CatLookAndFeel::drawLogo (g, juce::Rectangle<float> (14.0f, 10.0f, 170.0f, 32.0f), "BEND", "-cat");
     g.setColour (C::textDim);
     g.setFont (cat::catFont (11.0f, true));

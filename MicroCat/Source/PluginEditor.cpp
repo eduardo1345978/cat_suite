@@ -588,7 +588,7 @@ void MicroCatEditor::timerCallback()
 
 void MicroCatEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (cat::Colours::background);
+    cat::paintBackdrop (g, getLocalBounds());
     cat::CatLookAndFeel::drawLogo (g, logoArea.toFloat(), "MICRO", "CAT");
     cat::CatLookAndFeel::drawGlassPanel (g, list.getBounds().expanded (4).toFloat(), 8.0f);
     cat::CatLookAndFeel::drawGlassPanel (g, settingsArea.toFloat(), 10.0f);

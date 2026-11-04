@@ -410,7 +410,7 @@ void EchoCatEditor::timerCallback()
 
 void EchoCatEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (cat::Colours::background);
+    cat::paintBackdrop (g, getLocalBounds());
     cat::CatLookAndFeel::drawLogo (g, logoArea.toFloat(), "ECHO", "CAT");
     g.setColour (cat::Colours::textDim);
     g.setFont (cat::catFont (12.0f));

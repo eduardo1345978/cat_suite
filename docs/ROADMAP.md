@@ -28,8 +28,8 @@ then copy changed files to the PC (D:\Projekty\vst_plugin) and run build_and_ins
 - [ ] Discord bot (webhook): when live, rare fish & new species, daily summary, Super Chats / members
 
 ## 3. Fixes
-- [ ] Cat Hub: the Cats' windows (tabs) don't resize with the Hub window -> scale them to fit
-- [ ] Crashes: hunt them (stress tests, Hub + Muse-Cat PresetBar menu under no display)
+- [x] Cat Hub: the Cats' windows (tabs) don't resize with the Hub window -> scale them to fit
+- [x] Crashes: hunt them (stress tests, Hub + Muse-Cat PresetBar menu under no display)
 
 ## 4. Echo-Cat
 - [x] More presets, reverse echo, pitch echo (each echo higher / lower), echo steps (draw a rhythm of echoes) (2 Nov)
@@ -47,7 +47,7 @@ then copy changed files to the PC (D:\Projekty\vst_plugin) and run build_and_ins
 
 ## 7. Cat Hub
 - [ ] Echo-Cat as an effect on parts
-- [ ] Arrangement timeline (record the jam into a song view)
+- [x] Arrangement timeline (record the jam into a song view)
 - [ ] Mixer page (all volumes + meters)
 - [ ] Export to a Cubase project (MIDI + stems)
 - [ ] Piano roll: velocity bars, copy / paste / select many, scale highlight, drum grid
@@ -94,13 +94,13 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
             (direction + speed), chords feed Arp / Choir / Glide / own chord sound; play it like ORCHID
             (one hand picks the chord type, pads / keys the root); NO Markov generator
       - [x] Orbit page with animation (his favourite) - planets play the notes you hold (40 systems, planet edit, Hold, Arp or Bass sound)
-      - [ ] Choir engine (Sing-Cat) as an engine with presets; no meows, no Talk-Cat
-      - [ ] Effects TE style, as many as possible: echo with freeze / duck / ping-pong / tape wobble / shimmer,
+      - [x] Choir engine (Sing-Cat) as an engine with presets; no meows, no Talk-Cat
+      - [x] Effects TE style, as many as possible: echo with freeze / duck / ping-pong / tape wobble / shimmer,
             phaser, tremolo, tone, warmth, prism, shimmer/bloom rooms, ensemble
-      - [ ] Arp: Bounce as an arp mode, Euclidean rhythms, pattern length as you set it (no Patt-Cat page)
+      - [x] Arp: Bounce as an arp mode, Euclidean rhythms, pattern length as you set it (no Patt-Cat page)
       - [ ] Drums: Drum-Cat groove only (swing, human timing); Bass-Cat: Follow arp is enough
       - [ ] Joystick: bend (curves, LFO) + more targets; microtuning if it fits
-      - [ ] Engines also: piano, nylon guitar, strings, e-piano, chip / glass bells (Cat Hub instruments)
+      - [x] Engines also: piano, nylon guitar, strings, e-piano, chip / glass bells (Cat Hub instruments)
       - Life-Cat: no. Talk-Cat: no. Patt-Cat page: no.
 - [x] 26 Oct: user decided the box is just a box (Pi + screen + sound) played with his MIDI keyboard
       (M-Audio Oxygen Pro Mini: 32 keys, 8 pads x 2 banks, 4 knobs, 4 faders, transport). Done: MIDI learn wizard
@@ -165,7 +165,7 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
       microtiming later
 - [ ] Playing: quantize knob (only when switched on), metronome click + 1-bar count-in when recording,
       multi-step Undo, copy / paste pattern or bar, "mutate" button (small changes to MY pattern), sleep after 30 min
-- [ ] FX: knob automation recorded into the pattern; mixer page (volume, pan, mute)
+- [x] FX: knob automation recorded into the pattern; mixer page (volume, pan, mute)
 - [ ] Presets: banks A, B, C...; names typed on the PC, sent to the box (box <-> PC link); backups by hand
 - [ ] Screen: still simpler; big preset name, spectrum, mixer, gentle animations, modern clean font, no touch
 - [ ] PC: tempo follows Cubase; Cat Box as a VST3 used as a link between box and Cubase; preset library window

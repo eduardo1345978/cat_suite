@@ -412,7 +412,7 @@ void PattCatEditor::timerCallback()
 
 void PattCatEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (C::background);
+    cat::paintBackdrop (g, getLocalBounds());
     cat::CatLookAndFeel::drawLogo (g, juce::Rectangle<float> (12.0f, 8.0f, 160.0f, 32.0f), "PATT", "-cat");
 }
 

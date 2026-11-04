@@ -1756,7 +1756,7 @@ TalkCatEditor::~TalkCatEditor()
 
 void TalkCatEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (C::background);
+    cat::paintBackdrop (g, getLocalBounds());
     cat::CatLookAndFeel::drawLogo (g, juce::Rectangle<float> (14.0f, 8.0f, 150.0f, 32.0f), "TALK", "-cat");
 }
 
