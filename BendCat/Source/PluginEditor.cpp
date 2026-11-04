@@ -375,7 +375,7 @@ void BendCatEditor::resized()
 {
     auto r = getLocalBounds().reduced (16, 10);
     auto header = r.removeFromTop (56);
-    header.removeFromLeft (230);
+    header.removeFromLeft (290);
     catView.setBounds (header.removeFromLeft (56));
     header.removeFromLeft (12);
     presetStepper->setBounds (header.removeFromRight (290).withSizeKeepingCentre (290, 32));

@@ -80,6 +80,7 @@ public:
     {
         caption.setColour (juce::Label::textColourId, c);
         slider.setColour (juce::Slider::textBoxTextColourId, c.withMultipliedAlpha (0.8f));
+        slider.lookAndFeelChanged();   // re-creates the value box with the new colour
     }
 
 private:

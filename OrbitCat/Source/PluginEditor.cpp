@@ -190,7 +190,7 @@ OrbitCatEditor::OrbitCatEditor (OrbitCatProcessor& p)
 {
     setLookAndFeel (&lnf);
 
-    presetStepper = std::make_unique<cat::PresetBar> (p.presetManager);
+    presetStepper = std::make_unique<cat::PresetBar> (p.presetManager, juce::String());
     spokes = cat::Stepper::forParameter (p.apvts, "spokes", "Spokes");
     channel = cat::Stepper::forParameter (p.apvts, "outChannel", "Out", [] (int v) { return v == 0 ? juce::String ("In") : juce::String (v); });
 

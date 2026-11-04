@@ -319,7 +319,7 @@ juce::Label* CatLookAndFeel::createSliderTextBox (juce::Slider& slider)
 {
     auto* l = LookAndFeel_V4::createSliderTextBox (slider);
     l->setFont (catFont (12.0f));
-    l->setColour (juce::Label::textColourId, Colours::text);
+    l->setColour (juce::Label::textColourId, slider.findColour (juce::Slider::textBoxTextColourId));
     l->setColour (juce::Label::outlineColourId, juce::Colours::transparentBlack);
     l->setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
     return l;

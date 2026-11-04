@@ -268,15 +268,7 @@ void paintBackdrop (juce::Graphics& g, juce::Rectangle<int> bounds)
             stars (70, 0.5f, juce::Colour (0xff5cffd6));
             break;
         case Backdrop::Silver:
-            vertical (juce::Colour (0xffe7e8ea), juce::Colour (0xffc4c6ca));
-            {
-                auto stripe = b.withTop (b.getBottom() - 6.0f);
-                const juce::Colour cs[] = { juce::Colour (0xffc1272d), juce::Colour (0xfff2b51d), juce::Colour (0xff1a1a1c) };
-                for (int i = 0; stripe.getX() + i * 60.0f < stripe.getRight(); ++i)
-                {
-                    g.setColour (cs[i % 3]);
-                    g.fillRect (stripe.withX (stripe.getX() + i * 60.0f).withWidth (60.0f));
-                }
+            vertical (juce::Colour (0xffe7e8ea), juce::Colour (0xffc4c6ca));   // (Bass-Cat draws its own stripe)
             }
             break;
         case Backdrop::Amber:
