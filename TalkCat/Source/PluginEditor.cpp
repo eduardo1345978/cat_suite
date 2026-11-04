@@ -1649,6 +1649,10 @@ TalkCatEditor::TalkCatEditor (TalkCatProcessor& p)
       lanes (p, roll),
       catView (p.noteMonitor, [&p] { return p.uiPpq.load(); }, [&p] { return p.uiTransportRunning.load(); }, cat::CatStyle::Talk),
       surpriseControls (p, p.surpriseUndo, [&p] { p.surprise(); }),
+      sizeKnob (p.apvts, "size", "SIZE", &p.midiLearn),
+      genderKnob (p.apvts, "gender", "GENDER", &p.midiLearn),
+      catKnob (p.apvts, "cat", "CAT", &p.midiLearn),
+      volumeKnob (p.apvts, "volume", "VOLUME", &p.midiLearn),
       bootScreen (p.noteMonitor, [&p] { return p.uiPpq.load(); }, [&p] { return p.uiTransportRunning.load(); },
                   "TALK", "-cat", "A SINGER FOR PEOPLE AND CATS", cat::CatStyle::Talk)
 {
@@ -1744,25 +1748,116 @@ TalkCatEditor::TalkCatEditor (TalkCatProcessor& p)
         addAndMakeVisible (c);
     addAndMakeVisible (catView);
     addAndMakeVisible (surpriseControls);
+    for (auto* k : { &sizeKnob, &genderKnob, &catKnob, &volumeKnob })
+    {
+        k->setTextColour (juce::Colour (0xff2b2a24));
+        addAndMakeVisible (*k);
+    }
+    for (auto* b : std::initializer_list<juce::Button*> { &songsButton, &undoButton, &redoButton, &dragButton })
+        b->setLookAndFeel (&caseKeys);
     addAndMakeVisible (bootScreen);
-    setSize (1280, 880);
+    setSize (1280, 900);
     startTimerHz (8);
 }
 
 TalkCatEditor::~TalkCatEditor()
 {
+    for (auto* b : std::initializer_list<juce::Button*> { &songsButton, &undoButton, &redoButton, &dragButton })
+        b->setLookAndFeel (nullptr);
     setLookAndFeel (nullptr);
 }
 
 void TalkCatEditor::paint (juce::Graphics& g)
 {
-    cat::paintBackdrop (g, getLocalBounds());
-    cat::CatLookAndFeel::drawLogo (g, juce::Rectangle<float> (14.0f, 8.0f, 150.0f, 32.0f), "TALK", "-cat");
+    // the beige computer case
+    const auto all = getLocalBounds().toFloat();
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xffd7cfb8), 0.0f, 0.0f, juce::Colour (0xffbbb29a), 0.0f, all.getBottom(), false));
+    g.fillRect (all);
+    g.setColour (juce::Colours::white.withAlpha (0.6f));
+    g.drawHorizontalLine (1, 0.0f, all.getRight());
+    g.setColour (juce::Colours::black.withAlpha (0.04f));
+    for (float y = 0.0f; y < all.getBottom(); y += 3.0f) g.drawHorizontalLine ((int) y, 0.0f, all.getRight());
+
+    // the screen bezel and the green CRT
+    auto bezel = screenBounds.toFloat();
+    g.setColour (juce::Colours::white.withAlpha (0.6f));
+    g.fillRoundedRectangle (bezel.translated (0.0f, 1.0f), 34.0f);
+    g.setColour (juce::Colour (0xff1b1f18));
+    g.fillRoundedRectangle (bezel, 34.0f);
+    {
+        juce::Graphics::ScopedSaveState save (g);
+        juce::Path crt;
+        crt.addRoundedRectangle (crtBounds.toFloat(), 24.0f);
+        g.reduceClipRegion (crt);
+        cat::paintBackdrop (g, crtBounds);
+    }
+
+    // the label plate
+    const auto ink = juce::Colour (0xff2b2a24);
+    auto a = asideBounds;
+    g.setColour (ink);
+    g.setFont (cat::catFont (24.0f, true).withExtraKerningFactor (0.05f));
+    g.drawText (juce::String ("TALK") + juce::String::charToString ((juce::juce_wchar) 0x00b7) + "CAT", a.removeFromTop (30), juce::Justification::centredLeft);
+    g.setColour (juce::Colour (0xff4a473d));
+    g.setFont (cat::catFont (11.5f).withExtraKerningFactor (0.15f));
+    g.drawText ("SPEECH SYNTHESIZER", a.removeFromTop (18), juce::Justification::centredLeft);
+
+    // a speaker grille under the knobs
+    auto grille = juce::Rectangle<float> ((float) asideBounds.getX(), (float) sizeKnob.getBottom() + 120.0f, (float) asideBounds.getWidth(), 90.0f);
+    for (float y = grille.getY(); y < grille.getBottom(); y += 9.0f)
+    {
+        g.setColour (juce::Colours::black.withAlpha (0.28f));
+        g.fillRoundedRectangle (grille.getX(), y, grille.getWidth(), 4.0f, 2.0f);
+        g.setColour (juce::Colours::white.withAlpha (0.35f));
+        g.drawHorizontalLine ((int) y + 5, grille.getX() + 2.0f, grille.getRight() - 2.0f);
+    }
+}
+
+void TalkCatEditor::paintOverChildren (juce::Graphics& g)
+{
+    // scan lines and the glass of the CRT, over everything on the screen
+    juce::Graphics::ScopedSaveState save (g);
+    juce::Path crt;
+    crt.addRoundedRectangle (crtBounds.toFloat(), 24.0f);
+    g.reduceClipRegion (crt);
+    g.setColour (juce::Colours::black.withAlpha (0.13f));
+    for (int y = crtBounds.getY(); y < crtBounds.getBottom(); y += 3)
+        g.fillRect (crtBounds.getX(), y, crtBounds.getWidth(), 1);
+    const auto c = crtBounds.toFloat();
+    juce::ColourGradient vignette (juce::Colours::transparentBlack, c.getCentreX(), c.getCentreY(),
+                                   juce::Colours::black.withAlpha (0.35f), c.getX(), c.getY(), true);
+    g.setGradientFill (vignette);
+    g.fillRect (c);
 }
 
 void TalkCatEditor::resized()
 {
-    auto r = getLocalBounds().reduced (10);
+    auto all = getLocalBounds().reduced (26);
+    asideBounds = all.removeFromRight (250);
+    all.removeFromRight (22);
+    screenBounds = all;
+    crtBounds = screenBounds.reduced (18);
+
+    // the case: label plate, four knobs, keys
+    {
+        auto a = asideBounds;
+        a.removeFromTop (62);
+        auto knobs = a.removeFromTop (220);
+        auto top = knobs.removeFromTop (110), bottom = knobs;
+        sizeKnob.setBounds (top.removeFromLeft (top.getWidth() / 2).reduced (6, 0));
+        genderKnob.setBounds (top.reduced (6, 0));
+        catKnob.setBounds (bottom.removeFromLeft (bottom.getWidth() / 2).reduced (6, 0));
+        volumeKnob.setBounds (bottom.reduced (6, 0));
+        auto keys = a.removeFromBottom (92);
+        auto k1 = keys.removeFromTop (40), k2 = keys.withTrimmedTop (12);
+        songsButton.setBounds (k1.removeFromLeft (k1.getWidth() / 2).reduced (4, 0));
+        dragButton.setBounds (k1.reduced (4, 0));
+        undoButton.setBounds (k2.removeFromLeft (k2.getWidth() / 2).reduced (4, 0));
+        redoButton.setBounds (k2.reduced (4, 0));
+    }
+
+    // the screen: everything Talk-Cat does
+    auto r = crtBounds.reduced (18, 14);
     auto item = [] (juce::Component& c, float w, float h = 28.0f) { return juce::FlexItem (c).withWidth (w).withHeight (h).withMargin ({ 0, 3, 0, 3 }); };
     auto row = [] (juce::Rectangle<int> area, std::initializer_list<juce::FlexItem> items)
     {
@@ -1772,17 +1867,17 @@ void TalkCatEditor::resized()
         fb.performLayout (area);
     };
     {
-        auto top = r.removeFromTop (40);
-        auto logo = top.removeFromLeft (150);
-        catView.setBounds (logo.removeFromRight (40).expanded (0, 6));
-        row (top, { item (presetBar, 300), item (songsButton, 64), item (mode, 120), item (languageBox, 104), item (styleBox, 124),
-                    juce::FlexItem().withFlex (1.0f), item (undoButton, 50), item (redoButton, 50), item (surpriseControls, 122), item (dragButton, 88) });
+        auto top = r.removeFromTop (34);
+        catView.setBounds (top.removeFromLeft (40).expanded (0, 4));
+        top.removeFromLeft (8);
+        row (top, { item (presetBar, 280), item (mode, 120), item (languageBox, 104), item (styleBox, 124),
+                    juce::FlexItem().withFlex (1.0f), item (surpriseControls, 122) });
     }
     r.removeFromTop (6);
     row (r.removeFromTop (28), { item (toolButtons[0], 56), item (toolButtons[1], 60), item (toolButtons[2], 56), item (snapBox, 104),
                                  item (zoomOut, 26), item (zoomIn, 26), item (rowsOut, 26), item (rowsIn, 26), item (*barsStepper, 100),
                                  item (*startStepper, 120), item (loopToggle, 60), item (followToggle, 70), item (recordButton, 48),
-                                 item (infoLabel, 200).withFlex (1.0f) });
+                                 item (infoLabel, 100).withFlex (1.0f) });
     r.removeFromTop (6);
     tabs.setBounds (r.removeFromBottom (236));
     r.removeFromBottom (6);
@@ -1790,6 +1885,25 @@ void TalkCatEditor::resized()
     r.removeFromBottom (4);
     roll.setBounds (r);
     bootScreen.setBounds (getLocalBounds());
+}
+
+void TalkCatEditor::CaseKeys::drawButtonBackground (juce::Graphics& g, juce::Button& b, const juce::Colour&, bool over, bool down)
+{
+    auto r = b.getLocalBounds().toFloat().reduced (0.5f);
+    g.setColour (juce::Colour (0xff8e866f));
+    g.fillRoundedRectangle (r.withTrimmedTop (3.0f), 6.0f);
+    auto key = r.withTrimmedBottom (down ? 1.0f : 3.0f).translated (0.0f, down ? 2.0f : 0.0f);
+    auto top = juce::Colour (0xfff2ede0), bottom = juce::Colour (0xffd2cab4);
+    if (over) { top = top.brighter (0.04f); bottom = bottom.brighter (0.04f); }
+    g.setGradientFill (juce::ColourGradient (top, 0.0f, key.getY(), bottom, 0.0f, key.getBottom(), false));
+    g.fillRoundedRectangle (key, 6.0f);
+}
+
+void TalkCatEditor::CaseKeys::drawButtonText (juce::Graphics& g, juce::TextButton& b, bool, bool down)
+{
+    g.setColour (juce::Colour (0xff2b2a24));
+    g.setFont (cat::catFont (12.5f, true));
+    g.drawFittedText (b.getButtonText().toUpperCase(), b.getLocalBounds().withTrimmedBottom (3).translated (0, down ? 2 : 0), juce::Justification::centred, 1);
 }
 
 bool TalkCatEditor::keyPressed (const juce::KeyPress& k)

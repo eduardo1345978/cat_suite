@@ -51,10 +51,11 @@ private:
     std::unique_ptr<cat::PresetBar> presetStepper;
     cat::ParamToggle latch, followGroove;
     cat::ParamCombo quantize;
-    cat::BarSlider gravity, drag, turbulence, align, accent, tilt, glow, swing;
+    cat::LineSlider gravity, drag, turbulence, align, accent, tilt, glow, swing;
 
     juce::OwnedArray<juce::TextButton> slotButtons;
-    std::array<std::unique_ptr<cat::BarSlider>, 8> slotSliders;
+    std::array<std::unique_ptr<cat::LineSlider>, 8> slotSliders;
+    juce::Rectangle<int> asideBounds, dockBounds;
     int selectedSlot = 0;
 
     OrbitView view;

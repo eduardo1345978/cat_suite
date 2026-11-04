@@ -39,6 +39,8 @@ const Theme& theme();
 void applyTheme (const juce::String& pluginName);
 /** The theme's display font (logo, big headings). */
 juce::Font displayFont (float height);
+/** The pixel LCD font (VT323), for displays that look like hardware screens. */
+juce::Font lcdFont (float height);
 /** The window's background: colour, texture and the theme's decorations. */
 void paintBackdrop (juce::Graphics&, juce::Rectangle<int> bounds);
 } // namespace cat

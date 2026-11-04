@@ -182,6 +182,12 @@ void applyTheme (const juce::String& pluginName)
     }
 }
 
+juce::Font lcdFont (float height)
+{
+    static juce::Typeface::Ptr tf = juce::Typeface::createSystemTypefaceFor (CatFonts::VT323Regular_ttf, (size_t) CatFonts::VT323Regular_ttfSize);
+    return tf != nullptr ? juce::Font (juce::FontOptions (tf).withHeight (height)) : juce::Font (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), height, juce::Font::plain));
+}
+
 juce::Font displayFont (float height)
 {
     if (auto tf = typeface())

@@ -54,6 +54,43 @@ void BarSlider::paint (juce::Graphics& g)
     g.drawText (captionText, r.withWidth ((float) captionW).withTrimmedLeft (6.0f), juce::Justification::centredLeft);
 }
 
+LineSlider::LineSlider (APVTS& state, const juce::String& paramID, const juce::String& caption, MidiLearnManager* learn,
+                        juce::Colour f, juce::Colour t)
+    : captionText (caption), from (f), to (t)
+{
+    slider.setMidiLearn (learn, paramID);
+    slider.onValueChange = [this] { repaint(); };
+    addAndMakeVisible (slider);
+    attachment = std::make_unique<APVTS::SliderAttachment> (state, paramID, slider);
+}
+
+void LineSlider::resized()
+{
+    slider.setBounds (getLocalBounds());
+}
+
+void LineSlider::paint (juce::Graphics& g)
+{
+    auto r = getLocalBounds().toFloat();
+    auto bar = r.removeFromBottom (juce::jmin (12.0f, r.getHeight() * 0.4f)).withSizeKeepingCentre (r.getWidth(), 4.0f);
+    g.setFont (catFont (12.5f));
+    g.setColour (Colours::text.withAlpha (0.85f));
+    g.drawText (captionText, r, juce::Justification::centredLeft);
+    g.setColour (to);
+    g.drawText (slider.getTextFromValue (slider.getValue()), r, juce::Justification::centredRight);
+
+    g.setColour (juce::Colours::white.withAlpha (0.12f));
+    g.fillRoundedRectangle (bar, 2.0f);
+    const float p = (float) slider.valueToProportionOfLength (slider.getValue());
+    auto fill = bar.withWidth (juce::jmax (4.0f, bar.getWidth() * p));
+    g.setGradientFill (juce::ColourGradient (from, bar.getX(), 0.0f, to, bar.getRight(), 0.0f, false));
+    g.fillRoundedRectangle (fill, 2.0f);
+    g.setColour (to.withAlpha (0.25f));
+    g.fillRoundedRectangle (fill.expanded (0.0f, 2.0f), 3.0f);
+    g.setColour (juce::Colours::white);
+    g.fillEllipse (juce::Rectangle<float> (10.0f, 10.0f).withCentre ({ fill.getRight(), bar.getCentreY() }));
+}
+
 void BarSlider::resized()
 {
     slider.setBounds (getLocalBounds().withTrimmedLeft (captionW).reduced (2));

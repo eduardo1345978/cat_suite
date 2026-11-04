@@ -191,10 +191,18 @@ public:
     explicit TalkCatEditor (TalkCatProcessor&);
     ~TalkCatEditor() override;
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
     bool keyPressed (const juce::KeyPress&) override;
 
 private:
+    /** The beige keys on the computer case (outside the green screen). */
+    struct CaseKeys : public juce::LookAndFeel_V4
+    {
+        void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour&, bool over, bool down) override;
+        void drawButtonText (juce::Graphics&, juce::TextButton&, bool, bool) override;
+    };
+
     void timerCallback() override;
     void showSongsMenu();
     void importMidi();
@@ -223,6 +231,9 @@ private:
 
     cat::CatVisualizer catView;
     cat::SurpriseControls surpriseControls;
+    cat::Knob sizeKnob, genderKnob, catKnob, volumeKnob;
+    CaseKeys caseKeys;
+    juce::Rectangle<int> screenBounds, crtBounds, asideBounds;
     cat::BootScreen bootScreen;
     std::unique_ptr<juce::FileChooser> chooser;
 

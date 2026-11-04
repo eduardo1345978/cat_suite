@@ -7,8 +7,8 @@ namespace C = cat::Colours;
 juce::Colour OrbitView::slotColour (int slot)
 {
     static const juce::Colour colours[] = {
-        juce::Colour (0xff9db0f5), juce::Colour (0xff9fd0b0), juce::Colour (0xffe2c48f), juce::Colour (0xffd59a9a),
-        juce::Colour (0xff8fd0d6), juce::Colour (0xffbfa3e0), juce::Colour (0xffd8d58f), juce::Colour (0xffe0a8c8),
+        juce::Colour (0xff7fd8ff), juce::Colour (0xffff8fc8), juce::Colour (0xff9bffb0), juce::Colour (0xffffd27a),
+        juce::Colour (0xffb79bff), juce::Colour (0xffff9f7a), juce::Colour (0xff7affe0), juce::Colour (0xffe8ecff),
     };
     return colours[(size_t) ((slot % 8) + 8) % 8];
 }
@@ -55,9 +55,7 @@ void OrbitView::timerCallback()
 
 void OrbitView::paint (juce::Graphics& g)
 {
-    const auto bounds = getLocalBounds().toFloat();
-    g.setColour (juce::Colour (0xff0b0c10));
-    g.fillRoundedRectangle (bounds, 8.0f);
+    const auto bounds = getLocalBounds().toFloat();   // transparent: deep space is the window itself
     g.reduceClipRegion (getLocalBounds());
 
     const float glow = processor.apvts.getRawParameterValue ("glow")->load() / 100.0f;
@@ -77,8 +75,13 @@ void OrbitView::paint (juce::Graphics& g)
     {
         const float a = align + juce::MathConstants<float>::twoPi * (float) k / (float) spokes;
         const float far = bounds.getWidth() + bounds.getHeight();
-        g.setColour (C::accent.withAlpha (0.22f));
-        g.drawLine ({ centre, toScreen (std::cos (a) * far / pxPerAu, std::sin (a) * far / pxPerAu) }, 1.0f);
+        juce::Path spoke;
+        spoke.startNewSubPath (centre);
+        spoke.lineTo (toScreen (std::cos (a) * far / pxPerAu, std::sin (a) * far / pxPerAu));
+        const float dashes[] = { 4.0f, 6.0f };
+        juce::PathStrokeType (1.0f).createDashedStroke (spoke, spoke, dashes, 2);
+        g.setColour (juce::Colour (0xffffd27a).withAlpha (0.35f));
+        g.fillPath (spoke);
     }
 
     // Orbits
@@ -95,19 +98,21 @@ void OrbitView::paint (juce::Graphics& g)
             const auto pt = toScreen (r * std::cos (w + nu), r * std::sin (w + nu));
             if (k == 0) orbit.startNewSubPath (pt); else orbit.lineTo (pt);
         }
-        g.setColour (slotColour (v.slot.load()).withAlpha (0.2f));
-        g.strokePath (orbit, juce::PathStrokeType (1.0f));
+        g.setColour (slotColour (v.slot.load()).withAlpha (0.35f));
+        g.strokePath (orbit, juce::PathStrokeType (1.2f));
     }
 
     // Sun
     {
-        const float r = 9.0f + 26.0f * glow;
-        juce::ColourGradient halo (C::accent.withAlpha (0.55f * glow), centre.x, centre.y,
-                                   C::accent.withAlpha (0.0f), centre.x + r * 2.2f, centre.y, true);
+        // a golden star: white-hot core, gold body, orange corona
+        const float r = 34.0f + 40.0f * glow;
+        juce::ColourGradient halo (juce::Colour (0xfffff6d8), centre.x, centre.y, juce::Colour (0x00ff8a2a), centre.x + r, centre.y, true);
+        halo.addColour (0.4, juce::Colour (0xffffc44d).withAlpha (0.9f));
+        halo.addColour (0.7, juce::Colour (0xffff8a2a).withAlpha (0.35f));
         g.setGradientFill (halo);
-        g.fillEllipse (juce::Rectangle<float> (r * 4.4f, r * 4.4f).withCentre (centre));
-        g.setColour (juce::Colour (0xfff3f1e8));
-        g.fillEllipse (juce::Rectangle<float> (12.0f, 12.0f).withCentre (centre));
+        g.fillEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (centre));
+        g.setColour (juce::Colour (0xfffff3cf));
+        g.fillEllipse (juce::Rectangle<float> (22.0f, 22.0f).withCentre (centre));
     }
 
     // Trails and planets
@@ -137,13 +142,16 @@ void OrbitView::paint (juce::Graphics& g)
             g.setColour (colour.withAlpha (0.25f * flash * glow));
             g.fillEllipse (juce::Rectangle<float> (size * 2.6f, size * 2.6f).withCentre (p));
         }
+        juce::ColourGradient halo2 (colour.withAlpha (0.55f), p.x, p.y, colour.withAlpha (0.0f), p.x + size * 1.4f, p.y, true);
+        g.setGradientFill (halo2);
+        g.fillEllipse (juce::Rectangle<float> (size * 2.8f, size * 2.8f).withCentre (p));
         g.setColour (colour.interpolatedWith (juce::Colours::white, 0.5f * flash));
         g.fillEllipse (juce::Rectangle<float> (size, size).withCentre (p));
 
-        g.setColour (C::textDim);
-        g.setFont (cat::catFont (10.5f));
-        g.drawText (juce::MidiMessage::getMidiNoteName (v.note.load(), true, true, 3), juce::Rectangle<float> (40.0f, 12.0f).withCentre (p.translated (0.0f, size * 0.5f + 9.0f)),
-                    juce::Justification::centred);
+        g.setColour (juce::Colour (0xffc9d1f5));
+        g.setFont (cat::displayFont (12.0f));
+        g.drawText (juce::MidiMessage::getMidiNoteName (v.note.load(), true, true, 3),
+                    juce::Rectangle<float> (p.x + size * 0.5f + 6.0f, p.y - 7.0f, 40.0f, 14.0f), juce::Justification::centredLeft);
     }
 
     if (processor.bodyViews[0].active.load() == false)
@@ -166,14 +174,14 @@ OrbitCatEditor::OrbitCatEditor (OrbitCatProcessor& p)
       latch (p.apvts, "latch", "Latch", &p.midiLearn),
       followGroove (p.apvts, "followGroove", "Follow Drum", &p.midiLearn),
       quantize (p.apvts, "quantize", "Quantize", &p.midiLearn, 62),
-      gravity (p.apvts, "gravity", "Gravity", &p.midiLearn, 56),
-      drag (p.apvts, "drag", "Drag", &p.midiLearn, 40),
-      turbulence (p.apvts, "turbulence", "Turbulence", &p.midiLearn, 72),
-      align (p.apvts, "align", "Align", &p.midiLearn, 42),
-      accent (p.apvts, "accent", "Accent", &p.midiLearn, 50),
-      tilt (p.apvts, "tilt", "Tilt", &p.midiLearn, 32),
-      glow (p.apvts, "glow", "Glow", &p.midiLearn, 38),
-      swing (p.apvts, "swing", "Swing", &p.midiLearn, 44),
+      gravity (p.apvts, "gravity", "Gravity", &p.midiLearn, juce::Colour (0xff7fd8ff), juce::Colour (0xffffd27a)),
+      drag (p.apvts, "drag", "Drag", &p.midiLearn, juce::Colour (0xff7fd8ff), juce::Colour (0xffffd27a)),
+      turbulence (p.apvts, "turbulence", "Turbulence", &p.midiLearn, juce::Colour (0xff7fd8ff), juce::Colour (0xffffd27a)),
+      align (p.apvts, "align", "Align", &p.midiLearn, juce::Colour (0xff7fd8ff), juce::Colour (0xffffd27a)),
+      accent (p.apvts, "accent", "Accent", &p.midiLearn, juce::Colour (0xff7fd8ff), juce::Colour (0xffffd27a)),
+      tilt (p.apvts, "tilt", "Tilt", &p.midiLearn, juce::Colour (0xff7fd8ff), juce::Colour (0xffffd27a)),
+      glow (p.apvts, "glow", "Glow", &p.midiLearn, juce::Colour (0xff7fd8ff), juce::Colour (0xffffd27a)),
+      swing (p.apvts, "swing", "Swing", &p.midiLearn, juce::Colour (0xff7fd8ff), juce::Colour (0xffffd27a)),
       view (p),
       catView (p.noteMonitor, [&p] { return p.uiPpq.load(); }, [&p] { return p.uiTransportRunning.load(); }, cat::CatStyle::Orbit),
       surpriseControls (p, p.surpriseUndo, [&p] { p.surprise(); }),
@@ -226,12 +234,11 @@ void OrbitCatEditor::selectSlot (int slot)
     selectedSlot = slot;
     static const char* ids[] = { "mass", "radius", "ecc", "speed", "oct", "damp", "gate", "boost" };
     static const char* names[] = { "Mass", "Radius", "Eccent", "Speed", "Octave", "Damp", "Gate", "Boost" };
-    static const int widths[] = { 44, 50, 52, 46, 50, 46, 40, 46 };
     for (int i = 0; i < 8; ++i)
     {
-        slotSliders[(size_t) i] = std::make_unique<cat::BarSlider> (processor.apvts, OrbitCatProcessor::slotParam (slot, ids[i]),
-                                                                    names[i], &processor.midiLearn, widths[i]);
-        slotSliders[(size_t) i]->getSlider().setColour (juce::Slider::trackColourId, OrbitView::slotColour (slot));
+        slotSliders[(size_t) i] = std::make_unique<cat::LineSlider> (processor.apvts, OrbitCatProcessor::slotParam (slot, ids[i]),
+                                                                     names[i], &processor.midiLearn,
+                                                                     OrbitView::slotColour (slot).withMultipliedAlpha (0.6f), OrbitView::slotColour (slot));
         addAndMakeVisible (*slotSliders[(size_t) i]);
     }
     for (int s = 0; s < slotButtons.size(); ++s)
@@ -259,65 +266,84 @@ void OrbitCatEditor::timerCallback()
 void OrbitCatEditor::paint (juce::Graphics& g)
 {
     cat::paintBackdrop (g, getLocalBounds());
-    cat::CatLookAndFeel::drawLogo (g, juce::Rectangle<float> (14.0f, 8.0f, 160.0f, 32.0f), "ORBIT", "-cat");
 
-    g.setColour (C::textDim);
-    g.setFont (cat::catFont (11.0f, true));
-    const auto planetRow = slotButtons[0]->getBounds();
-    g.drawText ("SYSTEM", juce::Rectangle<int> (12, gravity.getY() - 16, 100, 14), juce::Justification::centredLeft);
-    g.drawText ("PLANET", juce::Rectangle<int> (12, planetRow.getY() - 16, 100, 14), juce::Justification::centredLeft);
+    // ORBIT / C A T
+    g.setColour (juce::Colour (0xffe8ecff));
+    g.setFont (cat::displayFont (30.0f).withExtraKerningFactor (0.3f));
+    g.drawText ("ORBIT", 28, 18, 220, 36, juce::Justification::centredLeft);
+    g.setColour (juce::Colour (0xff9aa6d8));
+    g.setFont (cat::catFont (14.0f).withExtraKerningFactor (0.5f));
+    g.drawText ("CAT", 30, 54, 120, 18, juce::Justification::centredLeft);
+
+    auto glass = [&g] (juce::Rectangle<int> r, float radius)
+    {
+        g.setColour (juce::Colour (0xff141a3a).withAlpha (0.6f));
+        g.fillRoundedRectangle (r.toFloat(), radius);
+        g.setColour (juce::Colour (0xffa0b4ff).withAlpha (0.2f));
+        g.drawRoundedRectangle (r.toFloat().reduced (0.5f), radius, 1.0f);
+    };
+    glass (asideBounds, 20.0f);
+    glass (dockBounds, 18.0f);
+
+    g.setColour (juce::Colour (0xff9aa6d8));
+    g.setFont (cat::catFont (12.0f).withExtraKerningFactor (0.3f));
+    g.drawText ("SYSTEM", asideBounds.getX() + 18, asideBounds.getY() + 14, 200, 16, juce::Justification::centredLeft);
+    g.drawText ("PLANET", dockBounds.getX() + 18, dockBounds.getY() + 12, 100, 16, juce::Justification::centredLeft);
 }
 
 void OrbitCatEditor::resized()
 {
-    auto r = getLocalBounds().reduced (10);
-    auto item = [] (juce::Component& c, float w, float h = 30.0f) { return juce::FlexItem (c).withWidth (w).withHeight (h).withMargin ({ 0, 3, 0, 3 }); };
+    auto r = getLocalBounds().reduced (22);
 
+    // the glass side panel: system controls
+    asideBounds = r.removeFromRight (250);
+    r.removeFromRight (18);
     {
-        auto top = r.removeFromTop (40);
-        auto logo = top.removeFromLeft (160);
-        catView.setBounds (logo.removeFromRight (40).expanded (0, 6));
-        juce::FlexBox fb;
-        fb.alignItems = juce::FlexBox::AlignItems::center;
-        fb.items.add (juce::FlexItem().withFlex (1.0f));
-        fb.items.add (item (*presetStepper, 330));
-        fb.items.add (juce::FlexItem().withFlex (1.0f));
-        fb.items.add (item (latch, 64));
-        fb.items.add (item (followGroove, 92));
-        fb.items.add (item (*channel, 90));
-        fb.items.add (item (surpriseControls, 122));
-        fb.performLayout (top);
-    }
-    r.removeFromTop (8);
-
-    // Planet (per-note) rows at the bottom, system row above them
-    auto planetRow = r.removeFromBottom (30);
-    r.removeFromBottom (6);
-    auto chipRow = r.removeFromBottom (26);
-    r.removeFromBottom (22);
-    auto systemRow = r.removeFromBottom (30);
-    r.removeFromBottom (22);
-    view.setBounds (r);
-
-    {
-        juce::FlexBox fb;
-        fb.alignItems = juce::FlexBox::AlignItems::center;
+        auto a = asideBounds.reduced (18, 14);
+        a.removeFromTop (22);
+        presetStepper->setBounds (a.removeFromTop (32));
+        a.removeFromTop (10);
+        auto two = [&a] (juce::Component& x, juce::Component& y)
+        {
+            auto row = a.removeFromTop (30);
+            x.setBounds (row.removeFromLeft (row.getWidth() / 2 - 4));
+            row.removeFromLeft (8);
+            y.setBounds (row);
+            a.removeFromTop (8);
+        };
+        two (latch, followGroove);
+        two (*channel, *spokes);
+        quantize.setBounds (a.removeFromTop (30));
+        a.removeFromTop (14);
+        surpriseControls.setBounds (a.removeFromBottom (36).withSizeKeepingCentre (a.getWidth(), 36));
+        a.removeFromBottom (10);
+        const int h = juce::jmin (40, a.getHeight() / 8);
         for (auto* s : { &gravity, &drag, &turbulence, &align, &accent, &tilt, &glow, &swing })
-            fb.items.add (item (*s, 110, 28).withFlex (1.0f));
-        fb.items.add (item (quantize, 132, 28));
-        fb.items.add (item (*spokes, 112, 28));
-        fb.performLayout (systemRow);
-    }
-    {
-        const int chipW = juce::jmin (90, chipRow.getWidth() / 8);
-        for (int s = 0; s < slotButtons.size(); ++s)
-            slotButtons[s]->setBounds (chipRow.removeFromLeft (chipW).reduced (2, 0));
-        juce::FlexBox fb;
-        fb.alignItems = juce::FlexBox::AlignItems::center;
-        for (auto& s : slotSliders)
-            if (s != nullptr) fb.items.add (item (*s, 80, 28).withFlex (1.0f));
-        fb.performLayout (planetRow);
+            s->setBounds (a.removeFromTop (h).reduced (0, 3));
     }
 
+    // the planet dock along the bottom of space
+    dockBounds = r.removeFromBottom (128);
+    r.removeFromBottom (10);
+    {
+        auto d = dockBounds.reduced (18, 10);
+        auto chips = d.removeFromTop (26);
+        chips.removeFromLeft (70);
+        const int chipW = juce::jmin (78, chips.getWidth() / 8);
+        for (int s = 0; s < slotButtons.size(); ++s)
+            slotButtons[s]->setBounds (chips.removeFromLeft (chipW).reduced (3, 0));
+        d.removeFromTop (8);
+        const int w = d.getWidth() / 4;
+        for (int row = 0; row < 2; ++row)
+        {
+            auto line = d.removeFromTop (d.getHeight() / (2 - row));
+            for (int i = 0; i < 4; ++i)
+                if (auto& s = slotSliders[(size_t) (row * 4 + i)]; s != nullptr)
+                    s->setBounds (line.removeFromLeft (w).reduced (8, 3));
+        }
+    }
+
+    catView.setBounds (150, 18, 52, 52);
+    view.setBounds (r.withTrimmedTop (60));
     bootScreen.setBounds (getLocalBounds());
 }

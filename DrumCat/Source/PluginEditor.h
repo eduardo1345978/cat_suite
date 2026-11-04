@@ -54,6 +54,34 @@ private:
     float glow = 0.0f;
 };
 
+/** The green LCD: kit / style, variation, tempo, swing, preset and a step read-out of the kick. */
+class DrumLcd : public juce::Component, private juce::Timer
+{
+public:
+    explicit DrumLcd (DrumCatProcessor& p) : processor (p) { setInterceptsMouseClicks (false, false); startTimerHz (8); }
+    void paint (juce::Graphics&) override;
+
+private:
+    void timerCallback() override { repaint(); }
+    DrumCatProcessor& processor;
+};
+
+/** MPC pads, one per drum: they light up when the drum plays, a click mutes / unmutes it. */
+class DrumPads : public juce::Component, private juce::Timer
+{
+public:
+    explicit DrumPads (DrumCatProcessor& p);
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+
+private:
+    void timerCallback() override;
+    juce::Rectangle<float> padBounds (int lane) const;
+    DrumCatProcessor& processor;
+    std::array<uint32_t, drumcat::NumLanes> seen {};
+    std::array<float, drumcat::NumLanes> glow {};
+};
+
 class DrumCatEditor : public juce::Component,
                       public juce::DragAndDropContainer,
                       private juce::Timer
@@ -78,7 +106,9 @@ private:
     std::unique_ptr<cat::PresetBar> presetStepper;
     cat::DragButton dragButton { "Drag MIDI" };
 
-    cat::BarSlider swing, human, velocity, velRandom, chance, open, density, fills;
+    cat::Knob swing, human, velocity, velRandom, chance, open, density, fills;
+    DrumLcd lcd;
+    DrumPads pads;
     cat::ParamCombo grid, length, map;
     std::unique_ptr<cat::Stepper> channel;
     cat::ParamToggle keyTrigger;
@@ -86,6 +116,7 @@ private:
     juce::OwnedArray<LaneHeader> lanes;
     DrumGrid drumGrid;
     std::array<uint32_t, drumcat::NumLanes> seenHits {};
+    juce::Rectangle<int> wellBounds;
 
     cat::CatVisualizer catView;
     cat::SurpriseControls surpriseControls;

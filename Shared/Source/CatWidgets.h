@@ -75,6 +75,12 @@ public:
           juce::Colour colour = Colours::accent);
     void resized() override;
     juce::Slider& getSlider() noexcept { return slider; }
+    /** Caption and value colour (for knobs that sit on a differently coloured panel). */
+    void setTextColour (juce::Colour c)
+    {
+        caption.setColour (juce::Label::textColourId, c);
+        slider.setColour (juce::Slider::textBoxTextColourId, c.withMultipliedAlpha (0.8f));
+    }
 
 private:
     Learnable<juce::Slider> slider { juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::TextBoxBelow };
@@ -96,6 +102,29 @@ private:
     Learnable<juce::Slider> slider { juce::Slider::LinearBar, juce::Slider::TextBoxLeft };
     juce::String captionText;
     int captionW;
+    std::unique_ptr<APVTS::SliderAttachment> attachment;
+};
+
+/** A slim slider row: caption on the left, value on the right (accent), a thin glowing bar under them. */
+class LineSlider : public juce::Component
+{
+public:
+    LineSlider (APVTS& state, const juce::String& paramID, const juce::String& caption, MidiLearnManager* learn = nullptr,
+                juce::Colour from = Colours::blue, juce::Colour to = Colours::accent);
+    void paint (juce::Graphics&) override;
+    void resized() override;
+    juce::Slider& getSlider() noexcept { return slider; }
+    void setColours (juce::Colour f, juce::Colour t) { from = f; to = t; repaint(); }
+
+private:
+    struct Invisible : Learnable<juce::Slider>
+    {
+        using Learnable<juce::Slider>::Learnable;
+        void paint (juce::Graphics&) override {}
+    };
+    Invisible slider { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };
+    juce::String captionText;
+    juce::Colour from, to;
     std::unique_ptr<APVTS::SliderAttachment> attachment;
 };
 

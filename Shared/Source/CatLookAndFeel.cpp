@@ -414,7 +414,7 @@ void CatLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& b, boo
     const auto& t = theme();
     auto onText = b.findColour (juce::TextButton::buttonOnColourId).brighter (0.35f);
     if (t.button == ButtonStyle::Metal || t.button == ButtonStyle::Terminal) onText = juce::Colour (0xff0b0c0f);
-    else if (t.light) onText = Colours::text;
+    else if (t.light) onText = b.findColour (juce::TextButton::buttonColourId).getPerceivedBrightness() < 0.45f ? juce::Colours::white : Colours::text;
     const auto colour = b.getToggleState() ? onText : b.findColour (juce::TextButton::textColourOffId);
     g.setColour (colour.withMultipliedAlpha (b.isEnabled() ? 1.0f : 0.4f));
     g.drawFittedText (b.getButtonText(), b.getLocalBounds().reduced (4, 2), juce::Justification::centred, 1, 0.8f);

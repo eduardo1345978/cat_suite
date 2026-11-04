@@ -56,9 +56,10 @@ private:
     cat::DragButton dragButton { "Drag MIDI" };
 
     cat::ParamCombo style, length;
-    cat::BarSlider density, fills, ghosts, slides, swing, human, gate, velocity, velRandom, chance;
+    cat::Knob density, fills, ghosts, slides, swing, human, gate, velocity, velRandom, chance;
     cat::ParamToggle followGroove, latch, thru, keyTrigger;
-    juce::Label chordLabel;
+    juce::Label chordLabel;   // the red LED read-out
+    juce::Rectangle<int> knobBounds, stripeBounds;
 
     DegreeGrid grid;
     cat::PianoDisplay keyboard;
