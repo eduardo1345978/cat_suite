@@ -101,11 +101,11 @@ private:
     std::unique_ptr<cat::Stepper> singers, unison, bendRange;
     std::unique_ptr<cat::PresetBar> presetStepper;
     cat::ParamCombo mode, cast, style, onset, move, room, quality;
-    cat::BarSlider moveRate, spread, roomMix, micWidth, micDist;
-    cat::BarSlider attack, release, vibrato, breath, rasp, glide, drift, human, purr;
-    cat::BarSlider neck, jaw, lips, nose, chest, volume;
+    cat::LineSlider moveRate, spread, roomMix, micWidth, micDist;
+    cat::LineSlider attack, release, vibrato, breath, rasp, glide, drift, human, purr;
+    cat::LineSlider neck, jaw, lips, nose, chest, volume;
     cat::ParamToggle mpe, words;
-    cat::BarSlider diction;
+    cat::LineSlider diction;
     juce::TextEditor lyricsBox;
     LyricStrip lyricStrip;
     juce::TextButton dice { "Dice" }, arrange { "Arrange" };

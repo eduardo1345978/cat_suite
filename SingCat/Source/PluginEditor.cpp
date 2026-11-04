@@ -869,29 +869,29 @@ SingCatEditor::SingCatEditor (SingCatProcessor& p)
       move (p.apvts, "move", "Move", &p.midiLearn, 40),
       room (p.apvts, "room", "Room", &p.midiLearn, 40),
       quality (p.apvts, "quality", "Quality", &p.midiLearn, 50),
-      moveRate (p.apvts, "moveRate", "Rate", &p.midiLearn, 36),
-      spread (p.apvts, "spread", "Spread", &p.midiLearn, 46),
-      roomMix (p.apvts, "roomMix", "Mix", &p.midiLearn, 30),
-      micWidth (p.apvts, "micWidth", "Width", &p.midiLearn, 42),
-      micDist (p.apvts, "micDist", "Distance", &p.midiLearn, 58),
-      attack (p.apvts, "attack", "Attack", &p.midiLearn, 46),
-      release (p.apvts, "release", "Release", &p.midiLearn, 52),
-      vibrato (p.apvts, "vibrato", "Vibrato", &p.midiLearn, 52),
-      breath (p.apvts, "breath", "Breath", &p.midiLearn, 48),
-      rasp (p.apvts, "rasp", "Rasp", &p.midiLearn, 36),
-      glide (p.apvts, "glide", "Glide", &p.midiLearn, 38),
-      drift (p.apvts, "drift", "Drift", &p.midiLearn, 36),
-      human (p.apvts, "human", "Loose", &p.midiLearn, 40),
-      purr (p.apvts, "purr", "Purr", &p.midiLearn, 34),
-      neck (p.apvts, "neck", "Neck", &p.midiLearn, 36),
-      jaw (p.apvts, "jaw", "Jaw", &p.midiLearn, 30),
-      lips (p.apvts, "lips", "Lips", &p.midiLearn, 32),
-      nose (p.apvts, "nose", "Nose", &p.midiLearn, 36),
-      chest (p.apvts, "chest", "Chest", &p.midiLearn, 40),
-      volume (p.apvts, "volume", "Volume", &p.midiLearn, 50),
+      moveRate (p.apvts, "moveRate", "Rate", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      spread (p.apvts, "spread", "Spread", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      roomMix (p.apvts, "roomMix", "Mix", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      micWidth (p.apvts, "micWidth", "Width", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      micDist (p.apvts, "micDist", "Distance", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      attack (p.apvts, "attack", "Attack", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      release (p.apvts, "release", "Release", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      vibrato (p.apvts, "vibrato", "Vibrato", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      breath (p.apvts, "breath", "Breath", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      rasp (p.apvts, "rasp", "Rasp", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      glide (p.apvts, "glide", "Glide", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      drift (p.apvts, "drift", "Drift", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      human (p.apvts, "human", "Loose", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      purr (p.apvts, "purr", "Purr", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      neck (p.apvts, "neck", "Neck", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      jaw (p.apvts, "jaw", "Jaw", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      lips (p.apvts, "lips", "Lips", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      nose (p.apvts, "nose", "Nose", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      chest (p.apvts, "chest", "Chest", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
+      volume (p.apvts, "volume", "Volume", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
       mpe (p.apvts, "mpe", "MPE", &p.midiLearn),
       words (p.apvts, "words", "Words", &p.midiLearn),
-      diction (p.apvts, "diction", "Diction", &p.midiLearn, 54),
+      diction (p.apvts, "diction", "Diction", &p.midiLearn, juce::Colour (0xffff3b4e), juce::Colour (0xffff8fb1)),
       lyricStrip (p),
       pad (p),
       stage (p),
@@ -965,13 +965,41 @@ SingCatEditor::~SingCatEditor()
 void SingCatEditor::paint (juce::Graphics& g)
 {
     cat::paintBackdrop (g, getLocalBounds());
-    cat::CatLookAndFeel::drawLogo (g, juce::Rectangle<float> (14.0f, 8.0f, 160.0f, 32.0f), "SING", "-cat");
 
-    g.setColour (C::textDim);
-    g.setFont (cat::catFont (11.0f, true));
-    g.drawText ("VOICE", juce::Rectangle<int> (12, cast.getY() - 17, 200, 14), juce::Justification::centredLeft);
-    g.drawText ("CHARACTER & PLAY", juce::Rectangle<int> (12, breath.getY() - 17, 200, 14), juce::Justification::centredLeft);
-    g.drawText ("BODY", juce::Rectangle<int> (12, neck.getY() - 17, 200, 14), juce::Justification::centredLeft);
+    // the ON AIR sign: red neon in a dark box
+    {
+        auto sign = juce::Rectangle<float> (12.0f, 8.0f, 118.0f, 40.0f);
+        const auto red = juce::Colour (0xffff3b4e);
+        g.setColour (red.withAlpha (0.18f));
+        g.fillRoundedRectangle (sign.expanded (6.0f), 12.0f);
+        g.setColour (juce::Colour (0xff2a0a0f));
+        g.fillRoundedRectangle (sign, 8.0f);
+        g.setColour (red);
+        g.drawRoundedRectangle (sign.reduced (1.0f), 8.0f, 2.0f);
+        g.setFont (cat::displayFont (30.0f).withExtraKerningFactor (0.15f));
+        g.setColour (red.withAlpha (0.45f));
+        g.drawText ("ON AIR", sign.translated (0.0f, 1.0f).expanded (1.0f), juce::Justification::centred);
+        g.setColour (juce::Colour (0xffff6676));
+        g.drawText ("ON AIR", sign, juce::Justification::centred);
+        g.setColour (juce::Colour (0xff8c93ae));
+        g.setFont (cat::catFont (10.0f, true).withExtraKerningFactor (0.3f));
+        g.drawText ("SING-CAT", juce::Rectangle<float> (136.0f, 12.0f, 80.0f, 32.0f), juce::Justification::centredLeft);
+    }
+
+    // the choir desk: one console strip per row of controls
+    for (auto* first : std::initializer_list<juce::Component*> { &cast, &breath, &neck })
+    {
+        auto strip = juce::Rectangle<float> (8.0f, (float) first->getY() - 22.0f, (float) getWidth() - 16.0f, (float) first->getHeight() + 26.0f);
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff1a1f38), 0.0f, strip.getY(), juce::Colour (0xff11152a), 0.0f, strip.getBottom(), false));
+        g.fillRoundedRectangle (strip, 10.0f);
+        g.setColour (juce::Colour (0xff262d4d));
+        g.drawRoundedRectangle (strip.reduced (0.5f), 10.0f, 1.0f);
+    }
+    g.setColour (juce::Colour (0xffa7aecb));
+    g.setFont (cat::catFont (10.5f, true).withExtraKerningFactor (0.2f));
+    g.drawText ("VOICE", juce::Rectangle<int> (20, cast.getY() - 19, 200, 14), juce::Justification::centredLeft);
+    g.drawText ("CHARACTER & PLAY", juce::Rectangle<int> (20, breath.getY() - 19, 200, 14), juce::Justification::centredLeft);
+    g.drawText ("BODY", juce::Rectangle<int> (20, neck.getY() - 19, 200, 14), juce::Justification::centredLeft);
 }
 
 void SingCatEditor::resized()
@@ -988,7 +1016,7 @@ void SingCatEditor::resized()
 
     {
         auto top = r.removeFromTop (40);
-        auto logo = top.removeFromLeft (160);
+        auto logo = top.removeFromLeft (250);
         catView.setBounds (logo.removeFromRight (40).expanded (0, 6));
         row (top, { juce::FlexItem().withFlex (1.0f), item (*presetStepper, 330), juce::FlexItem().withFlex (1.0f),
                     item (mode, 150), item (*singers, 112), item (surpriseControls, 122) });
@@ -997,11 +1025,11 @@ void SingCatEditor::resized()
 
     // Bottom: three rows of controls
     auto bodyRow = r.removeFromBottom (30);
-    r.removeFromBottom (20);
+    r.removeFromBottom (28);
     auto charRow = r.removeFromBottom (30);
-    r.removeFromBottom (20);
+    r.removeFromBottom (28);
     auto voiceRow = r.removeFromBottom (30);
-    r.removeFromBottom (24);
+    r.removeFromBottom (30);
 
     row (voiceRow, { item (cast, 180), item (style, 160), item (*unison, 116),
                      item (attack, 100).withFlex (1.0f), item (release, 100).withFlex (1.0f), item (glide, 90).withFlex (1.0f),
