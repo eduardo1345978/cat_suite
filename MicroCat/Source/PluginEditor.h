@@ -109,6 +109,10 @@ private:
     cat::ParamToggle configToggle { processor.apvts, "sendConfig", "Send MPE set-up" }, bypassToggle { processor.apvts, "bypass", "Bypass" },
                      mtsToggle { processor.apvts, "mtsEsp", "MTS-ESP master" };
     juce::TextButton mtsResetButton { "Reset MTS-ESP" };
+    // its own sound
+    cat::ParamToggle ownSoundToggle { processor.apvts, "ownSound", "Own sound" };
+    cat::ParamCombo soundBox { processor.apvts, "sound" };
+    cat::LineSlider volumeSlider { processor.apvts, "volume", "Volume" };
     juce::Rectangle<int> mtsStatusArea;
     juce::String mtsStatus;
 

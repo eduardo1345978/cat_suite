@@ -4,7 +4,7 @@ using namespace micro;
 
 namespace
 {
-    constexpr int designW = 1120, designH = 720;
+    constexpr int designW = 1120, designH = 800;
     constexpr float twoPi = juce::MathConstants<float>::twoPi;
 
     juce::String centsText (double c)
@@ -439,8 +439,10 @@ MicroCatEditor::MicroCatEditor (MicroCatProcessor& p) : processor (p)
                                 (juce::Component*) &exportButton, (juce::Component*) &newButton, (juce::Component*) &concertButton,
                                 (juce::Component*) &keyboard, (juce::Component*) &rootBox, (juce::Component*) &mapBox, (juce::Component*) &rangeBox,
                                 (juce::Component*) &rootHz, (juce::Component*) &voices, (juce::Component*) &configToggle, (juce::Component*) &bypassToggle,
-                                (juce::Component*) &mtsToggle })
+                                (juce::Component*) &mtsToggle, (juce::Component*) &ownSoundToggle, (juce::Component*) &soundBox,
+                                (juce::Component*) &volumeSlider })
         addAndMakeVisible (c);
+    ownSoundToggle.setTooltip ("Micro-Cat plays the tuning itself, like an instrument (turn off to only send tuned MIDI to another synth)");
 
     userTunings = loadUserTunings();
     refreshList();
@@ -656,6 +658,15 @@ void MicroCatEditor::resized()
     r.removeFromRight (14);
     auto s = settingsArea.reduced (14, 10);
     s.removeFromTop (24);
+    {
+        auto snd = s.removeFromTop (30);
+        ownSoundToggle.setBounds (snd.removeFromLeft (104));
+        snd.removeFromLeft (6);
+        soundBox.setBounds (snd);
+        s.removeFromTop (6);
+        volumeSlider.setBounds (s.removeFromTop (32));
+        s.removeFromTop (12);
+    }
     rootBox.setBounds (s.removeFromTop (30)); s.removeFromTop (6);
     auto hz = s.removeFromTop (30);
     concertButton.setBounds (hz.removeFromRight (104)); hz.removeFromRight (6);

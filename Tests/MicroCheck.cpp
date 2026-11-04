@@ -336,6 +336,48 @@ int main()
         check (r.getTuningB().name == "24-EDO" && std::abs (r.currentSettings().morph - 0.5f) < 1e-3f, "a saved project keeps tuning B and the morph");
     }
 
+    // its own sound: Micro-Cat plays the tuning itself (no other synth), and it really is in tune
+    {
+        MicroCatProcessor m;
+        auto setP = [&m] (const char* id, float v) { auto* prm = m.apvts.getParameter (id); prm->setValueNotifyingHost (prm->convertTo0to1 (v)); };
+        m.setTuning (*find ("24-EDO"));
+        setP ("mapping", 1.0f);                                     // one key per step
+        setP ("sound", 4.0f);                                       // Chip: a plain wave, easy to measure
+        const double sr = 48000.0;
+        const int bs = 512;
+        m.setRateAndBufferSizeDetails (sr, bs);
+        m.prepareToPlay (sr, bs);
+        std::vector<float> out;
+        for (int b = 0; b < 60; ++b)
+        {
+            AudioBuffer<float> audio (2, bs);
+            MidiBuffer midi;
+            if (b == 0) midi.addEvent (MidiMessage::noteOn (1, 61, (uint8) 100), 0);
+            m.processBlock (audio, midi);
+            for (int i = 0; i < bs; ++i) out.push_back (audio.getSample (0, i));
+        }
+        float peak = 0.0f;
+        for (auto x : out) peak = std::max (peak, std::abs (x));
+        // pitch by autocorrelation over the last ~0.25 s
+        const int start = (int) out.size() - 12000, len = 9000;
+        int bestLag = 0;
+        double best = -1.0e30;
+        for (int lag = 120; lag <= 240; ++lag)
+        {
+            double acc = 0.0;
+            for (int i = 0; i < len; ++i) acc += (double) out[(size_t) (start + i)] * (double) out[(size_t) (start + i + lag)];
+            if (acc > best) { best = acc; bestLag = lag; }
+        }
+        // refine with a parabola through the peak
+        auto ac = [&] (int lag) { double a = 0.0; for (int i = 0; i < len; ++i) a += (double) out[(size_t) (start + i)] * (double) out[(size_t) (start + i + lag)]; return a; };
+        const double y0 = ac (bestLag - 1), y1 = ac (bestLag), y2 = ac (bestLag + 1);
+        const double lagF = bestLag + 0.5 * (y0 - y2) / (y0 - 2.0 * y1 + y2);
+        const double hz = sr / lagF, want = C4 * std::pow (2.0, 0.5 / 12.0);
+        check (peak > 0.02f, "own sound: Micro-Cat plays the note itself (peak " + String (peak, 3) + ")");
+        check (std::abs (1200.0 * std::log2 (hz / want)) < 5.0,
+               "own sound: 24-EDO key C#4 sounds a quarter tone above C4 (" + String (hz, 2) + " Hz, wanted " + String (want, 2) + ")");
+    }
+
     // a real Micro-Cat sends its tuning, a follower gets it (needs the message loop: the Cat Link timers)
     // (one worker thread for all of these: JUCE's dispatch loop can't be started again once stopped)
     {

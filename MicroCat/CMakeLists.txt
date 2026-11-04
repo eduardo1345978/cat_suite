@@ -15,13 +15,14 @@ endif()
 cat_add_midi_plugin(MicroCat
     PRODUCT_NAME "Micro-Cat"
     PLUGIN_CODE  Mic1
-    DESCRIPTION  "Microtonal tunings for any MPE synth"
+    DESCRIPTION  "Microtonal tunings: its own piano and pads, or any MPE / MTS-ESP synth"
     SOURCES
         Source/Tunings.cpp
         Source/MicroEngine.cpp
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
         Source/MtsEsp.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatSounds.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/../ThirdParty/MTS-ESP/Master/libMTSMaster.cpp)
 # ODDSound's file as it is: no warnings from it
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/../ThirdParty/MTS-ESP/Master/libMTSMaster.cpp PROPERTIES COMPILE_OPTIONS "$<IF:$<CXX_COMPILER_ID:MSVC>,/w,-w>")

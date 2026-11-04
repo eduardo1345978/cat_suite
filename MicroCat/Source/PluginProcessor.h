@@ -6,6 +6,7 @@
 #include "PresetBar.h"
 #include "MicroEngine.h"
 #include "MtsEsp.h"
+#include "CatSounds.h"
 
 /**
     Micro-Cat: microtonal tunings for Cubase. Like Ableton's tuning systems, but for any synth: it sits on a
@@ -100,6 +101,10 @@ private:
     int engineVersion = 0, lastForced = -1;
     juce::MidiMessageCollector preview;
     juce::MidiBuffer previewBuffer, outBuffer;
+    hub::KeysSynth synth;          // Micro-Cat's own sound: plays the tuned MPE notes it makes
+    int synthSound = -1;
+    bool synthWasOn = false;
+    float synthGain = 0.5f;
     bool wasPlaying = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MicroCatProcessor)

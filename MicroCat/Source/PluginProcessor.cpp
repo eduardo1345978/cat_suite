@@ -31,13 +31,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout MicroCatProcessor::createLay
                                                                                       .withValueFromStringFunction ([] (const String& t) { return t.getFloatValue() / 100.0f; })));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "liveJust", 1 }, "Live Just Intonation",
                                                         StringArray { "Off", "5-limit (pure 3rds + 5ths)", "7-limit (bluesy 7ths)" }, 0));
+    // its own sound: like an instrument in Ableton, it plays the tuning itself (no other synth needed)
+    layout.add (std::make_unique<AudioParameterBool> (ParameterID { "ownSound", 1 }, "Own Sound", true));
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "sound", 1 }, "Sound", hub::KeysSynth::soundNames(), 6));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "volume", 1 }, "Volume", NormalisableRange<float> (-40.0f, 6.0f), -6.0f,
+                                                       AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String (v, 1) + " dB"; })));
     return layout;
 }
 
 MicroCatProcessor::MicroCatProcessor()
     : AudioProcessor (BusesProperties()
 #if CAT_INSTRUMENT_MODE && ! JucePlugin_IsMidiEffect
-                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)   // silent: Cubase loads MIDI Cats as instruments
+                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)   // Micro-Cat's own sound (Cubase loads MIDI Cats as instruments)
 #endif
                       ),
       apvts (*this, nullptr, "PARAMS", createLayout())
@@ -247,6 +252,8 @@ bool MicroCatProcessor::isBusesLayoutSupported (const BusesLayout& layouts) cons
 void MicroCatProcessor::prepareToPlay (double sampleRate, int)
 {
     preview.reset (sampleRate > 0.0 ? sampleRate : 48000.0);
+    synth.prepare (sampleRate > 0.0 ? sampleRate : 48000.0);
+    synthSound = -1;
     engine.reset();
     engineVersion = 0;
 }
@@ -296,6 +303,34 @@ void MicroCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     settings.blockSize = n;
     settings.blockSeconds = n / juce::jmax (1000.0, getSampleRate());
     engine.process (midi, outBuffer, settings);
+
+    // its own sound: the tuned MPE notes it just made, played by the built-in keys
+    const bool own = p ("ownSound") > 0.5f && buffer.getNumChannels() > 0;
+    if (own)
+    {
+        const int snd = juce::roundToInt (p ("sound"));
+        if (snd != synthSound) { synthSound = snd; synth.setSound (snd); }
+        synth.setBendRange ((float) settings.bendRange);
+        auto* l = buffer.getWritePointer (0);
+        auto* r = buffer.getWritePointer (juce::jmin (1, buffer.getNumChannels() - 1));
+        int pos = 0;
+        for (const auto meta : outBuffer)
+        {
+            const int at = juce::jlimit (0, n, meta.samplePosition);
+            if (at > pos) { synth.render (l + pos, r + pos, at - pos); pos = at; }
+            synth.handle (meta.getMessage());
+        }
+        if (n > pos) synth.render (l + pos, r + pos, n - pos);
+
+        const float target = juce::Decibels::decibelsToGain (p ("volume"));
+        for (int ch = 0; ch < juce::jmin (2, buffer.getNumChannels()); ++ch)
+            buffer.applyGainRamp (ch, 0, n, synthGain, target);
+        synthGain = target;
+    }
+    else if (synthWasOn)
+        synth.allOff();
+    synthWasOn = own;
+
     midi.swapWith (outBuffer);
 }
 
