@@ -99,7 +99,7 @@ private:
     std::shared_ptr<const cat::muse::Song> shownSong;
     int shownLine = -2;
     bool shownPlaying = false;
-    juce::Rectangle<int> logoArea, headerArea, renewLabelArea, lyricsArea, partsArea, midiInfoArea;
+    juce::Rectangle<int> logoArea, lampArea, screenArea, headerArea, renewLabelArea, lyricsArea, partsArea, midiInfoArea;
     std::array<juce::Rectangle<int>, cat::muse::NumParts> partLabelAreas;
     std::array<float, cat::muse::NumParts> shownMeters {};
     juce::String status;
