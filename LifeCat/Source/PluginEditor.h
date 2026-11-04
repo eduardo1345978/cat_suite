@@ -47,6 +47,7 @@ class WorldView : public juce::Component, public juce::SettableTooltipClient
 public:
     WorldView (LifeCatProcessor&, LifeViewState&);
 
+    bool lens = true;   // seen through the round microscope eyepiece (off in Big View)
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
@@ -156,7 +157,7 @@ private:
     struct Row
     {
         std::unique_ptr<cat::ParamToggle> sing;
-        std::unique_ptr<cat::BarSlider> volume, speed;
+        std::unique_ptr<cat::LineSlider> volume, speed;
         std::unique_ptr<cat::ParamCombo> sound;
         std::unique_ptr<cat::Stepper> octave, max;
     };
@@ -211,6 +212,7 @@ public:
     ~LifeCatEditor() override;
 
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
 
 private:
@@ -248,7 +250,7 @@ private:
     SpeciesPanel speciesPanel;
     GeneLab geneLab;
     // WORLD
-    cat::BarSlider gravity, wind, windDir, ambience, dayNightSound;
+    cat::LineSlider gravity, wind, windDir, ambience, dayNightSound;
     cat::ParamCombo dayLength, seasonLength, season, weather;
     juce::TextButton clearWalls { "Clear walls & zones" }, clearTerrain { "Clear painted terrain" };
     juce::Label skyLabel, eventsLabel;
@@ -257,14 +259,14 @@ private:
     cat::ParamCombo pitchMode, key, scale, grid;
     std::unique_ptr<cat::Stepper> lowNote, highNote, maxNotes;
     cat::ParamToggle quantize, followGroove, playStopped;
-    cat::BarSlider swing, density, noteLength;
+    cat::LineSlider swing, density, noteLength;
     // LIFE
-    cat::BarSlider lifeSpeed, foodGrowth, mutation, hunger, breeding, lifespan;
+    cat::LineSlider lifeSpeed, foodGrowth, mutation, hunger, breeding, lifespan;
     std::unique_ptr<cat::Stepper> maxPop;
     cat::ParamToggle immigration;
     // SOUND
     cat::ParamToggle ownSound;
-    cat::BarSlider brightness, attack, release, reverbMix, reverbSize, delayMix, delayFb, width, volume;
+    cat::LineSlider brightness, attack, release, reverbMix, reverbSize, delayMix, delayFb, width, volume;
     cat::ParamCombo delayTime;
     // MIDI
     cat::ParamToggle midiOut;
@@ -276,6 +278,8 @@ private:
     cat::BootScreen bootScreen;
 
     int lastTheme = -1, tickCount = 0;
+    juce::Rectangle<int> statsBounds;
+    juce::Image ringCache;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LifeCatEditor)
 };
