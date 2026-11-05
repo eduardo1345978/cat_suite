@@ -219,7 +219,7 @@ bool LinkBus::readKey (juce::uint32& seq, int& root, juce::uint16& absMask, juce
         const auto s1 = at (shared->keySeq).load (std::memory_order_acquire);
         if (s1 == seq) return false;
         if ((s1 & 1u) != 0u) continue;
-        const int r = shared->keyRoot;
+        const int r = ((int) shared->keyRoot % 12 + 12) % 12;
         const auto m = (juce::uint16) shared->keyMask;
         const auto src = shared->keySource;
         std::atomic_thread_fence (std::memory_order_acquire);
@@ -252,7 +252,12 @@ bool LinkBus::readTuning (juce::uint32& seq, std::array<float, 128>& pitches, bo
         if (s1 == seq) return false;
         if ((s1 & 1u) != 0u) continue;
         std::array<float, 128> p;
-        for (int k = 0; k < 128; ++k) p[(size_t) k] = shared->tuningPitch[k];
+        for (int k = 0; k < 128; ++k)
+        {
+            // the bus is a file anyone on this computer can write: only take sane pitches
+            const float v = shared->tuningPitch[k];
+            p[(size_t) k] = std::isfinite (v) && v > -60.0f && v < 200.0f ? v : (float) k;
+        }
         const bool a = shared->tuningActive != 0u;
         const auto src = shared->tuningSource;
         std::atomic_thread_fence (std::memory_order_acquire);
@@ -288,7 +293,7 @@ bool LinkBus::readChord (juce::uint32& seq, std::array<int, 16>& notes, int& cou
         if (s1 == seq) return false;
         if ((s1 & 1u) != 0u) continue;
         std::array<int, 16> n {};
-        for (int i = 0; i < 16; ++i) n[(size_t) i] = shared->chordNotes[i];
+        for (int i = 0; i < 16; ++i) n[(size_t) i] = juce::jlimit (0, 127, (int) shared->chordNotes[i]);
         const int c = juce::jlimit (0, 16, (int) shared->chordCount);
         const auto src = shared->chordSource;
         std::atomic_thread_fence (std::memory_order_acquire);
@@ -324,7 +329,7 @@ void LinkBus::readEvents (juce::uint32& lastSeen, juce::uint64 self, const std::
     {
         auto& e = shared->events[(s - 1u) % numEvents];
         if (at (e.seq).load (std::memory_order_acquire) != s) continue;
-        if (e.source != self) fn ((int) e.kind, (int) e.role);
+        if (e.source != self) fn (juce::jlimit (0, 255, (int) e.kind), juce::jlimit (0, 255, (int) e.role));
     }
     lastSeen = w;
 }

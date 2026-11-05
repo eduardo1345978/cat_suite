@@ -16,8 +16,13 @@
     the PC screen shows what the box does.
 
     Messages are small JSON objects with a "t" (type):
-      PC -> box: knob, reset, button, pad, key, slider, joy, track, mode, hello
-      box -> PC: state (the project and the screen), live (what plays now + the last 20 ms of sound)
+      PC -> box: hello (with the link code), knob, reset, button, pad, key, slider, joy, track, mode
+      box -> PC: state (the project and the screen), live (what plays now + the last 20 ms of sound), denied
+
+    The link code: the box makes a 4-digit code when it starts and shows it with its address (PROJECT page).
+    A PC must send it in its hello before the box listens to anything it says; a wrong code is refused and
+    the connection closed, and after 5 wrong codes the box takes no codes for 30 s. So nobody else on the
+    same WiFi can play or reset the box.
 */
 namespace catbox
 {
@@ -44,6 +49,8 @@ public:
     void messageReceived (const juce::MemoryBlock& m) override { if (onMessage) onMessage (juce::JSON::parse (m.toString())); }
 
     std::atomic<bool> made { false }, lost { false }, needsState { true };
+    std::atomic<bool> paired { false }, kick { false };        // gave the right code / to be closed
+    juce::uint32 openedAt = juce::Time::getMillisecondCounter();
     juce::String lastStateSent;
 };
 
@@ -58,6 +65,8 @@ public:
     bool isListening() const noexcept { return listening; }
     int numClients() const;
     static juce::String ownAddress();   // this box's address on the network (for the screen)
+    /** The link code a PC must give (4 digits, new every time the box starts). */
+    juce::String code() const { return pairCode; }
 
 private:
     juce::InterprocessConnection* createConnectionObject() override;
@@ -69,6 +78,9 @@ private:
     std::unique_ptr<juce::NetworkServiceDiscovery::Advertiser> advertiser;
     bool listening = false;
     int ticks = 0;
+    juce::String pairCode;
+    int wrongCodes = 0;
+    juce::uint32 lockedUntil = 0;
 };
 
 //==============================================================================
@@ -82,7 +94,9 @@ public:
     struct Found { juce::String name, address; int port = linkPort; };
     std::vector<Found> found() const;
 
-    bool connect (const juce::String& host, int port = linkPort);
+    /** Connects and gives the box its link code. false = nobody answered (a wrong code shows up as wasDenied()). */
+    bool connect (const juce::String& host, int port = linkPort, const juce::String& code = {});
+    bool wasDenied() const noexcept { return denied; }
     void disconnect();
     bool isConnected() const;
     juce::String connectedTo() const { return isConnected() ? host : juce::String(); }
@@ -104,6 +118,7 @@ private:
     struct Waiting { int page, slot; std::function<void (const juce::var&)> done; };
     std::vector<Waiting> waiting;   // preset requests
     size_t lastFoundCount = 0;
+    bool denied = false;
 
     JUCE_DECLARE_WEAK_REFERENCEABLE (LinkClient)
 };

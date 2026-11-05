@@ -28,22 +28,26 @@ LinkPanel::LinkPanel (Controller& b, LinkClient& l) : box (b), link (l)
     foundLabel.setText ("Boxes on your network", juce::dontSendNotification);
     styleLabel (info, 13.0f, false, panelDim);
     info.setText ("The box and this PC must be on the same network (WiFi or cable). The box shows its address on "
-                  "its PROJECT page.\n\nConnected, everything here plays the box and this PC stays silent. "
+                  "its PROJECT page, with its 4-digit link code - type both here.\n\nConnected, everything here plays the box and this PC stays silent. "
                   "Disconnect and Cat Box plays here again.", juce::dontSendNotification);
 
     address.setTextToShowWhenEmpty ("address, e.g. 192.168.1.23", panelDim);
     address.setFont (juce::Font (juce::FontOptions (14.0f)));
     address.onReturnKey = [this] { connectButton.triggerClick(); };
+    code.setTextToShowWhenEmpty ("link code (on the box's PROJECT page)", panelDim);
+    code.setFont (juce::Font (juce::FontOptions (14.0f)));
+    code.setInputRestrictions (4, "0123456789");
+    code.onReturnKey = [this] { connectButton.triggerClick(); };
     connectButton.onClick = [this]
     {
         const auto a = address.getText().trim();
         if (a.isEmpty()) return;
-        if (! link.connect (a)) status.setText ("No Cat Box answered at " + a + ". Is it on and on the same network?", juce::dontSendNotification);
+        if (! link.connect (a, linkPort, code.getText())) status.setText ("No Cat Box answered at " + a + ". Is it on and on the same network?", juce::dontSendNotification);
         refresh();
     };
     disconnectButton.onClick = [this] { link.disconnect(); refresh(); };
     for (auto* c : { (juce::Component*) &title, (juce::Component*) &status, (juce::Component*) &foundLabel, (juce::Component*) &info,
-                     (juce::Component*) &address, (juce::Component*) &connectButton, (juce::Component*) &disconnectButton })
+                     (juce::Component*) &address, (juce::Component*) &code, (juce::Component*) &connectButton, (juce::Component*) &disconnectButton })
         addAndMakeVisible (c);
     connectButton.setWantsKeyboardFocus (false);
     disconnectButton.setWantsKeyboardFocus (false);
@@ -76,6 +80,8 @@ void LinkPanel::resized()
     r.removeFromTop (8);
     address.setBounds (r.removeFromTop (30));
     r.removeFromTop (6);
+    code.setBounds (r.removeFromTop (30));
+    r.removeFromTop (6);
     auto buttons = r.removeFromTop (30);
     connectButton.setBounds (buttons.removeFromLeft (buttons.getWidth() / 2).withTrimmedRight (4));
     disconnectButton.setBounds (buttons.withTrimmedLeft (4));
@@ -89,6 +95,11 @@ void LinkPanel::refresh()
     {
         status.setText ("Connected to the box at " + link.connectedTo() + ".", juce::dontSendNotification);
         status.setColour (juce::Label::textColourId, okColour);
+    }
+    else if (link.wasDenied())
+    {
+        status.setText ("Wrong link code. The box shows it on its PROJECT page (next to its address).", juce::dontSendNotification);
+        status.setColour (juce::Label::textColourId, juce::Colours::orange);
     }
     else if (! status.getText().startsWith ("No Cat Box"))
     {
@@ -111,7 +122,7 @@ void LinkPanel::refresh()
             b->setWantsKeyboardFocus (false);
             const auto addr = f.address;
             const int port = f.port;
-            b->onClick = [this, addr, port] { address.setText (addr); if (! link.connect (addr, port)) status.setText ("No Cat Box answered at " + addr + ".", juce::dontSendNotification); refresh(); };
+            b->onClick = [this, addr, port] { address.setText (addr); if (! link.connect (addr, port, code.getText())) status.setText ("No Cat Box answered at " + addr + ".", juce::dontSendNotification); refresh(); };
             addAndMakeVisible (b);
         }
         foundLabel.setVisible (! found.empty());

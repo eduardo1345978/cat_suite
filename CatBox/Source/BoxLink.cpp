@@ -5,6 +5,7 @@ namespace catbox
 //==============================================================================
 LinkServer::LinkServer (Controller& b, int port, bool advertise, const juce::String& bindAddress) : box (b)
 {
+    pairCode = juce::String (1000 + juce::Random::getSystemRandom().nextInt (9000));
     listening = beginWaitingForSocket (port, bindAddress);
     if (listening && advertise)
         advertiser = std::make_unique<juce::NetworkServiceDiscovery::Advertiser> (linkServiceId, "Cat Box", discoveryPort, port);
@@ -24,7 +25,7 @@ int LinkServer::numClients() const
 {
     const juce::ScopedLock sl (lock);
     int n = 0;
-    for (auto& c : clients) if (c->made.load() && ! c->lost.load()) ++n;
+    for (auto& c : clients) if (c->made.load() && c->paired.load() && ! c->lost.load()) ++n;
     return n;
 }
 
@@ -42,6 +43,24 @@ juce::InterprocessConnection* LinkServer::createConnectionObject()
     auto* raw = c.get();
     c->onMessage = [this, raw] (const juce::var& m)
     {
+        if (raw->kick.load()) return;
+        if (! raw->paired.load())
+        {
+            // nothing counts before the right link code
+            const auto now = juce::Time::getMillisecondCounter();
+            if (m.isObject() && m["t"].toString() == "hello" && now >= lockedUntil && m["code"].toString() == pairCode)
+            {
+                raw->paired = true;
+                wrongCodes = 0;
+            }
+            else
+            {
+                if (m.isObject() && m["t"].toString() == "hello" && ++wrongCodes >= 5) { lockedUntil = now + 30000; wrongCodes = 0; }
+                raw->send (juce::JSON::parse ("{\"t\":\"denied\"}"));
+                raw->kick = true;          // closed by the timer (not inside its own callback)
+                return;
+            }
+        }
         box.handleLinkMessage (m, [raw] (const juce::var& reply) { raw->send (reply); });
         if (m["t"].toString() == "hello") raw->needsState = false;
     };
@@ -53,11 +72,15 @@ juce::InterprocessConnection* LinkServer::createConnectionObject()
 void LinkServer::timerCallback()
 {
     const juce::ScopedLock sl (lock);
+    // close the ones that gave a wrong code, or none in 10 s
+    const auto now = juce::Time::getMillisecondCounter();
+    for (auto& c : clients)
+        if (c->kick.load() || (! c->paired.load() && now - c->openedAt > 10000)) { c->kick = true; c->disconnect(); c->lost = true; }
     // forget PCs that went away
     clients.erase (std::remove_if (clients.begin(), clients.end(), [] (const std::unique_ptr<LinkConnection>& c) { return c->lost.load(); }),
                    clients.end());
     bool any = false;
-    for (auto& c : clients) any = any || (c->made.load() && c->isConnected());
+    for (auto& c : clients) any = any || (c->made.load() && c->paired.load() && c->isConnected());
     if (! any) return;
 
     const auto state = box.makeState();
@@ -65,7 +88,7 @@ void LinkServer::timerCallback()
     const auto live = box.makeLive();
     for (auto& c : clients)
     {
-        if (! c->made.load() || ! c->isConnected()) continue;
+        if (! c->made.load() || ! c->paired.load() || ! c->isConnected()) continue;
         if (c->needsState.load() || stateText != c->lastStateSent || ++ticks % 30 == 0)
         {
             c->send (state);
@@ -103,14 +126,21 @@ std::vector<LinkClient::Found> LinkClient::found() const
     return out;
 }
 
-bool LinkClient::connect (const juce::String& h, int port)
+bool LinkClient::connect (const juce::String& h, int port, const juce::String& code)
 {
     disconnect();
+    denied = false;
     conn = std::make_unique<LinkConnection>();
     conn->onMessage = [this] (const juce::var& m)
     {
         const auto t = m["t"].toString();
-        if (t == "state") box.applyState (m);
+        if (t == "denied")
+        {
+            denied = true;
+            juce::WeakReference<LinkClient> weak (this);
+            juce::MessageManager::callAsync ([weak] { if (auto* self = weak.get()) { self->disconnect(); self->denied = true; if (self->onChange) self->onChange(); } });
+        }
+        else if (t == "state") box.applyState (m);
         else if (t == "live") box.applyLive (m);
         else if (t == "preset")
         {
@@ -138,7 +168,12 @@ bool LinkClient::connect (const juce::String& h, int port)
     }
     host = h;
     box.setRemoteSink ([this] (const juce::var& v) { send (v); });
-    send (juce::JSON::parse ("{\"t\":\"hello\"}"));
+    {
+        auto* hello = new juce::DynamicObject();
+        hello->setProperty ("t", "hello");
+        hello->setProperty ("code", code.trim());
+        send (juce::var (hello));
+    }
     if (onChange) onChange();
     return true;
 }

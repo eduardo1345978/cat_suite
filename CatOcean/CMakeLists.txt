@@ -20,6 +20,7 @@ target_sources(CatOcean PRIVATE
     Source/OceanEngine.cpp
     Source/YouTubeChat.cpp
     Source/Streamer.cpp
+    Source/OceanSecret.cpp
     Source/OceanTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatSounds.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/Composer.cpp

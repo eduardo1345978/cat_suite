@@ -494,8 +494,10 @@ float InsertFx::readDelay (const std::vector<float>& buf, float back) const noex
     back = juce::jlimit (1.0f, (float) (size - 2), back);
     float pos = (float) w - back;
     while (pos < 0.0f) pos += (float) size;
-    const int i0 = (int) pos;
+    int i0 = (int) pos;
     const float f = pos - (float) i0;
+    if (i0 >= size) i0 -= size;       // float rounding can land exactly on the end (an out-of-range read)
+    if (i0 < 0) i0 = 0;
     const int i1 = (i0 + 1) % size;
     return buf[(size_t) i0] + (buf[(size_t) i1] - buf[(size_t) i0]) * f;
 }

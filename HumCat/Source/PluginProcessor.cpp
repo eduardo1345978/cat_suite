@@ -140,6 +140,10 @@ bool HumCatProcessor::loadFile (const File& file, String& error)
     fm.registerBasicFormats();
     std::unique_ptr<AudioFormatReader> reader (fm.createReaderFor (file));
     if (reader == nullptr) { error = "Hum-Cat can't read " + file.getFileName(); return false; }
+    // a broken or hostile file can claim anything in its header: only believe sane numbers
+    if (reader->numChannels < 1 || reader->numChannels > 32 || ! (reader->sampleRate >= 4000.0 && reader->sampleRate <= 768000.0)
+        || reader->lengthInSamples <= 0)
+    { error = file.getFileName() + " looks broken"; return false; }
     const auto maxSamples = (int64) (reader->sampleRate * maxRecordSeconds);
     const int n = (int) jmin (reader->lengthInSamples, maxSamples);
     if (n < (int) (0.3 * reader->sampleRate)) { error = "That recording is too short"; return false; }

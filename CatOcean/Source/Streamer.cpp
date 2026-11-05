@@ -131,7 +131,7 @@ public:
                     }
                     if (l.containsChar ('=') && ! l.containsChar (' ')) continue;   // other progress keys
                     if (l.trim().isEmpty()) continue;
-                    owner.log << l << "\n";
+                    owner.log << owner.hideKey (l) << "\n";
                 }
                 if (owner.log.length() > 6000) owner.log = owner.log.getLastCharacters (4000);
                 updateStatus();
@@ -184,7 +184,15 @@ private:
 Streamer::Streamer() = default;
 Streamer::~Streamer() { stop(); }
 
-void Streamer::setStatus (const juce::String& s) { const juce::ScopedLock sl (lock); status = s; }
+juce::String Streamer::hideKey (const juce::String& s) const
+{
+    // ffmpeg's errors repeat the stream URL - and in it the stream key: never show that on screen
+    if (! target.startsWithIgnoreCase ("rtmp")) return s;
+    const auto key = target.fromLastOccurrenceOf ("/", false, false);
+    return key.length() >= 4 ? s.replace (key, "****") : s;
+}
+
+void Streamer::setStatus (const juce::String& s) { const auto hidden = hideKey (s); const juce::ScopedLock sl (lock); status = hidden; }
 juce::String Streamer::getStatus() const { const juce::ScopedLock sl (lock); return status; }
 juce::String Streamer::getLog() const { const juce::ScopedLock sl (lock); return log; }
 bool Streamer::isRunning() const { return running.load(); }

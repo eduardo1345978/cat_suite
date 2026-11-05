@@ -267,7 +267,7 @@ std::vector<Tuning> loadUserTunings()
     for (auto& f : userFolder().findChildFiles (juce::File::findFiles, false, "*.scl;*.ascl"))
     {
         Tuning t;
-        if (parseScl (f.loadFileAsString(), t))
+        if (f.getSize() <= 1024 * 1024 && parseScl (f.loadFileAsString(), t))
         {
             t.name = f.getFileNameWithoutExtension();
             v.push_back (t);

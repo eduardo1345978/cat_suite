@@ -1590,6 +1590,7 @@ void Controller::turnKnobBy (int k, float fraction)
 
 void Controller::resetKnob (int k)
 {
+    if (k < 0 || k >= numKnobs) return;   // (also from the network)
     if (isRemote()) { auto* o = new juce::DynamicObject(); o->setProperty ("t", "reset"); o->setProperty ("k", k); sendRemote (o); return; }
     const auto t = targetFor (k + (shift.load() ? numKnobs : 0));
     const auto* def = targetDef (t);
@@ -3116,7 +3117,7 @@ void Controller::handleLinkMessage (const juce::var& m, const std::function<void
 {
     if (isRemote() || ! m.isObject()) return;
     const auto t = m["t"].toString();
-    if (t == "knob")        turnKnob ((int) m["k"], (float) m["c"]);
+    if (t == "knob")        { const float c = (float) m["c"]; if (std::isfinite (c)) turnKnob ((int) m["k"], juce::jlimit (-1000.0f, 1000.0f, c)); }
     else if (t == "reset")  resetKnob ((int) m["k"]);
     else if (t == "button")
     {
@@ -3127,8 +3128,8 @@ void Controller::handleLinkMessage (const juce::var& m, const std::function<void
     }
     else if (t == "pad")    (bool) m["down"] ? padDown ((int) m["p"], (int) m.getProperty ("v", 100)) : padUp ((int) m["p"]);
     else if (t == "key")    (bool) m["down"] ? keyDown ((int) m["n"], (int) m.getProperty ("v", 100)) : keyUp ((int) m["n"]);
-    else if (t == "slider") setSlider ((float) m["v"]);
-    else if (t == "joy")    setJoystick ((float) m["x"], (float) m["y"]);
+    else if (t == "slider") { const float v = (float) m["v"]; if (std::isfinite (v)) setSlider (v); }
+    else if (t == "joy")    { const float x = (float) m["x"], y = (float) m["y"]; if (std::isfinite (x) && std::isfinite (y)) setJoystick (x, y); }
     else if (t == "track")  selectTrack ((int) m["v"]);
     else if (t == "mode")   setMode ((int) m["v"]);
     else if (t == "reset!") factoryReset();

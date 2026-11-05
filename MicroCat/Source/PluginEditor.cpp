@@ -456,7 +456,8 @@ MicroCatEditor::MicroCatEditor (MicroCatProcessor& p) : processor (p)
             if (sp == nullptr || ! fc.getResult().existsAsFile()) return;
             Tuning t;
             juce::String err;
-            if (parseScl (fc.getResult().loadFileAsString(), t, &err))
+            if (fc.getResult().getSize() > 1024 * 1024) err = "too big for a tuning file";
+            else if (parseScl (fc.getResult().loadFileAsString(), t, &err))
             {
                 t.name = fc.getResult().getFileNameWithoutExtension();
                 sp->processor.setTuning (t, true);

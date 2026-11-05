@@ -253,6 +253,9 @@ bool GlitchCatProcessor::loadVoice (const File& file, String& error)
     fm.registerBasicFormats();
     std::unique_ptr<AudioFormatReader> reader (fm.createReaderFor (file));
     if (reader == nullptr) { error = "Glitch-Cat can't read " + file.getFileName(); return false; }
+    // a broken or hostile file can claim anything in its header: only believe sane numbers
+    if (reader->numChannels < 1 || reader->numChannels > 32 || ! (reader->sampleRate >= 4000.0 && reader->sampleRate <= 768000.0))
+    { error = file.getFileName() + " looks broken"; return false; }
     const int len = (int) jmin (reader->lengthInSamples, (int64) (reader->sampleRate * maxVoiceSeconds));
     if (len <= 0) { error = "That file is empty"; return false; }
     AudioBuffer<float> buf ((int) jmax (1u, reader->numChannels), len);
