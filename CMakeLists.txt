@@ -40,6 +40,7 @@ add_subdirectory(HumCat)
 add_subdirectory(GlitchCat)
 add_subdirectory(CatHub)
 add_subdirectory(CatOcean)
+add_subdirectory(CatSetup)
 add_subdirectory(CatBox)
 
 option(CAT_BUILD_TESTS "Build the headless VST3 host test (loads the built .vst3 files)" OFF)
