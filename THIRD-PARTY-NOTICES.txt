@@ -1,0 +1,50 @@
+Cat Suite - third-party notices
+================================
+
+Cat Suite itself is licensed under the GNU General Public License v3 (see LICENSE), or under a separate
+commercial license from its author (see COMMERCIAL-LICENSE). It is built with and contains the components
+below, which keep their own licenses. The full license texts are in the licenses/ folder.
+
+Inside the plug-ins and apps
+----------------------------
+
+JUCE 8.0.15 - Raw Material Software Limited - https://juce.com
+  The framework every Cat is built on. Dual-licensed: AGPLv3 (licenses/AGPL-3.0-JUCE.txt) or the commercial
+  JUCE 8 licence. Cat Suite uses it under the AGPLv3; its source is at https://github.com/juce-framework/JUCE
+  (GPLv3 and AGPLv3 code may be combined, GPLv3 section 13). Anyone building Cat Suite into a closed-source
+  product needs a JUCE licence of their own.
+
+VST3 SDK 3.8 - Steinberg Media Technologies GmbH - MIT License (licenses/MIT-VST3-SDK.txt)
+  Comes with JUCE; makes the .vst3 plug-ins. VST is a registered trademark of Steinberg Media Technologies GmbH.
+
+MTS-ESP (libMTSClient, libMTSMaster and the libMTS installers) - ODDSound Ltd - 0BSD (licenses/0BSD-MTS-ESP.txt)
+  Micro-Cat's link to MTS-ESP synths. In ThirdParty/MTS-ESP and in the release zips.
+
+Fonts - SIL Open Font License 1.1 (licenses/OFL-1.1-fonts.txt)
+  Archivo Black: Copyright 2017 The Archivo Black Project Authors (https://github.com/Omnibus-Type/ArchivoBlack)
+  Barlow Condensed: Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow)
+  Bebas Neue: Copyright 2019 The Bebas Neue Project Authors (https://github.com/dharmatype/Bebas-Neue)
+  Cormorant SC: Copyright 2015 The Cormorant Project Authors (github.com/CatharsisFonts/Cormorant)
+  Exo 2: Copyright 2013 The Exo 2 Project Authors (https://github.com/googlefonts/Exo-2.0)
+  Michroma: Copyright 2011 The Michroma Project Authors (https://github.com/googlefonts/Michroma-font)
+  Orbitron: Copyright 2018 The Orbitron Project Authors (https://github.com/theleagueof/orbitron), with Reserved Font Name: "Orbitron".
+  Oswald: Copyright 2016 The Oswald Project Authors (https://github.com/googlefonts/OswaldFont)
+  Playfair Display: Copyright 2017 The Playfair Display Project Authors (https://github.com/clauseggers/Playfair-Display), with Reserved Font Name "Playfair Display".
+  Rajdhani: Copyright (c) 2014 Indian Type Foundry (info@indiantypefoundry.com)
+  Roboto Condensed: Copyright 2011 Google Inc. All Rights Reserved.
+  Sora: Copyright 2019 The Sora Project Authors (https://github.com/sora-xor/sora-font)
+  Syne: Copyright 2019 The Syne Project Authors (https://gitlab.com/bonjour-monde/fonderie/syne-typeface)
+  VT323: Copyright 2011, The VT323 Project Authors (peter.hull@oikoi.com)
+
+Downloaded later, not part of Cat Suite's files
+-----------------------------------------------
+
+FFmpeg - https://ffmpeg.org - Cat Ocean downloads a Windows build of FFmpeg (from https://github.com/BtbN/FFmpeg-Builds)
+  the first time you stream, and runs it as a separate program. FFmpeg is licensed under the LGPL / GPL;
+  those builds come with their own license files.
+
+Sample libraries for Cat Box (get_libraries.bat / pi/get_libraries.sh download them on request):
+  VSCO 2 Community Edition - Sam Gossner - CC0 1.0 (public domain) - https://github.com/sgossner/VSCO-2-CE
+  Dirt-Samples - the TidalCycles community - https://github.com/tidalcycles/Dirt-Samples
+    (collected from many sources; see that repository for its terms). They are not included in Cat Suite's
+    downloads.

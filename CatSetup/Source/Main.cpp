@@ -595,6 +595,8 @@ static int selfTest (const File& dir)
             stage.getChildFile ("VST3").getChildFile (String (n) + ".vst3").getChildFile ("Contents/x86_64-win").createDirectory();
             stage.getChildFile ("VST3").getChildFile (String (n) + ".vst3").getChildFile ("Contents/x86_64-win/" + String (n) + ".vst3").replaceWithText ("plug-in " + String (n));
         }
+        stage.getChildFile ("THIRD-PARTY-NOTICES.txt").replaceWithText ("notices");
+        stage.getChildFile ("licenses/MIT-VST3-SDK.txt").create();
         ZipFile::Builder b;
         for (auto& f : stage.findChildFiles (File::findFiles, true))
             b.addFile (f, 9, f.getRelativePathFrom (stage).replaceCharacter ('\\', '/'));
@@ -643,6 +645,8 @@ static int selfTest (const File& dir)
     check (paths.vst3.getChildFile ("Glitch-Cat.vst3/Contents/x86_64-win/Glitch-Cat.vst3").loadFileAsString() == "plug-in Glitch-Cat", "the VST3 is in the VST3 folder");
     check (paths.apps.getChildFile ("Cat-Hub.exe").existsAsFile() && paths.apps.getChildFile ("Hub Cats/Chord-Cat.vst3/x.txt").existsAsFile(), "the Hub and its own Cats are in the apps folder");
     check (! paths.vst3.getChildFile ("Micro-Cat.vst3").exists(), "only what was picked");
+    check (paths.apps.getChildFile ("THIRD-PARTY-NOTICES.txt").existsAsFile() && paths.apps.getChildFile ("licenses/MIT-VST3-SDK.txt").existsAsFile(),
+           "the license files are installed with the programs");
     auto state = Installed::load (paths.stateFile);
     check (state.items["Glitch-Cat"] == rel.commit && state.items.size() == 3, "remembers what it installed and which build");
     check (stateOf (*findItem ("Glitch-Cat"), state, rel, paths) == State::Installed && stateOf (*findItem ("Micro-Cat"), state, rel, paths) == State::NotInstalled,

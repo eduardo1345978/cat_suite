@@ -492,6 +492,19 @@ void Job::run()
         progress = 0.9f + 0.09f * (float) (k + 1) / (float) items.size();
     }
     state.save (paths.stateFile);
+    // the licenses go with the programs
+    for (auto& from : { suite, apps })
+        if (from.isDirectory())
+        {
+            paths.apps.createDirectory();
+            for (auto name : { "LICENSE.txt", "THIRD-PARTY-NOTICES.txt" })
+                if (from.getChildFile (name).existsAsFile()) from.getChildFile (name).copyFileTo (paths.apps.getChildFile (name));
+            if (from.getChildFile ("licenses").isDirectory())
+            {
+                paths.apps.getChildFile ("licenses").deleteRecursively();
+                from.getChildFile ("licenses").copyDirectoryTo (paths.apps.getChildFile ("licenses"));
+            }
+        }
     installSelf();
     paths.temp.deleteRecursively();
     progress = 1.0f;

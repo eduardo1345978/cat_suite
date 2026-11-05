@@ -298,3 +298,9 @@ docs/reference/           UI reference screenshots
 
 
 **Renamed:** the choir that used to be called Talk-Cat is now **Sing-Cat** (same plug-in ID, so old projects still load it), and the new lyric singer is **Talk-Cat**.
+
+## License
+- **Cat Suite** is free software under the **GNU General Public License v3** ([LICENSE](LICENSE)): you may use, study, change and share it, and anything you share that is built from it must stay under the GPLv3 with its source code.
+- For a closed-source product built on Cat Suite there is a separate **commercial license** on request ([COMMERCIAL-LICENSE](COMMERCIAL-LICENSE)). It covers Cat Suite's own code only; such a product also needs its own JUCE licence.
+- **Third-party parts** keep their own licenses: JUCE 8 (AGPLv3), the VST3 SDK (MIT), MTS-ESP (0BSD) and the fonts (SIL Open Font License 1.1). The list is in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt), the full texts in [licenses/](licenses/). Both also ship inside the download zips.
+- No warranty: Cat Suite is provided as it is (GPLv3 sections 15 and 16).
