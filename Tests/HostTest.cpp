@@ -1847,6 +1847,38 @@ void testGlitchCat()
     gl->releaseResources();
 }
 
+/** Molten: loads as a VST3 audio effect, reports its latency, melts a sound without making it louder. */
+void testMolten()
+{
+    std::cout << "\n== Molten ==" << std::endl;
+    auto fx = loadPlugin (MOLTEN_VST3);
+    if (fx == nullptr) { ++failures; return; }
+    check (fx->getTotalNumInputChannels() == 2 && fx->getTotalNumOutputChannels() == 2, "Molten is a stereo audio effect");
+    check (fx->getNumPrograms() == 13 && fx->getProgramName (0) == "Warm Glow", "Molten has its 13 presets");
+    fx->setCurrentProgram (0);
+    fx->prepareToPlay (sampleRate, blockSize);
+    check (fx->getLatencySamples() > 0, "Molten tells the host its latency (" + juce::String (fx->getLatencySamples()) + " samples)");
+    juce::AudioBuffer<float> audio (2, blockSize);
+    juce::MidiBuffer midi;
+    float peakLevel = 0.0f;
+    bool finite = true;
+    double ph = 0.0;
+    for (int b = 0; b < 400; ++b)
+    {
+        for (int i = 0; i < blockSize; ++i)
+        {
+            const float v = 0.3f * (float) std::sin (ph);
+            ph += juce::MathConstants<double>::twoPi * 110.0 / sampleRate;
+            audio.setSample (0, i, v); audio.setSample (1, i, v);
+        }
+        fx->processBlock (audio, midi);
+        if (b > 100) peakLevel = juce::jmax (peakLevel, audio.getMagnitude (0, blockSize));
+        for (int i = 0; i < blockSize; ++i) finite &= std::isfinite (audio.getSample (0, i));
+    }
+    check (finite && peakLevel > 0.05f && peakLevel <= 1.0f, "Molten: a bass goes in, a melted bass comes out (peak " + juce::String (peakLevel, 2) + ")");
+    fx->releaseResources();
+}
+
 int main()
 {
     juce::ScopedJuceInitialiser_GUI juceInit;
@@ -1870,6 +1902,7 @@ int main()
     testMicroCat();
     testHumCat();
     testGlitchCat();
+    testMolten();
 
     std::cout << "\n" << (failures == 0 ? "ALL TESTS PASSED" : juce::String (failures) + " TEST(S) FAILED") << std::endl;
     return failures == 0 ? 0 : 1;

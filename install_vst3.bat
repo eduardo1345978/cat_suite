@@ -13,6 +13,7 @@ if not exist "%APPS%\Hub Cats" mkdir "%APPS%\Hub Cats"
 set "LOG=%~dp0install_log.txt"
 echo Installing to %DEST% > "%LOG%"
 for %%C in (Chord Patt Bend Drum Orbit Sing Bass Glide Talk Life Muse Echo Micro Phase Hum Glitch) do call :plugin %%C
+call :fx Molten
 echo. >> "%LOG%"
 echo Apps to %APPS% >> "%LOG%"
 call :app CatHub Cat-Hub.exe
@@ -27,6 +28,13 @@ set "SRC=build\%1Cat\%1Cat_artefacts\Release\VST3\%1-Cat.vst3"
 if not exist "%SRC%" (echo NOT BUILT: %1-Cat >> "%LOG%" & exit /b 0)
 xcopy /E /I /Y "%SRC%" "%DEST%\%1-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: %1-Cat (is Cubase still running?) >> "%LOG%"
 if /I not "%1"=="Muse" if /I not "%1"=="Echo" if /I not "%1"=="Micro" xcopy /E /I /Y "%SRC%" "%APPS%\Hub Cats\%1-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Hub Cats\%1-Cat (is Cat Hub still running?) >> "%LOG%"
+exit /b 0
+
+:fx
+rem an effect without "-Cat" in its name (Molten): only into the VST3 folder
+set "SRC=build\%1\%1_artefacts\Release\VST3\%1.vst3"
+if not exist "%SRC%" (echo NOT BUILT: %1 >> "%LOG%" & exit /b 0)
+xcopy /E /I /Y "%SRC%" "%DEST%\%1.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: %1 (is Cubase still running?) >> "%LOG%"
 exit /b 0
 
 :app

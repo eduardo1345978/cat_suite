@@ -35,3 +35,5 @@ What is inside (folder VST3):
                  (put it on the audio track with your microphone, or drop a recording on it)
     Glitch-Cat - every note is a swarm: one MADNESS knob from a warm wobbly pad to rolls,
                  stutters, reversed bits and broken rhythms (an instrument, with its own beat)
+    Molten     - an effect that melts the sound: HEAT from warm to molten (fat, dirty, never
+                 louder - auto gain), drips that fall lower and lower, a tape-like wobble

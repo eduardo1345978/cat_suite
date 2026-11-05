@@ -23,14 +23,15 @@ target_compile_definitions(CatSuiteHostTest PRIVATE
     ECHOCAT_VST3="$<TARGET_FILE_DIR:EchoCat_VST3>/../../../Echo-Cat.vst3"
     MICROCAT_VST3="$<TARGET_FILE_DIR:MicroCat_VST3>/../../../Micro-Cat.vst3"
     HUMCAT_VST3="$<TARGET_FILE_DIR:HumCat_VST3>/../../../Hum-Cat.vst3"
-    GLITCHCAT_VST3="$<TARGET_FILE_DIR:GlitchCat_VST3>/../../../Glitch-Cat.vst3")
+    GLITCHCAT_VST3="$<TARGET_FILE_DIR:GlitchCat_VST3>/../../../Glitch-Cat.vst3"
+    MOLTEN_VST3="$<TARGET_FILE_DIR:Molten_VST3>/../../../Molten.vst3")
 
 target_link_libraries(CatSuiteHostTest PRIVATE
     juce::juce_audio_processors
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 
-add_dependencies(CatSuiteHostTest ChordCat_VST3 PattCat_VST3 BendCat_VST3 DrumCat_VST3 OrbitCat_VST3 SingCat_VST3 BassCat_VST3 GlideCat_VST3 TalkCat_VST3 LifeCat_VST3 EchoCat_VST3 MicroCat_VST3 HumCat_VST3 GlitchCat_VST3)
+add_dependencies(CatSuiteHostTest ChordCat_VST3 PattCat_VST3 BendCat_VST3 DrumCat_VST3 OrbitCat_VST3 SingCat_VST3 BassCat_VST3 GlideCat_VST3 TalkCat_VST3 LifeCat_VST3 EchoCat_VST3 MicroCat_VST3 HumCat_VST3 GlitchCat_VST3 Molten_VST3)
 
 if(MSVC)
     target_compile_options(CatSuiteHostTest PRIVATE /utf-8)

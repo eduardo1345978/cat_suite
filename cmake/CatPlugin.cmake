@@ -138,6 +138,9 @@ function(cat_add_fx_plugin target)
         set(_midi_out FALSE)
         set(_cats Fx Delay Reverb)
     endif()
+    if(ARG_CATEGORIES)
+        set(_cats ${ARG_CATEGORIES})
+    endif()
 
     juce_add_plugin(${target}
         VERSION                    1.0.0

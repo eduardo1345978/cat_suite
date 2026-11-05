@@ -28,6 +28,7 @@ const std::vector<Item>& catalog()
         { "Phase-Cat",  "Phase-Cat",  "Drifting, phasing rhythms",         Kind::Plugin, 0xffb88cff },
         { "Hum-Cat",    "Hum-Cat",    "Sing a tune, get a song",           Kind::Plugin, 0xffff6f4f },
         { "Glitch-Cat", "Glitch-Cat", "Every note is a swarm",             Kind::Plugin, 0xff3dff9a },
+        { "Molten",     "Molten",     "The sound melts (warm and fat)",    Kind::Plugin, 0xffff6a1f },
         { "app:Cat-Hub",   "Cat Hub",   "Every Cat jamming together",       Kind::App, 0xff8fa3f0, true },
         { "app:Cat-Ocean", "Cat Ocean", "The endless ocean for YouTube",    Kind::App, 0xff2ce8f5, true },
         { "app:Cat-Box",   "Cat Box",   "The groovebox",                    Kind::App, 0xffd9dde3, true },

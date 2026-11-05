@@ -132,6 +132,13 @@ namespace
             t.button = ButtonStyle::Glow; t.backdrop = Backdrop::Lab; t.corner = 6.0f;
             font (t, RajdhaniBold_ttf, RajdhaniBold_ttfSize, 1.12f);
         }
+        else if (p.startsWith ("molten"))     // molten: near-black warm brown, lava orange
+        {
+            t = make ("Molten", 0xff0d0605, 0xff160a08, 0xff1f0f0b, 0xff2a1510, 0xff3a1d15, 0xffffe7d6, 0xffb9a8a0, 0xffff6a1f);
+            t.knob = KnobStyle::Hardware; t.knobBody = juce::Colour (0xff1f0f0b); t.knobRing = juce::Colour (0xff3a1d15); t.knobPointer = t.accent;
+            t.button = ButtonStyle::Glow; t.corner = 8.0f;
+            font (t, SoraBold_ttf, SoraBold_ttfSize, 0.95f);
+        }
         else if (p.startsWith ("glitch"))     // a broken screen: black, acid green, magenta errors
         {
             t = make ("Broken Screen", 0xff050607, 0xff0b0d10, 0xff12151a, 0xff1a1e24, 0xff2a313a, 0xffd9ffe9, 0xff6f9a84, 0xff3dff9a);
