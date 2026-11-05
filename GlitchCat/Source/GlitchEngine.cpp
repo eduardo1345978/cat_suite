@@ -188,19 +188,24 @@ void Engine::startBug (Note& note, Bug& b, int index, bool first)
     b.panTarget = 0.5f + rnd2() * 0.48f * s.flight;
     if (first) b.pan = 0.5f + rnd2() * 0.2f * s.flight;
 
-    // how long this segment lasts
+    // how long this segment lasts. On the grid, every bug of a note makes the same choice at the same moment,
+    // so the rolls are tight ratchets instead of a smear (odd rhythm then pulls them apart on purpose)
+    const float freedom = juce::jmax (0.0f, (m - 0.55f) / 0.45f);
+    // (off the grid the shared choices follow the segment count instead, so the note's bugs still roll together)
+    if (first) b.segCount = 0;
+    juce::Random shared ((juce::int64) note.order * 7919 + (freedom > 0.0f ? 100003 * (juce::int64) ++b.segCount : (juce::int64) std::llround (renderBeat * 32.0)));
+    auto pick = [&] { return shared.nextFloat(); };
     double d;
     if (s.rolls)
     {
         const int maxK = 1 + (int) (m * 5.0f);
-        const int k = juce::jmin (maxK, (int) (rnd() * (float) (maxK + 1)));
+        const int k = juce::jmin (maxK, (int) (std::pow (pick(), 1.0f / (1.0f + 2.5f * m)) * (float) (maxK + 1)));   // madder: shorter more often
         d = 2.0 * std::pow (2.0, -k);
-        if (m > 0.6f && rnd() < 0.3f) d *= 2.0 / 3.0;                // triplets
+        if (m > 0.6f && pick() < 0.3f) d *= 2.0 / 3.0;               // triplets
     }
     else d = 1.0 + rnd() * 2.0;
     if (s.odd && m > 0.1f) d *= b.ratio;                           // every bug its own length: they drift apart and meet again
-    const float freedom = juce::jmax (0.0f, (m - 0.55f) / 0.45f);
-    if (freedom > 0.0f) d *= 1.0 + freedom * rnd2() * 0.6;
+    if (freedom > 0.0f) d *= 1.0 + freedom * (pick() * 2.0f - 1.0f) * 0.6;
     b.segLen = juce::jmax (32.0, d * spb);
     if (first)
     {
@@ -209,12 +214,13 @@ void Engine::startBug (Note& note, Bug& b, int index, bool first)
             b.segLeft = (d - std::fmod (beat, d)) * spb;          // the first segment ends on the grid
             if (b.segLeft < 32.0) b.segLeft += b.segLen;
         }
-        else b.segLeft = b.segLen * (0.3 + 0.7 * rnd());
+        else b.segLeft = b.segLen * (0.3 + 0.7 * pick());
     }
     else b.segLeft += b.segLen;
 
     // rolls: the bug starts again (a ratchet) instead of just gliding on
-    b.retrig = s.rolls && rnd() < smoothstep (0.12f, 0.6f, m);
+    b.retrig = s.rolls && pick() < smoothstep (0.12f, 0.6f, m);
+    if (b.retrig && ! first) ++retriggers;
     if (b.retrig || first)
     {
         b.seg = 0.0f;
@@ -242,7 +248,7 @@ void Engine::renderNotes (float* outL, float* outR, int start, int n)
 {
     const float m = madness();
     const int nb = 2 + juce::roundToInt (s.swarm * 6.0f);
-    const float bugGain = 0.30f / std::sqrt ((float) nb);
+    const float bugGain = 0.6f / std::sqrt ((float) nb);
     const float atk = 1.0f - std::exp (-1.0f / (juce::jmax (0.001f, s.attack) * (float) sr));
     const float rel = 1.0f - std::exp (-1.0f / (juce::jmax (0.01f, s.release) * (float) sr));
     const float panCoef = 1.0f - std::exp (-(float) chunk / ((1.6f - s.flight * 1.4f) * (float) sr));
@@ -258,6 +264,7 @@ void Engine::renderNotes (float* outL, float* outR, int start, int n)
     for (int c0 = 0; c0 < n; c0 += chunk)
     {
         const int len = juce::jmin (chunk, n - c0);
+        renderBeat = beat + (start + c0) / samplesPerBeatNow;
         float* l = outL + start + c0;
         float* r = outR + start + c0;
         const float wow = s.tape * (0.10f * std::sin ((float) wowPh) + 0.035f * std::sin ((float) flutterPh));
@@ -323,13 +330,13 @@ void Engine::renderNotes (float* outL, float* outR, int start, int n)
                     if (s.shape < 0.5f)
                     {
                         double ph2 = ph + 0.5; if (ph2 >= 1.0) ph2 -= 1.0;
-                        const float sq = (ph < 0.5 ? 1.0f : -1.0f) + polyBlep (ph, inc) - polyBlep (ph2, inc);
+                        const float sq = (ph < 0.5 ? -1.0f : 1.0f) - polyBlep (ph, inc) + polyBlep (ph2, inc);   // in step with the saw, so they add
                         synth = juce::jmap (s.shape * 2.0f, saw, sq * 0.8f);
                     }
                     else
                     {
                         double ph2 = ph + 0.5; if (ph2 >= 1.0) ph2 -= 1.0;
-                        const float sq = (ph < 0.5 ? 1.0f : -1.0f) + polyBlep (ph, inc) - polyBlep (ph2, inc);
+                        const float sq = (ph < 0.5 ? -1.0f : 1.0f) - polyBlep (ph, inc) + polyBlep (ph2, inc);   // in step with the saw, so they add
                         const float glass = std::sin (twoPi * (float) ph + 1.3f * std::sin (twoPi * (float) b.ph2));
                         synth = juce::jmap ((s.shape - 0.5f) * 2.0f, sq * 0.8f, glass);
                     }
@@ -349,7 +356,7 @@ void Engine::renderNotes (float* outL, float* outR, int start, int n)
                             const float fr = (float) (b.samplePos - i0);
                             const auto& d = smp->data;
                             const float x0 = d[(size_t) i0], x1 = d[(size_t) ((i0 + 1) % (int) d.size())];
-                            v = (x0 + (x1 - x0) * fr) * 1.6f;
+                            v = (x0 + (x1 - x0) * fr);
                             b.samplePos += b.reverse ? -sampleStep : sampleStep;
                             while (b.samplePos >= sampleLen) b.samplePos -= sampleLen;
                             while (b.samplePos < 0.0) b.samplePos += sampleLen;

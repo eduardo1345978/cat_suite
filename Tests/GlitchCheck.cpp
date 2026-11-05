@@ -92,7 +92,7 @@ static double pitchHz (const std::vector<float>& x, int from, int to)
     return sr / (bestLag + (std::isfinite (shift) ? shift : 0.0));
 }
 
-static std::vector<double> onsets (const std::vector<float>& x, double windowMs, float floor)
+static std::vector<double> onsets (const std::vector<float>& x, double windowMs, float floor, float jump = 1.8f)
 {
     const int w = (int) (sr * windowMs / 1000.0);
     std::vector<double> times;
@@ -102,7 +102,7 @@ static std::vector<double> onsets (const std::vector<float>& x, double windowMs,
     {
         float e = 0.0f;
         for (int k = 0; k < w; ++k) e = jmax (e, std::abs (x[i + (size_t) k]));
-        if (armed && e > floor && e > prev * 1.8f) { times.push_back ((double) i / sr); armed = false; }
+        if (armed && e > floor && e > prev * jump) { times.push_back ((double) i / sr); armed = false; }
         if (e < prev * 0.9f) armed = true;
         prev = e;
     }
@@ -156,23 +156,40 @@ int main()
         check (p->getNumPrograms() == 12, "12 presets");
     }
 
-    // madness makes rolls
+    // madness makes rolls: the bugs restart (ratchets) and the level jumps about
     {
-        auto count = [] (float madness)
+        struct R { int retrig; double wobble; };
+        auto measure = [] (float madness)
         {
             auto p = make();
             quiet (*p);
             set (*p, "madness", madness);
             set (*p, "doDetune", 0.0f); set (*p, "doStutter", 0.0f); set (*p, "doOdd", 0.0f);
             set (*p, "attack", 0.001f);
+            set (*p, "flight", 0.0f);
             const auto x = render (*p, 3.0, { { 0.0, MidiMessage::noteOn (1, 60, 0.9f) }, { 0.0, MidiMessage::noteOn (1, 67, 0.9f) } });
-            return (int) onsets (x, 4.0, 0.02f).size();
+            // how much the loudness moves (20 ms windows, after the first half second)
+            std::vector<double> env;
+            const int w = (int) (0.02 * sr);
+            for (size_t i = (size_t) (0.5 * sr); i + (size_t) w < x.size(); i += (size_t) w)
+            {
+                double e = 0.0;
+                for (int k = 0; k < w; ++k) e += (double) x[i + (size_t) k] * x[i + (size_t) k];
+                env.push_back (std::sqrt (e / w));
+            }
+            double mean = 0.0, var = 0.0;
+            for (double e : env) mean += e;
+            mean /= (double) env.size();
+            for (double e : env) var += (e - mean) * (e - mean);
+            return R { p->engine.retriggers.load(), std::sqrt (var / (double) env.size()) / (mean + 1e-9) };
         };
-        const int gentle = count (0.0f), mad = count (0.9f);
-        check (mad > 20 && mad > gentle * 4, "madness: rolls and ratchets (" + String (gentle) + " hits gentle, " + String (mad) + " mad)");
+        const auto gentle = measure (0.0f), mad = measure (0.55f), insane = measure (0.95f);
+        check (gentle.retrig == 0 && mad.retrig > 100, "madness: the bugs roll and ratchet (" + String (gentle.retrig) + " restarts gentle, " + String (mad.retrig) + " mad)");
+        check (mad.wobble > gentle.wobble * 2.0 && insane.wobble > gentle.wobble * 2.0,
+               "madness: you hear the rolls - the loudness jumps (" + String (gentle.wobble, 2) + " gentle, " + String (mad.wobble, 2) + " mad, " + String (insane.wobble, 2) + " insane)");
     }
 
-    // the swarm's beat sits on Cubase's grid when gentle
+    // the swarm's beat sits on Cubase's grid when gentle: a kick right on every beat
     {
         auto p = make();
         quiet (*p);
@@ -184,15 +201,19 @@ int main()
         FakePlayHead ph; ph.playing = true; ph.bpm = 120.0;
         p->setPlayHead (&ph);
         const auto x = render (*p, 4.0, { { 0.0, MidiMessage::noteOn (1, 60, 0.9f) } }, &ph);
-        const auto on = onsets (x, 2.0, 0.05f);
-        int offGrid = 0;
-        for (double t : on)
+        auto energy = [&] (double from, double to)
         {
-            const double grid = 0.125;
-            const double d = std::abs (t - std::round (t / grid) * grid);
-            if (d > 0.008) ++offGrid;
+            double e = 0.0;
+            for (int i = jmax (0, (int) (from * sr)); i < jmin ((int) x.size(), (int) (to * sr)); ++i) e += (double) x[(size_t) i] * x[(size_t) i];
+            return e;
+        };
+        int onBeat = 0;
+        for (int k = 1; k < 8; ++k)
+        {
+            const double t = k * 0.5;
+            if (energy (t, t + 0.006) > 6.0 * energy (t - 0.006, t)) ++onBeat;
         }
-        check (on.size() >= 12 && offGrid == 0, "gentle: the drums are on the 1/16 grid at 120 BPM (" + String ((int) on.size()) + " hits, " + String (offGrid) + " off)");
+        check (onBeat == 7, "gentle: the kick hits right on every beat at 120 BPM (" + String (onBeat) + " / 7)");
         p->setPlayHead (nullptr);
     }
 

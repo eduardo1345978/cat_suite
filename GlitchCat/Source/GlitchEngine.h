@@ -85,6 +85,7 @@ public:
     std::atomic<int> glitchNow { GlitchNone };
     std::atomic<int> glitchEvents { 0 };                          // how many glitches so far (tests, screen)
     std::atomic<int> activeBugs { 0 };
+    std::atomic<int> retriggers { 0 };                            // bug restarts (rolls) so far
     std::atomic<double> beatNow { 0.0 };
 
 private:
@@ -103,6 +104,7 @@ private:
         double samplePos = 0.0;
         bool reverse = false;
         float ratio = 1.0f;                   // odd rhythm: this bug's own segment length
+        int segCount = 0;
     };
     struct Note
     {
@@ -141,6 +143,7 @@ private:
     uint32_t orderCounter = 0;
     std::atomic<const Sample*> sample { nullptr };
     double samplesPerBeatNow = 24000.0;
+    double renderBeat = 0.0;            // the beat where the swarm is rendering now (for the shared roll choices)
 
     // clock
     double beat = 0.0;                  // where the swarm is (beats)
