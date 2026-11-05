@@ -270,6 +270,30 @@ int main()
         const auto x = render (*p, 1.0, { { 0.0, MidiMessage::noteOn (1, 60, 0.9f) } });
         check (loaded && peak (x) > 0.05f, "my voice: a recording loads and the swarm plays it (peak " + String (peak (x), 3) + ")");
 
+        // a shorter voice arrives while the swarm is still reading the long one (crashed Cubase, 5 Nov)
+        {
+            auto shortFile = File::getSpecialLocation (File::tempDirectory).getChildFile ("glitchcheck_short.wav");
+            shortFile.deleteFile();
+            WavAudioFormat wav;
+            std::unique_ptr<AudioFormatWriter> w (wav.createWriterFor (new FileOutputStream (shortFile), 44100.0, 1, 16, {}, 0));
+            std::vector<float> v (6000);
+            for (size_t i = 0; i < v.size(); ++i) v[i] = 0.5f * std::sin ((float) i * 0.05f) * std::sin (MathConstants<float>::pi * (float) i / (float) v.size());
+            const float* ch[] = { v.data() };
+            w->writeFromFloatArrays (ch, 1, (int) v.size());
+            w.reset();
+            set (*p, "madness", 0.0f);
+            render (*p, 0.5, { { 0.0, MidiMessage::noteOn (1, 64, 0.9f) }, { 0.0, MidiMessage::noteOn (1, 67, 0.9f) } });   // bugs deep in the long voice
+            String e2;
+            const bool ok = p->loadVoice (shortFile, e2);
+            const auto y = render (*p, 0.5, {});
+            bool finite = true;
+            for (float s : y) finite &= std::isfinite (s);
+            check (ok && finite && peak (y) > 0.01f, "a shorter voice loaded while notes play: no crash, it keeps singing");
+            render (*p, 0.2, { { 0.0, MidiMessage::noteOff (1, 64) }, { 0.0, MidiMessage::noteOff (1, 67) }, { 0.0, MidiMessage::noteOff (1, 60) } });
+            shortFile.deleteFile();
+            p->loadVoice (file, e2);
+        }
+
         set (*p, "madness", 0.77f);
         MemoryBlock state;
         p->getStateInformation (state);

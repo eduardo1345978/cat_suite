@@ -352,7 +352,10 @@ void Engine::renderNotes (float* outL, float* outR, int start, int n)
                         float v = 0.0f;
                         if (useSample)
                         {
-                            const int i0 = (int) b.samplePos;
+                            // the voice may have been swapped for a shorter one while this bug was reading the old one
+                            if (! (b.samplePos >= 0.0 && b.samplePos < sampleLen))
+                                b.samplePos = std::isfinite (b.samplePos) ? std::fmod (std::abs (b.samplePos), sampleLen) : 0.0;
+                            const int i0 = juce::jlimit (0, (int) smp->data.size() - 1, (int) b.samplePos);
                             const float fr = (float) (b.samplePos - i0);
                             const auto& d = smp->data;
                             const float x0 = d[(size_t) i0], x1 = d[(size_t) ((i0 + 1) % (int) d.size())];
