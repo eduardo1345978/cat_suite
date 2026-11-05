@@ -13,7 +13,7 @@ namespace cat
 */
 enum class KnobStyle { Arc, Hardware, Chrome, Cream, Brass, Glow, Gauge };
 enum class ButtonStyle { Flat, Hardware, Glow, Metal, Terminal };
-enum class Backdrop { Plain, Wood, Rack, ChromeSheen, Plastic, Stars, Studio, Biolum, Silver, Amber, Terminal, Console, Cream, Observatory, Lab };
+enum class Backdrop { Plain, Wood, Rack, ChromeSheen, Plastic, Stars, Studio, Biolum, Silver, Amber, Terminal, Console, Cream, Observatory, Lab, Foam };
 
 struct Theme
 {

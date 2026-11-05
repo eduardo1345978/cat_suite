@@ -1,10 +1,11 @@
 #include "PluginEditor.h"
+#include <numeric>
 
 using namespace micro;
 
 namespace
 {
-    constexpr int designW = 1120, designH = 800;
+    constexpr int designW = 1260, designH = 830;
     constexpr float twoPi = juce::MathConstants<float>::twoPi;
 
     juce::String centsText (double c)
@@ -23,8 +24,9 @@ TuningCircle::TuningCircle()
 
 juce::Rectangle<float> TuningCircle::ring() const
 {
-    const float s = (float) juce::jmin (getWidth(), getHeight()) - 64.0f;
-    return getLocalBounds().toFloat().withSizeKeepingCentre (s, s);
+    // the circle the notes sit on (the brass dial is drawn round it)
+    const float s = (float) juce::jmin (getWidth(), getHeight());
+    return getLocalBounds().toFloat().withSizeKeepingCentre (s * 0.572f, s * 0.572f);
 }
 
 juce::Point<float> TuningCircle::pointFor (double cents, float radius) const
@@ -56,31 +58,101 @@ int TuningCircle::degreeAt (juce::Point<float> p) const
     return best;
 }
 
+namespace
+{
+    const juce::Colour brassHi (0xfff3d99b), brassMid (0xffc79a4c), brassLo (0xff7a5a26), gold (0xffd8b169), ivory (0xffede3cc), parchment (0xffc9bc9f);
+
+    juce::ColourGradient brass (juce::Rectangle<float> r)
+    {
+        juce::ColourGradient gr (brassHi, r.getX() + r.getWidth() * 0.4f, r.getY() + r.getHeight() * 0.3f, brassLo, r.getRight(), r.getBottom(), true);
+        gr.addColour (0.5, brassMid);
+        return gr;
+    }
+
+    void brassDot (juce::Graphics& g, juce::Point<float> c, float radius, juce::Colour edge = juce::Colour (0xff0b1530))
+    {
+        const auto r = juce::Rectangle<float> (radius * 2.0f, radius * 2.0f).withCentre (c);
+        g.setGradientFill (brass (r));
+        g.fillEllipse (r);
+        g.setColour (edge);
+        g.drawEllipse (r, 2.0f);
+    }
+
+    const char* const noteNames[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+
+    /** A simple ratio near these cents (within a cent, the smallest one), or empty. */
+    juce::String ratioNear (double cents)
+    {
+        for (int q = 1; q <= 16; ++q)
+        {
+            const int p = (int) std::lround (q * std::pow (2.0, cents / 1200.0));
+            if (p <= 0 || p > 32 || std::gcd (p, q) != 1) continue;
+            if (std::abs (1200.0 * std::log2 ((double) p / q) - cents) < 1.0) return juce::String (p) + "/" + juce::String (q);
+        }
+        return {};
+    }
+
+    /** A microtone's name: the nearest normal note and how far off it ("E -14"). */
+    juce::String microName (double semis, bool octave)
+    {
+        const int n = (int) std::lround (semis);
+        const int c = (int) std::lround ((semis - n) * 100.0);
+        juce::String s = noteNames[((n % 12) + 12) % 12];
+        if (octave) s << (n / 12 - 1);
+        if (c != 0) s << " " << (c > 0 ? "+" : juce::String::fromUTF8 ("\xe2\x88\x92")) << std::abs (c);
+        return s;
+    }
+}
+
 void TuningCircle::paint (juce::Graphics& g)
 {
-    cat::CatLookAndFeel::drawGlassPanel (g, getLocalBounds().toFloat(), 10.0f);
     if (tuning.cents.empty()) return;
-    const auto rr = ring();
-    const auto c = rr.getCentre();
-    const float r = rr.getWidth() * 0.5f;
-    g.setColour (cat::Colours::outline);
-    g.drawEllipse (rr, 1.5f);
-    // 12-EDO's notes for comparison (when the period is an octave)
+    const float s = (float) juce::jmin (getWidth(), getHeight());
+    const auto c = getLocalBounds().toFloat().getCentre();
+    const auto disc = [&] (float frac) { return juce::Rectangle<float> (s * frac * 2.0f, s * frac * 2.0f).withCentre (c); };
+    const float r = ring().getWidth() * 0.5f;
+
+    // the brass rim and the night-blue dial
+    g.setColour (juce::Colours::black.withAlpha (0.45f));
+    g.fillEllipse (disc (0.49f).translated (0.0f, s * 0.012f));
+    g.setGradientFill (brass (disc (0.48f)));
+    g.fillEllipse (disc (0.48f));
+    g.setColour (juce::Colour (0xff5c4318));
+    g.drawEllipse (disc (0.48f), 1.0f);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff15254a), c.x - s * 0.1f, c.y - s * 0.12f, juce::Colour (0xff0a1430), c.x + s * 0.4f, c.y + s * 0.4f, true));
+    g.fillEllipse (disc (0.436f));
+    g.setColour (brassMid);
+    g.drawEllipse (disc (0.436f), 1.5f);
+    g.setColour (brassMid.withAlpha (0.35f));
+    g.drawEllipse (disc (0.39f), 0.8f);
+
+    // the dial: a tick every 10 cents, a long one every 100 (12-EDO), the note names
     const double period = tuning.period();
-    static const char* names[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
-    for (int k = 0; k * 100.0 < period - 1e-6; ++k)
+    for (int k = 0; k * 10.0 < period - 1e-6; ++k)
     {
-        const auto inner = pointFor (k * 100.0, r - 6.0f), outer = pointFor (k * 100.0, r + 6.0f);
-        g.setColour (cat::Colours::textDim.withAlpha (0.5f));
-        g.drawLine ({ inner, outer }, 1.2f);
-        if (std::abs (period - 1200.0) < 1e-3)
-        {
-            const auto lp = pointFor (k * 100.0, r + 20.0f);
-            g.setFont (cat::catFont (11.0f));
-            g.drawText (names[k % 12], juce::Rectangle<float> (30.0f, 14.0f).withCentre (lp), juce::Justification::centred);
-        }
+        const bool big = k % 10 == 0;
+        const auto outer = pointFor (k * 10.0, s * 0.436f), inner = pointFor (k * 10.0, s * (big ? 0.396f : 0.418f));
+        g.setColour (brassMid.withAlpha (big ? 0.9f : 0.4f));
+        g.drawLine ({ inner, outer }, big ? 2.0f : 1.0f);
     }
-    // the tuning: a star through all its notes, then the notes
+    if (std::abs (period - 1200.0) < 1e-3)
+    {
+        g.setFont (cat::displayFont (s * 0.032f));
+        g.setColour (gold);
+        for (int k = 0; k < 12; ++k)
+            g.drawText (tuning.noteNames.size() == 12 ? tuning.noteNames[k] : juce::String (noteNames[k]),
+                        juce::Rectangle<float> (s * 0.08f, s * 0.04f).withCentre (pointFor (k * 100.0, s * 0.357f)), juce::Justification::centred);
+    }
+    g.setColour (brassMid.withAlpha (0.4f));
+    {
+        juce::Path dash, circle;
+        circle.addEllipse (ring());
+        const float pattern[] = { 2.0f, 6.0f };
+        juce::PathStrokeType (1.0f).createDashedStroke (dash, circle, pattern, 2);
+        g.fillPath (dash);
+    }
+
+    // the tuning: a star through all its notes
     juce::Path star;
     for (int d = 0; d < tuning.notesPerPeriod(); ++d)
     {
@@ -88,44 +160,68 @@ void TuningCircle::paint (juce::Graphics& g)
         if (d == 0) star.startNewSubPath (pt); else star.lineTo (pt);
     }
     star.closeSubPath();
-    g.setColour (cat::Colours::accent.withAlpha (0.10f));
+    g.setColour (gold.withAlpha (0.08f));
     g.fillPath (star);
-    g.setColour (cat::Colours::accent.withAlpha (0.35f));
+    g.setColour (gold.withAlpha (0.85f));
     g.strokePath (star, juce::PathStrokeType (1.2f));
+
+    // the needle: the last note played (or the selected one)
+    const double needle = needleCents >= 0.0 ? needleCents : tuning.degreeCents (juce::jlimit (0, tuning.notesPerPeriod() - 1, selected));
+    {
+        const auto tip = pointFor (needle, r - s * 0.018f);
+        juce::Path n;
+        const auto dir = (tip - c) / juce::jmax (1.0f, tip.getDistanceFrom (c));
+        const juce::Point<float> side (-dir.y * 3.5f, dir.x * 3.5f);
+        n.startNewSubPath (c + side); n.lineTo (tip); n.lineTo (c - side); n.lineTo (c - dir * s * 0.05f); n.closeSubPath();
+        g.setGradientFill (brass (disc (0.3f)));
+        g.fillPath (n);
+    }
+
+    // the notes
     const bool many = tuning.notesPerPeriod() > 36;
     for (int d = 0; d < tuning.notesPerPeriod(); ++d)
     {
         const double cents = tuning.degreeCents (d);
         const auto pt = pointFor (cents, r);
-        const double off = cents - 100.0 * std::round (cents / 100.0);       // how far from a normal note
-        const auto col = d == 0 ? cat::Colours::text
-                                : cat::Colours::green.interpolatedWith (cat::Colours::red, (float) juce::jlimit (0.0, 1.0, std::abs (off) / 50.0));
-        const float size = d == 0 ? 13.0f : (many ? 6.0f : 10.0f);
-        g.setColour (col);
-        g.fillEllipse (juce::Rectangle<float> (size, size).withCentre (pt));
+        const float size = s * (d == selected ? 0.0196f : (many ? 0.008f : 0.0143f));
+        brassDot (g, pt, d == 0 ? size * 1.15f : size);
         if (d == selected)
         {
-            g.setColour (cat::Colours::text);
-            g.drawEllipse (juce::Rectangle<float> (size + 8.0f, size + 8.0f).withCentre (pt), 2.0f);
+            g.setColour (ivory.withAlpha (0.8f));
+            g.drawEllipse (juce::Rectangle<float> (size * 2.0f + 8.0f, size * 2.0f + 8.0f).withCentre (pt), 1.2f);
         }
         if (! many || d == selected)
         {
-            const auto lp = pointFor (cents, r - 24.0f);
-            g.setColour (d == selected ? cat::Colours::text : cat::Colours::textDim);
+            const auto lp = pointFor (cents, r - s * 0.055f);
+            g.setColour (d == selected ? ivory : parchment.withAlpha (0.75f));
             g.setFont (cat::catFont (d == selected ? 12.5f : 10.5f, d == selected));
             g.drawText (juce::String ((int) std::lround (cents)), juce::Rectangle<float> (44.0f, 14.0f).withCentre (lp), juce::Justification::centred);
         }
     }
-    // in the middle: the name and the size
-    g.setColour (cat::Colours::text);
-    g.setFont (cat::catFont (20.0f, true));
-    g.drawFittedText (tuning.name, juce::Rectangle<int> ((int) c.x - 130, (int) c.y - 34, 260, 28), juce::Justification::centred, 1);
-    g.setColour (cat::Colours::textDim);
-    g.setFont (cat::catFont (13.0f));
-    juce::String sub;
-    sub << tuning.notesPerPeriod() << " notes  -  repeats every " << juce::String (period, std::abs (period - std::round (period)) < 1e-3 ? 0 : 2) << " cents";
-    g.drawFittedText (sub, juce::Rectangle<int> ((int) c.x - 130, (int) c.y - 4, 260, 18), juce::Justification::centred, 1);
-    g.drawFittedText (tuning.description, juce::Rectangle<int> ((int) c.x - 120, (int) c.y + 16, 240, 48), juce::Justification::centredTop, 3);
+
+    // what sounds now: glowing stars on the circle, with their cents off 12-EDO
+    for (double sc : sounding)
+    {
+        const auto pt = pointFor (sc, r);
+        for (float k : { 3.0f, 2.0f, 1.4f })
+        {
+            g.setColour (juce::Colour (0xfffff2c8).withAlpha (0.12f));
+            g.fillEllipse (juce::Rectangle<float> (s * 0.02f * k * 2.0f, s * 0.02f * k * 2.0f).withCentre (pt));
+        }
+        g.setColour (juce::Colour (0xfffff6dc));
+        g.fillEllipse (juce::Rectangle<float> (s * 0.022f, s * 0.022f).withCentre (pt));
+        const auto lp = pointFor (sc, r + s * 0.05f);
+        const double off = sc - 100.0 * std::round (sc / 100.0);
+        g.setColour (juce::Colour (0xfffff6dc));
+        g.setFont (cat::catFont (11.5f, true));
+        g.drawText ((off >= 0 ? "+" : juce::String::fromUTF8 ("\xe2\x88\x92")) + juce::String (std::abs (off), 1),
+                    juce::Rectangle<float> (50.0f, 14.0f).withCentre (lp), juce::Justification::centred);
+    }
+
+    // the hub
+    brassDot (g, c, s * 0.0286f);
+    g.setColour (juce::Colour (0xff3a2a10));
+    g.fillEllipse (juce::Rectangle<float> (4.0f, 4.0f).withCentre (c));
 }
 
 void TuningCircle::mouseDown (const juce::MouseEvent& e)
@@ -237,10 +333,10 @@ void TuningKeyboard::paint (juce::Graphics& g)
         const bool black = pc == 1 || pc == 3 || pc == 6 || pc == 8 || pc == 10;
         auto r = juce::Rectangle<float> (i * w, 6.0f, w, (float) getHeight() - 12.0f).reduced (1.5f, 0.0f);
         const bool held = shownHeld[(size_t) key];
-        g.setColour (held ? cat::Colours::accent : (black ? juce::Colour (0xff2a2d36) : juce::Colour (0xffe9ecf2)));
+        g.setColour (held ? cat::Colours::accent : (black ? juce::Colour (0xff142245) : juce::Colour (0xffede3cc)));
         g.fillRoundedRectangle (r, 4.0f);
         const auto kp = keyPitch (pm, key);
-        const auto ink = held ? juce::Colours::white : (black ? cat::Colours::text : juce::Colour (0xff23262e));
+        const auto ink = held ? juce::Colour (0xff1a1206) : (black ? cat::Colours::text : juce::Colour (0xff2a2210));
         g.setColour (ink);
         g.setFont (cat::catFont (11.0f, true));
         g.drawText (juce::MidiMessage::getMidiNoteName (key, true, true, 4), r.removeFromTop (18.0f), juce::Justification::centred);
@@ -249,7 +345,7 @@ void TuningKeyboard::paint (juce::Graphics& g)
         // what it really plays: the nearest normal note and the cents off it, then the Hz
         auto lower = r.removeFromBottom (r.getHeight() * 0.55f);
         const int cents = (int) std::lround (kp.bend * 100.0);
-        g.setColour (cents == 0 ? ink.withAlpha (0.6f) : (held ? juce::Colours::white : cat::Colours::accent));
+        g.setColour (cents == 0 ? ink.withAlpha (0.6f) : (held ? ink : (black ? cat::Colours::accent : juce::Colour (0xff8a5a10))));
         g.drawFittedText (juce::MidiMessage::getMidiNoteName (kp.note, true, false, 4), r.toNearestInt(), juce::Justification::centredBottom, 1);
         g.drawFittedText (cents == 0 ? juce::String ("0") : centsText (cents), lower.removeFromTop (14.0f).toNearestInt(), juce::Justification::centred, 1);
         g.setColour (ink.withAlpha (0.55f));
@@ -310,7 +406,8 @@ MicroCatEditor::MicroCatEditor (MicroCatProcessor& p) : processor (p)
     circle.onSelect = [this] { showTuning(); };
     addAndMakeVisible (circle);
 
-    nameBox.setTooltip ("The tuning's name (for saving)");
+    nameBox.setTooltip ("The tuning's name (Save as mine keeps it under this name)");
+    nameBox.setTextToShowWhenEmpty ("Name for Save as mine", cat::Colours::textDim);
     nameBox.onReturnKey = [this] { auto t = processor.getTuning(); t.name = nameBox.getText().trim().substring (0, 40); if (t.name.isNotEmpty()) edited (t); };
     centsBox.setInputRestrictions (10, "0123456789.-");
     centsBox.setJustification (juce::Justification::centred);
@@ -444,14 +541,86 @@ MicroCatEditor::MicroCatEditor (MicroCatProcessor& p) : processor (p)
         addAndMakeVisible (c);
     ownSoundToggle.setTooltip ("Micro-Cat plays the tuning itself, like an instrument (turn off to only send tuned MIDI to another synth)");
 
+    for (auto* t : { &catalogueTab, &instrumentTab })
+    {
+        t->setClickingTogglesState (true);
+        t->setRadioGroupId (708);
+        addAndMakeVisible (*t);
+    }
+    catalogueTab.onClick = [this] { showTab (0); };
+    instrumentTab.onClick = [this] { showTab (1); };
+    catalogueTab.setTooltip ("Every tuning: equal, just and historical, from around the world, and yours");
+    instrumentTab.setTooltip ("How Micro-Cat plays: its own sound, the root, MPE, live just intonation, MTS-ESP");
+
     userTunings = loadUserTunings();
     refreshList();
     showTuning();
+    showTab (0);
     resized();
-    startTimerHz (10);
+    startTimerHz (20);
 }
 
 MicroCatEditor::~MicroCatEditor() { stopTimer(); list.setModel (nullptr); }
+
+void MicroCatEditor::showTab (int t)
+{
+    tab = t;
+    catalogueTab.setToggleState (t == 0, juce::dontSendNotification);
+    instrumentTab.setToggleState (t == 1, juce::dontSendNotification);
+    search.setVisible (t == 0);
+    nameBox.setVisible (t == 0);
+    list.setVisible (t == 0);
+    for (auto* b : categoryButtons) b->setVisible (t == 0);
+    for (juce::Component* c : { (juce::Component*) &ownSoundToggle, (juce::Component*) &soundBox, (juce::Component*) &volumeSlider,
+                                (juce::Component*) &rootBox, (juce::Component*) &rootHz, (juce::Component*) &concertButton,
+                                (juce::Component*) &mapBox, (juce::Component*) &rangeBox, (juce::Component*) &voices,
+                                (juce::Component*) &configToggle, (juce::Component*) &justBox, (juce::Component*) &mtsToggle })
+        c->setVisible (t == 1);
+    mtsResetButton.setVisible (t == 1 && processor.mts.canReset());
+    repaint();
+}
+
+void MicroCatEditor::updateSounding()
+{
+    bool changed = false;
+    for (int k = 0; k < 128; ++k)
+    {
+        const bool h = processor.engine.held[(size_t) k].load();
+        if (h != shownHeld[(size_t) k])
+        {
+            shownHeld[(size_t) k] = h;
+            changed = true;
+            if (h) lastKey = k;
+        }
+    }
+    static uint32_t lastBends = 0;
+    const auto bends = (uint32_t) processor.engine.bendUpdates.load();
+    if (bends != lastBends) { lastBends = bends; changed = true; }    // morph / live just moved held notes
+    if (! changed) return;
+
+    soundingNow.clear();
+    const auto pm = processor.currentMap();
+    const double rootSemis = 69.0 + 12.0 * std::log2 (pm.rootHz / 440.0);
+    const double period = circle.getTuning().period();
+    std::vector<double> cents;
+    for (int k = 0; k < 128; ++k)
+    {
+        if (! shownHeld[(size_t) k]) continue;
+        bool valid = true;
+        const double semis = keySemis (pm, k, valid);
+        if (! valid) continue;
+        double c = std::fmod ((semis - rootSemis) * 100.0, period);
+        if (c < 0.0) c += period;
+        if (c > period - 0.01) c = 0.0;
+        soundingNow.push_back ({ k, semis, c });
+        cents.push_back (c);
+    }
+    double needle = -1.0;
+    for (auto& sn : soundingNow) if (sn.key == lastKey) needle = sn.cents;
+    if (needle < 0.0 && ! soundingNow.empty()) needle = soundingNow.back().cents;
+    circle.setSounding (std::move (cents), needle);
+    repaint (asideArea);
+}
 
 void MicroCatEditor::refreshList()
 {
@@ -558,7 +727,7 @@ void MicroCatEditor::showTuning()
     const bool canEdit = t.notesPerPeriod() > 1;
     for (auto* b : { &downButton, &upButton, &removeButton }) b->setEnabled (canEdit);
     centsBox.setEnabled (canEdit);
-    repaint (noteLabelArea);
+    repaint (asideArea);
 }
 
 void MicroCatEditor::timerCallback()
@@ -574,10 +743,10 @@ void MicroCatEditor::timerCallback()
     }
     const auto ms = processor.mts.statusText();
     const bool showReset = processor.mts.canReset();
-    if (ms != mtsStatus || showReset != mtsResetButton.isVisible())
+    if (ms != mtsStatus || (showReset && tab == 1) != mtsResetButton.isVisible())
     {
         mtsStatus = ms;
-        mtsResetButton.setVisible (showReset);
+        mtsResetButton.setVisible (showReset && tab == 1);
         repaint (mtsStatusArea);
     }
     if (processor.tuningVersion.load() != shownVersion)
@@ -585,46 +754,138 @@ void MicroCatEditor::timerCallback()
         shownVersion = processor.tuningVersion.load();
         showTuning();
         refreshList();
+        shownHeld.fill (false);       // re-reads the sounding notes against the new tuning
+        repaint (asideArea);
     }
+    updateSounding();
 }
 
 void MicroCatEditor::paint (juce::Graphics& g)
 {
     cat::paintBackdrop (g, getLocalBounds());
-    cat::CatLookAndFeel::drawLogo (g, logoArea.toFloat(), "MICRO", "CAT");
-    cat::CatLookAndFeel::drawGlassPanel (g, list.getBounds().expanded (4).toFloat(), 8.0f);
-    cat::CatLookAndFeel::drawGlassPanel (g, settingsArea.toFloat(), 10.0f);
-
-    const auto t = circle.getTuning();
-    g.setColour (cat::Colours::textDim);
-    g.setFont (cat::catFont (12.5f, true));
-    if (t.notesPerPeriod() > 1)
+    const auto mono = [] (float h) { return juce::Font (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), h, juce::Font::plain)); };
+    const auto rule = [&] (int y, juce::Rectangle<int> span)
     {
-        const double c = t.degreeCents (circle.selected);
-        const double off = c - 100.0 * std::round (c / 100.0);
-        g.drawText ("NOTE " + juce::String (circle.selected + 1) + "  (" + centsText (off) + " from 12-EDO)", noteLabelArea, juce::Justification::centredLeft);
-    }
-    else g.drawText ("ONE STEP, REPEATING", noteLabelArea, juce::Justification::centredLeft);
+        g.setColour (gold.withAlpha (0.4f));
+        g.fillRect (span.getX(), y, span.getWidth(), 1);
+    };
 
-    // settings: titles
-    auto s = settingsArea.reduced (14, 10);
-    g.setColour (cat::Colours::text);
-    g.setFont (cat::catFont (13.0f, true));
-    g.drawText ("PLAYING", s.removeFromTop (20), juce::Justification::centredLeft);
-    g.setColour (cat::Colours::textDim);
-    g.setFont (cat::catFont (11.5f));
-    g.drawText ("Voices", voices.getBounds().withX (settingsArea.getX() + 14).withWidth (60), juce::Justification::centredLeft);
+    // --- the aside: the title, the tuning, the read-out ---
+    auto a = asideArea;
+    g.setColour (gold);
+    g.setFont (cat::displayFont (38.0f));
+    g.drawText (juce::String::fromUTF8 ("Micro\xc2\xb7" "Cat"), a.removeFromTop (44), juce::Justification::centredLeft);
+    g.setColour (ivory);
+    g.setFont (cat::catFont (16.0f).italicised());
+    g.drawText ("Observatory of tunings", a.removeFromTop (22), juce::Justification::centredLeft);
+    a.removeFromTop (46);                                        // the preset bar
+    const auto t = circle.getTuning();
+    rule (a.getY(), a);
+    a.removeFromTop (8);
+    g.setColour (ivory);
+    g.setFont (cat::catFont (24.0f, true));
+    g.drawFittedText (t.name, a.removeFromTop (30), juce::Justification::centredLeft, 1);
+    g.setColour (parchment);
+    g.setFont (cat::catFont (14.0f).italicised());
+    juce::String sub = t.description.isNotEmpty() ? t.description : t.category;
+    g.drawFittedText (juce::String (t.notesPerPeriod()) + " notes  -  " + sub, a.removeFromTop (38), juce::Justification::topLeft, 2);
+    a.removeFromTop (4);
+    rule (a.getY(), a);
+
+    // NOW SOUNDING: the microtone, big
+    auto ro = readoutArea;
+    g.setColour (parchment);
+    g.setFont (cat::catFont (12.0f, true));
+    g.drawText (soundingNow.empty() ? "CHOSEN NOTE" : "NOW SOUNDING", ro.removeFromTop (18), juce::Justification::centredLeft);
+    const auto pm = processor.currentMap();
+    const double rootSemis = 69.0 + 12.0 * std::log2 (pm.rootHz / 440.0);
+    double semis = 0.0, cents = 0.0;
+    int key = -1;
+    if (! soundingNow.empty())
+    {
+        const Sounding* sn = &soundingNow.back();
+        for (auto& x : soundingNow) if (x.key == lastKey) sn = &x;
+        semis = sn->semis; cents = sn->cents; key = sn->key;
+    }
+    else if (t.notesPerPeriod() > 0)
+    {
+        cents = t.degreeCents (juce::jlimit (0, t.notesPerPeriod() - 1, circle.selected));
+        semis = rootSemis + cents / 100.0;
+    }
+    g.setColour (soundingNow.empty() ? ivory : juce::Colour (0xfffff2c8));
+    g.setFont (cat::displayFont (40.0f));
+    g.drawText (microName (semis, ! soundingNow.empty()), ro.removeFromTop (46), juce::Justification::centredLeft);
+    // the step it is, its cents, how far from 12-EDO, Hz, the ratio
+    int step = -1;
+    for (int d = 0; d <= t.notesPerPeriod(); ++d)
+        if (std::abs (t.degreeCents (d) - cents) < 0.6) { step = d % juce::jmax (1, t.notesPerPeriod()); break; }
+    const double off = (semis - std::round (semis)) * 100.0;
+    const double hz = 440.0 * std::pow (2.0, (semis - 69.0) / 12.0);
+    const auto ratio = ratioNear (cents);
+    struct Row { const char* k; juce::String v; };
+    const Row rows[] = {
+        { "Step", step >= 0 ? juce::String (step + 1) + " of " + juce::String (t.notesPerPeriod()) : juce::String ("between steps (morph / just)") },
+        { "Above the root", juce::String (cents, 2) + juce::String::fromUTF8 (" \xc2\xa2") },
+        { "From 12-EDO", (off >= 0 ? "+" : juce::String::fromUTF8 ("\xe2\x88\x92")) + juce::String (std::abs (off), 2) + juce::String::fromUTF8 (" \xc2\xa2") },
+        { "Frequency", juce::String (hz, 2) + " Hz" },
+        { "Pure ratio", ratio.isNotEmpty() ? juce::String::fromUTF8 ("\xe2\x89\x88 ") + ratio : juce::String ("-") },
+        { "Root", juce::MidiMessage::getMidiNoteName (pm.rootKey, true, true, 4) + " = " + juce::String (pm.rootHz, 2) + " Hz" },
+    };
+    auto rr = rowsArea;
+    const int rh = rr.getHeight() / (int) std::size (rows);
+    for (auto& row : rows)
+    {
+        auto line = rr.removeFromTop (rh);
+        g.setColour (parchment);
+        g.setFont (cat::catFont (15.0f));
+        g.drawText (row.k, line, juce::Justification::centredLeft);
+        g.setColour (ivory);
+        g.setFont (mono (13.5f));
+        g.drawText (row.v, line, juce::Justification::centredRight);
+    }
+    // every note held, when it is a chord
+    if (soundingNow.size() > 1)
+    {
+        juce::String chord;
+        for (auto& x : soundingNow) chord << microName (x.semis, true) << "    ";
+        g.setColour (juce::Colour (0xfffff2c8).withAlpha (0.8f));
+        g.setFont (mono (12.5f));
+        g.drawFittedText (chord.trim(), ro.removeFromTop (18), juce::Justification::centredLeft, 1, 0.7f);
+    }
+
+    rule (noteLabelArea.getY() - 8, asideArea);
+    g.setColour (parchment);
+    g.setFont (cat::catFont (14.0f));
+    if (t.notesPerPeriod() > 1)
+        g.drawText ("Note " + juce::String (circle.selected + 1), noteLabelArea, juce::Justification::centredLeft);
+    else
+        g.drawText ("One step", noteLabelArea, juce::Justification::centredLeft);
     g.drawText ("Morph to", morphLabelArea, juce::Justification::centredLeft);
-    g.drawFittedText ("IN CUBASE: Micro-Cat on a MIDI track, its MIDI Out to an MPE synth (Vital, Surge XT, Serum, Pigments, "
-                      "Retrologue in MPE mode) with the same Bend range. Or MTS-ESP: no routing at all.\n"
-                      "GLIDE-, SING-, TALK-CAT follow over Cat Link - don't also send them Micro-Cat's MIDI.",
-                      helpArea, juce::Justification::topLeft, 14);
-    g.setColour (processor.mts.state() == micro::MtsMaster::State::Connected ? cat::Colours::accent : cat::Colours::textDim);
-    g.setFont (cat::catFont (11.0f));
-    g.drawFittedText (mtsStatus, mtsStatusArea, juce::Justification::topLeft, 2);
+
+    // --- the right column ---
+    auto panel = rightArea.withTrimmedTop (catalogueTab.getBottom() - rightArea.getY() + 6).toFloat();
+    g.setColour (juce::Colour (0xcc0a1430));
+    g.fillRoundedRectangle (panel, 10.0f);
+    g.setColour (brassMid.withAlpha (0.6f));
+    g.drawRoundedRectangle (panel.reduced (0.5f), 10.0f, 1.0f);
+    if (tab == 1)
+    {
+        g.setColour (parchment);
+        g.setFont (cat::catFont (13.0f));
+        g.drawText ("Voices", voices.getBounds().withX (settingsArea.getX()).withWidth (60), juce::Justification::centredLeft);
+        g.setFont (cat::catFont (11.5f));
+        g.setColour (processor.mts.state() == micro::MtsMaster::State::Connected ? gold : parchment);
+        g.drawFittedText (mtsStatus, mtsStatusArea, juce::Justification::topLeft, 2);
+        g.setColour (parchment.withAlpha (0.8f));
+        g.drawFittedText ("IN CUBASE: Micro-Cat on a MIDI track, its MIDI Out to an MPE synth (Vital, Surge XT, Serum, Pigments, "
+                          "Retrologue in MPE mode) with the same Bend range. Or MTS-ESP: no routing at all. "
+                          "Glide-, Sing-, Talk-Cat follow over Cat Link - don't also send them Micro-Cat's MIDI.",
+                          helpArea, juce::Justification::topLeft, 12);
+    }
     if (status.isNotEmpty())
     {
-        g.setColour (cat::Colours::accent);
+        g.setColour (gold);
+        g.setFont (cat::catFont (12.5f));
         g.drawText (status, infoArea, juce::Justification::centredLeft, true);
     }
 }
@@ -632,80 +893,104 @@ void MicroCatEditor::paint (juce::Graphics& g)
 void MicroCatEditor::resized()
 {
     if (categoryButtons.size() < 5) return;   // still being built
-    auto r = getLocalBounds().reduced (14, 10);
-    auto top = r.removeFromTop (40);
-    logoArea = top.removeFromLeft (170);
-    top.removeFromLeft (10);
-    presetBar.setBounds (top.removeFromLeft (470));
-    bypassToggle.setBounds (top.removeFromRight (110));
-
-    r.removeFromTop (10);
+    auto r = getLocalBounds().reduced (24, 18);
     infoArea = r.removeFromBottom (18);
     keyboard.setBounds (r.removeFromBottom (112));
-    r.removeFromBottom (10);
+    r.removeFromBottom (12);
 
-    auto left = r.removeFromLeft (270);
-    search.setBounds (left.removeFromTop (30));
-    left.removeFromTop (6);
-    auto cats = left.removeFromTop (28);
-    const int cw = cats.getWidth() / 5;
-    for (auto* b : categoryButtons) b->setBounds (cats.removeFromLeft (cw).reduced (2, 0));
-    left.removeFromTop (10);
-    list.setBounds (left.reduced (4));
-    r.removeFromLeft (14);
+    // the astrolabe
+    const int side = juce::jmin (r.getHeight(), 620);
+    circle.setBounds (r.removeFromLeft (side).withSizeKeepingCentre (side, side));
+    r.removeFromLeft (18);
 
-    settingsArea = r.removeFromRight (300);
-    r.removeFromRight (14);
-    auto s = settingsArea.reduced (14, 10);
-    s.removeFromTop (24);
+    // the right column: Catalogue | Instrument
+    rightArea = r.removeFromRight (270);
+    r.removeFromRight (20);
     {
+        auto rc = rightArea;
+        auto top = rc.removeFromTop (30);
+        bypassToggle.setBounds (top.removeFromRight (90));
+        rc.removeFromTop (8);
+        auto tabs = rc.removeFromTop (32);
+        catalogueTab.setBounds (tabs.removeFromLeft (tabs.getWidth() / 2).reduced (2, 0));
+        instrumentTab.setBounds (tabs.reduced (2, 0));
+        rc.removeFromTop (6);
+        auto in = rc.reduced (10, 10);
+        // catalogue
+        auto cl = in;
+        search.setBounds (cl.removeFromTop (30));
+        cl.removeFromTop (6);
+        auto cats = cl.removeFromTop (26);
+        const int cw = cats.getWidth() / 5;
+        for (auto* b : categoryButtons) b->setBounds (cats.removeFromLeft (cw).reduced (1, 0));
+        cl.removeFromTop (8);
+        nameBox.setBounds (cl.removeFromBottom (28));
+        cl.removeFromBottom (8);
+        list.setBounds (cl);
+        // instrument
+        settingsArea = in;
+        auto s = in;
         auto snd = s.removeFromTop (30);
-        ownSoundToggle.setBounds (snd.removeFromLeft (104));
+        ownSoundToggle.setBounds (snd.removeFromLeft (96));
         snd.removeFromLeft (6);
         soundBox.setBounds (snd);
-        s.removeFromTop (6);
+        s.removeFromTop (4);
         volumeSlider.setBounds (s.removeFromTop (32));
-        s.removeFromTop (12);
+        s.removeFromTop (8);
+        rootBox.setBounds (s.removeFromTop (28)); s.removeFromTop (5);
+        auto hz = s.removeFromTop (28);
+        concertButton.setBounds (hz.removeFromRight (96)); hz.removeFromRight (6);
+        rootHz.setBounds (hz); s.removeFromTop (5);
+        mapBox.setBounds (s.removeFromTop (28)); s.removeFromTop (5);
+        rangeBox.setBounds (s.removeFromTop (28)); s.removeFromTop (5);
+        auto vr = s.removeFromTop (28);
+        vr.removeFromLeft (60);
+        voices.setBounds (vr.removeFromLeft (130)); s.removeFromTop (5);
+        configToggle.setBounds (s.removeFromTop (28)); s.removeFromTop (5);
+        justBox.setBounds (s.removeFromTop (28)); s.removeFromTop (8);
+        auto mr = s.removeFromTop (28);
+        mtsToggle.setBounds (mr.removeFromLeft (140));
+        mr.removeFromLeft (6);
+        mtsResetButton.setBounds (mr);
+        mtsStatusArea = s.removeFromTop (30);
+        s.removeFromTop (4);
+        helpArea = s;
     }
-    rootBox.setBounds (s.removeFromTop (30)); s.removeFromTop (6);
-    auto hz = s.removeFromTop (30);
-    concertButton.setBounds (hz.removeFromRight (104)); hz.removeFromRight (6);
-    rootHz.setBounds (hz); s.removeFromTop (6);
-    mapBox.setBounds (s.removeFromTop (30)); s.removeFromTop (6);
-    rangeBox.setBounds (s.removeFromTop (30)); s.removeFromTop (6);
-    auto vr = s.removeFromTop (30);
-    vr.removeFromLeft (60);
-    voices.setBounds (vr.removeFromLeft (130)); s.removeFromTop (6);
-    configToggle.setBounds (s.removeFromTop (30)); s.removeFromTop (8);
-    justBox.setBounds (s.removeFromTop (30)); s.removeFromTop (6);
-    auto br = s.removeFromTop (30);
-    morphLabelArea = br.removeFromLeft (60);
-    tuningBBox.setBounds (br.removeFromLeft (118)); br.removeFromLeft (6);
-    morph.setBounds (br);
-    s.removeFromTop (8);
-    auto mr = s.removeFromTop (30);
-    mtsToggle.setBounds (mr.removeFromLeft (150));
-    mr.removeFromLeft (6);
-    mtsResetButton.setBounds (mr);
-    mtsStatusArea = s.removeFromTop (30);
-    s.removeFromTop (6);
-    helpArea = s;
 
-    // the middle: the circle, then the selected note and the tuning's name
-    auto mid = r;
-    auto nameRow = mid.removeFromBottom (32);
-    mid.removeFromBottom (6);
-    auto noteRow = mid.removeFromBottom (32);
-    mid.removeFromBottom (8);
-    circle.setBounds (mid);
-    noteLabelArea = noteRow.removeFromLeft (170);
-    centsBox.setBounds (noteRow.removeFromLeft (74)); noteRow.removeFromLeft (4);
-    downButton.setBounds (noteRow.removeFromLeft (36)); noteRow.removeFromLeft (4);
-    upButton.setBounds (noteRow.removeFromLeft (36)); noteRow.removeFromLeft (8);
-    const int nb = (noteRow.getWidth() - 6) / 2;
-    addButton.setBounds (noteRow.removeFromLeft (nb)); noteRow.removeFromLeft (6);
-    removeButton.setBounds (noteRow);
-    nameBox.setBounds (nameRow.removeFromLeft (170)); nameRow.removeFromLeft (6);
-    const int bw = (nameRow.getWidth() - 18) / 4;
-    for (auto* b : { &saveButton, &newButton, &loadButton, &exportButton }) { b->setBounds (nameRow.removeFromLeft (bw)); nameRow.removeFromLeft (6); }
+    // the aside
+    asideArea = r;
+    auto a = r;
+    a.removeFromTop (66);                                         // title
+    presetBar.setBounds (a.removeFromTop (34));
+    a.removeFromTop (12);
+    a.removeFromTop (8 + 30 + 38 + 4);                            // the tuning's name and description
+    a.removeFromTop (8);
+    readoutArea = a.removeFromTop (84);
+    a.removeFromTop (2);
+    rowsArea = a.removeFromTop (120);
+
+    // bottom of the aside: the note editor, morph, the four buttons, the name
+    auto b = r;
+    auto buttons2 = b.removeFromBottom (36);
+    b.removeFromBottom (8);
+    auto buttons1 = b.removeFromBottom (36);
+    b.removeFromBottom (10);
+    auto morphRow = b.removeFromBottom (30);
+    b.removeFromBottom (8);
+    auto noteRow = b.removeFromBottom (30);
+    b.removeFromBottom (6);
+    auto addRow = b.removeFromBottom (28);
+    noteLabelArea = noteRow.removeFromLeft (64);
+    centsBox.setBounds (noteRow.removeFromLeft (noteRow.getWidth() - 80)); noteRow.removeFromLeft (6);
+    downButton.setBounds (noteRow.removeFromLeft (35)); noteRow.removeFromLeft (4);
+    upButton.setBounds (noteRow);
+    addButton.setBounds (addRow.removeFromLeft (addRow.getWidth() / 2 - 3)); addRow.removeFromLeft (6);
+    removeButton.setBounds (addRow);
+    morphLabelArea = morphRow.removeFromLeft (64);
+    tuningBBox.setBounds (morphRow.removeFromLeft (morphRow.getWidth() / 2)); morphRow.removeFromLeft (6);
+    morph.setBounds (morphRow);
+    saveButton.setBounds (buttons1.removeFromLeft (buttons1.getWidth() / 2 - 4)); buttons1.removeFromLeft (8);
+    newButton.setBounds (buttons1);
+    loadButton.setBounds (buttons2.removeFromLeft (buttons2.getWidth() / 2 - 4)); buttons2.removeFromLeft (8);
+    exportButton.setBounds (buttons2);
 }

@@ -31,3 +31,5 @@ What is inside (folder VST3):
     Phase-Cat  - drifting, phasing rhythms (Steve Reich, Risset) for drums
                  (Glide/Sing/Talk-Cat follow it over Cat Link; MTS-ESP synths too, with
                  the free MTS-ESP library the installer offers)
+    Hum-Cat    - sing or hum a tune: get the melody, chords, bass and drums as MIDI
+                 (put it on the audio track with your microphone, or drop a recording on it)

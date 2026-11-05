@@ -1804,6 +1804,24 @@ void testMicroCat()
     micro->releaseResources();
 }
 
+/** Hum-Cat: loads as a VST3 audio effect that sends MIDI, lets the voice through, and has its styles as programs. */
+void testHumCat()
+{
+    std::cout << "\n== Hum-Cat ==" << std::endl;
+    auto hum = loadPlugin (HUMCAT_VST3);
+    if (hum == nullptr) { ++failures; return; }
+    check (hum->producesMidi() && hum->getTotalNumInputChannels() >= 1, "Hum-Cat sits on an audio track (input) and sends MIDI");
+    check (hum->getNumPrograms() == 7 && hum->getProgramName (0) == "Pop Song", "Hum-Cat has its styles as programs");
+    hum->prepareToPlay (sampleRate, blockSize);
+    juce::AudioBuffer<float> audio (juce::jmax (2, hum->getTotalNumOutputChannels()), blockSize);
+    for (int i = 0; i < blockSize; ++i) audio.setSample (0, i, 0.3f * std::sin (i * 0.05f));
+    audio.copyFrom (1, 0, audio, 0, 0, blockSize);
+    juce::MidiBuffer midi;
+    hum->processBlock (audio, midi);
+    check (std::abs (audio.getSample (0, 100) - 0.3f * std::sin (100 * 0.05f)) < 1e-4f && midi.isEmpty(), "Hum-Cat: the voice passes through, no MIDI before it heard anything");
+    hum->releaseResources();
+}
+
 int main()
 {
     juce::ScopedJuceInitialiser_GUI juceInit;
@@ -1825,6 +1843,7 @@ int main()
     testCatLink2();
     testEchoCat();
     testMicroCat();
+    testHumCat();
 
     std::cout << "\n" << (failures == 0 ? "ALL TESTS PASSED" : juce::String (failures) + " TEST(S) FAILED") << std::endl;
     return failures == 0 ? 0 : 1;

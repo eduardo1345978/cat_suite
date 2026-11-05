@@ -132,6 +132,13 @@ namespace
             t.button = ButtonStyle::Glow; t.backdrop = Backdrop::Lab; t.corner = 6.0f;
             font (t, RajdhaniBold_ttf, RajdhaniBold_ttfSize, 1.12f);
         }
+        else if (p.startsWith ("hum"))        // vocal booth: acoustic foam, a warm tally light
+        {
+            t = make ("Vocal Booth", 0xff17141a, 0xff1f1b22, 0xff27222b, 0xff302a35, 0xff3b3440, 0xfff3e9e2, 0xffa89aa3, 0xffff6f4f);
+            t.knob = KnobStyle::Hardware; t.knobBody = juce::Colour (0xff221e26); t.knobRing = juce::Colour (0xff3b3440); t.knobPointer = t.accent; t.knobGlow = true;
+            t.button = ButtonStyle::Glow; t.backdrop = Backdrop::Foam; t.corner = 12.0f;
+            font (t, SyneExtraBold_ttf, SyneExtraBold_ttfSize, 1.0f);
+        }
         return t;
     }
 
@@ -303,6 +310,38 @@ void paintBackdrop (juce::Graphics& g, juce::Rectangle<int> bounds)
             g.setColour (juce::Colour (0x0cb88cff));
             for (float x = b.getX(); x < b.getRight(); x += 24.0f) g.drawVerticalLine ((int) x, b.getY(), b.getBottom());
             break;
+        case Backdrop::Foam:
+        {
+            // acoustic foam: a checkerboard of pyramid tiles, lit from the top
+            g.fillAll (juce::Colour (0xff141116));
+            const float tile = 46.0f;
+            int row = 0;
+            for (float y = b.getY(); y < b.getBottom(); y += tile, ++row)
+            {
+                int col = 0;
+                for (float x = b.getX(); x < b.getRight(); x += tile, ++col)
+                {
+                    const juce::Point<float> c (x + tile * 0.5f, y + tile * 0.5f);
+                    const juce::Point<float> tl (x, y), tr (x + tile, y), br (x + tile, y + tile), bl (x, y + tile);
+                    const bool turn = ((row + col) & 1) != 0;
+                    auto face = [&] (juce::Point<float> a, juce::Point<float> e, float shade)
+                    {
+                        juce::Path tri; tri.addTriangle (a, e, c);
+                        g.setColour (juce::Colour (0xff221d25).withMultipliedBrightness (shade));
+                        g.fillPath (tri);
+                    };
+                    face (tl, tr, turn ? 1.35f : 1.15f);
+                    face (tr, br, turn ? 0.75f : 0.95f);
+                    face (br, bl, turn ? 0.55f : 0.65f);
+                    face (bl, tl, turn ? 1.05f : 1.25f);
+                }
+            }
+            g.setGradientFill (juce::ColourGradient (juce::Colour (0x22ff6f4f), b.getCentreX(), b.getY(), juce::Colour (0x00ff6f4f), b.getCentreX(), b.getY() + b.getHeight() * 0.7f, true));
+            g.fillRect (b);
+            g.setGradientFill (juce::ColourGradient (juce::Colour (0x00000000), 0.0f, b.getY() + b.getHeight() * 0.4f, juce::Colour (0x88000000), 0.0f, b.getBottom(), false));
+            g.fillRect (b);
+            break;
+        }
     }
 }
 } // namespace cat
