@@ -132,6 +132,13 @@ namespace
             t.button = ButtonStyle::Glow; t.backdrop = Backdrop::Lab; t.corner = 6.0f;
             font (t, RajdhaniBold_ttf, RajdhaniBold_ttfSize, 1.12f);
         }
+        else if (p.startsWith ("glitch"))     // a broken screen: black, acid green, magenta errors
+        {
+            t = make ("Broken Screen", 0xff050607, 0xff0b0d10, 0xff12151a, 0xff1a1e24, 0xff2a313a, 0xffd9ffe9, 0xff6f9a84, 0xff3dff9a);
+            t.knob = KnobStyle::Hardware; t.knobBody = juce::Colour (0xff0d1013); t.knobRing = juce::Colour (0xff1f2a26); t.knobPointer = t.accent; t.knobGlow = true;
+            t.button = ButtonStyle::Glow; t.backdrop = Backdrop::Glitch; t.corner = 2.0f;
+            font (t, VT323Regular_ttf, VT323Regular_ttfSize, 1.3f);
+        }
         else if (p.startsWith ("hum"))        // vocal booth: acoustic foam, a warm tally light
         {
             t = make ("Vocal Booth", 0xff17141a, 0xff1f1b22, 0xff27222b, 0xff302a35, 0xff3b3440, 0xfff3e9e2, 0xffa89aa3, 0xffff6f4f);
@@ -340,6 +347,25 @@ void paintBackdrop (juce::Graphics& g, juce::Rectangle<int> bounds)
             g.fillRect (b);
             g.setGradientFill (juce::ColourGradient (juce::Colour (0x00000000), 0.0f, b.getY() + b.getHeight() * 0.4f, juce::Colour (0x88000000), 0.0f, b.getBottom(), false));
             g.fillRect (b);
+            break;
+        }
+        case Backdrop::Glitch:
+        {
+            g.fillAll (juce::Colour (0xff050607));
+            g.setColour (juce::Colour (0x0d3dff9a));
+            for (float y = b.getY() + 4.0f; y < b.getBottom(); y += 8.0f)
+                for (float x = b.getX() + 4.0f; x < b.getRight(); x += 8.0f)
+                    g.fillRect (x, y, 1.0f, 1.0f);
+            juce::Random rng (77);
+            for (int i = 0; i < 40; ++i)          // dead pixels and stray blocks
+            {
+                const juce::Colour c = rng.nextInt (3) == 0 ? juce::Colour (0x40ff2bd6) : rng.nextInt (2) == 0 ? juce::Colour (0x303dff9a) : juce::Colour (0x2833d6ff);
+                g.setColour (c);
+                const float w = (float) (2 + rng.nextInt (rng.nextInt (6) == 0 ? 60 : 8)), h = (float) (2 + rng.nextInt (4));
+                g.fillRect (b.getX() + rng.nextFloat() * b.getWidth(), b.getY() + rng.nextFloat() * b.getHeight(), w, h);
+            }
+            g.setColour (juce::Colour (0x30000000));
+            for (int y = bounds.getY(); y < bounds.getBottom(); y += 3) g.fillRect (bounds.getX(), y, bounds.getWidth(), 1);
             break;
         }
     }

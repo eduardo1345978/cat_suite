@@ -33,3 +33,5 @@ What is inside (folder VST3):
                  the free MTS-ESP library the installer offers)
     Hum-Cat    - sing or hum a tune: get the melody, chords, bass and drums as MIDI
                  (put it on the audio track with your microphone, or drop a recording on it)
+    Glitch-Cat - every note is a swarm: one MADNESS knob from a warm wobbly pad to rolls,
+                 stutters, reversed bits and broken rhythms (an instrument, with its own beat)

@@ -1822,6 +1822,31 @@ void testHumCat()
     hum->releaseResources();
 }
 
+/** Glitch-Cat: loads as a VST3 instrument, a note makes sound, it has its presets. */
+void testGlitchCat()
+{
+    std::cout << "\n== Glitch-Cat ==" << std::endl;
+    auto gl = loadPlugin (GLITCHCAT_VST3);
+    if (gl == nullptr) { ++failures; return; }
+    check (gl->acceptsMidi() && gl->getTotalNumOutputChannels() == 2, "Glitch-Cat is an instrument (MIDI in, stereo out)");
+    check (gl->getNumPrograms() == 12 && gl->getProgramName (0) == "Firefly Dream", "Glitch-Cat has its 12 presets");
+    gl->prepareToPlay (sampleRate, blockSize);
+    juce::AudioBuffer<float> audio (juce::jmax (2, gl->getTotalNumOutputChannels()), blockSize);
+    float peakLevel = 0.0f;
+    bool finite = true;
+    for (int b = 0; b < 200; ++b)
+    {
+        juce::MidiBuffer midi;
+        if (b == 0) midi.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+        audio.clear();
+        gl->processBlock (audio, midi);
+        peakLevel = juce::jmax (peakLevel, audio.getMagnitude (0, blockSize));
+        for (int i = 0; i < blockSize; ++i) finite &= std::isfinite (audio.getSample (0, i));
+    }
+    check (finite && peakLevel > 0.02f && peakLevel <= 1.0f, "Glitch-Cat: a note makes the swarm sound");
+    gl->releaseResources();
+}
+
 int main()
 {
     juce::ScopedJuceInitialiser_GUI juceInit;
@@ -1844,6 +1869,7 @@ int main()
     testEchoCat();
     testMicroCat();
     testHumCat();
+    testGlitchCat();
 
     std::cout << "\n" << (failures == 0 ? "ALL TESTS PASSED" : juce::String (failures) + " TEST(S) FAILED") << std::endl;
     return failures == 0 ? 0 : 1;
