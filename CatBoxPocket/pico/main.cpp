@@ -19,6 +19,8 @@
 #include "../engine/pocket.h"
 #include <cstring>
 #include <cmath>
+#include <algorithm>
+#include <initializer_list>
 
 using namespace pocket;
 
