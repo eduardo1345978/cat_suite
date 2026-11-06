@@ -68,6 +68,9 @@ private:
     echocat::Settings readSettings (double bpm) const;
     float p (const char* id) const;
 
+    std::array<std::atomic<float>*, echocat::numSteps> stepRefs {};
+    std::array<std::atomic<bool>, 128> linkChord {};     // Chord-Cat's chord now (Cat Link)
+    juce::MidiBuffer linkMidi;
     std::map<std::string, std::atomic<float>*> refs;
     cat::SafetyLimiter limiter;
     std::vector<float> monoRight;

@@ -20,11 +20,13 @@ target_sources(CatOcean PRIVATE
     Source/OceanEngine.cpp
     Source/YouTubeChat.cpp
     Source/Streamer.cpp
+    Source/OceanSecret.cpp
     Source/OceanTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatSounds.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/Composer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/SongRenderer.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatLookAndFeel.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatLookAndFeel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatTheme.cpp)
 
 # the text for the stream's YouTube description (the app copies it to the clipboard)
 juce_add_binary_data(CatOceanData SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../packaging/Cat-Ocean-YouTube-Description.txt)
@@ -43,6 +45,7 @@ target_compile_definitions(CatOcean PRIVATE
 
 target_link_libraries(CatOcean
     PRIVATE
+        cat_fonts
         CatOceanData
         juce::juce_audio_utils
         juce::juce_audio_formats

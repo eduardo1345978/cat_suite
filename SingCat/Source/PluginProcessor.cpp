@@ -268,7 +268,8 @@ SingCatProcessor::SingCatProcessor()
         cat::LinkClient::Caps caps;
         caps.receiveChords = true;
         caps.receiveChordsText = "Sing Chord-Cat's chords";
-        presetManager.enableLink (apvts, caps);
+        caps.receiveTuning = true;
+        engine.link = &presetManager.enableLink (apvts, caps);
     }
     for (int i = 0; i < numParams; ++i)
     {

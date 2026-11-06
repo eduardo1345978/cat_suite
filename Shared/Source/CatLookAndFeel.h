@@ -1,26 +1,27 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include "CatTheme.h"
 
 namespace cat
 {
 namespace Colours
 {
-    // Minimal, near-monochrome palette: flat dark surfaces, one soft blue accent.
-    inline const juce::Colour background  { 0xff0f1013 };
-    inline const juce::Colour panel       { 0xff15161a };
-    inline const juce::Colour panelLight  { 0xff1b1c21 };
-    inline const juce::Colour raised      { 0xff24262c };
-    inline const juce::Colour outline     { 0xff2a2c33 };
-    inline const juce::Colour text        { 0xffe4e6ea };
-    inline const juce::Colour textDim     { 0xff7a7e88 };
-    inline const juce::Colour accent      { 0xff8fa3f0 };
-    inline const juce::Colour blue        { 0xff7f93c9 };
-    inline const juce::Colour purple      { 0xff9a88c4 };
-    inline const juce::Colour red         { 0xffc27a78 };
-    inline const juce::Colour teal        { 0xff6fa3a8 };
-    inline const juce::Colour green       { 0xff7fb393 };
-    inline const juce::Colour slate       { 0xff8a95b0 };
+    // The shared colours: Graphite by default; each plug-in sets its own (CatTheme.h) before its window opens.
+    inline juce::Colour background  { 0xff0f1013 };
+    inline juce::Colour panel       { 0xff15161a };
+    inline juce::Colour panelLight  { 0xff1b1c21 };
+    inline juce::Colour raised      { 0xff24262c };
+    inline juce::Colour outline     { 0xff2a2c33 };
+    inline juce::Colour text        { 0xffe4e6ea };
+    inline juce::Colour textDim     { 0xff7a7e88 };
+    inline juce::Colour accent      { 0xff8fa3f0 };
+    inline juce::Colour blue        { 0xff7f93c9 };
+    inline juce::Colour purple      { 0xff9a88c4 };
+    inline juce::Colour red         { 0xffc27a78 };
+    inline juce::Colour teal        { 0xff6fa3a8 };
+    inline juce::Colour green       { 0xff7fb393 };
+    inline juce::Colour slate       { 0xff8a95b0 };
 
     /** Palette used for chord pads / layers / voices. */
     juce::Colour palette (int index);
@@ -50,6 +51,9 @@ public:
     void drawButtonText (juce::Graphics&, juce::TextButton&, bool isMouseOverButton, bool isButtonDown) override;
     juce::Font getTextButtonFont (juce::TextButton&, int buttonHeight) override;
 
+    /** A combo box off every screen (window larger than the display) opens its menu inside the window
+        (JUCE would crash looking up a display for it). */
+    juce::PopupMenu::Options getOptionsForComboBoxPopupMenu (juce::ComboBox&, juce::Label&) override;
     void drawComboBox (juce::Graphics&, int width, int height, bool isButtonDown, int buttonX, int buttonY,
                        int buttonW, int buttonH, juce::ComboBox&) override;
     juce::Font getComboBoxFont (juce::ComboBox&) override;

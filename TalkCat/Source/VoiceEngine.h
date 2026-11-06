@@ -15,6 +15,8 @@
     3 diatonic harmony voices. After the voices: tone (low cut, presence, air), compressor,
     saturation, tempo delay and reverb.
 */
+namespace cat { class LinkClient; }
+
 namespace talkcat
 {
 constexpr int numGroups = 2;          // 0 = score, 1 = live
@@ -94,6 +96,8 @@ struct NoteEvent
 class Engine
 {
 public:
+    /** Cat Link: plays in Micro-Cat's tuning when linked (set by the processor; may be null). */
+    const cat::LinkClient* link = nullptr;
     Engine();
     void prepare (double sampleRate, int maxBlock);
     void setSettings (const Settings&);

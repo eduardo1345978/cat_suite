@@ -28,11 +28,11 @@ then copy changed files to the PC (D:\Projekty\vst_plugin) and run build_and_ins
 - [ ] Discord bot (webhook): when live, rare fish & new species, daily summary, Super Chats / members
 
 ## 3. Fixes
-- [ ] Cat Hub: the Cats' windows (tabs) don't resize with the Hub window -> scale them to fit
-- [ ] Crashes: hunt them (stress tests, Hub + Muse-Cat PresetBar menu under no display)
+- [x] Cat Hub: the Cats' windows (tabs) don't resize with the Hub window -> scale them to fit
+- [x] Crashes: hunt them (stress tests, Hub + Muse-Cat PresetBar menu under no display)
 
 ## 4. Echo-Cat
-- [ ] More presets, reverse echo, pitch echo (each echo higher / lower), echo steps (draw a rhythm of echoes)
+- [x] More presets, reverse echo, pitch echo (each echo higher / lower), echo steps (draw a rhythm of echoes) (2 Nov)
 
 ## 5. New plug-ins
 - [ ] Tune-Cat: vocal tuner - natural correction, hard T-Pain effect, follows Chord-Cat's key (Cat Link), harmony voices
@@ -47,7 +47,7 @@ then copy changed files to the PC (D:\Projekty\vst_plugin) and run build_and_ins
 
 ## 7. Cat Hub
 - [ ] Echo-Cat as an effect on parts
-- [ ] Arrangement timeline (record the jam into a song view)
+- [x] Arrangement timeline (record the jam into a song view)
 - [ ] Mixer page (all volumes + meters)
 - [ ] Export to a Cubase project (MIDI + stems)
 - [ ] Piano roll: velocity bars, copy / paste / select many, scale highlight, drum grid
@@ -62,7 +62,7 @@ then copy changed files to the PC (D:\Projekty\vst_plugin) and run build_and_ins
 - [ ] One-click installer .exe where you tick what you want - MODERN and nice to use (user asked): a real window
       with the Cat look, cards with icons for each Cat / app, a progress bar, "Open Cubase" / "Start Cat Hub" at the end, also uninstall
 - [ ] Auto update: the apps tell you a new version is out, you click Update
-- [ ] Mac version: later
+- [x] Mac version: universal VST3s (Apple Silicon + Intel) built and tested on GitHub, Cat-Suite-Mac.zip in the release (2 Nov). Apps for Mac: later
 - [ ] Linux: publish Linux builds too (VST3 + apps) on GitHub (user asked 21 Oct; everything already builds and is tested on Linux)
 
 ## 10. Cat Box (hardware groovebox) - TOP PRIORITY (questionnaires 4 + 5, 22 Oct 2026)
@@ -94,13 +94,13 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
             (direction + speed), chords feed Arp / Choir / Glide / own chord sound; play it like ORCHID
             (one hand picks the chord type, pads / keys the root); NO Markov generator
       - [x] Orbit page with animation (his favourite) - planets play the notes you hold (40 systems, planet edit, Hold, Arp or Bass sound)
-      - [ ] Choir engine (Sing-Cat) as an engine with presets; no meows, no Talk-Cat
-      - [ ] Effects TE style, as many as possible: echo with freeze / duck / ping-pong / tape wobble / shimmer,
+      - [x] Choir engine (Sing-Cat) as an engine with presets; no meows, no Talk-Cat
+      - [x] Effects TE style, as many as possible: echo with freeze / duck / ping-pong / tape wobble / shimmer,
             phaser, tremolo, tone, warmth, prism, shimmer/bloom rooms, ensemble
-      - [ ] Arp: Bounce as an arp mode, Euclidean rhythms, pattern length as you set it (no Patt-Cat page)
+      - [x] Arp: Bounce as an arp mode, Euclidean rhythms, pattern length as you set it (no Patt-Cat page)
       - [ ] Drums: Drum-Cat groove only (swing, human timing); Bass-Cat: Follow arp is enough
       - [ ] Joystick: bend (curves, LFO) + more targets; microtuning if it fits
-      - [ ] Engines also: piano, nylon guitar, strings, e-piano, chip / glass bells (Cat Hub instruments)
+      - [x] Engines also: piano, nylon guitar, strings, e-piano, chip / glass bells (Cat Hub instruments)
       - Life-Cat: no. Talk-Cat: no. Patt-Cat page: no.
 - [x] 26 Oct: user decided the box is just a box (Pi + screen + sound) played with his MIDI keyboard
       (M-Audio Oxygen Pro Mini: 32 keys, 8 pads x 2 banks, 4 knobs, 4 faders, transport). Done: MIDI learn wizard
@@ -165,7 +165,7 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
       microtiming later
 - [ ] Playing: quantize knob (only when switched on), metronome click + 1-bar count-in when recording,
       multi-step Undo, copy / paste pattern or bar, "mutate" button (small changes to MY pattern), sleep after 30 min
-- [ ] FX: knob automation recorded into the pattern; mixer page (volume, pan, mute)
+- [x] FX: knob automation recorded into the pattern; mixer page (volume, pan, mute)
 - [ ] Presets: banks A, B, C...; names typed on the PC, sent to the box (box <-> PC link); backups by hand
 - [ ] Screen: still simpler; big preset name, spectrum, mixer, gentle animations, modern clean font, no touch
 - [ ] PC: tempo follows Cubase; Cat Box as a VST3 used as a link between box and Cubase; preset library window
@@ -182,6 +182,27 @@ Plan doc: Claude Doc "Cat Box - modularny syntetizator". Same program on the PC 
 - Working style: always test everything before saying done; medium-length reports; ask at big decisions.
 - Cat Hub must not become a soulless quick-music generator either.
 - Cat Ocean, Cat Hub, new Cats sections were left unanswered (no preference now).
+
+## Asked later
+- [x] Micro-Cat: microtonal tunings for Cubase like Ableton (2 Nov): MPE pitch bend to any synth, 37 tunings (equal, just & historical, world), browser + tuning circle editor, Scala .scl in / out
+- [x] Micro-Cat: Glide-, Sing- and Talk-Cat play in its tuning over Cat Link (no MPE, no routing) (2 Nov)
+- [x] Micro-Cat: Ableton .ascl files (reference pitch sets the root) (2 Nov)
+- [x] Micro-Cat: MTS-ESP master (one tuning for every MTS-ESP synth); the installers offer the free MTS-ESP library (2 Nov)
+- [x] Cat Hub: the Cats' windows follow the Hub's window size (they were stuck at their first size) (2 Nov)
+- [x] Crash hunt: every Cat 2 x 45 s UI + audio stress under AddressSanitizer, Hub UI stress + self test, Ocean self test (2 Nov)
+- [x] Mac: Cat Link works between the Cats (each Mac plug-in had its own temp folder) (2 Nov)
+
+## Experimental music (questionnaire 3 Nov, "najprv najrýchlejšie")
+- [x] Micro-Cat: live just intonation (held chord tuned pure around its lowest note, 5- / 7-limit, notes glide)
+- [x] Micro-Cat: tuning B + Morph knob (held notes glide; Cat Link / MTS-ESP follow)
+- [x] Echo-Cat: resonator echo (strings tuned to Micro-Cat's tuning, or on Chord-Cat's chord)
+- [x] Echo-Cat sound fixes (user: "sounds bad"): shimmer ran away into noise, drive made the loop louder each time round, space too loud (limiter)
+- [ ] New experimental rhythm VST: phasing (Reich), polymeters, Risset rhythm, metric modulation
+- [ ] Shepard tone (endless glissando)
+- [ ] Micro-Cat: tuning from a sound (its partials)
+- [ ] Melody from speech (a sentence becomes a riff)
+- [ ] Spectro-Cat: standalone .exe spectrogram app (see sound as a picture, a picture becomes sound)
+- [ ] Then the "normal" new VSTs (section 5): Tune-Cat, compressor, filter / wobble, lo-fi, Piano, Sampler
 
 ## Answers that mean "no"
 - Vertical Shorts picture: no, YouTube Auto is fine

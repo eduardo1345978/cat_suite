@@ -97,6 +97,7 @@ private:
     cat::PianoDisplay keyboard;
 
     uint32_t shownVersion = 0;
+    std::vector<juce::Rectangle<int>> modules;   // the Eurorack faceplates behind each group
 
 
     // Steps / Bounce view switch and the Bounce page

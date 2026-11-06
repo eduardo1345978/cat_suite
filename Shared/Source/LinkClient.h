@@ -30,9 +30,11 @@ public:
         bool receiveLife = false;    // answers Life-Cat
         juce::String receiveLifeText = "React to Life-Cat";
         juce::String grooveParam;    // e.g. "followGroove" (the existing Drum-Cat groove link)
+        bool sendTuning = false;     // Micro-Cat
+        bool receiveTuning = false;  // Glide-, Sing-, Talk-Cat: play in Micro-Cat's tuning
     };
-    enum Option { On = 0, Key, Chords, Life, Tempo };
-    static constexpr int numOptions = 5;
+    enum Option { On = 0, Key, Chords, Life, Tempo, Tuning };
+    static constexpr int numOptions = 6;
 
     LinkClient (juce::AudioProcessor&, juce::AudioProcessorValueTreeState&, const juce::String& pluginName, Caps);
     ~LinkClient() override;
@@ -57,6 +59,23 @@ public:
     void publishLifeEvent (int kind, int role);
     /** Calls fn (kind, role) for Life-Cat events since the last call (only while Life is on). */
     void pollLifeEvents (const std::function<void (int, int)>& fn);
+
+    // ---- tuning
+    /** Micro-Cat (message thread): the pitch (MIDI semitones) every key plays; active = false: normal tuning. */
+    void publishTuning (const std::array<float, 128>& pitches, bool active);
+    /** Followers (audio thread, real-time safe): a pitch in MIDI semitones (may be fractional: glides, bends)
+        moved into the linked tuning; unchanged when no tuning is linked. */
+    float tuned (float semis) const noexcept   // (inline: engines built without the rest of Cat Link, e.g. in Cat Box, still link)
+    {
+        if (! tuningActive.load (std::memory_order_relaxed) || ! std::isfinite (semis)) return semis;
+        const float s = juce::jlimit (0.0f, 127.0f, semis);
+        const int k = juce::jmin (126, (int) std::floor (s));
+        const float frac = s - (float) k;
+        const float a = tunedPitch[(size_t) k].load (std::memory_order_relaxed), b = tunedPitch[(size_t) k + 1].load (std::memory_order_relaxed);
+        return a + (b - a) * frac + (semis - s);   // beyond the MIDI range: keep the distance
+    }
+    bool followingTuning() const noexcept { return tuningActive.load (std::memory_order_relaxed); }
+    juce::String tuningText() const;
 
     // ---- shared tempo + play / stop (standalone apps)
     /** Use instead of getPlayHead(): in a standalone app with Tempo linked, returns a play head that
@@ -109,6 +128,13 @@ private:
     int numLastSent = -1;
     std::atomic<int> uiChord[16] {};
     std::atomic<int> uiChordCount { 0 };
+
+    // tuning: published (message thread), followed (written by the timer, read on the audio thread)
+    std::array<float, 128> ownTuning {};
+    bool ownTuningActive = false, ownTuningSent = false;
+    juce::uint32 seenTuningSeq = 0;
+    std::array<std::atomic<float>, 128> tunedPitch {};
+    std::atomic<bool> tuningActive { false };
 
     // life (audio thread)
     juce::uint32 seenEvents = 0;

@@ -127,9 +127,20 @@ function(cat_add_synth_plugin target)
 endfunction()
 
 # An audio effect (Echo-Cat): audio in -> audio out, no MIDI.
+# MIDI_OUT: the effect also sends MIDI (Hum-Cat: the notes it heard).
 function(cat_add_fx_plugin target)
-    cmake_parse_arguments(ARG "" "PRODUCT_NAME;PLUGIN_CODE;DESCRIPTION;CATEGORIES" "SOURCES" ${ARGN})
+    cmake_parse_arguments(ARG "MIDI_OUT" "PRODUCT_NAME;PLUGIN_CODE;DESCRIPTION;CATEGORIES" "SOURCES" ${ARGN})
     _cat_formats(_formats FALSE)
+    if(ARG_MIDI_OUT)
+        set(_midi_out TRUE)
+        set(_cats Fx Analyzer)
+    else()
+        set(_midi_out FALSE)
+        set(_cats Fx Delay Reverb)
+    endif()
+    if(ARG_CATEGORIES)
+        set(_cats ${ARG_CATEGORIES})
+    endif()
 
     juce_add_plugin(${target}
         VERSION                    1.0.0
@@ -143,9 +154,9 @@ function(cat_add_fx_plugin target)
         IS_SYNTH                   FALSE
         IS_MIDI_EFFECT             FALSE
         NEEDS_MIDI_INPUT           FALSE
-        NEEDS_MIDI_OUTPUT          FALSE
+        NEEDS_MIDI_OUTPUT          ${_midi_out}
         EDITOR_WANTS_KEYBOARD_FOCUS FALSE
-        VST3_CATEGORIES            Fx Delay Reverb
+        VST3_CATEGORIES            ${_cats}
         COPY_PLUGIN_AFTER_BUILD    ${CAT_COPY_AFTER_BUILD})
 
     target_sources(${target} PRIVATE ${ARG_SOURCES})

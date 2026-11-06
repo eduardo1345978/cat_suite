@@ -38,5 +38,16 @@ if "%FAILED%"=="1" (
     echo.
     echo   In Cubase: Studio ^> VST Plug-in Manager ^> Rescan.
 )
+rem Micro-Cat's MTS-ESP mode needs ODDSound's free MTS-ESP library (one tuning for every MTS-ESP synth)
+if exist "%CommonProgramFiles%\MTS-ESP\LIBMTS.dll" goto mtsDone
+if not exist "MTS-ESP\libMTSWin_v1.03.exe" goto mtsDone
+echo.
+echo   Micro-Cat can tune every MTS-ESP synth at once (Surge XT, Vital, Pigments, Serum 2 ...).
+echo   For that it needs the free MTS-ESP library by ODDSound (Windows asks for permission).
+choice /C YN /M "  Install the MTS-ESP library now"
+if errorlevel 2 goto mtsDone
+start "" /wait "MTS-ESP\libMTSWin_v1.03.exe"
+if exist "%CommonProgramFiles%\MTS-ESP\LIBMTS.dll" (echo   MTS-ESP library installed.) else (echo   MTS-ESP was not installed - you can run MTS-ESP\libMTSWin_v1.03.exe later.)
+:mtsDone
 echo.
 pause

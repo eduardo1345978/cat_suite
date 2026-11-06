@@ -15,7 +15,8 @@ target_sources(CatHub PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/SongRenderer.cpp
     Source/HubWindow.cpp
     Source/HubLook.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatLookAndFeel.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatLookAndFeel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatTheme.cpp)
 
 target_include_directories(CatHub PRIVATE Source ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source)
 target_compile_features(CatHub PRIVATE cxx_std_20)
@@ -32,6 +33,7 @@ target_compile_definitions(CatHub PRIVATE
 
 target_link_libraries(CatHub
     PRIVATE
+        cat_fonts
         juce::juce_audio_utils
         juce::juce_audio_processors
         juce::juce_audio_formats

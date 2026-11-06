@@ -17,6 +17,8 @@
     resonant 12 dB low-pass with an initial/attack-level envelope -> amp envelope; ring mod
     between the layers; automatic swell, brightening, drift and delayed vibrato; MPE on top.
 */
+namespace cat { class LinkClient; }
+
 namespace glidecat
 {
 constexpr int maxVoices = 16;
@@ -115,6 +117,8 @@ struct VoiceView
 class Synth
 {
 public:
+    /** Cat Link: plays in Micro-Cat's tuning when linked (set by the processor; may be null). */
+    const cat::LinkClient* link = nullptr;
     Synth();
     void prepare (double sampleRate, int maxBlock);
     void setSettings (const Settings& s) { settings = s; }

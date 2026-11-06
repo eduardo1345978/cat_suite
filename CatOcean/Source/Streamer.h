@@ -25,6 +25,8 @@ public:
     bool hasFailed() const noexcept { return failed.load(); }
     juce::String getStatus() const;
     juce::String getLog() const;
+    /** The text with the stream key blanked out (ffmpeg's messages contain the URL). */
+    juce::String hideKey (const juce::String&) const;
 
     /** One frame (BGRA pixels) and its sound (interleaved later to 16-bit). Any thread, never blocks. */
     void push (const juce::uint32* pixels, const float* left, const float* right, int numSamples);

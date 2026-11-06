@@ -1535,7 +1535,23 @@ public:
                 LinkServer server (boxA, port, false, "127.0.0.1");
                 check (server.isListening(), "the box listens for a PC", "port " + juce::String (port));
                 LinkClient client (pc, false);
-                check (client.connect ("127.0.0.1", port) && pc.isRemote(), "the PC app connects to the box", {});
+                {
+                    // a wrong link code: refused, the box ignores it
+                    auto otherOwner = std::make_unique<Controller> (dirB.getSiblingFile (dir.getFileName() + "-intruder"));
+                    LinkClient intruder (*otherOwner, false);
+                    const juce::String wrong (server.code() == "1000" ? "1001" : "1000");
+                    intruder.connect ("127.0.0.1", port, wrong);
+                    wait (600);
+                    const float tBefore = boxA.getProject().m.tempo;
+                    boxA.setMode (ModeProject);
+                    otherOwner->turnKnob (0, 5.0f);
+                    wait (400);
+                    check (intruder.wasDenied() && ! intruder.isConnected() && std::abs (boxA.getProject().m.tempo - tBefore) < 0.001f && server.numClients() == 0,
+                           "a PC with the wrong link code is refused and can't touch the box", {});
+                    intruder.disconnect();
+                    dirB.getSiblingFile (dir.getFileName() + "-intruder").deleteRecursively();
+                }
+                check (client.connect ("127.0.0.1", port, server.code()) && pc.isRemote(), "the PC app connects to the box (with its link code)", {});
                 wait (600);
                 boxA.setMode (ModeProject);
                 wait (300);
@@ -1845,7 +1861,7 @@ public:
         {
             server = std::make_unique<LinkServer> (*box);
             info = [this] { const auto a = LinkServer::ownAddress();
-                            return server != nullptr && server->isListening() ? "PC link: " + (a.isNotEmpty() ? a : juce::String ("no network"))
+                            return server != nullptr && server->isListening() ? "PC link: " + (a.isNotEmpty() ? a : juce::String ("no network")) + "  code " + server->code()
                                                                               : juce::String ("PC link: port busy"); };
         }
         else link = std::make_unique<LinkClient> (*box);

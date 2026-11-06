@@ -5,7 +5,7 @@ namespace cat
 {
 namespace
 {
-    const char* optionIds[] = { "catLinkOn", "catLinkKey", "catLinkChords", "catLinkLife", "catLinkTempo" };
+    const char* optionIds[] = { "catLinkOn", "catLinkKey", "catLinkChords", "catLinkLife", "catLinkTempo", "catLinkTuning" };
 
     juce::String noteNames (const int* notes, int n)
     {
@@ -25,6 +25,7 @@ LinkClient::LinkClient (juce::AudioProcessor& p, juce::AudioProcessorValueTreeSt
     seenLinkAll = bus->linkAllSeq();
     seenKeySeq = bus->keySeq();
     slot = bus->join (pluginName, id);
+    for (int k = 0; k < 128; ++k) tunedPitch[(size_t) k].store ((float) k, std::memory_order_relaxed);
     startTimerHz (10);
 }
 
@@ -32,12 +33,13 @@ LinkClient::~LinkClient()
 {
     closePanel();
     stopTimer();
+    if (caps.sendTuning && ownTuningSent) bus->publishTuning (nullptr, false, id);   // Micro-Cat closes: everyone back to normal
     bus->leave (slot, id);
 }
 
 void LinkClient::readOptions()
 {
-    const bool defaults[] = { true, caps.key, caps.sendChords, caps.sendLife, true };
+    const bool defaults[] = { true, caps.key, caps.sendChords, caps.sendLife, true, caps.sendTuning || caps.receiveTuning };
     for (int i = 0; i < numOptions; ++i)
         options[(size_t) i].store ((bool) state.state.getProperty (optionIds[i], defaults[i]), std::memory_order_relaxed);
 }
@@ -68,8 +70,30 @@ void LinkClient::timerCallback()
         if (caps.sendChords || caps.receiveChords) setOption (Chords, true);
         if (caps.sendLife || caps.receiveLife) setOption (Life, true);
         setOption (Tempo, true);
+        if (caps.sendTuning || caps.receiveTuning) setOption (Tuning, true);
         if (caps.grooveParam.isNotEmpty())
             if (auto* prm = state.getParameter (caps.grooveParam)) prm->setValueNotifyingHost (1.0f);
+    }
+
+    // tuning: Micro-Cat publishes (again when its link is switched on / off), the others follow
+    if (caps.sendTuning)
+    {
+        const bool want = ownTuningActive && sharing (Tuning);
+        if (want != ownTuningSent || (want && beat % 50 == 0))   // re-sent now and then (a Cat app that started later)
+        {
+            bus->publishTuning (want ? ownTuning.data() : nullptr, want, id);
+            ownTuningSent = want;
+        }
+    }
+    if (caps.receiveTuning)
+    {
+        std::array<float, 128> p;
+        bool active = false;
+        juce::uint64 src = 0;
+        if (bus->readTuning (seenTuningSeq, p, active, src))
+            for (int k = 0; k < 128; ++k) tunedPitch[(size_t) k].store (active ? p[(size_t) k] : (float) k, std::memory_order_relaxed);
+        else active = tuningActive.load();
+        tuningActive.store (active && sharing (Tuning), std::memory_order_relaxed);
     }
 
     // key + scale: share my changes, follow the others
@@ -167,6 +191,25 @@ void LinkClient::pollLifeEvents (const std::function<void (int, int)>& fn)
     bus->readEvents (seenEvents, id, fn);
 }
 
+void LinkClient::publishTuning (const std::array<float, 128>& pitches, bool active)
+{
+    ownTuning = pitches;
+    ownTuningActive = active;
+    if (sharing (Tuning) || ownTuningSent)
+    {
+        const bool want = active && sharing (Tuning);
+        bus->publishTuning (want ? ownTuning.data() : nullptr, want, id);
+        ownTuningSent = want;
+    }
+}
+
+
+juce::String LinkClient::tuningText() const
+{
+    if (caps.receiveTuning) return followingTuning() ? "Playing in Micro-Cat's tuning" : "Normal tuning";
+    return {};
+}
+
 juce::AudioPlayHead* LinkClient::playHead (juce::AudioPlayHead* host, int numSamples, double sampleRate)
 {
     if (! isStandalone() || ! sharing (Tempo)) return host;
@@ -236,6 +279,8 @@ public:
         if (client.caps.key) setup (keyButton, "Share key & scale", LinkClient::Key, "Change the key or scale here and the other Cats follow (and the other way round)");
         if (client.caps.sendChords) setup (chordButton, "Send my chords to the others", LinkClient::Chords, "Bass-Cat, Patt-Cat, Life-Cat... can follow these chords without MIDI routing");
         else if (client.caps.receiveChords) setup (chordButton, client.caps.receiveChordsText, LinkClient::Chords, "Play along with Chord-Cat without routing MIDI in Cubase");
+        if (client.caps.sendTuning) setup (tuningButton, "Send my tuning to Glide / Sing / Talk-Cat", LinkClient::Tuning, "They play in this tuning straight away, no MPE or MIDI routing needed");
+        else if (client.caps.receiveTuning) setup (tuningButton, "Play in Micro-Cat's tuning", LinkClient::Tuning, "Follow the tuning picked in Micro-Cat (microtonal), without MIDI routing");
         if (client.caps.sendLife) setup (lifeButton, "Send births & deaths", LinkClient::Life, "Drum-Cat can answer them with hits");
         else if (client.caps.receiveLife) setup (lifeButton, client.caps.receiveLifeText, LinkClient::Life, "Births and deaths in Life-Cat play extra hits");
         if (client.isStandalone())
@@ -261,7 +306,7 @@ public:
             grooveAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (client.state, client.caps.grooveParam, grooveButton);
             addAndMakeVisible (grooveButton);
         }
-        for (auto* b : { &onButton, &keyButton, &chordButton, &lifeButton, &tempoButton, &grooveButton, &allButton, &playButton })
+        for (auto* b : { &onButton, &keyButton, &chordButton, &tuningButton, &lifeButton, &tempoButton, &grooveButton, &allButton, &playButton })
         {
             b->setColour (juce::TextButton::buttonColourId, Colours::raised);
             b->setColour (juce::TextButton::buttonOnColourId, Colours::accent);
@@ -335,16 +380,16 @@ public:
     }
 
 private:
-    std::vector<juce::Button*> toggles() { return { &onButton, &keyButton, &chordButton, &lifeButton, &tempoButton, &grooveButton }; }
+    std::vector<juce::Button*> toggles() { return { &onButton, &keyButton, &chordButton, &tuningButton, &lifeButton, &tempoButton, &grooveButton }; }
     int numToggles() { int n = 0; for (auto* b : toggles()) n += b->isVisible() ? 1 : 0; return n; }
     void refresh()
     {
         const bool on = client.option (LinkClient::On);
-        for (auto* b : { &keyButton, &chordButton, &lifeButton, &tempoButton }) b->setEnabled (on);
+        for (auto* b : { &keyButton, &chordButton, &tuningButton, &lifeButton, &tempoButton }) b->setEnabled (on);
         playButton.setButtonText (client.transportPlaying() ? "Stop" : "Play");
         playButton.setEnabled (on && client.option (LinkClient::Tempo));
         bpm.setEnabled (on && client.option (LinkClient::Tempo));
-        for (auto* b : { &onButton, &keyButton, &chordButton, &lifeButton, &tempoButton, &grooveButton })
+        for (auto* b : { &onButton, &keyButton, &chordButton, &tuningButton, &lifeButton, &tempoButton, &grooveButton })
             if (b->getName().isNotEmpty()) b->setButtonText ((b->getToggleState() ? "ON    " : "off    ") + b->getName());
         repaint();
     }
@@ -356,13 +401,14 @@ private:
         chordButton.setToggleState (client.option (LinkClient::Chords), juce::dontSendNotification);
         lifeButton.setToggleState (client.option (LinkClient::Life), juce::dontSendNotification);
         tempoButton.setToggleState (client.option (LinkClient::Tempo), juce::dontSendNotification);
+        tuningButton.setToggleState (client.option (LinkClient::Tuning), juce::dontSendNotification);
         if (! bpm.isMouseButtonDown()) bpm.setValue (client.transportBpm(), juce::dontSendNotification);
         refresh();
     }
 
     CatLookAndFeel lnf;
     LinkClient& client;
-    juce::TextButton onButton, keyButton, chordButton, lifeButton, tempoButton, grooveButton, allButton, playButton { "Play" };
+    juce::TextButton onButton, keyButton, chordButton, tuningButton, lifeButton, tempoButton, grooveButton, allButton, playButton { "Play" };
     juce::Slider bpm;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> grooveAttachment;
 };
@@ -413,7 +459,16 @@ void LinkClient::showPanel (juce::Component& nextTo)
     // Owned here (not by JUCE's launchAsynchronously helper), so the pop-up, its timer and
     // its parameter attachment are always deleted before the plug-in is.
     panelContent = createLinkPanel (*this);
-    panelBox = std::make_unique<juce::CallOutBox> (*panelContent, nextTo.getScreenBounds(), nullptr);
+    // a button off every screen (window half outside the display) has no display: JUCE's CallOutBox
+    // would crash looking one up, so then the pop-up opens inside the plug-in window instead
+    const auto screen = nextTo.getScreenBounds();
+    if (juce::Desktop::getInstance().getDisplays().getDisplayForRect (screen) == nullptr)
+    {
+        auto* top = nextTo.getTopLevelComponent();
+        panelBox = std::make_unique<juce::CallOutBox> (*panelContent, top->getLocalArea (&nextTo, nextTo.getLocalBounds()), top);
+    }
+    else
+        panelBox = std::make_unique<juce::CallOutBox> (*panelContent, screen, nullptr);
     panelBox->setVisible (true);
     panelBox->enterModalState (true, nullptr, false);
 }

@@ -47,7 +47,7 @@ int DegreeGrid::degreeForRow (int row) const { return rowOrder[juce::jlimit (0, 
 
 juce::Rectangle<float> DegreeGrid::gridArea() const
 {
-    return getLocalBounds().toFloat().reduced (8.0f).withTrimmedLeft (50.0f).withTrimmedTop (16.0f);
+    return getLocalBounds().toFloat().reduced (8.0f).withTrimmedLeft (54.0f).withTrimmedTop (14.0f);
 }
 
 void DegreeGrid::timerCallback()
@@ -64,8 +64,8 @@ void DegreeGrid::timerCallback()
 void DegreeGrid::paint (juce::Graphics& g)
 {
     const auto bounds = getLocalBounds().toFloat();
-    g.setColour (juce::Colour (0xff101116));
-    g.fillRoundedRectangle (bounds, 8.0f);
+    g.setColour (juce::Colour (0xff1a1a1c));
+    g.fillRoundedRectangle (bounds, 6.0f);
 
     const auto area = gridArea();
     const int steps = pattern.bars * 16;
@@ -75,22 +75,38 @@ void DegreeGrid::paint (juce::Graphics& g)
     for (int r = 0; r < numRows; ++r)
     {
         const auto row = juce::Rectangle<float> (area.getX(), area.getY() + rh * (float) r, area.getWidth(), rh);
-        g.setColour (r % 2 == 0 ? juce::Colour (0xff15161b) : juce::Colour (0xff121318));
+        g.setColour (r % 2 == 0 ? juce::Colour (0xff232326) : juce::Colour (0xff1e1e21));
         g.fillRect (row);
-        g.setColour (degreeColour (rowOrder[r]).withAlpha (0.85f));
+        g.setColour (juce::Colour (0xfff1f1f2).withAlpha (rowOrder[r] == Ghost ? 0.5f : 0.9f));
         g.setFont (cat::catFont (11.0f, true));
-        g.drawText (names[rowOrder[r]], juce::Rectangle<float> (bounds.getX() + 8.0f, row.getY(), 46.0f, rh), juce::Justification::centredLeft);
+        g.drawText (names[rowOrder[r]].toUpperCase(), juce::Rectangle<float> (bounds.getX() + 8.0f, row.getY(), 46.0f, rh), juce::Justification::centredLeft);
     }
     for (int s = 0; s <= steps; ++s)
     {
-        g.setColour (s % 16 == 0 ? C::outline.brighter (0.4f) : (s % 4 == 0 ? C::outline : C::outline.withAlpha (0.35f)));
+        g.setColour (juce::Colours::white.withAlpha (s % 16 == 0 ? 0.3f : (s % 4 == 0 ? 0.14f : 0.05f)));
         g.drawVerticalLine (juce::roundToInt (area.getX() + cw * (float) s), area.getY(), area.getBottom());
     }
-    g.setColour (C::textDim);
-    g.setFont (cat::catFont (10.0f));
-    for (int b = 0; b < pattern.bars; ++b)
-        g.drawText ("Bar " + juce::String (b + 1), juce::Rectangle<float> (area.getX() + cw * 16.0f * (float) b + 3.0f, bounds.getY() + 4.0f, 60.0f, 12.0f),
-                    juce::Justification::centredLeft);
+    // step LEDs along the top, the one under the playhead lit
+    {
+        int lit = -1;
+        if (processor.uiTransportRunning.load() && processor.uiChordRoot.load() >= 0)
+            lit = (int) (std::fmod (processor.uiPpq.load(), pattern.lengthPpq()) * 4.0);
+        for (int st = 0; st < steps; ++st)
+        {
+            const auto c = juce::Point<float> (area.getX() + cw * ((float) st + 0.5f), bounds.getY() + 9.0f);
+            bool has = false;
+            for (const auto& n : pattern.notes) has = has || (int) std::floor (n.pos * 4.0 + 0.01) == st;
+            const auto led = st == lit ? juce::Colour (0xffff4a3a) : (has ? juce::Colour (0xffa0362f) : juce::Colour (0xff5a2a27));
+            if (st == lit)
+            {
+                g.setColour (led.withAlpha (0.35f));
+                g.fillEllipse (juce::Rectangle<float> (14.0f, 14.0f).withCentre (c));
+            }
+            g.setColour (led);
+            g.fillEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre (c));
+        }
+    }
+
 
     // Notes
     for (const auto& n : pattern.notes)
@@ -120,7 +136,7 @@ void DegreeGrid::paint (juce::Graphics& g)
         const double L = pattern.lengthPpq();
         const double ph = std::fmod (processor.uiPpq.load(), L);
         const float x = area.getX() + (float) (ph / L) * area.getWidth();
-        g.setColour (C::text.withAlpha (0.7f));
+        g.setColour (juce::Colour (0xffff4a3a).withAlpha (0.8f));
         g.drawVerticalLine (juce::roundToInt (x), area.getY(), area.getBottom());
     }
     else if (processor.uiChordRoot.load() < 0)
@@ -193,16 +209,16 @@ BassCatEditor::BassCatEditor (BassCatProcessor& p)
       presetBar (p.presetManager),
       style (p.apvts, "style", "Style", &p.midiLearn, 40),
       length (p.apvts, "bars", "Length", &p.midiLearn, 48),
-      density (p.apvts, "density", "Density", &p.midiLearn, 54),
-      fills (p.apvts, "fills", "Fills", &p.midiLearn, 34),
-      ghosts (p.apvts, "ghosts", "Ghosts", &p.midiLearn, 48),
-      slides (p.apvts, "slides", "Slides", &p.midiLearn, 44),
-      swing (p.apvts, "swing", "Swing", &p.midiLearn, 44),
-      human (p.apvts, "human", "Human", &p.midiLearn, 48),
-      gate (p.apvts, "gate", "Gate", &p.midiLearn, 36),
-      velocity (p.apvts, "velocity", "Velocity", &p.midiLearn, 56),
-      velRandom (p.apvts, "velRandom", "Vel Rnd", &p.midiLearn, 52),
-      chance (p.apvts, "chance", "Chance", &p.midiLearn, 50),
+      density (p.apvts, "density", "DENSITY", &p.midiLearn),
+      fills (p.apvts, "fills", "FILLS", &p.midiLearn),
+      ghosts (p.apvts, "ghosts", "GHOSTS", &p.midiLearn),
+      slides (p.apvts, "slides", "SLIDES", &p.midiLearn),
+      swing (p.apvts, "swing", "SWING", &p.midiLearn),
+      human (p.apvts, "human", "HUMAN", &p.midiLearn),
+      gate (p.apvts, "gate", "GATE", &p.midiLearn),
+      velocity (p.apvts, "velocity", "VELOCITY", &p.midiLearn),
+      velRandom (p.apvts, "velRandom", "VEL RND", &p.midiLearn),
+      chance (p.apvts, "chance", "CHANCE", &p.midiLearn),
       followGroove (p.apvts, "followGroove", "Follow Drum", &p.midiLearn),
       latch (p.apvts, "latch", "Latch", &p.midiLearn),
       thru (p.apvts, "thru", "Thru", &p.midiLearn),
@@ -244,11 +260,24 @@ BassCatEditor::BassCatEditor (BassCatProcessor& p)
     ghosts.getSlider().setTooltip ("Muted 'dead' notes between the main notes");
     fills.getSlider().setTooltip ("Chance of a walk-up into the next phrase");
 
-    chordLabel.setFont (cat::catFont (13.0f, true));
-    chordLabel.setColour (juce::Label::textColourId, C::text);
-    chordLabel.setJustificationType (juce::Justification::centredRight);
-    chordTimer.fn = [this] { chordLabel.setText ("Chord  " + processor.getChordText(), juce::dontSendNotification); };
+    chordLabel.setFont (cat::displayFont (30.0f));
+    chordLabel.setColour (juce::Label::textColourId, juce::Colour (0xffff4a3a));
+    chordLabel.setJustificationType (juce::Justification::centred);
+    chordLabel.setInterceptsMouseClicks (false, false);
+    chordTimer.fn = [this]
+    {
+        auto chord = processor.getChordText();
+        if (chord.isEmpty() || chord == "-") chord = "- - -";
+        chordLabel.setText (chord.toUpperCase() + "  " + juce::String (processor.getVariation()).paddedLeft ('0', 2), juce::dontSendNotification);
+    };
     chordTimer.startTimerHz (10);
+
+    for (auto* b : std::initializer_list<juce::TextButton*> { &generateButton, &followGroove, &latch, &thru, &keyTrigger, &dragButton })
+    {
+        b->setColour (juce::TextButton::buttonColourId, juce::Colour (0xff2a2a2d));
+        b->setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff2a2a2d));
+        b->setColour (juce::TextButton::textColourOffId, juce::Colour (0xfff1f1f2));
+    }
 
     for (auto* c : std::initializer_list<juce::Component*> { &presetBar, &generateButton, variationStepper.get(), lowNote.get(), octave.get(),
              channel.get(), &dragButton, &style, &length, &density, &fills, &ghosts, &slides, &swing, &human, &gate, &velocity, &velRandom,
@@ -258,7 +287,7 @@ BassCatEditor::BassCatEditor (BassCatProcessor& p)
     addAndMakeVisible (catView);
     addAndMakeVisible (surpriseControls);
     addAndMakeVisible (bootScreen);
-    setSize (1100, 680);
+    setSize (1100, 720);
 }
 
 BassCatEditor::~BassCatEditor()
@@ -268,42 +297,106 @@ BassCatEditor::~BassCatEditor()
 
 void BassCatEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (C::background);
-    cat::CatLookAndFeel::drawLogo (g, juce::Rectangle<float> (14.0f, 8.0f, 160.0f, 32.0f), "BASS", "-cat");
+    cat::paintBackdrop (g, getLocalBounds());
+
+    // Bass Cat BC-303 .................. COMPUTER CONTROLLED
+    const auto ink = juce::Colour (0xff1a1a1c);
+    g.setColour (ink);
+    g.setFont (cat::displayFont (30.0f));
+    g.drawText ("Bass Cat", 26, 14, 150, 40, juce::Justification::centredLeft);
+    g.setColour (juce::Colour (0xffc1272d));
+    g.setFont (cat::displayFont (30.0f).withStyle (juce::Font::plain));
+    g.drawText ("BC-303", 160, 14, 120, 40, juce::Justification::centredLeft);
+    g.setColour (ink);
+    g.setFont (cat::catFont (13.0f, true).withExtraKerningFactor (0.3f));
+    g.drawText ("COMPUTER CONTROLLED", getWidth() - 266, 20, 240, 30, juce::Justification::centredRight);
+    g.fillRect (26, 60, getWidth() - 52, 2);
+
+    // LEDs above the mode keys
+    for (auto* b : std::initializer_list<juce::Button*> { &followGroove, &latch, &thru, &keyTrigger })
+    {
+        const auto c = juce::Point<float> ((float) b->getBounds().getCentreX(), (float) b->getY() - 8.0f);
+        const bool on = b->getToggleState();
+        if (on)
+        {
+            g.setColour (juce::Colour (0xffff4a3a).withAlpha (0.35f));
+            g.fillEllipse (juce::Rectangle<float> (16.0f, 16.0f).withCentre (c));
+        }
+        g.setColour (on ? juce::Colour (0xffff4a3a) : juce::Colour (0xff6e2a26));
+        g.fillEllipse (juce::Rectangle<float> (8.0f, 8.0f).withCentre (c));
+    }
+
+    // the red LED window
+    auto led = chordLabel.getBounds().toFloat();
+    g.setColour (juce::Colour (0xff23110f));
+    g.fillRoundedRectangle (led, 4.0f);
+    g.setColour (juce::Colours::black.withAlpha (0.6f));
+    g.drawRoundedRectangle (led.reduced (1.0f), 4.0f, 2.0f);
+    g.setColour (juce::Colour (0xffff4a3a).withAlpha (0.12f));
+    g.fillRoundedRectangle (led.reduced (8.0f, 10.0f), 6.0f);
+
+    // the red / yellow / black stripe
+    const auto st = stripeBounds;
+    const juce::Colour stripe[] = { juce::Colour (0xffc1272d), juce::Colour (0xfff2b51d), ink };
+    for (int x = st.getX(), i = 0; x < st.getRight(); x += 60, ++i)
+    {
+        g.setColour (stripe[i % 3]);
+        g.fillRect (juce::Rectangle<int> (x, st.getY(), juce::jmin (60, st.getRight() - x), st.getHeight()));
+    }
 }
 
 void BassCatEditor::resized()
 {
-    auto r = getLocalBounds().reduced (10);
-    auto item = [] (juce::Component& c, float w, float h = 30.0f) { return juce::FlexItem (c).withWidth (w).withHeight (h).withMargin ({ 0, 3, 0, 3 }); };
-    auto row = [] (juce::Rectangle<int> area, std::initializer_list<juce::FlexItem> items)
+    auto r = getLocalBounds().reduced (26, 14);
     {
-        juce::FlexBox fb;
-        fb.alignItems = juce::FlexBox::AlignItems::center;
-        for (auto& it : items) fb.items.add (it);
-        fb.performLayout (area);
-    };
-
-    {
-        auto top = r.removeFromTop (40);
-        auto logo = top.removeFromLeft (150);
-        catView.setBounds (logo.removeFromRight (40).expanded (0, 6));
-        row (top, { item (presetBar, 330), juce::FlexItem().withFlex (1.0f), item (generateButton, 90), item (*variationStepper, 116),
-                    item (surpriseControls, 122), item (dragButton, 92) });
+        auto top = r.removeFromTop (46);
+        top.removeFromLeft (270);
+        catView.setBounds (top.removeFromLeft (46));
+        top.removeFromLeft (14);
+        presetBar.setBounds (top.removeFromLeft (320).withSizeKeepingCentre (320, 30));
     }
-    r.removeFromTop (10);
-    row (r.removeFromTop (30), { item (style, 200, 28), item (length, 140, 28), item (density, 120, 28).withFlex (1.0f), item (fills, 100, 28).withFlex (1.0f),
-                                 item (ghosts, 110, 28).withFlex (1.0f), item (slides, 110, 28).withFlex (1.0f) });
-    r.removeFromTop (6);
-    row (r.removeFromTop (30), { item (swing, 110, 28).withFlex (1.0f), item (human, 110, 28).withFlex (1.0f), item (followGroove, 92, 28),
-                                 item (gate, 100, 28).withFlex (1.0f), item (velocity, 120, 28).withFlex (1.0f), item (velRandom, 110, 28).withFlex (1.0f),
-                                 item (chance, 110, 28).withFlex (1.0f) });
-    r.removeFromTop (6);
-    row (r.removeFromTop (30), { item (*lowNote, 140, 28), item (*octave, 110, 28), item (*channel, 80, 28), item (latch, 64, 28), item (thru, 60, 28),
-                                 item (keyTrigger, 80, 28), juce::FlexItem().withFlex (1.0f), item (chordLabel, 180, 28) });
-    r.removeFromTop (10);
-    keyboard.setBounds (r.removeFromBottom (54));
-    r.removeFromBottom (8);
+    r.removeFromTop (14);
+
+    // one long row of big 303 knobs
+    knobBounds = r.removeFromTop (104);
+    {
+        auto k = knobBounds;
+        const int w = k.getWidth() / 10;
+        for (auto* c : std::initializer_list<juce::Component*> { &density, &fills, &ghosts, &slides, &swing, &human, &gate, &velocity, &velRandom, &chance })
+            c->setBounds (k.removeFromLeft (w).reduced (4, 0));
+    }
+    r.removeFromTop (14);
+
+    // mode keys with LEDs + selectors | the red LED read-out
+    {
+        auto band = r.removeFromTop (78);
+        chordLabel.setBounds (band.removeFromRight (230).withSizeKeepingCentre (230, 58));
+        band.removeFromRight (16);
+        auto keys = band.removeFromTop (44).withTrimmedTop (14);
+        const int kw = 92;
+        for (auto* b : std::initializer_list<juce::Component*> { &followGroove, &latch, &thru, &keyTrigger })
+        {
+            b->setBounds (keys.removeFromLeft (kw).reduced (4, 0));
+        }
+        keys.removeFromLeft (12);
+        generateButton.setBounds (keys.removeFromLeft (100).reduced (4, 0));
+        variationStepper->setBounds (keys.removeFromLeft (124).reduced (4, 0));
+        surpriseControls.setBounds (keys.removeFromLeft (130).reduced (4, 0));
+        dragButton.setBounds (keys.removeFromLeft (100).reduced (4, 0));
+        band.removeFromTop (6);
+        auto sel = band.removeFromTop (28);
+        style.setBounds (sel.removeFromLeft (200).reduced (4, 0));
+        length.setBounds (sel.removeFromLeft (150).reduced (4, 0));
+        lowNote->setBounds (sel.removeFromLeft (150).reduced (4, 0));
+        octave->setBounds (sel.removeFromLeft (120).reduced (4, 0));
+        channel->setBounds (sel.removeFromLeft (90).reduced (4, 0));
+    }
+    r.removeFromTop (12);
+
+    stripeBounds = r.removeFromBottom (10);
+    r.removeFromBottom (10);
+    keyboard.setBounds (r.removeFromBottom (48));
+    r.removeFromBottom (10);
     grid.setBounds (r);
 
     bootScreen.setBounds (getLocalBounds());

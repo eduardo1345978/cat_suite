@@ -1,0 +1,375 @@
+# COMMERCIAL LICENSE AGREEMENT – CAT SUITE
+
+Version 1.4 – 5 November 2026
+
+Copyright © 2026 eduardo1345978
+Licensor: eduardo1345978
+Contact: minepercraft@gmail.com
+GitHub: https://github.com/eduardo1345978
+
+This Commercial License Agreement ("Agreement") is entered into between eduardo1345978 ("Licensor") and the individual or legal entity purchasing a Commercial License ("Licensee").
+
+If you do NOT agree to this Agreement, you do NOT have a Commercial License.
+
+Cat Suite is also available under the GNU General Public License version 3.0 ("GPLv3"), as provided in the LICENSE file. The availability of Cat Suite under GPLv3 does not limit Licensor's right to offer Commercial Licenses.
+
+A Commercial License is valid only after all of the following conditions have been met:
+
+1. The Licensee and Licensor have agreed on the applicable fee in writing.
+2. The Licensee has paid the agreed fee in full.
+3. The Licensor has issued written confirmation of the Commercial License by email or GitHub message.
+
+Downloading, copying, accessing, or using the Software does not by itself grant a Commercial License.
+
+---
+
+## 1. DEFINITIONS
+
+### 1.1 "Software"
+"Software" means Cat Suite, including its source code, binaries, plugins, libraries, installers, documentation, presets, graphics, and updates distributed by the Licensor as part of Cat Suite.
+
+Third-party components are subject to their respective licenses.
+
+### 1.2 "Licensed Product"
+"Licensed Product" means ONE (1) specific software product identified in the written license confirmation issued by the Licensor.
+
+Updates, bug fixes, patches, and new versions of the same Licensed Product are included unless otherwise agreed in writing.
+
+Different products, independently marketed products, or substantially separate products require separate Commercial Licenses.
+
+Different formats, architectures, and platform versions of the same product are included unless explicitly excluded in the written license confirmation.
+
+### 1.3 "End User"
+"End User" means a person or organization that obtains and uses the Licensed Product without receiving Cat Suite source code.
+
+### 1.4 "Third-Party Components"
+"Third-Party Components" means software, libraries, frameworks, assets, or other materials included in or used by Cat Suite that are owned or licensed by parties other than the Licensor.
+
+### 1.5 "Written Confirmation"
+"Written Confirmation" means an email or GitHub message issued by the Licensor explicitly confirming the Licensee, Licensed Product, and applicable Commercial License. A Written Confirmation must identify:
+- The Licensee
+- The Licensed Product
+- The agreed license fee
+- The date the license becomes effective
+- Any additional agreed restrictions or permissions
+
+---
+
+## 2. GRANT OF LICENSE
+
+### 2.1 License Grant
+Subject to payment and compliance with this Agreement, the Licensor grants the Licensee a non-exclusive, non-transferable, non-sublicensable, worldwide, perpetual license, subject to termination under Section 8, to:
+
+a) Access and use Cat Suite source code for the development of the Licensed Product.
+b) Modify Cat Suite source code as necessary for the development of the Licensed Product.
+c) Compile, build, and integrate Cat Suite into the Licensed Product.
+d) Distribute the Licensed Product in binary, executable, or object code form to End Users.
+e) Sell, commercially distribute, or otherwise make the Licensed Product available to End Users, including through digital distribution platforms.
+f) Use Cat Suite internally for development, testing, and maintenance of the Licensed Product.
+
+### 2.2 License Scope
+This Commercial License applies to:
+- ONE (1) Licensed Product.
+- ONE (1) individual or legal entity identified as the Licensee.
+
+The license does not automatically extend to subsidiaries, parent companies, affiliated companies, or other independent legal entities.
+
+### 2.3 Employees and Contractors
+The Licensee may allow its employees and independent contractors to access Cat Suite source code solely when reasonably necessary to develop, maintain, or support the Licensed Product.
+
+The Licensee must ensure that these individuals:
+a) Use Cat Suite only for the purposes permitted by this Agreement.
+b) Maintain the confidentiality of Cat Suite source code.
+c) Do not independently redistribute, publish, or sublicense Cat Suite.
+
+The Licensee remains responsible for ensuring their compliance with this Agreement.
+
+### 2.4 No Additional Rights
+All rights not expressly granted in this Agreement are reserved by the Licensor.
+
+---
+
+## 3. PERMITTED AND PROHIBITED USE
+
+### 3.1 Closed-Source Distribution
+The Licensee is NOT required to release the source code of the Licensed Product under GPLv3 solely because Cat Suite is incorporated into the Licensed Product under this Commercial License.
+
+The Licensee may distribute the Licensed Product as proprietary, closed-source software.
+
+### 3.2 Third-Party Licenses
+This Agreement does not grant any rights to third-party software, frameworks, libraries, SDKs, or tools used by or included with Cat Suite.
+
+The Licensee is solely responsible for obtaining all necessary third-party licenses required for the development, compilation, distribution, and commercial use of the Licensed Product.
+
+This includes, where applicable:
+a) JUCE commercial licensing requirements.
+b) Audio plugin format licensing requirements.
+c) Third-party libraries and dependencies.
+d) Any additional tools or SDKs required for distribution.
+
+The Licensee must independently verify compliance with all applicable third-party licensing requirements.
+
+### 3.3 Restrictions
+The Licensee may NOT:
+
+a) Sell, rent, lease, sublicense, or redistribute Cat Suite itself as a standalone product or library.
+b) Publish, upload, or distribute Cat Suite source code, in whole or in part, except as expressly permitted under this Agreement.
+c) Remove or alter copyright notices, license headers, or required attributions belonging to the Licensor.
+d) Use Cat Suite to create a competing software library, SDK, framework, or development toolkit intended for distribution to third-party developers.
+e) Reverse engineer Cat Suite for the purpose of extracting and redistributing its source code or recreating it for unauthorized redistribution.
+f) Claim ownership or authorship of Cat Suite or represent Cat Suite as entirely their own original work.
+g) Transfer, sell, or sublicense their Commercial License to another individual or legal entity without the Licensor's prior written consent.
+
+These restrictions do not prohibit activities that cannot lawfully be restricted under applicable mandatory law.
+
+### 3.4 Distribution of Licensed Products
+The Licensee MAY distribute the Licensed Product containing compiled Cat Suite code, provided that:
+
+a) End Users do not receive Cat Suite source code.
+b) Cat Suite is not made available as a separately distributable library or development framework.
+c) The Licensee complies with applicable third-party licensing requirements.
+d) Any applicable copyright notices and attributions are preserved.
+
+The Licensee may use its own End User License Agreement (EULA) for the Licensed Product.
+
+Such an agreement must not grant End Users rights to independently extract, redistribute, or sublicense Cat Suite beyond rights permitted by applicable law.
+
+### 3.5 Reverse Engineering and Mandatory Law
+Nothing in this Agreement prohibits activities that applicable mandatory law expressly permits and that cannot be contractually excluded.
+
+---
+
+## 4. FEES AND PAYMENT
+
+### 4.1 License Fee
+The Commercial License fee is the amount agreed upon in writing between the Licensor and Licensee before the license is issued.
+
+### 4.2 Payment
+The Commercial License becomes valid only after the full agreed fee has been received by the Licensor and Written Confirmation has been issued.
+
+### 4.3 Refunds
+All fees are non-refundable except where a refund is required by applicable mandatory law or expressly agreed in writing by the Licensor.
+
+### 4.4 Failed Payments
+If payment is reversed, charged back, or otherwise invalidated, the Licensor may suspend or terminate the Commercial License in accordance with Section 8.
+
+### 4.5 Updates
+The Commercial License does not guarantee future updates, maintenance, technical support, or new features.
+
+The Licensor may provide updates at their sole discretion unless otherwise agreed in writing.
+
+---
+
+## 5. OWNERSHIP AND INTELLECTUAL PROPERTY
+
+### 5.1 Ownership of Cat Suite
+Cat Suite remains the intellectual property of the Licensor and/or its respective rights holders.
+
+No ownership, copyright, or intellectual property rights in Cat Suite are transferred to the Licensee through this Agreement.
+
+### 5.2 Ownership of Licensed Product
+The Licensee retains ownership of their original code, designs, graphics, and other independently created materials incorporated into the Licensed Product, subject to applicable third-party rights.
+
+This does not transfer ownership of Cat Suite or any of its underlying components.
+
+### 5.3 Modifications
+The Licensee may modify Cat Suite source code as permitted under Section 2.
+
+The Licensee retains any copyright it may hold in its original contributions, subject to the rights of the Licensor in the underlying Cat Suite code.
+
+Modifications to Cat Suite may only be distributed as part of the Licensed Product in accordance with this Agreement.
+
+The Licensee may not independently distribute modified versions of Cat Suite as a standalone product or library.
+
+### 5.4 Attribution
+The Licensee is not required to use the Cat Suite name or branding when marketing the Licensed Product.
+
+However, existing copyright notices and legally required attributions must not be removed or misrepresented.
+
+### 5.5 Trademarks
+This Agreement does not grant trademark rights to "Cat Suite", its logos, or associated branding.
+
+The Licensee may not use these trademarks to market or endorse the Licensed Product without prior written permission.
+
+### 5.6 Patent Rights
+No patent rights are granted beyond any rights necessarily implied by applicable law or expressly granted in this Agreement.
+
+---
+
+## 6. WARRANTY DISCLAIMER
+
+### 6.1 "AS IS" BASIS
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, CAT SUITE IS PROVIDED "AS IS", WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED.
+
+THIS INCLUDES, WITHOUT LIMITATION, IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+### 6.2 No Performance Guarantee
+The Licensor does not guarantee that Cat Suite will be:
+
+a) Free of errors or defects.
+b) Uninterrupted or continuously available.
+c) Compatible with every operating system, DAW, plugin format, or hardware configuration.
+d) Suitable for any particular commercial or technical purpose.
+
+### 6.3 Responsibility
+The Licensee assumes responsibility for evaluating Cat Suite and determining whether it is suitable for the intended Licensed Product.
+
+Nothing in this Section excludes warranties or rights that cannot lawfully be excluded.
+
+---
+
+## 7. LIMITATION OF LIABILITY AND INDEMNIFICATION
+
+### 7.1 Exclusion of Certain Damages
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSOR SHALL NOT BE LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES.
+
+THIS INCLUDES, WITHOUT LIMITATION:
+a) Loss of profits.
+b) Loss of revenue.
+c) Loss of data.
+d) Loss of business opportunities.
+e) Loss of goodwill.
+
+### 7.2 Liability Cap
+To the maximum extent permitted by applicable law, the Licensor's total aggregate liability arising out of or relating to this Agreement shall not exceed the amount actually paid by the Licensee for the relevant Commercial License.
+
+### 7.3 Indemnification by Licensee
+The Licensee agrees to indemnify, defend, and hold harmless the Licensor from any third-party claims, damages, or costs arising from:
+a) The Licensee's Licensed Product,
+b) The Licensee's breach of this Agreement,
+c) The Licensee's failure to obtain required third-party licenses, including JUCE,
+d) The Licensee's marketing, distribution, or support of the Licensed Product.
+
+### 7.4 Mandatory Exceptions
+Nothing in this Agreement excludes or limits liability that cannot legally be excluded or limited under applicable law.
+
+---
+
+## 8. TERMINATION
+
+### 8.1 Termination for Breach
+The Licensor may terminate this Agreement if the Licensee materially breaches any provision of this Agreement and fails to remedy the breach within thirty (30) days after receiving written notice describing the breach.
+
+### 8.2 Immediate Termination
+The Licensor may terminate this Agreement immediately by written notice if the Licensee:
+
+a) Intentionally publishes or publicly redistributes Cat Suite source code without authorization.
+b) Sells or sublicenses Cat Suite as a standalone product in violation of Section 3.
+c) Fraudulently obtains or uses the Commercial License.
+
+### 8.3 Non-Payment
+If the agreed fee has not been received, no Commercial License is granted.
+
+If a previously received payment is reversed or charged back, the Licensor may suspend the license while the payment issue is resolved or terminate it in accordance with this Section.
+
+### 8.4 Consequences of Termination
+Upon termination:
+
+a) The Licensee's rights to use Cat Suite under this Commercial License end.
+b) The Licensee must stop distributing new copies of the Licensed Product containing Cat Suite within thirty (30) days after termination.
+c) The Licensee must stop using Cat Suite for further development, maintenance, or modification of the Licensed Product.
+d) The Licensee must delete Cat Suite source code and development copies in its possession, except for archival copies that must be retained by law.
+
+### 8.5 Previously Distributed Copies
+Termination does not automatically invalidate licenses previously granted by the Licensee to End Users for copies of the Licensed Product lawfully distributed before termination.
+
+End Users may continue using those copies according to the applicable End User License Agreement, provided that no separate rights to Cat Suite source code were granted.
+
+The Licensee may not distribute new copies or updates containing Cat Suite after the applicable termination period.
+
+### 8.6 No Automatic GPL Conversion
+Termination of this Commercial License does NOT automatically convert the Licensed Product into a GPLv3-licensed product.
+
+The Licensee may independently choose to distribute the Licensed Product under GPLv3 only if the Licensee has obtained all necessary rights to do so and fully complies with GPLv3 and all applicable third-party licenses.
+
+### 8.7 Survival
+Sections 3, 5, 6, 7, 8, 9, and 10 survive termination to the extent necessary for their intended operation.
+
+---
+
+## 9. COMPLIANCE AND AUDIT
+
+### 9.1 Compliance Requests
+The Licensor may reasonably request written confirmation that the Licensee is complying with this Agreement.
+
+Such requests may include:
+a) Confirmation of the Licensed Product's name.
+b) Confirmation that Cat Suite source code has not been publicly redistributed.
+c) Confirmation that the Software is being used within the permitted license scope.
+
+### 9.2 Reasonable Scope
+Any compliance request must be reasonable, proportionate, and limited to information relevant to verifying compliance with this Agreement.
+
+The Licensee is not required to disclose unrelated proprietary source code or confidential business information.
+
+### 9.3 Enforcement Costs
+If the Licensee is found to be in material breach of this Agreement, the Licensee may be responsible for reasonable enforcement costs incurred by the Licensor, to the extent permitted by applicable law.
+
+---
+
+## 10. GENERAL TERMS
+
+### 10.1 Entire Agreement
+This Agreement together with the Written Confirmation constitutes the entire agreement between the Licensor and Licensee concerning the Commercial License.
+
+It supersedes all previous discussions, representations, and agreements relating to the same subject matter.
+
+### 10.2 Amendments
+Any amendment to this Agreement or additional licensing terms must be agreed upon in writing by both parties. Licensor may publish a new version of this template for future licenses, but it does not retroactively change licenses already granted.
+
+### 10.3 No Waiver
+Failure to enforce any provision of this Agreement does not constitute a waiver of the right to enforce that provision later.
+
+### 10.4 Severability
+If any provision of this Agreement is found to be invalid or unenforceable, the remaining provisions shall remain in effect to the extent permitted by applicable law.
+
+### 10.5 Governing Law
+This Agreement is governed by the laws of the Slovak Republic.
+
+The courts of the Slovak Republic shall have jurisdiction over disputes arising from this Agreement, subject to applicable mandatory jurisdiction rules.
+
+### 10.6 No Partnership
+Nothing in this Agreement creates a partnership, joint venture, employment relationship, or agency relationship between the parties.
+
+### 10.7 Assignment
+The Licensee may not assign or transfer this Agreement without the Licensor's prior written consent.
+
+The Licensor may assign this Agreement in connection with a transfer or sale of Cat Suite or substantially all related intellectual property rights, provided that the assignee assumes the Licensor's obligations under this Agreement.
+
+### 10.8 Force Majeure
+Neither party shall be liable for a failure or delay in performing its obligations caused by circumstances beyond its reasonable control, to the extent permitted by applicable law.
+
+### 10.9 Notices
+Official notices under this Agreement must be sent in writing to the email addresses or GitHub accounts specified in the Written Confirmation or otherwise designated by the parties.
+
+An email notice is considered received when successfully delivered, provided that the sender does not receive an automated delivery failure notification.
+
+### 10.10 Language
+This Agreement is written in English.
+
+In the event of a translated version, the English version shall prevail to the extent permitted by applicable law.
+
+---
+
+## HOW TO OBTAIN A COMMERCIAL LICENSE
+
+To obtain a Commercial License:
+
+1. Contact the Licensor at minepercraft@gmail.com or https://github.com/eduardo1345978.
+2. Provide the exact name and a brief description of your Licensed Product.
+3. Agree on the license fee and applicable terms in writing.
+4. Pay the agreed fee in full.
+5. Receive Written Confirmation from the Licensor.
+
+The Written Confirmation must identify:
+- The Licensee.
+- The Licensed Product.
+- The agreed license fee.
+- The date the license becomes effective.
+- Any additional agreed restrictions or permissions.
+
+IMPORTANT: Until all five steps have been completed, the Licensee does not have a Commercial License and may only use Cat Suite under the terms of the GNU General Public License version 3.0, if applicable.
+
+Copyright © 2026 eduardo1345978. All rights reserved, subject to the applicable open-source and commercial licensing terms.
+
+END OF AGREEMENT

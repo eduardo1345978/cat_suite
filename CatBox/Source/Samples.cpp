@@ -194,7 +194,8 @@ bool SampleBank::readInto (int slot, const juce::File& f)
     juce::AudioFormatManager fm;
     fm.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (f));
-    if (reader == nullptr || reader->lengthInSamples <= 0) return false;
+    if (reader == nullptr || reader->lengthInSamples <= 0 || reader->numChannels < 1 || reader->numChannels > 32
+        || ! (reader->sampleRate >= 4000.0 && reader->sampleRate <= 768000.0)) return false;   // a broken header: don't believe it
     const int len = (int) juce::jmin<juce::int64> (reader->lengthInSamples, (juce::int64) (reader->sampleRate * 60.0));
     juce::AudioBuffer<float> b ((int) juce::jmax (1u, juce::jmin (2u, reader->numChannels)), len);
     reader->read (&b, 0, len, 0, true, true);
@@ -266,7 +267,8 @@ void SampleBank::loadFolder (const juce::File& folder, const juce::StringArray& 
     auto readFile = [this, &fm] (const juce::File& f)
     {
         std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (f));
-        if (reader == nullptr || reader->lengthInSamples <= 0) return false;
+        if (reader == nullptr || reader->lengthInSamples <= 0 || reader->numChannels < 1 || reader->numChannels > 32
+            || ! (reader->sampleRate >= 4000.0 && reader->sampleRate <= 768000.0)) return false;   // a broken header: don't believe it
         const int len = (int) juce::jmin<juce::int64> (reader->lengthInSamples, (juce::int64) (reader->sampleRate * 60.0));   // up to a minute
         juce::AudioBuffer<float> b ((int) juce::jmin (2u, reader->numChannels), len);
         reader->read (&b, 0, len, 0, true, true);

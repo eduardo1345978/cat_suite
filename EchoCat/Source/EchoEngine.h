@@ -14,6 +14,10 @@
         in -> [echo line L/R: time, feedback, ping-pong, tone, low cut, wobble, drive]
            -> [duck] -> mix
         in + echoes -> [space: reverb + shimmer (octave up, fed back)] -> mix
+
+    Echo modes: Normal; Reverse (each echo plays backwards: the last echo-time of sound, read from its
+    end to its start); Steps (8 echoes in a row, each with its own level: a rhythm of echoes, the pattern
+    repeating with the feedback). Pitch: every echo is that many semitones higher / lower than the last.
 */
 namespace echocat
 {
@@ -21,6 +25,14 @@ namespace echocat
 juce::StringArray divisionNames();
 double divisionBeats (int index);
 constexpr int numDivisions = 11;
+enum Mode { ModeNormal = 0, ModeReverse, ModeSteps, ModeResonator };
+constexpr int numSteps = 8;
+constexpr int maxStrings = 8;
+constexpr int chordFollow = 9;     // "Chord-Cat's chord"
+juce::StringArray modeNames();
+juce::StringArray chordNames();
+/** A resonator chord shape (semitones above the root note); returns how many. */
+int chordShape (int index, std::array<int, maxStrings>& out);
 
 struct Settings
 {
@@ -34,21 +46,29 @@ struct Settings
     float space = 0.0f, shimmer = 0.0f, duck = 0.0f;
     bool freeze = false;
     float outputDb = 0.0f;
+    int mode = ModeNormal;
+    float pitch = 0.0f;            // semitones per echo (-12 .. +12)
+    std::array<float, numSteps> steps { 1.0f, 0.0f, 0.8f, 0.0f, 0.6f, 0.6f, 0.0f, 0.4f };
+    // Resonator: the strings' pitches (MIDI semitones, may be fractional: Micro-Cat's tuning)
+    std::array<float, maxStrings> stringPitch {};
+    int numStrings = 0;
 
     double delaySeconds() const;
 };
 
-/** A little granular pitch shifter: an octave up (two overlapping grains read at double speed). */
-class OctaveUp
+/** A little granular pitch shifter (two overlapping grains read faster or slower). */
+class PitchShifter
 {
 public:
     void prepare (double sampleRate);
     void reset();
+    /** 2 = an octave up, 0.5 = an octave down. */
+    void setRatio (float r) noexcept { ratio = juce::jlimit (0.25f, 4.0f, r); }
     float process (float x) noexcept;
 private:
     std::vector<float> buf;
     int w = 0, grain = 2048;
-    float phase = 0.0f;
+    float phase = 0.0f, ratio = 2.0f;
 };
 
 class Engine
@@ -71,7 +91,11 @@ private:
     double wobPhase1 = 0.0, wobPhase2 = 0.0;
     float env = 0.0f, freezeMix = 0.0f;
     juce::Reverb reverb;
-    std::array<OctaveUp, 2> shifters;
+    std::array<PitchShifter, 2> shifters, loopShifters;
+    double revPhase = 0.0;
+    struct ResString { std::vector<float> buf; int w = 0; float lp = 0.0f, delay = -1.0f, targetDelay = 100.0f; };
+    std::array<ResString, maxStrings> strings;
+    float fbLpL = 0, fbLpR = 0, fbHpL = 0, fbHpR = 0;      // the feedback tap's colour (Steps mode)
     std::vector<float> revL, revR, shimL, shimR;
     float shimLp = 0.0f, shimLpR = 0.0f;
     float outGain = 1.0f;

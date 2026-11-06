@@ -1,4 +1,5 @@
 #include "LinkBus.h"
+#include "CatLink.h"
 
 namespace cat
 {
@@ -9,8 +10,40 @@ namespace
     constexpr int maxMembers = 32;
     constexpr int numEvents = 64;
 
+   #if defined (_MSC_VER)
     template <typename T>
     std::atomic_ref<T> at (T& v) noexcept { return std::atomic_ref<T> (v); }
+   #else
+    // Atomic access to a plain value in the shared memory. Apple's C++ library has no std::atomic_ref
+    // yet, so on clang / gcc this uses the compiler's own atomic built-ins (the same machine code).
+    constexpr int order (std::memory_order o) noexcept
+    {
+        switch (o)
+        {
+            case std::memory_order_relaxed: return __ATOMIC_RELAXED;
+            case std::memory_order_consume: return __ATOMIC_CONSUME;
+            case std::memory_order_acquire: return __ATOMIC_ACQUIRE;
+            case std::memory_order_release: return __ATOMIC_RELEASE;
+            case std::memory_order_acq_rel: return __ATOMIC_ACQ_REL;
+            default:                        return __ATOMIC_SEQ_CST;
+        }
+    }
+    template <typename T>
+    struct AtomicRef
+    {
+        T* v;
+        T load (std::memory_order o = std::memory_order_seq_cst) const noexcept { return __atomic_load_n (v, order (o)); }
+        void store (T x, std::memory_order o = std::memory_order_seq_cst) const noexcept { __atomic_store_n (v, x, order (o)); }
+        T fetch_add (T d, std::memory_order o = std::memory_order_seq_cst) const noexcept { return __atomic_fetch_add (v, d, order (o)); }
+        bool compare_exchange_weak (T& expected, T desired, std::memory_order o = std::memory_order_seq_cst) const noexcept
+        {
+            const int failOrder = o == std::memory_order_release ? __ATOMIC_RELAXED : (o == std::memory_order_acq_rel ? __ATOMIC_ACQUIRE : order (o));
+            return __atomic_compare_exchange_n (v, &expected, desired, true, order (o), failOrder);
+        }
+    };
+    template <typename T>
+    AtomicRef<T> at (T& v) noexcept { return AtomicRef<T> { &v }; }
+   #endif
 
     juce::int64 nowMs() noexcept { return juce::Time::currentTimeMillis(); }
 }
@@ -40,11 +73,16 @@ struct alignas (16) LinkBus::Shared
     double transportBpm;
     juce::int64 transportStartTicks;
     juce::uint64 transportSource;
+
+    // Micro-Cat's tuning (added at the end: older Cats simply don't read it)
+    juce::uint32 tuningSeq, tuningActive;
+    juce::uint64 tuningSource;
+    float tuningPitch[128];
 };
 
 juce::File LinkBus::busFile()
 {
-    return juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("CatSuiteLink.bus");
+    return CatLink::sharedFolder().getChildFile ("CatSuiteLink.bus");     // the same folder for every Cat (Mac too)
 }
 
 LinkBus::LinkBus()
@@ -181,12 +219,50 @@ bool LinkBus::readKey (juce::uint32& seq, int& root, juce::uint16& absMask, juce
         const auto s1 = at (shared->keySeq).load (std::memory_order_acquire);
         if (s1 == seq) return false;
         if ((s1 & 1u) != 0u) continue;
-        const int r = shared->keyRoot;
+        const int r = ((int) shared->keyRoot % 12 + 12) % 12;
         const auto m = (juce::uint16) shared->keyMask;
         const auto src = shared->keySource;
         std::atomic_thread_fence (std::memory_order_acquire);
         if (at (shared->keySeq).load (std::memory_order_relaxed) != s1) continue;
         seq = s1; root = r; absMask = m; source = src;
+        return true;
+    }
+    return false;
+}
+
+//==============================================================================
+void LinkBus::publishTuning (const float* pitches, bool active, juce::uint64 source)
+{
+    if (! lock()) return;
+    auto seq = at (shared->tuningSeq);
+    seq.fetch_add (1u, std::memory_order_acq_rel);
+    for (int k = 0; k < 128; ++k) shared->tuningPitch[k] = pitches != nullptr ? pitches[k] : (float) k;
+    shared->tuningActive = active ? 1u : 0u;
+    shared->tuningSource = source;
+    seq.fetch_add (1u, std::memory_order_release);
+    unlock();
+}
+
+bool LinkBus::readTuning (juce::uint32& seq, std::array<float, 128>& pitches, bool& active, juce::uint64& source) const
+{
+    if (shared == nullptr) return false;
+    for (int tries = 0; tries < 8; ++tries)
+    {
+        const auto s1 = at (shared->tuningSeq).load (std::memory_order_acquire);
+        if (s1 == seq) return false;
+        if ((s1 & 1u) != 0u) continue;
+        std::array<float, 128> p;
+        for (int k = 0; k < 128; ++k)
+        {
+            // the bus is a file anyone on this computer can write: only take sane pitches
+            const float v = shared->tuningPitch[k];
+            p[(size_t) k] = std::isfinite (v) && v > -60.0f && v < 200.0f ? v : (float) k;
+        }
+        const bool a = shared->tuningActive != 0u;
+        const auto src = shared->tuningSource;
+        std::atomic_thread_fence (std::memory_order_acquire);
+        if (at (shared->tuningSeq).load (std::memory_order_relaxed) != s1) continue;
+        seq = s1; pitches = p; active = a; source = src;
         return true;
     }
     return false;
@@ -217,7 +293,7 @@ bool LinkBus::readChord (juce::uint32& seq, std::array<int, 16>& notes, int& cou
         if (s1 == seq) return false;
         if ((s1 & 1u) != 0u) continue;
         std::array<int, 16> n {};
-        for (int i = 0; i < 16; ++i) n[(size_t) i] = shared->chordNotes[i];
+        for (int i = 0; i < 16; ++i) n[(size_t) i] = juce::jlimit (0, 127, (int) shared->chordNotes[i]);
         const int c = juce::jlimit (0, 16, (int) shared->chordCount);
         const auto src = shared->chordSource;
         std::atomic_thread_fence (std::memory_order_acquire);
@@ -253,7 +329,7 @@ void LinkBus::readEvents (juce::uint32& lastSeen, juce::uint64 self, const std::
     {
         auto& e = shared->events[(s - 1u) % numEvents];
         if (at (e.seq).load (std::memory_order_acquire) != s) continue;
-        if (e.source != self) fn ((int) e.kind, (int) e.role);
+        if (e.source != self) fn (juce::jlimit (0, 255, (int) e.kind), juce::jlimit (0, 255, (int) e.role));
     }
     lastSeen = w;
 }

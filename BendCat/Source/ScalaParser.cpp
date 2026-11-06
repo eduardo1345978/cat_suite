@@ -10,6 +10,11 @@ bool ScalaParser::loadSclFile (const juce::File& file)
         lastError = "File not found: " + file.getFullPathName();
         return false;
     }
+    if (file.getSize() > 1024 * 1024)
+    {
+        lastError = "That file is too big for a Scala tuning";
+        return false;
+    }
     return parse (file.loadFileAsString());
 }
 
@@ -38,7 +43,7 @@ bool ScalaParser::parsePitch (const juce::String& raw, double& cents)
     if (token.containsChar ('.'))
     {
         cents = token.getDoubleValue();
-        return true;
+        return std::isfinite (cents);
     }
 
     double num = 0.0, den = 1.0;
@@ -56,7 +61,7 @@ bool ScalaParser::parsePitch (const juce::String& raw, double& cents)
         return false;
 
     cents = 1200.0 * std::log2 (num / den);
-    return true;
+    return std::isfinite (cents);
 }
 
 bool ScalaParser::parse (const juce::String& text)
@@ -98,12 +103,22 @@ bool ScalaParser::parse (const juce::String& text)
         degrees.push_back (cents);
     }
 
+    if (expected > 1024)
+    {
+        lastError = "Too many pitches (" + juce::String (expected) + ")";
+        return false;
+    }
     if (expected <= 0 || (int) degrees.size() != expected)
     {
         lastError = "Expected " + juce::String (expected) + " pitches, found " + juce::String ((int) degrees.size());
         return false;
     }
 
+    if (degrees.back() <= 0.0)
+    {
+        lastError = "The last pitch (the period) must be above the first note";
+        return false;
+    }
     degreesCents = std::move (degrees);
     description = desc;
     rawText = text;

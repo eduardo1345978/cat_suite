@@ -1,4 +1,5 @@
 #include "GlideSynth.h"
+#include "LinkClient.h"
 #include <numeric>
 
 namespace glidecat
@@ -726,7 +727,7 @@ void Synth::renderVoice (Voice& v, int index, float* left, float* right, int num
             auto& l = v.layers[(size_t) li];
             if (! ls.on) { l.amp = 0.0f; continue; }
             static const float feet[] = { -12.0f, 0.0f, 12.0f, 24.0f };
-            const float lp = pitch + feet[juce::jlimit (0, 3, ls.feet)] + ls.fine * 0.01f;
+            const float lp = (link != nullptr ? link->tuned (pitch) : pitch) + feet[juce::jlimit (0, 3, ls.feet)] + ls.fine * 0.01f;
             const double f0 = 440.0 * std::pow (2.0, (lp - 69.0) / 12.0);
             const float det = (ls.detune + mDetune) * 0.01f;
             const int uni = juce::jlimit (1, 3, ls.unison);

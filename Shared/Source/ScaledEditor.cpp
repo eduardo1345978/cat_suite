@@ -94,6 +94,9 @@ float ScaledEditor::loadScale() const
 
 void ScaledEditor::saveScale (float scale) const
 {
+    // in Cat Hub the Hub sizes the window to its tab: don't let that change the size you chose in Cubase
+    const auto host = juce::File (juce::PluginHostType::getHostPath()).getFileNameWithoutExtension();
+    if (host.containsIgnoreCase ("Cat-Hub") || host.containsIgnoreCase ("CatHub") || host.containsIgnoreCase ("Cat Hub")) return;
     juce::PropertiesFile settings (settingsOptions (name));
     settings.setValue ("uiScale", (double) scale);
     settings.saveIfNeeded();

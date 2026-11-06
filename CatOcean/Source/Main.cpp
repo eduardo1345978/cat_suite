@@ -3,6 +3,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "OceanEngine.h"
+#include "OceanSecret.h"
 #include "OceanFilter.h"
 #include "CatLookAndFeel.h"
 #include "BinaryData.h"
@@ -132,8 +133,9 @@ public:
         for (auto* l : { &streamStatus, &chatStatus, &ffmpegStatus }) l->setJustificationType (juce::Justification::topLeft);
 
         keyEditor.setPasswordCharacter ((juce::juce_wchar) 0x2022);
-        keyEditor.setText (props.getValue ("streamKey"), false);
+        keyEditor.setText (juce::String::fromUTF8 (ocean::secret::unprotect (props.getValue ("streamKey").toStdString()).c_str()), false);
         channelEditor.setText (props.getValue ("channel"), false);
+        if (! props.getValue ("streamKey").startsWith ("dpapi:") && keyEditor.getText().isNotEmpty()) save();   // an old plain key: lock it now
         channelEditor.setTextToShowWhenEmpty ("@yourchannel", aero::inkDim);
         hostEditor.setTextToShowWhenEmpty ("!fish Miro blue stripes", aero::inkDim);
         for (auto* ed : { &keyEditor, &channelEditor, &hostEditor })
@@ -438,7 +440,7 @@ private:
 
     void save()
     {
-        props.setValue ("streamKey", keyEditor.getText().trim());
+        props.setValue ("streamKey", juce::String (ocean::secret::protect (keyEditor.getText().trim().toStdString())));
         props.setValue ("channel", channelEditor.getText().trim());
         props.saveIfNeeded();
     }

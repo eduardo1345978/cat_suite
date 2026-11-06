@@ -598,6 +598,98 @@ private:
 };
 
 //==============================================================================
+/** The resize test (see --resizetest): runs on its own thread, does every UI step on the message thread. */
+struct ResizeTest
+{
+    ResizeTest (juce::File cats, juce::File outFolder) : catsFolder (cats), out (outFolder)
+    {
+        juce::PropertiesFile::Options o;
+        o.applicationName = "Cat Hub resize test"; o.filenameSuffix = "settings"; o.folderName = "Cat Suite";
+        props = std::make_unique<juce::PropertiesFile> (o);
+    }
+    ~ResizeTest() { onUi ([this] { window.reset(); main.reset(); engine.releaseCats(); (void) keepAlive.release(); }); }   // (left open on purpose, see above)
+
+    static void onUi (std::function<void()> f)
+    {
+        if (juce::MessageManager::getInstance()->isThisTheMessageThread()) { f(); return; }
+        juce::WaitableEvent done;
+        juce::MessageManager::callAsync ([&] { f(); done.signal(); });
+        done.wait();
+    }
+
+    int run()
+    {
+        out.createDirectory();
+        int numTabs = 0;
+        onUi ([&]
+        {
+            // (Linux only: one extra plug-in kept open for the whole test, so JUCE's shared VST3 run loop
+            // isn't freed while a window still listens on it - a JUCE hosting quirk, not the Hub's)
+            formats.addFormat (std::make_unique<juce::VST3PluginFormat>());
+            for (auto& f : catsFolder.findChildFiles (juce::File::findDirectories, false, "*.vst3"))
+            {
+                juce::OwnedArray<juce::PluginDescription> found;
+                juce::VST3PluginFormat().findAllTypesForFile (found, f.getFullPathName());
+                juce::String err;
+                if (! found.isEmpty()) keepAlive = formats.createPluginInstance (*found[0], 48000.0, 512, err);
+                if (keepAlive != nullptr) break;
+            }
+            engine.prepare (48000.0, 512);
+            engine.loadCats ({ catsFolder });
+            main = std::make_unique<HubMain> (engine, dm, *props);
+            main->setAdvanced (true);
+            main->changeCats ([this] { engine.applyStyle (4); });
+            window = std::make_unique<juce::DocumentWindow> ("Cat Hub", juce::Colours::black, 0);
+            window->setUsingNativeTitleBar (false);
+            window->setTitleBarHeight (0);
+            window->setContentNonOwned (main.get(), false);
+            window->setBounds (0, 0, 1000, 700);
+            window->setVisible (true);
+            numTabs = main->numTabs();
+        });
+        juce::Thread::sleep (1500);
+        int fails = 0;
+        for (int t = 3; t < numTabs; ++t)
+        {
+            juce::String name;
+            onUi ([&] { main->selectTab (t); name = main->tabName (t); });
+            juce::String line = name + ":";
+            juce::Rectangle<int> last;
+            bool grew = true, fits = true;
+            for (auto size : { juce::Point<int> (1000, 700), juce::Point<int> (1500, 950), juce::Point<int> (1900, 1080) })
+            {
+                onUi ([&] { window->setBounds (0, 0, size.x, size.y); });
+                juce::Thread::sleep (1200);
+                juce::Rectangle<int> area, r;
+                onUi ([&] { r = main->catEditorBounds (&area); });
+                line << "  " << size.x << "x" << size.y << " -> " << r.getWidth() << "x" << r.getHeight();
+                fits = fits && area.contains (r);
+                if (! last.isEmpty()) grew = grew && r.getWidth() > last.getWidth();
+                last = r;
+                const auto f = out.getChildFile (name.replaceCharacter (' ', '_') + "_" + juce::String (size.x) + ".png");
+                juce::ChildProcess cp;
+                if (cp.start (juce::StringArray { "import", "-window", "root", "-crop",
+                                                  juce::String (size.x) + "x" + juce::String (size.y) + "+0+0", f.getFullPathName() }))
+                    cp.waitForProcessToFinish (20000);
+            }
+            const bool ok = grew && fits;
+            if (! ok) ++fails;
+            std::printf ("%s %s%s\n", ok ? "ok  " : "FAIL", line.toRawUTF8(), fits ? "" : "  (does not fit)");
+            std::fflush (stdout);
+        }
+        return fails;
+    }
+
+    juce::File catsFolder, out;
+    std::unique_ptr<juce::PropertiesFile> props;
+    HubEngine engine;
+    juce::AudioDeviceManager dm;
+    std::unique_ptr<HubMain> main;
+    std::unique_ptr<juce::DocumentWindow> window;
+    juce::AudioPluginFormatManager formats;
+    std::unique_ptr<juce::AudioPluginInstance> keepAlive;
+};
+
 class HubApplication : public juce::JUCEApplication
 {
 public:
@@ -609,6 +701,25 @@ public:
     {
         auto args = juce::StringArray::fromTokens (commandLine, true);
         for (auto& a : args) a = a.unquoted();
+        if (args.contains ("--resizetest"))
+        {
+            // --resizetest <catsFolder> <out folder>: every Cat's window in its tab, in a real window on screen,
+            // at three window sizes; the screen is captured (import) so the hosted plug-in's own drawing shows
+            const int at = args.indexOf ("--resizetest");
+            resizeTest = std::make_unique<ResizeTest> (juce::File (args[at + 1]), juce::File (args[at + 2]));
+            resizeThread = std::thread ([this]
+            {
+                const int fails = resizeTest->run();
+                juce::MessageManager::callAsync ([this, fails]
+                {
+                    resizeTest.reset();
+                    std::printf (fails == 0 ? "RESIZE TEST PASSED\n" : "RESIZE TEST FAILED\n");
+                    setApplicationReturnValue (fails == 0 ? 0 : 1);
+                    quit();
+                });
+            });
+            return;
+        }
         if (args.contains ("--snapshot"))
         {
             // --snapshot <catsFolder> <out.png>: pictures of every tab (for checking the layout)
@@ -737,6 +848,8 @@ public:
     void shutdown() override
     {
         uiStress.reset();
+        if (resizeThread.joinable()) resizeThread.join();
+        resizeTest.reset();
         if (engine == nullptr) return;
         if (auto xml = engine->saveState().createXml()) settings->setValue ("hub", xml.get());
         if (auto xml = deviceManager.createStateXml()) settings->setValue ("audio", xml.get());
@@ -779,6 +892,8 @@ private:
     juce::AudioDeviceManager deviceManager;
     std::unique_ptr<MainWindow> window;
     std::unique_ptr<UiStress> uiStress;
+    std::unique_ptr<ResizeTest> resizeTest;
+    std::thread resizeThread;
 };
 } // namespace hub
 

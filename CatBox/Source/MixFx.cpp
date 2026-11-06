@@ -20,8 +20,9 @@ float OctaveUp::process (float x) noexcept
         const float d = (1.0f - ph) * window + 2.0f;
         float pos = (float) w - d;
         while (pos < 0.0f) pos += (float) size;
-        const int i0 = (int) pos;
+        int i0 = (int) pos;
         const float f = pos - (float) i0;
+        if (i0 >= size) i0 -= size;   // float rounding can land exactly on the end
         const float s = buf[(size_t) i0] + (buf[(size_t) ((i0 + 1) % size)] - buf[(size_t) i0]) * f;
         y += s * std::sin (dsp::pi * ph);
     }
@@ -149,8 +150,9 @@ float SendDelay::tap (const std::vector<float>& buf, float back) const noexcept
     back = juce::jlimit (1.0f, (float) size - 3.0f, back);
     float pos = (float) w - back;
     while (pos < 0.0f) pos += (float) size;
-    const int i0 = (int) pos;
+    int i0 = (int) pos;
     const float f = pos - (float) i0;
+    if (i0 >= size) i0 -= size;       // float rounding can land exactly on the end
     return buf[(size_t) i0] + (buf[(size_t) ((i0 + 1) % size)] - buf[(size_t) i0]) * f;
 }
 

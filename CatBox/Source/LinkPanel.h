@@ -29,7 +29,7 @@ private:
     LinkClient& link;
     juce::Label title, status, foundLabel, info;
     juce::OwnedArray<juce::TextButton> foundButtons;
-    juce::TextEditor address;
+    juce::TextEditor address, code;
     juce::TextButton connectButton { "Connect" }, disconnectButton { "Disconnect" };
     juce::String lastFoundKey;
 };

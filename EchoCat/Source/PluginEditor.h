@@ -22,6 +22,24 @@ private:
     double clock = 0.0;
 };
 
+/** Steps mode: the 8 echoes' levels as bars - drag up / down (or across) to draw the rhythm. */
+class StepsEditor : public juce::Component, public juce::SettableTooltipClient, private juce::Timer
+{
+public:
+    explicit StepsEditor (EchoCatProcessor&);
+    ~StepsEditor() override;
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
+    juce::Rectangle<float> barArea (int step) const;
+private:
+    void timerCallback() override { repaint(); }
+    void setFrom (juce::Point<float>);
+    EchoCatProcessor& processor;
+    std::array<bool, echocat::numSteps> gesture {};
+};
+
 /** A titled glass group with its controls. */
 class EchoSection : public juce::Component
 {
@@ -52,7 +70,36 @@ private:
     EchoCatProcessor& processor;
     cat::PresetBar presetBar { processor.presetManager, "Preset" };
     cat::ParamToggle freezeButton { processor.apvts, "freeze", "Freeze" }, syncButton { processor.apvts, "sync", "In time with Cubase" };
-    cat::ParamCombo divisionBox { processor.apvts, "division", "Echo", nullptr, 44 };
+    cat::ParamCombo divisionBox { processor.apvts, "division", "Echo", nullptr, 44 },
+                    modeBox { processor.apvts, "mode", "Mode", nullptr, 50 };
+    StepsEditor stepsEditor { processor };
+    /** Resonator mode: the strings' note and chord. */
+    struct ResonatorPanel : public juce::Component
+    {
+        explicit ResonatorPanel (EchoCatProcessor& p) : note (p.apvts, "resNote", "Note", nullptr, 50), chord (p.apvts, "resChord", "Chord", nullptr, 54)
+        {
+            addAndMakeVisible (note);
+            addAndMakeVisible (chord);
+        }
+        void paint (juce::Graphics& g) override
+        {
+            g.setColour (juce::Colour (0xcc0d1018));
+            g.fillRoundedRectangle (getLocalBounds().toFloat(), 8.0f);
+            g.setColour (cat::Colours::textDim);
+            g.setFont (cat::catFont (11.5f, true));
+            g.drawFittedText ("TUNED\nSTRINGS", getLocalBounds().reduced (10, 6).removeFromLeft (64), juce::Justification::centredLeft, 2);
+        }
+        void resized() override
+        {
+            auto r = getLocalBounds().reduced (10, 8);
+            r.removeFromLeft (70);
+            note.setBounds (r.removeFromLeft (r.getWidth() / 2 - 5));
+            r.removeFromLeft (10);
+            chord.setBounds (r);
+        }
+        cat::BarSlider note;
+        cat::ParamCombo chord;
+    } resonatorPanel { processor };
     EchoView view { processor };
     EchoSection timeSection { "TIME", cat::Colours::accent }, colourSection { "EACH ECHO", cat::Colours::red },
                 spaceSection { "SPACE", cat::Colours::purple }, mixSection { "MIX", cat::Colours::green };
@@ -61,6 +108,7 @@ private:
     juce::Rectangle<int> logoArea, infoArea;
     juce::String info;
     bool shownSync = true;
+    int shownMode = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EchoCatEditor)
 };

@@ -6,7 +6,7 @@ using namespace cat::muse;
 
 namespace
 {
-    constexpr int designW = 1060, designH = 700;
+    constexpr int designW = 1160, designH = 760;
 
     juce::Colour sectionColour (int type)
     {
@@ -319,6 +319,9 @@ MuseCatEditor::MuseCatEditor (MuseCatProcessor& p) : processor (p)
 
     playButton.setTooltip ("Play the song here (in Cubase, Muse-Cat follows Cubase's Play)");
     playButton.onClick = [this] { processor.previewPlaying = ! processor.previewPlaying.load(); };
+    playButton.setButtonText ("LAUNCH SONG");
+    playButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xffd8361f));
+    playButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
     dragButton.setTooltip ("Drag the whole song into Cubase as MIDI (every part on its own channel, with the words)");
     dragButton.onDragOut = [this]
     {
@@ -441,8 +444,9 @@ void MuseCatEditor::timerCallback()
     if (preview != shownPlaying)
     {
         shownPlaying = preview;
-        playButton.setButtonText (preview ? "Stop" : "Play");
-        playButton.setColour (juce::TextButton::buttonColourId, preview ? cat::Colours::accent.withAlpha (0.5f) : cat::Colours::raised);
+        playButton.setButtonText (preview ? "STOP" : "LAUNCH SONG");
+        playButton.setColour (juce::TextButton::buttonColourId, preview ? juce::Colour (0xff8a1a12) : juce::Colour (0xffd8361f));
+        playButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
     }
     if (s != nullptr)
     {
@@ -452,7 +456,7 @@ void MuseCatEditor::timerCallback()
     for (int part = 0; part < NumParts; ++part)
     {
         const float m = juce::jmax (processor.partMeter (part), shownMeters[(size_t) part] * 0.85f);
-        if (std::abs (m - shownMeters[(size_t) part]) > 0.004f) { shownMeters[(size_t) part] = m; repaint (partLabelAreas[(size_t) part]); }
+        if (std::abs (m - shownMeters[(size_t) part]) > 0.004f) { shownMeters[(size_t) part] = m; repaint (partLabelAreas[(size_t) part]); repaint (lampArea); }
     }
     if (! seedBox.hasKeyboardFocus (true))
     {
@@ -548,86 +552,134 @@ void MuseCatEditor::exportSong (int what)
 
 void MuseCatEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (cat::Colours::background);
-    cat::CatLookAndFeel::drawLogo (g, logoArea.toFloat(), "MUSE", "CAT");
+    cat::paintBackdrop (g, getLocalBounds());
 
-    auto s = shownSong;
-    auto h = headerArea;
-    if (s != nullptr)
+    // MUSE·CAT  SONG MISSION CONTROL                         lamps
     {
-        const auto st = s->settings;
+        auto l = logoArea;
         g.setColour (cat::Colours::text);
-        g.setFont (cat::catFont (22.0f, true));
-        g.drawText ("\"" + s->title + "\"", h.removeFromLeft (360), juce::Justification::centredLeft, true);
+        g.setFont (cat::displayFont (22.0f).withExtraKerningFactor (0.2f));
+        const juce::String name = juce::String ("MUSE") + juce::String::charToString ((juce::juce_wchar) 0x00b7) + "CAT";
+        g.drawText (name, l.removeFromLeft (190), juce::Justification::centredLeft);
         g.setColour (cat::Colours::textDim);
-        g.setFont (cat::catFont (13.0f));
-        const int secs = (int) std::round (s->lengthBeats * 60.0 / juce::jmax (30.0, s->bpm));
-        juce::String info = keyName (s->key) + " " + scaleName (s->scale) + "     written for " + juce::String (juce::roundToInt (s->bpm)) + " BPM";
-        if (processor.isHostPlaying() && std::abs (processor.getHostBpm() - s->bpm) > 0.5)
-            info << " (Cubase plays it at " << juce::roundToInt (processor.getHostBpm()) << ")";
-        info << (st.endless ? "     endless, part " + juce::String (s->chunk + 1)
-                            : "     " + juce::String (secs / 60) + ":" + juce::String (secs % 60).paddedLeft ('0', 2) + " min");
-        g.drawText (info, h, juce::Justification::centredRight, true);
+        g.setFont (cat::catFont (11.0f).withExtraKerningFactor (0.25f));
+        g.drawText ("SONG MISSION CONTROL", l, juce::Justification::centredLeft);
+
+        auto lamps = lampArea;
+        for (int part = NumParts - 1; part >= 0; --part)
+        {
+            auto one = lamps.removeFromRight (lamps.getWidth() / (part + 1));
+            const bool on = shownMeters[(size_t) part] > 0.0005f;
+            const auto c = on ? juce::Colour (0xff4ce08a) : juce::Colour (0xff3a3f46);
+            auto dot = one.removeFromLeft (14).toFloat().withSizeKeepingCentre (9.0f, 9.0f);
+            if (on) { g.setColour (c.withAlpha (0.35f)); g.fillEllipse (dot.expanded (4.0f)); }
+            g.setColour (c);
+            g.fillEllipse (dot);
+            g.setColour (cat::Colours::text.withAlpha (on ? 1.0f : 0.55f));
+            g.setFont (cat::catFont (11.0f).withExtraKerningFactor (0.1f));
+            g.drawText (partNames()[part].toUpperCase() + (on ? " OK" : ""), one.withTrimmedLeft (4), juce::Justification::centredLeft, true);
+        }
     }
     g.setColour (cat::Colours::textDim);
     g.setFont (cat::catFont (12.0f, true));
-    g.drawText ("NEW:", renewLabelArea, juce::Justification::centredLeft);
-    g.drawText ("Song #", seedBox.getBounds().translated (-56, 0).withWidth (52), juce::Justification::centredRight);
+    g.drawText ("SONG #", seedBox.getBounds().translated (-62, 0).withWidth (58), juce::Justification::centredRight);
 
-    // words
-    auto la = lyricsArea.toFloat();
-    cat::CatLookAndFeel::drawGlassPanel (g, la, 8.0f);
-    la = la.reduced (16.0f, 6.0f);
+    // the arrangement screen
+    auto screen = screenArea.toFloat();
+    g.setColour (juce::Colour (0xff2e3238));
+    g.fillRoundedRectangle (screen, 12.0f);
+    auto glass = screen.reduced (6.0f);
+    g.setColour (juce::Colour (0xff0a0f14));
+    g.fillRoundedRectangle (glass, 9.0f);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff0b1a24), glass.getCentreX(), glass.getY() + glass.getHeight() * 0.4f,
+                                             juce::Colour (0xff060c11), glass.getX(), glass.getBottom(), true));
+    g.fillRoundedRectangle (glass.reduced (6.0f), 7.0f);
+
+    auto s = shownSong;
     if (s != nullptr)
     {
-        const auto& lines = s->lyricLines;
-        if (lines.isEmpty())
+        auto h = headerArea;
+        const auto st = s->settings;
+        const int secs = (int) std::round (s->lengthBeats * 60.0 / juce::jmax (30.0, s->bpm));
+        juce::String info = s->title.toUpperCase() + "  " + juce::String::charToString ((juce::juce_wchar) 0x00b7) + "  " + keyName (s->key).toUpperCase() + " "
+                          + scaleName (s->scale).toUpperCase() + "  " + juce::String::charToString ((juce::juce_wchar) 0x00b7) + "  " + juce::String (juce::roundToInt (s->bpm)) + " BPM";
+        if (processor.isHostPlaying() && std::abs (processor.getHostBpm() - s->bpm) > 0.5)
+            info << " (CUBASE " << juce::roundToInt (processor.getHostBpm()) << ")";
+        g.setColour (juce::Colour (0xff4fd1ff));
+        g.setFont (cat::catFont (13.0f, true).withExtraKerningFactor (0.05f));
+        g.drawText (info, h, juce::Justification::centredLeft, true);
+        g.drawText (st.endless ? "ENDLESS  " + juce::String (s->chunk + 1) : juce::String (secs / 60) + ":" + juce::String (secs % 60).paddedLeft ('0', 2),
+                    h, juce::Justification::centredRight, true);
+    }
+
+    // the lyrics terminal
+    {
+        auto la = lyricsArea.toFloat();
+        g.setColour (juce::Colour (0xff2e3238));
+        g.fillRoundedRectangle (la, 10.0f);
+        g.setColour (juce::Colour (0xff0a0f14));
+        g.fillRoundedRectangle (la.reduced (2.0f), 9.0f);
+        auto t = la.reduced (12.0f, 8.0f);
+        const auto green = juce::Colour (0xff7dffb2);
+        g.setFont (cat::catFont (12.0f, true));
+        g.setColour (green.withAlpha (0.7f));
+        g.drawText ("> LYRICS", t.removeFromTop (16.0f), juce::Justification::centredLeft);
+        if (s != nullptr)
         {
-            g.setColour (cat::Colours::textDim);
-            g.setFont (cat::catFont (14.0f));
-            g.drawText ("(this song has no words)", la, juce::Justification::centred);
-        }
-        else
-        {
+            const auto& lines = s->lyricLines;
             const int line = shownLine;
-            auto top = la.removeFromTop (la.getHeight() * 0.28f);
-            auto mid = la.removeFromTop (la.getHeight() * 0.58f);
-            g.setColour (cat::Colours::textDim);
-            g.setFont (cat::catFont (13.0f));
-            g.drawText (line >= 1 ? lines[line - 1] : juce::String ("WORDS  -  the melody (MIDI ch 3) into Sing-Cat or Talk-Cat sings them: paste them there"),
-                        top, juce::Justification::centred, true);
-            g.setColour (cat::Colours::text);
-            g.setFont (cat::catFont (22.0f, true));
-            g.drawText (line >= 0 ? lines[line] : lines[0], mid, juce::Justification::centred, true);
-            g.setColour (cat::Colours::textDim);
-            g.setFont (cat::catFont (13.0f));
-            const int next = line >= 0 ? line + 1 : 1;
-            if (next < lines.size()) g.drawText (lines[next], la, juce::Justification::centred, true);
+            if (lines.isEmpty())
+            {
+                g.drawText ("(no words in this song)", t.removeFromTop (18.0f), juce::Justification::centredLeft);
+            }
+            else
+            {
+                const int cur = line >= 0 ? line : 0;
+                g.setColour (green.withAlpha (0.45f));
+                g.setFont (cat::catFont (12.0f));
+                if (cur >= 1) g.drawFittedText (lines[cur - 1], t.removeFromTop (18.0f).toNearestInt(), juce::Justification::centredLeft, 1);
+                else t.removeFromTop (18.0f);
+                g.setColour (green);
+                g.setFont (cat::catFont (14.0f, true));
+                g.drawFittedText (lines[cur], t.removeFromTop (40.0f).toNearestInt(), juce::Justification::centredLeft, 2);
+                g.setColour (green.withAlpha (0.45f));
+                g.setFont (cat::catFont (12.0f));
+                if (cur + 1 < lines.size()) g.drawFittedText (lines[cur + 1], t.removeFromTop (18.0f).toNearestInt(), juce::Justification::centredLeft, 1);
+            }
         }
     }
 
-    // parts
-    cat::CatLookAndFeel::drawGlassPanel (g, partsArea.toFloat(), 8.0f);
+    g.setColour (cat::Colours::textDim);
+    g.setFont (cat::catFont (11.0f).withExtraKerningFactor (0.2f));
+    g.drawText ("WRITE AGAIN", renewLabelArea, juce::Justification::centredLeft);
+
+    // the parts console
+    {
+        auto pa = partsArea.toFloat();
+        g.setColour (juce::Colour (0xff1a1d22));
+        g.fillRoundedRectangle (pa, 12.0f);
+        g.setColour (juce::Colours::black.withAlpha (0.4f));
+        g.drawRoundedRectangle (pa.reduced (1.0f), 12.0f, 2.0f);
+    }
     for (int part = 0; part < NumParts; ++part)
     {
         auto a = partLabelAreas[(size_t) part].toFloat();
         const auto c = SongMap::partColour (part);
         g.setColour (c);
-        g.fillEllipse (a.removeFromLeft (12.0f).withSizeKeepingCentre (9.0f, 9.0f));
+        g.fillEllipse (a.removeFromLeft (12.0f).withSizeKeepingCentre (8.0f, 8.0f));
         g.setColour (cat::Colours::text);
-        g.setFont (cat::catFont (13.0f, true));
-        g.drawText (partNames()[part] + "  (ch " + juce::String (partChannel (part)) + ")", a.removeFromLeft (a.getWidth() - 40.0f).translated (4.0f, 0.0f), juce::Justification::centredLeft);
-        auto meter = a.reduced (4.0f, 6.0f);
-        g.setColour (cat::Colours::raised);
+        g.setFont (cat::catFont (11.5f, true).withExtraKerningFactor (0.1f));
+        g.drawText (partNames()[part].toUpperCase(), a.removeFromLeft (a.getWidth() - 34.0f).translated (4.0f, 0.0f), juce::Justification::centredLeft, true);
+        auto meter = a.reduced (2.0f, 7.0f);
+        g.setColour (juce::Colour (0xff0a0f14));
         g.fillRoundedRectangle (meter, 2.0f);
         const float lv = juce::jlimit (0.0f, 1.0f, std::sqrt (shownMeters[(size_t) part]) * 1.4f);
         g.setColour (c);
         g.fillRoundedRectangle (meter.withWidth (meter.getWidth() * lv), 2.0f);
     }
     g.setColour (cat::Colours::textDim);
-    g.setFont (cat::catFont (11.5f));
-    g.drawFittedText ("MIDI out: chords ch 1, bass 2, melody 3, counter-melody 4, drums 10. Route Muse-Cat's MIDI to other tracks in Cubase.",
-                      midiInfoArea, juce::Justification::centredLeft, 2);
+    g.setFont (cat::catFont (11.0f));
+    g.drawFittedText ("MIDI out: chords ch 1, bass 2, melody 3, counter 4, drums 10", midiInfoArea, juce::Justification::centredLeft, 2);
     if (status.isNotEmpty())
     {
         g.setColour (cat::Colours::accent);
@@ -639,53 +691,64 @@ void MuseCatEditor::resized()
 {
     if (soundBoxes.size() < NumParts || volumeKnobs.size() < NumParts)
         return;   // still being built (setSize in the constructor comes first)
-    auto r = getLocalBounds().reduced (14, 10);
-    auto top = r.removeFromTop (40);
-    logoArea = top.removeFromLeft (160);
-    top.removeFromLeft (10);
-    presetBar.setBounds (top.removeFromLeft (390));
-    top.removeFromLeft (12);
-    playButton.setBounds (top.removeFromLeft (90));
-    exportButton.setBounds (top.removeFromRight (100));
-    top.removeFromRight (8);
-    dragButton.setBounds (top.removeFromRight (110));
-    top.removeFromRight (8);
-    wordsButton.setBounds (top.removeFromRight (130));
-
+    auto r = getLocalBounds().reduced (18, 12);
+    {
+        auto top = r.removeFromTop (34);
+        logoArea = top.removeFromLeft (420);
+        lampArea = top.withTrimmedLeft (20);
+    }
     r.removeFromTop (8);
-    headerArea = r.removeFromTop (32);
-    r.removeFromTop (6);
-    auto row = r.removeFromTop (32);
-    genreBox.setBounds (row.removeFromLeft (200)); row.removeFromLeft (10);
-    moodBox.setBounds (row.removeFromLeft (170)); row.removeFromLeft (64);
-    seedBox.setBounds (row.removeFromLeft (80)); row.removeFromLeft (8);
-    newSeedButton.setBounds (row.removeFromLeft (110)); row.removeFromLeft (16);
-    songButton.setBounds (row.removeFromLeft (70));
-    endlessButton.setBounds (row.removeFromLeft (84));
-
-    r.removeFromTop (8);
-    auto renew = r.removeFromTop (28);
-    renewLabelArea = renew.removeFromLeft (44);
-    const int bw = (renew.getWidth() - 6 * (renewButtons.size() - 1)) / juce::jmax (1, renewButtons.size());
-    for (auto* b : renewButtons) { b->setBounds (renew.removeFromLeft (bw)); renew.removeFromLeft (6); }
-
+    {
+        auto row = r.removeFromTop (32);
+        presetBar.setBounds (row.removeFromLeft (310)); row.removeFromLeft (10);
+        genreBox.setBounds (row.removeFromLeft (190)); row.removeFromLeft (10);
+        moodBox.setBounds (row.removeFromLeft (160)); row.removeFromLeft (66);
+        seedBox.setBounds (row.removeFromLeft (74)); row.removeFromLeft (6);
+        newSeedButton.setBounds (row.removeFromLeft (104)); row.removeFromLeft (12);
+        songButton.setBounds (row.removeFromLeft (70));
+        endlessButton.setBounds (row.removeFromLeft (84));
+    }
+    r.removeFromTop (12);
     r.removeFromBottom (14);
-    partsArea = r.removeFromBottom (128);
-    r.removeFromBottom (8);
-    lyricsArea = r.removeFromBottom (78);
-    r.removeFromBottom (8);
-    r.removeFromTop (8);
-    map.setBounds (r);
-    wordsPanel.setBounds (map.getBounds().getUnion (lyricsArea));
 
-    auto pa = partsArea.reduced (10, 8);
+    // the side: lyrics terminal, write-again switches, export, LAUNCH
+    auto aside = r.removeFromRight (250);
+    r.removeFromRight (14);
+    lyricsArea = aside.removeFromTop (130);
+    aside.removeFromTop (10);
+    playButton.setBounds (aside.removeFromBottom (56));
+    aside.removeFromBottom (10);
+    {
+        auto row = aside.removeFromBottom (30);
+        dragButton.setBounds (row.removeFromLeft (row.getWidth() / 2 - 3));
+        row.removeFromLeft (6);
+        exportButton.setBounds (row);
+        aside.removeFromBottom (6);
+        wordsButton.setBounds (aside.removeFromBottom (30));
+        aside.removeFromBottom (10);
+    }
+    renewLabelArea = aside.removeFromTop (18);
+    const int bh = juce::jmin (32, (aside.getHeight() - 4 * (renewButtons.size() - 1)) / juce::jmax (1, renewButtons.size()));
+    for (auto* b : renewButtons) { b->setBounds (aside.removeFromTop (bh)); aside.removeFromTop (4); }
+
+    // the parts console
+    partsArea = r.removeFromBottom (168);
+    r.removeFromBottom (12);
+    screenArea = r;
+    auto inner = screenArea.reduced (20, 14);
+    headerArea = inner.removeFromTop (24);
+    inner.removeFromTop (4);
+    map.setBounds (inner);
+    wordsPanel.setBounds (screenArea);
+
+    auto pa = partsArea.reduced (12, 10);
     auto right = pa.removeFromRight (190);
-    masterKnob.setBounds (right.removeFromLeft (70));
+    masterKnob.setBounds (right.removeFromLeft (76));
     right.removeFromLeft (8);
     soundToggle.setBounds (right.removeFromTop (30));
     right.removeFromTop (6);
     midiToggle.setBounds (right.removeFromTop (30));
-    midiInfoArea = right.withTrimmedTop (2);
+    midiInfoArea = right.withTrimmedTop (4);
     pa.removeFromRight (10);
     const int cw = pa.getWidth() / NumParts;
     for (int part = 0; part < NumParts; ++part)
@@ -695,6 +758,6 @@ void MuseCatEditor::resized()
         c.removeFromTop (4);
         soundBoxes[part]->setBounds (c.removeFromTop (26));
         c.removeFromTop (2);
-        volumeKnobs[part]->setBounds (c.withSizeKeepingCentre (juce::jmin (c.getWidth(), 80), c.getHeight()));
+        volumeKnobs[part]->setBounds (c.withSizeKeepingCentre (juce::jmin (c.getWidth(), 86), c.getHeight()));
     }
 }

@@ -6,6 +6,17 @@
 #include <map>
 #include <set>
 
+/** Cat Link's shared folder (as in Shared/Source/CatLink.cpp: on a Mac JUCE's temp folder is per program). */
+juce::File catLinkFolder()
+{
+   #if JUCE_MAC
+    return juce::File ("~/Library/Caches/CatSuite");
+   #else
+    return juce::File::getSpecialLocation (juce::File::tempDirectory);
+   #endif
+}
+
+
 namespace
 {
 constexpr double sampleRate = 48000.0;
@@ -1007,14 +1018,14 @@ void testCatLink()
     // A chain picked in "another Cat": written straight into the link file
     {
         juce::XmlElement x ("CATLINK");
-        if (auto old = juce::XmlDocument::parse (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("CatSuiteLink.xml")))
+        if (auto old = juce::XmlDocument::parse (catLinkFolder().getChildFile ("CatSuiteLink.xml")))
             x = *old;
         auto* c = x.getChildByName ("CHAIN");
         if (c == nullptr) c = x.createNewChildElement ("CHAIN");
         c->setAttribute ("name", "Trap Night");
         c->setAttribute ("stamp", juce::String (juce::Time::currentTimeMillis() + 10));
         c->setAttribute ("source", "host-test");
-        x.writeTo (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("CatSuiteLink.xml"));
+        x.writeTo (catLinkFolder().getChildFile ("CatSuiteLink.xml"));
     }
     juce::MessageManager::getInstance()->runDispatchLoopUntil (1200);
     auto now = [] (juce::AudioPluginInstance& p) { return p.getProgramName (p.getCurrentProgram()); };
@@ -1765,6 +1776,142 @@ void testEchoCat()
     echo->releaseResources();
 }
 
+/** Micro-Cat: loads as a VST3, its programs are the tunings, a note comes out as an MPE note with the tuning's bend. */
+void testMicroCat()
+{
+    std::cout << "\n== Micro-Cat ==" << std::endl;
+    auto micro = loadPlugin (MICROCAT_VST3);
+    if (micro == nullptr) { ++failures; return; }
+    check (micro->acceptsMidi() && micro->producesMidi(), "Micro-Cat takes and sends MIDI");
+    int ji = -1;
+    for (int i = 0; i < micro->getNumPrograms(); ++i) if (micro->getProgramName (i) == "Just intonation (5-limit)") ji = i;
+    check (micro->getNumPrograms() >= 35 && ji >= 0, "Micro-Cat has its tunings as programs (" + juce::String (micro->getNumPrograms()) + ")");
+    if (ji >= 0) micro->setCurrentProgram (ji);
+    micro->prepareToPlay (sampleRate, blockSize);
+    juce::AudioBuffer<float> audio (juce::jmax (1, micro->getTotalNumOutputChannels()), blockSize);
+    juce::MidiBuffer midi;
+    midi.addEvent (juce::MidiMessage::noteOn (1, 64, (juce::uint8) 100), 10);
+    micro->processBlock (audio, midi);
+    int channel = -1, bend = -1, noteCh = -1;
+    for (const auto meta : midi)
+    {
+        const auto m = meta.getMessage();
+        if (m.isPitchWheel() && m.getChannel() >= 2) { channel = m.getChannel(); bend = m.getPitchWheelValue(); }
+        if (m.isNoteOn() && m.getNoteNumber() == 64) noteCh = m.getChannel();
+    }
+    std::cout << "  E4 in just intonation: channel " << noteCh << ", bend " << bend << std::endl;
+    check (noteCh >= 2 && noteCh == channel && bend > 8100 && bend < 8192, "Micro-Cat: E4 goes out on its own MPE channel, 13.7 cents low");
+    micro->releaseResources();
+}
+
+/** Hum-Cat: loads as a VST3 audio effect that sends MIDI, lets the voice through, and has its styles as programs. */
+void testHumCat()
+{
+    std::cout << "\n== Hum-Cat ==" << std::endl;
+    auto hum = loadPlugin (HUMCAT_VST3);
+    if (hum == nullptr) { ++failures; return; }
+    check (hum->producesMidi() && hum->getTotalNumInputChannels() >= 1, "Hum-Cat sits on an audio track (input) and sends MIDI");
+    check (hum->getNumPrograms() == 7 && hum->getProgramName (0) == "Pop Song", "Hum-Cat has its styles as programs");
+    hum->prepareToPlay (sampleRate, blockSize);
+    juce::AudioBuffer<float> audio (juce::jmax (2, hum->getTotalNumOutputChannels()), blockSize);
+    for (int i = 0; i < blockSize; ++i) audio.setSample (0, i, 0.3f * std::sin (i * 0.05f));
+    audio.copyFrom (1, 0, audio, 0, 0, blockSize);
+    juce::MidiBuffer midi;
+    hum->processBlock (audio, midi);
+    check (std::abs (audio.getSample (0, 100) - 0.3f * std::sin (100 * 0.05f)) < 1e-4f && midi.isEmpty(), "Hum-Cat: the voice passes through, no MIDI before it heard anything");
+    hum->releaseResources();
+}
+
+/** Glitch-Cat: loads as a VST3 instrument, a note makes sound, it has its presets. */
+void testGlitchCat()
+{
+    std::cout << "\n== Glitch-Cat ==" << std::endl;
+    auto gl = loadPlugin (GLITCHCAT_VST3);
+    if (gl == nullptr) { ++failures; return; }
+    check (gl->acceptsMidi() && gl->getTotalNumOutputChannels() == 2, "Glitch-Cat is an instrument (MIDI in, stereo out)");
+    check (gl->getNumPrograms() == 12 && gl->getProgramName (0) == "Firefly Dream", "Glitch-Cat has its 12 presets");
+    gl->prepareToPlay (sampleRate, blockSize);
+    juce::AudioBuffer<float> audio (juce::jmax (2, gl->getTotalNumOutputChannels()), blockSize);
+    float peakLevel = 0.0f;
+    bool finite = true;
+    for (int b = 0; b < 200; ++b)
+    {
+        juce::MidiBuffer midi;
+        if (b == 0) midi.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+        audio.clear();
+        gl->processBlock (audio, midi);
+        peakLevel = juce::jmax (peakLevel, audio.getMagnitude (0, blockSize));
+        for (int i = 0; i < blockSize; ++i) finite &= std::isfinite (audio.getSample (0, i));
+    }
+    check (finite && peakLevel > 0.02f && peakLevel <= 1.0f, "Glitch-Cat: a note makes the bugs sound");
+    gl->releaseResources();
+}
+
+/** Molten: loads as a VST3 audio effect, reports its latency, melts a sound without making it louder. */
+void testMolten()
+{
+    std::cout << "\n== Molten ==" << std::endl;
+    auto fx = loadPlugin (MOLTEN_VST3);
+    if (fx == nullptr) { ++failures; return; }
+    check (fx->getTotalNumInputChannels() == 2 && fx->getTotalNumOutputChannels() == 2, "Molten is a stereo audio effect");
+    check (fx->getNumPrograms() == 13 && fx->getProgramName (0) == "Warm Glow", "Molten has its 13 presets");
+    fx->setCurrentProgram (0);
+    fx->prepareToPlay (sampleRate, blockSize);
+    check (fx->getLatencySamples() > 0, "Molten tells the host its latency (" + juce::String (fx->getLatencySamples()) + " samples)");
+    juce::AudioBuffer<float> audio (2, blockSize);
+    juce::MidiBuffer midi;
+    float peakLevel = 0.0f;
+    bool finite = true;
+    double ph = 0.0;
+    for (int b = 0; b < 400; ++b)
+    {
+        for (int i = 0; i < blockSize; ++i)
+        {
+            const float v = 0.3f * (float) std::sin (ph);
+            ph += juce::MathConstants<double>::twoPi * 110.0 / sampleRate;
+            audio.setSample (0, i, v); audio.setSample (1, i, v);
+        }
+        fx->processBlock (audio, midi);
+        if (b > 100) peakLevel = juce::jmax (peakLevel, audio.getMagnitude (0, blockSize));
+        for (int i = 0; i < blockSize; ++i) finite &= std::isfinite (audio.getSample (0, i));
+    }
+    check (finite && peakLevel > 0.05f && peakLevel <= 1.0f, "Molten: a bass goes in, a melted bass comes out (peak " + juce::String (peakLevel, 2) + ")");
+    fx->releaseResources();
+}
+
+/** Swarm: loads as a VST3 audio effect, a sound goes in and a swarm comes out, silence stays silent. */
+void testSwarm()
+{
+    std::cout << "\n== Swarm ==" << std::endl;
+    auto fx = loadPlugin (SWARM_VST3);
+    if (fx == nullptr) { ++failures; return; }
+    check (fx->getTotalNumInputChannels() == 2 && fx->getTotalNumOutputChannels() == 2, "Swarm is a stereo audio effect");
+    check (fx->getNumPrograms() == 15 && fx->getProgramName (0) == "Night Choir", "Swarm has its 15 presets");
+    fx->setCurrentProgram (0);
+    fx->prepareToPlay (sampleRate, blockSize);
+    juce::AudioBuffer<float> audio (2, blockSize);
+    juce::MidiBuffer midi;
+    float peakLevel = 0.0f, silentPeak = 0.0f;
+    bool finite = true;
+    double ph = 0.0;
+    for (int b = 0; b < 1300; ++b)
+    {
+        for (int i = 0; i < blockSize; ++i)
+        {
+            const float v = b < 300 ? 0.3f * (float) std::sin (ph) : 0.0f;
+            ph += juce::MathConstants<double>::twoPi * 330.0 / sampleRate;
+            audio.setSample (0, i, v); audio.setSample (1, i, v);
+        }
+        fx->processBlock (audio, midi);
+        if (b > 100 && b < 300) peakLevel = juce::jmax (peakLevel, audio.getMagnitude (0, blockSize));
+        if (b > 1280) silentPeak = juce::jmax (silentPeak, audio.getMagnitude (0, blockSize));
+        for (int i = 0; i < blockSize; ++i) finite &= std::isfinite (audio.getSample (0, i));
+    }
+    check (finite && peakLevel > 0.05f && peakLevel <= 1.0f, "Swarm: a tone goes in, a swarm comes out (peak " + juce::String (peakLevel, 2) + ")");
+    check (silentPeak < 0.05f, "Swarm: after the sound stops it fades away (" + juce::String (silentPeak, 4) + ")");
+    fx->releaseResources();
+}
+
 int main()
 {
     juce::ScopedJuceInitialiser_GUI juceInit;
@@ -1785,6 +1932,11 @@ int main()
     testLifeCat();
     testCatLink2();
     testEchoCat();
+    testMicroCat();
+    testHumCat();
+    testGlitchCat();
+    testMolten();
+    testSwarm();
 
     std::cout << "\n" << (failures == 0 ? "ALL TESTS PASSED" : juce::String (failures) + " TEST(S) FAILED") << std::endl;
     return failures == 0 ? 0 : 1;

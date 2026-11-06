@@ -193,6 +193,12 @@ void WorldView::tick()
 //------------------------------------------------------------------------------
 void WorldView::paint (juce::Graphics& g)
 {
+    if (lens)
+    {
+        juce::Path eye;
+        eye.addEllipse (getLocalBounds().toFloat());
+        g.reduceClipRegion (eye);
+    }
     const auto a = area();
     const double t = now();
     const auto& w = view.world;
@@ -1117,8 +1123,8 @@ SpeciesPanel::SpeciesPanel (LifeCatProcessor& p, LifeViewState& v) : processor (
         auto id = [r] (const char* w) { return "sp" + juce::String (r) + w; };
         auto& row = rows[(size_t) r];
         row.sing = std::make_unique<cat::ParamToggle> (s, id ("Sing"), "Sing", &p.midiLearn);
-        row.volume = std::make_unique<cat::BarSlider> (s, id ("Vol"), "Vol", &p.midiLearn, 30);
-        row.speed = std::make_unique<cat::BarSlider> (s, id ("Speed"), "Speed", &p.midiLearn, 40);
+        row.volume = std::make_unique<cat::LineSlider> (s, id ("Vol"), "Vol", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6));
+        row.speed = std::make_unique<cat::LineSlider> (s, id ("Speed"), "Speed", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6));
         row.sound = std::make_unique<cat::ParamCombo> (s, id ("Sound"), "", &p.midiLearn, 0);
         row.octave = cat::Stepper::forParameter (s, id ("Oct"), "Oct", [] (int x) { return x > 0 ? "+" + juce::String (x) : juce::String (x); });
         row.max = cat::Stepper::forParameter (s, id ("Max"), "Max");
@@ -1354,11 +1360,11 @@ LifeCatEditor::LifeCatEditor (LifeCatProcessor& p)
       graph (view),
       speciesPanel (p, view),
       geneLab (p, view),
-      gravity (p.apvts, "gravity", "Gravity", &p.midiLearn, 58),
-      wind (p.apvts, "wind", "Wind", &p.midiLearn, 44),
-      windDir (p.apvts, "windDir", "Direction", &p.midiLearn, 64),
-      ambience (p.apvts, "ambience", "Weather Sound", &p.midiLearn, 94),
-      dayNightSound (p.apvts, "dayNightSound", "Day/Night Colour", &p.midiLearn, 104),
+      gravity (p.apvts, "gravity", "Gravity", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      wind (p.apvts, "wind", "Wind", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      windDir (p.apvts, "windDir", "Direction", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      ambience (p.apvts, "ambience", "Weather Sound", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      dayNightSound (p.apvts, "dayNightSound", "Day/Night Colour", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
       dayLength (p.apvts, "dayLength", "Day / Night", &p.midiLearn, 80),
       seasonLength (p.apvts, "seasonLength", "Seasons", &p.midiLearn, 80),
       season (p.apvts, "season", "Season", &p.midiLearn, 80),
@@ -1370,26 +1376,26 @@ LifeCatEditor::LifeCatEditor (LifeCatProcessor& p)
       quantize (p.apvts, "quantize", "On the Beat", &p.midiLearn),
       followGroove (p.apvts, "followGroove", "Follow Drum", &p.midiLearn),
       playStopped (p.apvts, "playStopped", "Play When Stopped", &p.midiLearn),
-      swing (p.apvts, "swing", "Swing", &p.midiLearn, 48),
-      density (p.apvts, "density", "Density", &p.midiLearn, 56),
-      noteLength (p.apvts, "noteLength", "Length", &p.midiLearn, 50),
-      lifeSpeed (p.apvts, "lifeSpeed", "Speed", &p.midiLearn, 50),
-      foodGrowth (p.apvts, "foodGrowth", "Food", &p.midiLearn, 44),
-      mutation (p.apvts, "mutation", "Mutation", &p.midiLearn, 62),
-      hunger (p.apvts, "metabolism", "Hunger", &p.midiLearn, 52),
-      breeding (p.apvts, "breeding", "Breeding", &p.midiLearn, 62),
-      lifespan (p.apvts, "lifespan", "Lifespan", &p.midiLearn, 60),
+      swing (p.apvts, "swing", "Swing", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      density (p.apvts, "density", "Density", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      noteLength (p.apvts, "noteLength", "Length", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      lifeSpeed (p.apvts, "lifeSpeed", "Speed", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      foodGrowth (p.apvts, "foodGrowth", "Food", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      mutation (p.apvts, "mutation", "Mutation", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      hunger (p.apvts, "metabolism", "Hunger", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      breeding (p.apvts, "breeding", "Breeding", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      lifespan (p.apvts, "lifespan", "Lifespan", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
       immigration (p.apvts, "immigration", "Newcomers", &p.midiLearn),
       ownSound (p.apvts, "sound", "Own Sound", &p.midiLearn),
-      brightness (p.apvts, "brightness", "Bright", &p.midiLearn, 50),
-      attack (p.apvts, "attack", "Attack", &p.midiLearn, 50),
-      release (p.apvts, "release", "Release", &p.midiLearn, 56),
-      reverbMix (p.apvts, "reverbMix", "Reverb", &p.midiLearn, 54),
-      reverbSize (p.apvts, "reverbSize", "Size", &p.midiLearn, 40),
-      delayMix (p.apvts, "delayMix", "Delay", &p.midiLearn, 48),
-      delayFb (p.apvts, "delayFb", "Feedback", &p.midiLearn, 64),
-      width (p.apvts, "width", "Width", &p.midiLearn, 48),
-      volume (p.apvts, "volume", "Volume", &p.midiLearn, 56),
+      brightness (p.apvts, "brightness", "Bright", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      attack (p.apvts, "attack", "Attack", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      release (p.apvts, "release", "Release", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      reverbMix (p.apvts, "reverbMix", "Reverb", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      reverbSize (p.apvts, "reverbSize", "Size", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      delayMix (p.apvts, "delayMix", "Delay", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      delayFb (p.apvts, "delayFb", "Feedback", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      width (p.apvts, "width", "Width", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
+      volume (p.apvts, "volume", "Volume", &p.midiLearn, juce::Colour (0xff3fa9ff), juce::Colour (0xff5cffd6)),
       delayTime (p.apvts, "delayTime", "Time", &p.midiLearn, 40),
       midiOut (p.apvts, "midiOut", "MIDI Out", &p.midiLearn),
       midiChannels (p.apvts, "midiChannels", "", &p.midiLearn, 0),
@@ -1621,6 +1627,7 @@ void LifeCatEditor::timerCallback()
     {
         inspector.refresh();
         graph.repaint();
+        repaint (statsBounds);
         const auto& w = view.world;
         juce::String sky = "Now:  " + lifeart::seasonName (w.season);
         if (processor.apvts.getRawParameterValue ("dayLength")->load() > 0.5f)
@@ -1633,8 +1640,93 @@ void LifeCatEditor::timerCallback()
 
 void LifeCatEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (C::background);
-    cat::CatLookAndFeel::drawLogo (g, juce::Rectangle<float> (14.0f, 8.0f, 160.0f, 32.0f), "LIFE", "-cat");
+    cat::paintBackdrop (g, getLocalBounds());
+
+    // lifecat / organism - living music
+    {
+        juce::AttributedString t;
+        t.append ("life", cat::displayFont (30.0f), juce::Colour (0xffd8fff4));
+        t.append ("cat", cat::catFont (30.0f), juce::Colour (0xff5cffd6));
+        t.draw (g, juce::Rectangle<float> (16.0f, 4.0f, 140.0f, 36.0f));
+    }
+
+    if (worldView.lens)
+    {
+        // the brushed-metal eyepiece ring (drawn once into an image: the world repaints 30 times a second)
+        const auto eye = worldView.getBounds().toFloat();
+        const auto outer = eye.expanded (26.0f).withTrimmedBottom (-20.0f);
+        if (ringCache.getWidth() != (int) outer.getWidth() || ringCache.getHeight() != (int) outer.getHeight())
+        {
+            ringCache = juce::Image (juce::Image::ARGB, (int) outer.getWidth(), (int) outer.getHeight(), true);
+            juce::Graphics rg (ringCache);
+            const auto e = eye.translated (-outer.getX(), -outer.getY());
+            const auto ring = e.expanded (16.0f);
+            rg.setColour (juce::Colours::black.withAlpha (0.45f));
+            rg.fillEllipse (ring.translated (0.0f, 12.0f).expanded (4.0f));
+            const juce::Colour metal[] = { juce::Colour (0xff3a4248), juce::Colour (0xff8c979e), juce::Colour (0xff2b3136), juce::Colour (0xffa7b1b8),
+                                           juce::Colour (0xff3a4248), juce::Colour (0xff6e787f), juce::Colour (0xff3a4248) };
+            const int segs = 144;
+            for (int i = 0; i < segs; ++i)
+            {
+                const float f = (float) i / (float) segs, pos = f * 6.0f;
+                const int k = (int) pos;
+                const auto c = metal[k].interpolatedWith (metal[k + 1], pos - (float) k);
+                const float a0 = f * juce::MathConstants<float>::twoPi + 0.5f, a1 = a0 + juce::MathConstants<float>::twoPi / (float) segs + 0.01f;
+                juce::Path wedge;
+                wedge.addPieSegment (ring, a0, a1, e.getWidth() / ring.getWidth());
+                rg.setColour (c);
+                rg.fillPath (wedge);
+            }
+        }
+        g.drawImageAt (ringCache, (int) outer.getX(), (int) outer.getY());
+        g.setColour (juce::Colour (0xff010a0c));
+        g.fillEllipse (eye);
+    }
+
+    // ALIVE / BORN / DIED
+    if (! statsBounds.isEmpty())
+    {
+        const auto& w = view.world;
+        const struct { const char* k; juce::String v; juce::Colour c; } stats[] = {
+            { "ALIVE", juce::String (w.population()), juce::Colour (0xff5cffd6) },
+            { "BORN", "+" + juce::String (w.births), juce::Colour (0xffffd36e) },
+            { "DIED", juce::String::charToString ((juce::juce_wchar) 0x2212) + juce::String (w.deaths), juce::Colour (0xffb98cff) } };
+        auto r = statsBounds;
+        const int bw = (r.getWidth() - 16) / 3;
+        for (auto& st : stats)
+        {
+            auto box = r.removeFromLeft (bw).toFloat();
+            r.removeFromLeft (8);
+            g.setColour (juce::Colour (0xff5cffd6).withAlpha (0.06f));
+            g.fillRoundedRectangle (box, 12.0f);
+            g.setColour (juce::Colour (0xff5cffd6).withAlpha (0.2f));
+            g.drawRoundedRectangle (box.reduced (0.5f), 12.0f, 1.0f);
+            auto in = box.reduced (12.0f, 7.0f);
+            g.setColour (juce::Colour (0xff8fd9c6));
+            g.setFont (cat::catFont (10.5f).withExtraKerningFactor (0.15f));
+            g.drawText (st.k, in.removeFromTop (14.0f), juce::Justification::centredLeft);
+            g.setColour (st.c.withAlpha (0.35f));
+            g.setFont (cat::catFont (21.0f, true));
+            g.drawText (st.v, in.translated (0.0f, 1.0f), juce::Justification::centredLeft);
+            g.setColour (st.c);
+            g.drawText (st.v, in, juce::Justification::centredLeft);
+        }
+    }
+}
+
+void LifeCatEditor::paintOverChildren (juce::Graphics& g)
+{
+    if (! worldView.lens || ! worldView.isVisible()) return;
+    // the glass: a dark rim inside the eyepiece and faint cross hairs
+    const auto eye = worldView.getBounds().toFloat();
+    juce::ColourGradient rim (juce::Colours::transparentBlack, eye.getCentreX(), eye.getCentreY(),
+                              juce::Colours::black.withAlpha (0.75f), eye.getRight(), eye.getCentreY(), true);
+    rim.addColour (0.82, juce::Colours::transparentBlack);
+    g.setGradientFill (rim);
+    g.fillEllipse (eye);
+    g.setColour (juce::Colour (0xff5cffd6).withAlpha (0.12f));
+    g.drawHorizontalLine (juce::roundToInt (eye.getCentreY()), eye.getX() + 20.0f, eye.getRight() - 20.0f);
+    g.drawVerticalLine (juce::roundToInt (eye.getCentreX()), eye.getY() + 20.0f, eye.getBottom() - 20.0f);
 }
 
 void LifeCatEditor::resized()
@@ -1651,7 +1743,7 @@ void LifeCatEditor::resized()
 
     {
         auto top = r.removeFromTop (40);
-        auto logo = top.removeFromLeft (150);
+        auto logo = top.removeFromLeft (170);
         catView.setBounds (logo.removeFromRight (40).expanded (0, 6));
         row (top, { item (presetBar, 310), item (theme, 160), item (running, 56), item (newWorldButton, 92), item (bigButton, 80),
                     juce::FlexItem().withFlex (1.0f), item (surpriseControls, 122), item (dragButton, 92) });
@@ -1663,16 +1755,20 @@ void LifeCatEditor::resized()
     toolPanel.setBounds (r.removeFromLeft (104));
     r.removeFromLeft (8);
 
+    worldView.lens = ! processor.bigView;
+    statsBounds = {};
     if (processor.bigView)
     {
         worldView.setBounds (r);
     }
     else
     {
-        const int side = juce::jmin (r.getHeight(), r.getWidth() - 440);
-        worldView.setBounds (r.removeFromLeft (side).withSizeKeepingCentre (side, side));
-        r.removeFromLeft (10);
+        const int side = juce::jmin (r.getHeight(), r.getWidth() - 450);
+        worldView.setBounds (r.removeFromLeft (side).withSizeKeepingCentre (side, side).reduced (22));
+        r.removeFromLeft (14);
 
+        statsBounds = r.removeFromTop (56);
+        r.removeFromTop (10);
         auto tabs = r.removeFromTop (28);
         for (int i = 0; i < numTabs; ++i) tabButtons[i]->setBounds (tabs.removeFromLeft (tabs.getWidth() / (numTabs - i)).reduced (1, 0));
         r.removeFromTop (8);

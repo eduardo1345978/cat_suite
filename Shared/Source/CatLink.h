@@ -39,6 +39,8 @@ public:
     std::function<void()> onTick;                           // called on every poll (for publishers)
 
     static juce::File linkFile();
+    /** The folder every Cat (and app) shares for Cat Link's files. */
+    static juce::File sharedFolder();
 
 private:
     void timerCallback() override;

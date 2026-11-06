@@ -15,6 +15,8 @@ juce::Colour Colours::palette (int index)
 
 juce::Font catFont (float height, bool bold)
 {
+    if (theme().uiFont)                    // (Talk-Cat: everything in the terminal font)
+        return displayFont (height);
     return juce::Font (juce::FontOptions (height).withStyle (bold ? "Bold" : "Regular"));
 }
 
@@ -69,11 +71,24 @@ CatLookAndFeel::CatLookAndFeel()
 
 void CatLookAndFeel::drawGlassPanel (juce::Graphics& g, juce::Rectangle<float> b, float corner, juce::Colour tint)
 {
-    // Flat surface with a hairline edge (kept the old name so every panel picks up the new look)
-    g.setColour (tint);
-    g.fillRoundedRectangle (b, corner);
-    g.setColour (juce::Colours::white.withAlpha (0.045f));
-    g.drawRoundedRectangle (b.reduced (0.5f), corner, 1.0f);
+    const auto& t = theme();
+    if (t.backdrop == Backdrop::Plain)
+    {
+        // Graphite: flat surface with a hairline edge
+        g.setColour (tint);
+        g.fillRoundedRectangle (b, corner);
+        g.setColour (juce::Colours::white.withAlpha (0.045f));
+        g.drawRoundedRectangle (b.reduced (0.5f), corner, 1.0f);
+        return;
+    }
+    // a little depth: lighter at the top, a light top edge, a dark outline
+    const float c = juce::jmax (corner, t.corner * 0.75f);
+    g.setGradientFill (juce::ColourGradient (tint.brighter (t.light ? 0.06f : 0.08f), 0.0f, b.getY(), tint.darker (t.light ? 0.04f : 0.12f), 0.0f, b.getBottom(), false));
+    g.fillRoundedRectangle (b, c);
+    g.setColour (t.light ? juce::Colours::black.withAlpha (0.18f) : juce::Colours::black.withAlpha (0.45f));
+    g.drawRoundedRectangle (b.reduced (0.5f), c, 1.0f);
+    g.setColour (juce::Colours::white.withAlpha (t.light ? 0.55f : 0.07f));
+    g.drawHorizontalLine ((int) b.getY() + 1, b.getX() + c * 0.6f, b.getRight() - c * 0.6f);
 }
 
 void CatLookAndFeel::drawTriangle (juce::Graphics& g, juce::Rectangle<float> r, bool right, juce::Colour c)
@@ -89,8 +104,30 @@ void CatLookAndFeel::drawTriangle (juce::Graphics& g, juce::Rectangle<float> r, 
 
 void CatLookAndFeel::drawLogo (juce::Graphics& g, juce::Rectangle<float> b, const juce::String& first, const juce::String& second)
 {
-    auto f1 = catFont (b.getHeight() * 0.72f, true);
-    auto f2 = catFont (b.getHeight() * 0.72f, false);
+    const bool themed = theme().fontData != nullptr;
+    if (theme().backdrop == Backdrop::ChromeSheen)
+    {
+        // liquid chrome lettering: "bend·cat"
+        const auto word = first.toLowerCase() + juce::String::charToString ((juce::juce_wchar) 0x00b7) + second.trimCharactersAtStart ("-").toLowerCase();
+        juce::GlyphArrangement ga;
+        ga.addLineOfText (displayFont (b.getHeight() * 0.8f), word, b.getX(), 0.0f);
+        juce::Path text;
+        ga.createPath (text);
+        const auto tb = text.getBounds();
+        text.applyTransform (juce::AffineTransform::translation (0.0f, b.getCentreY() - tb.getCentreY()));
+        const auto r = text.getBounds();
+        juce::ColourGradient chrome (juce::Colours::white, 0.0f, r.getY(), juce::Colour (0xff8c95a6), 0.0f, r.getBottom(), false);
+        chrome.addColour (0.38, juce::Colour (0xffb9c2d3));
+        chrome.addColour (0.52, juce::Colour (0xff4e5566));
+        chrome.addColour (0.70, juce::Colour (0xffdde3ee));
+        g.setColour (juce::Colours::black.withAlpha (0.45f));
+        g.fillPath (text, juce::AffineTransform::translation (0.0f, 2.0f));
+        g.setGradientFill (chrome);
+        g.fillPath (text);
+        return;
+    }
+    auto f1 = themed ? displayFont (b.getHeight() * 0.62f) : catFont (b.getHeight() * 0.72f, true);
+    auto f2 = themed ? displayFont (b.getHeight() * 0.62f) : catFont (b.getHeight() * 0.72f, false);
     juce::GlyphArrangement ga;
     ga.addLineOfText (f1, first, 0.0f, 0.0f);
     const float w1 = ga.getBoundingBox (0, -1, true).getWidth();
@@ -99,40 +136,149 @@ void CatLookAndFeel::drawLogo (juce::Graphics& g, juce::Rectangle<float> b, cons
     g.setColour (Colours::text);
     g.drawText (first, b.withWidth (w1 + 4.0f), juce::Justification::centredLeft);
     g.setFont (f2);
-    g.setColour (Colours::textDim);
+    g.setColour (themed ? Colours::accent : Colours::textDim);
     g.drawText (second, b.withTrimmedLeft (w1 + 2.0f), juce::Justification::centredLeft);
 }
 
 void CatLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height, float pos,
                                        float startAngle, float endAngle, juce::Slider& slider)
 {
-    // Thin arc + value arc + a small dot: no knob body, no gradients
+    const auto& t = theme();
     auto bounds = juce::Rectangle<int> (x, y, width, height).toFloat().reduced (4.0f);
     const float radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) * 0.5f;
     const auto centre = bounds.getCentre();
     const float lineW = juce::jmax (2.0f, radius * 0.08f);
     const float arcRadius = radius - lineW;
     const float toAngle = startAngle + pos * (endAngle - startAngle);
-
-    juce::Path track;
-    track.addCentredArc (centre.x, centre.y, arcRadius, arcRadius, 0.0f, startAngle, endAngle, true);
-    g.setColour (Colours::raised);
-    g.strokePath (track, juce::PathStrokeType (lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
+    const auto dir = juce::Point<float> (std::sin (toAngle), -std::cos (toAngle));
     const bool bipolar = slider.getMinimum() < 0.0 && slider.getMaximum() > 0.0;
     const float zeroAngle = bipolar ? startAngle + (float) slider.valueToProportionOfLength (0.0) * (endAngle - startAngle)
                                     : startAngle;
-    juce::Path value;
-    value.addCentredArc (centre.x, centre.y, arcRadius, arcRadius, 0.0f,
-                         juce::jmin (zeroAngle, toAngle), juce::jmax (zeroAngle, toAngle), true);
-    const auto colour = slider.isEnabled() ? slider.findColour (juce::Slider::rotarySliderFillColourId) : Colours::textDim;
-    g.setColour (colour);
-    g.strokePath (value, juce::PathStrokeType (lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    const auto fill = slider.isEnabled() ? slider.findColour (juce::Slider::rotarySliderFillColourId) : Colours::textDim;
 
-    // Indicator: short line from the centre area towards the arc
-    const auto dir = juce::Point<float> (std::sin (toAngle), -std::cos (toAngle));
-    g.setColour (Colours::text);
-    g.drawLine (juce::Line<float> (centre + dir * (arcRadius * 0.35f), centre + dir * (arcRadius * 0.72f)), juce::jmax (1.5f, lineW * 0.8f));
+    auto arc = [&] (float r, float from, float to, float w, juce::Colour c)
+    {
+        juce::Path p;
+        p.addCentredArc (centre.x, centre.y, r, r, 0.0f, from, to, true);
+        g.setColour (c);
+        g.strokePath (p, juce::PathStrokeType (w, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    };
+    auto body = [&] (float r, juce::Colour light, juce::Colour mid, juce::Colour dark)
+    {
+        g.setColour (juce::Colours::black.withAlpha (0.35f));
+        g.fillEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (centre.translated (0.0f, r * 0.12f)));
+        juce::ColourGradient grad (light, centre.x - r * 0.35f, centre.y - r * 0.45f, dark, centre.x + r * 0.7f, centre.y + r * 0.9f, true);
+        grad.addColour (0.45, mid);
+        g.setGradientFill (grad);
+        g.fillEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (centre));
+    };
+    auto ticks = [&] (float r0, float r1, juce::Colour c)
+    {
+        g.setColour (c);
+        for (int i = 0; i <= 10; ++i)
+        {
+            const float a = startAngle + (endAngle - startAngle) * (float) i / 10.0f;
+            const auto d = juce::Point<float> (std::sin (a), -std::cos (a));
+            g.drawLine (juce::Line<float> (centre + d * r0, centre + d * (i % 5 == 0 ? r1 + 2.0f : r1)), 1.0f);
+        }
+    };
+    auto pointer = [&] (float r0, float r1, float w, juce::Colour c, bool glow)
+    {
+        const juce::Line<float> l (centre + dir * r0, centre + dir * r1);
+        if (glow)
+        {
+            g.setColour (c.withAlpha (0.25f));
+            g.drawLine (l, w * 2.6f);
+        }
+        g.setColour (c);
+        g.drawLine (l, w);
+    };
+
+    switch (t.knob)
+    {
+        case KnobStyle::Arc:
+        {
+            arc (arcRadius, startAngle, endAngle, lineW, Colours::raised);
+            arc (arcRadius, juce::jmin (zeroAngle, toAngle), juce::jmax (zeroAngle, toAngle), lineW, fill);
+            g.setColour (Colours::text);
+            g.drawLine (juce::Line<float> (centre + dir * (arcRadius * 0.35f), centre + dir * (arcRadius * 0.72f)), juce::jmax (1.5f, lineW * 0.8f));
+            break;
+        }
+        case KnobStyle::Hardware:
+        {
+            // a black knob in a ring, a bright pointer line; a thin value arc round it
+            arc (arcRadius, startAngle, endAngle, lineW * 0.6f, t.light ? juce::Colours::black.withAlpha (0.12f) : juce::Colours::white.withAlpha (0.06f));
+            arc (arcRadius, juce::jmin (zeroAngle, toAngle), juce::jmax (zeroAngle, toAngle), lineW * 0.6f, fill.withAlpha (0.8f));
+            const float r = arcRadius * 0.78f;
+            g.setColour (t.knobRing);
+            g.fillEllipse (juce::Rectangle<float> (r * 2.2f, r * 2.2f).withCentre (centre));
+            body (r, t.knobBody.brighter (0.55f), t.knobBody.brighter (0.1f), t.knobBody.darker (0.4f));
+            pointer (r * 0.3f, r * 0.9f, juce::jmax (2.0f, r * 0.13f), t.knobPointer, t.knobGlow);
+            break;
+        }
+        case KnobStyle::Chrome:
+        {
+            const float r = arcRadius * 0.9f;
+            g.setColour (juce::Colours::black.withAlpha (0.5f));
+            g.fillEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (centre.translated (0.0f, r * 0.15f)));
+            // brushed metal: a light diagonal sheen over a mid grey, with a dark band
+            juce::ColourGradient metal (juce::Colour (0xfff4f6fa), centre.x - r, centre.y - r, juce::Colour (0xff6e7789), centre.x + r, centre.y + r, false);
+            metal.addColour (0.35, juce::Colour (0xffb9c2d3));
+            metal.addColour (0.5, juce::Colour (0xff545b6a));
+            metal.addColour (0.68, juce::Colour (0xffe3e8f0));
+            g.setGradientFill (metal);
+            g.fillEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (centre));
+            g.setColour (juce::Colours::black.withAlpha (0.3f));
+            g.drawEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (centre), 1.0f);
+            arc (r + lineW * 1.2f, juce::jmin (zeroAngle, toAngle), juce::jmax (zeroAngle, toAngle), lineW * 0.7f, fill);
+            g.setColour (t.knobPointer);
+            g.fillEllipse (juce::Rectangle<float> (r * 0.24f, r * 0.24f).withCentre (centre + dir * (r * 0.72f)));
+            break;
+        }
+        case KnobStyle::Cream:
+        case KnobStyle::Brass:
+        {
+            const bool brass = t.knob == KnobStyle::Brass;
+            const float r = arcRadius * 0.74f;
+            ticks (r * 1.18f, r * 1.32f, (t.light ? Colours::text : Colours::textDim).withAlpha (0.7f));
+            arc (r * 1.08f, juce::jmin (zeroAngle, toAngle), juce::jmax (zeroAngle, toAngle), lineW * 0.55f, fill);
+            if (brass) body (r, juce::Colour (0xfff3d99b), juce::Colour (0xffc79a4c), juce::Colour (0xff7a5a26));
+            else       body (r, juce::Colour (0xfffffdf6), juce::Colour (0xffe9e1ce), juce::Colour (0xffa99f88));
+            g.setColour (juce::Colours::black.withAlpha (0.25f));
+            g.drawEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (centre), 1.0f);
+            pointer (r * 0.15f, r * 0.92f, juce::jmax (2.2f, r * 0.15f), t.knobPointer, false);
+            break;
+        }
+        case KnobStyle::Glow:
+        {
+            arc (arcRadius, startAngle, endAngle, lineW, juce::Colours::white.withAlpha (0.1f));
+            arc (arcRadius, juce::jmin (zeroAngle, toAngle), juce::jmax (zeroAngle, toAngle), lineW * 2.6f, fill.withAlpha (0.22f));
+            arc (arcRadius, juce::jmin (zeroAngle, toAngle), juce::jmax (zeroAngle, toAngle), lineW, fill);
+            const float r = arcRadius * 0.62f;
+            g.setColour (t.knobBody);
+            g.fillEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (centre));
+            g.setColour (juce::Colours::white.withAlpha (0.18f));
+            g.drawEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (centre), 1.0f);
+            g.setColour (Colours::text);
+            g.fillEllipse (juce::Rectangle<float> (r * 0.36f, r * 0.36f).withCentre (centre + dir * (r * 0.62f)));
+            break;
+        }
+        case KnobStyle::Gauge:
+        {
+            // a round dial with ticks and an amber needle
+            const float r = arcRadius;
+            g.setColour (t.knobBody);
+            g.fillEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (centre));
+            g.setColour (Colours::outline);
+            g.drawEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (centre), 1.5f);
+            ticks (r * 0.72f, r * 0.86f, Colours::accent.withAlpha (0.6f));
+            arc (r * 0.92f, juce::jmin (zeroAngle, toAngle), juce::jmax (zeroAngle, toAngle), lineW * 0.5f, fill.withAlpha (0.7f));
+            pointer (0.0f, r * 0.8f, juce::jmax (1.8f, r * 0.07f), t.knobPointer, true);
+            g.setColour (Colours::text);
+            g.fillEllipse (juce::Rectangle<float> (r * 0.22f, r * 0.22f).withCentre (centre));
+            break;
+        }
+    }
 }
 
 void CatLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
@@ -173,31 +319,104 @@ juce::Label* CatLookAndFeel::createSliderTextBox (juce::Slider& slider)
 {
     auto* l = LookAndFeel_V4::createSliderTextBox (slider);
     l->setFont (catFont (12.0f));
-    l->setColour (juce::Label::textColourId, Colours::text);
+    l->setColour (juce::Label::textColourId, slider.findColour (juce::Slider::textBoxTextColourId));
     l->setColour (juce::Label::outlineColourId, juce::Colours::transparentBlack);
     l->setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
     return l;
 }
 
-void CatLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b, const juce::Colour& bg,
+void CatLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b, const juce::Colour& juceBg,
                                            bool over, bool down)
 {
-    // Flat: off = quiet surface, on = soft tint of the button's "on" colour. No borders.
+    const auto& t = theme();
+    // JUCE hands a toggled-on button its solid "on" colour; every style draws "on" itself, from the off colour
+    const auto bg = b.getToggleState() ? b.findColour (juce::TextButton::buttonColourId) : juceBg;
     auto r = b.getLocalBounds().toFloat().reduced (0.5f);
     const bool on = b.getToggleState();
-    auto base = on ? b.findColour (juce::TextButton::buttonOnColourId).withAlpha (0.2f) : bg;
-    if (down)      base = base.brighter (0.06f);
-    else if (over) base = base.brighter (0.1f);
+    const auto onColour = b.findColour (juce::TextButton::buttonOnColourId);
+    const float c = juce::jmin (t.corner, r.getHeight() * 0.5f);
 
-    g.setColour (base);
-    g.fillRoundedRectangle (r, 4.0f);
+    switch (t.button)
+    {
+        case ButtonStyle::Flat:
+        {
+            // Graphite: off = quiet surface, on = soft tint of the button's "on" colour. No borders.
+            auto base = on ? onColour.withAlpha (0.2f) : bg;
+            if (down)      base = base.brighter (0.06f);
+            else if (over) base = base.brighter (0.1f);
+            g.setColour (base);
+            g.fillRoundedRectangle (r, 4.0f);
+            break;
+        }
+        case ButtonStyle::Hardware:
+        {
+            // a raised key with a shadow under it; pressed / on = pushed in
+            const bool in = down || on;
+            auto key = r.withTrimmedBottom (in ? 1.0f : 3.0f).translated (0.0f, in ? 2.0f : 0.0f);
+            g.setColour (juce::Colours::black.withAlpha (t.light ? 0.3f : 0.6f));
+            g.fillRoundedRectangle (r.withTrimmedTop (3.0f), c);
+            auto top = bg.brighter (t.light ? 0.25f : 0.12f);
+            if (on) top = top.interpolatedWith (onColour, t.light ? 0.45f : 0.35f);
+            if (over) top = top.brighter (0.06f);
+            g.setGradientFill (juce::ColourGradient (top.brighter (0.08f), 0.0f, key.getY(), top.darker (0.1f), 0.0f, key.getBottom(), false));
+            g.fillRoundedRectangle (key, c);
+            g.setColour (juce::Colours::white.withAlpha (t.light ? 0.6f : 0.08f));
+            g.drawHorizontalLine ((int) key.getY() + 1, key.getX() + c, key.getRight() - c);
+            break;
+        }
+        case ButtonStyle::Glow:
+        {
+            auto base = bg.brighter (over ? 0.08f : 0.0f);
+            g.setColour (base);
+            g.fillRoundedRectangle (r, c);
+            g.setColour (on ? onColour.withAlpha (0.9f) : juce::Colours::white.withAlpha (t.light ? 0.0f : 0.07f));
+            g.drawRoundedRectangle (r.reduced (0.5f), c, on ? 1.4f : 1.0f);
+            if (on)
+            {
+                g.setColour (onColour.withAlpha (0.18f));
+                g.fillRoundedRectangle (r, c);
+                g.setColour (onColour.withAlpha (0.12f));
+                g.drawRoundedRectangle (r.expanded (1.5f), c + 1.5f, 3.0f);
+            }
+            if (down) { g.setColour (juce::Colours::black.withAlpha (0.15f)); g.fillRoundedRectangle (r, c); }
+            break;
+        }
+        case ButtonStyle::Metal:
+        {
+            if (on)
+            {
+                juce::ColourGradient metal (juce::Colour (0xffffffff), 0.0f, r.getY(), juce::Colour (0xffd6dce7), 0.0f, r.getBottom(), false);
+                metal.addColour (0.5, juce::Colour (0xffaeb7c8));
+                metal.addColour (0.52, juce::Colour (0xff6e7789));
+                g.setGradientFill (metal);
+            }
+            else g.setColour (bg.brighter (over ? 0.1f : 0.03f));
+            g.fillRoundedRectangle (r, c);
+            g.setColour (juce::Colours::white.withAlpha (on ? 0.0f : 0.14f));
+            g.drawRoundedRectangle (r.reduced (0.5f), c, 1.0f);
+            if (down) { g.setColour (juce::Colours::black.withAlpha (0.18f)); g.fillRoundedRectangle (r, c); }
+            break;
+        }
+        case ButtonStyle::Terminal:
+        {
+            g.setColour (on ? Colours::accent : bg.brighter (over ? 0.15f : 0.0f));
+            g.fillRect (r);
+            g.setColour (Colours::accent.withAlpha (on ? 1.0f : 0.55f));
+            g.drawRect (r, 1.0f);
+            break;
+        }
+    }
 }
 
 void CatLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& b, bool, bool)
 {
     g.setFont (getTextButtonFont (b, b.getHeight()));
-    const auto colour = b.getToggleState() ? b.findColour (juce::TextButton::buttonOnColourId).brighter (0.35f)
-                                           : b.findColour (juce::TextButton::textColourOffId);
+    const auto& t = theme();
+    auto onText = b.findColour (juce::TextButton::buttonOnColourId).brighter (0.35f);
+    if (t.button == ButtonStyle::Metal || t.button == ButtonStyle::Terminal) onText = juce::Colour (0xff0b0c0f);
+    else if (t.light) onText = b.findColour (juce::TextButton::buttonColourId).getPerceivedBrightness() < 0.45f ? juce::Colours::white : Colours::text;
+    if (b.isColourSpecified (juce::TextButton::textColourOnId)) onText = b.findColour (juce::TextButton::textColourOnId);
+    const auto colour = b.getToggleState() ? onText : b.findColour (juce::TextButton::textColourOffId);
     g.setColour (colour.withMultipliedAlpha (b.isEnabled() ? 1.0f : 0.4f));
     g.drawFittedText (b.getButtonText(), b.getLocalBounds().reduced (4, 2), juce::Justification::centred, 1, 0.8f);
 }
@@ -210,8 +429,18 @@ juce::Font CatLookAndFeel::getTextButtonFont (juce::TextButton&, int h)
 void CatLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height, bool, int, int, int, int, juce::ComboBox& box)
 {
     auto r = juce::Rectangle<float> (0, 0, (float) width, (float) height).reduced (0.5f);
+    const auto& t = theme();
+    const float c = juce::jmin (t.corner, r.getHeight() * 0.5f);
     g.setColour (box.findColour (juce::ComboBox::backgroundColourId));
-    g.fillRoundedRectangle (r, 4.0f);
+    g.fillRoundedRectangle (r, t.backdrop == Backdrop::Plain ? 4.0f : c);
+    if (t.backdrop != Backdrop::Plain)
+    {
+        // a recessed field
+        g.setColour (juce::Colours::black.withAlpha (t.light ? 0.16f : 0.4f));
+        g.drawRoundedRectangle (r.reduced (0.5f), c, 1.0f);
+        g.setColour (juce::Colours::black.withAlpha (t.light ? 0.06f : 0.2f));
+        g.fillRoundedRectangle (r.withHeight (3.0f), c);
+    }
 
     // Thin chevron
     juce::Path chevron;
@@ -250,7 +479,8 @@ void CatLookAndFeel::drawLabel (juce::Graphics& g, juce::Label& label)
     {
         const float alpha = label.isEnabled() ? 1.0f : 0.5f;
         const auto font = sliderBox ? catFont (12.0f) : getLabelFont (label);
-        g.setColour ((sliderBox ? Colours::text : label.findColour (juce::Label::textColourId)).withMultipliedAlpha (alpha));
+        g.setColour ((sliderBox ? static_cast<juce::Slider*> (label.getParentComponent())->findColour (juce::Slider::textBoxTextColourId)
+                                : label.findColour (juce::Label::textColourId)).withMultipliedAlpha (alpha));
         g.setFont (font);
         const auto area = getLabelBorderSize (label).subtractedFrom (label.getLocalBounds());
         g.drawFittedText (label.getText(), area, label.getJustificationType(),
@@ -318,4 +548,16 @@ void CatLookAndFeel::drawScrollbar (juce::Graphics& g, juce::ScrollBar&, int x, 
     juce::ignoreUnused (height, width);
 }
 
+} // namespace cat
+
+namespace cat
+{
+juce::PopupMenu::Options CatLookAndFeel::getOptionsForComboBoxPopupMenu (juce::ComboBox& box, juce::Label& label)
+{
+    auto options = LookAndFeel_V4::getOptionsForComboBoxPopupMenu (box, label);
+    if (box.isShowing() && juce::Desktop::getInstance().getDisplays().getDisplayForRect (box.getScreenBounds()) == nullptr)
+        if (auto* top = box.getTopLevelComponent(); top != nullptr && top != &box)
+            options = options.withParentComponent (top);
+    return options;
+}
 } // namespace cat

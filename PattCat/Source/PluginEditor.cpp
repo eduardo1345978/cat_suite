@@ -339,7 +339,7 @@ PattCatEditor::PattCatEditor (PattCatProcessor& p)
     addAndMakeVisible (surpriseControls);
     addAndMakeVisible (bootScreen);   // last: drawn over everything until it fades out
 
-    setSize (1280, 820);
+    setSize (1320, 880);
     refreshAll();
     startTimerHz (30);
 }
@@ -412,19 +412,66 @@ void PattCatEditor::timerCallback()
 
 void PattCatEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (C::background);
-    cat::CatLookAndFeel::drawLogo (g, juce::Rectangle<float> (12.0f, 8.0f, 160.0f, 32.0f), "PATT", "-cat");
+    // the rack: black case, silver rails with slotted screws at top and bottom
+    const auto all = getLocalBounds().toFloat();
+    g.fillAll (juce::Colour (0xff0c0c0e));
+    for (auto rail : { all.withHeight (18.0f), all.withTop (all.getBottom() - 18.0f) })
+    {
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xffb9bcc2), 0.0f, rail.getY(), juce::Colour (0xff7e8188), 0.0f, rail.getBottom(), false));
+        g.fillRect (rail);
+        g.setColour (juce::Colours::black.withAlpha (0.5f));
+        g.drawHorizontalLine ((int) rail.getBottom() - 1, rail.getX(), rail.getRight());
+        for (float x = 18.0f; x < all.getRight(); x += 52.0f)
+        {
+            g.setColour (juce::Colour (0xff2a2b2f));
+            g.fillRoundedRectangle (x, rail.getCentreY() - 3.0f, 16.0f, 6.0f, 3.0f);
+        }
+    }
+
+    // a faceplate per group: brushed dark aluminium, four screws, a thin bevel
+    auto screw = [&g] (float cx, float cy)
+    {
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xffd5d7dc), cx - 3.0f, cy - 3.0f, juce::Colour (0xff6a6d74), cx + 3.0f, cy + 3.0f, false));
+        g.fillEllipse (cx - 4.0f, cy - 4.0f, 8.0f, 8.0f);
+        g.setColour (juce::Colour (0xff2a2b2f));
+        g.drawLine (cx - 2.6f, cy + 1.2f, cx + 2.6f, cy - 1.2f, 1.4f);
+    };
+    for (const auto& m : modules)
+    {
+        auto f = m.toFloat();
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff2b2d33), 0.0f, f.getY(), juce::Colour (0xff1f2025), 0.0f, f.getBottom(), false));
+        g.fillRoundedRectangle (f, 3.0f);
+        g.setColour (juce::Colour (0xff3a3c43));
+        g.drawRoundedRectangle (f.reduced (0.5f), 3.0f, 1.0f);
+        g.setColour (juce::Colours::white.withAlpha (0.05f));
+        g.drawHorizontalLine ((int) f.getY() + 1, f.getX() + 3.0f, f.getRight() - 3.0f);
+        if (f.getWidth() > 60.0f && f.getHeight() > 40.0f)
+            for (auto pt : { f.getTopLeft().translated (9.0f, 9.0f), f.getTopRight().translated (-9.0f, 9.0f),
+                             f.getBottomLeft().translated (9.0f, -9.0f), f.getBottomRight().translated (-9.0f, -9.0f) })
+                screw (pt.x, pt.y);
+    }
+
+    // PATT  CAT · SEQ
+    g.setColour (juce::Colour (0xffededf0));
+    g.setFont (cat::displayFont (28.0f).withExtraKerningFactor (0.08f));
+    g.drawText ("PATT", 30, 26, 80, 30, juce::Justification::centredLeft);
+    g.setColour (juce::Colour (0xffa7a9b0));
+    g.setFont (cat::catFont (10.0f, true).withExtraKerningFactor (0.3f));
+    g.drawText ("CAT - SEQ", 31, 52, 90, 12, juce::Justification::centredLeft);
 }
 
 void PattCatEditor::resized()
 {
-    auto r = getLocalBounds().reduced (8);
+    auto r = getLocalBounds().withTrimmedTop (20).withTrimmedBottom (20).reduced (10, 4);
+    modules.clear();
 
     auto item = [] (juce::Component& c, float w, float h = 30.0f) { return juce::FlexItem (c).withWidth (w).withHeight (h).withMargin ({ 0, 3, 0, 3 }); };
 
     {
-        auto top = r.removeFromTop (44);
-        top.removeFromLeft (130);
+        auto top = r.removeFromTop (48);
+        modules.push_back (top);
+        top = top.reduced (8, 0);
+        top.removeFromLeft (120);
         juce::FlexBox fb;
         fb.alignItems = juce::FlexBox::AlignItems::center;
         fb.items.add (item (*presetStepper, 320));
@@ -446,21 +493,33 @@ void PattCatEditor::resized()
 
     keyboard.setBounds (r.removeFromBottom (44));
     r.removeFromBottom (6);
-    presets.setBounds (r.removeFromBottom (juce::jlimit (130, 220, r.getHeight() / 4)));
+    {
+        auto pm = r.removeFromBottom (juce::jlimit (140, 230, r.getHeight() / 4));
+        modules.push_back (pm);
+        presets.setBounds (pm.reduced (18, 10));
+    }
     r.removeFromBottom (6);
 
-    auto left = r.removeFromLeft (230);
+    auto left = r.removeFromLeft (236);
+    modules.push_back (left);
+    left = left.reduced (6, 18);
     const int stripH = juce::jmin (100, left.getHeight() / 4);
     for (auto* s : strips) s->setBounds (left.removeFromTop (stripH).reduced (0, 2));
     left.removeFromTop (8);
     surpriseControls.setBounds (left.removeFromTop (30));
     left.removeFromTop (4);
     catView.setBounds (left.reduced (10, 0));
-    r.removeFromLeft (8);
+    r.removeFromLeft (6);
 
+    {
+        auto right = r.removeFromRight (236);
+        modules.push_back (right);
+        inspector.setBounds (right.reduced (6, 18));
+    }
+    r.removeFromRight (6);
+    modules.push_back (r);
+    r = r.reduced (16, 14);
     const auto mainArea = r;
-    inspector.setBounds (r.removeFromRight (230));
-    r.removeFromRight (8);
 
     {
         auto bar = r.removeFromTop (30);

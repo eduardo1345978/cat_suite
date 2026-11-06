@@ -48,15 +48,22 @@ void PatternOverview::paint (juce::Graphics& g)
     ctx.engine.collectHits (0.0, len, ctx.barLength, 0, 0.0f, rng, false, [&] (const PatternHit& h)
     {
         PattCatEngine::selectVoices (chord, h.voiceIndex, voices);
-        const auto colour = cat::Colours::palette (h.layer == 0 ? 0 : h.layer == 1 ? 3 : h.layer == 2 ? 1 : 7);
+        static const juce::Colour leds[] = { juce::Colour (0xffffd23f), juce::Colour (0xff3fa9ff), juce::Colour (0xffff4f7b), juce::Colour (0xff4fe08a) };
+        const auto colour = leds[juce::jlimit (0, 3, h.layer)];
         const float x = area.getX() + (float) (h.ppq / len) * area.getWidth();
         const float w = juce::jmax (3.0f, (float) (h.lengthPpq / len) * area.getWidth() - 1.0f);
 
         for (int v : voices)
         {
             const float y = area.getBottom() - (float) (v + 1) * laneH + laneH * 0.2f;
-            g.setColour (colour.withAlpha (0.35f + 0.6f * juce::jlimit (0.0f, 1.0f, h.velocity) * h.probability));
-            g.fillRoundedRectangle (x, y, juce::jmin (w, area.getRight() - x), laneH * 0.6f, 2.0f);
+            const auto bar = juce::Rectangle<float> (x, y + laneH * 0.15f, juce::jmin (w, area.getRight() - x), laneH * 0.3f);
+            const float a = 0.3f + 0.55f * juce::jlimit (0.0f, 1.0f, h.velocity) * h.probability;
+            g.setColour (colour.withAlpha (a * 0.25f));
+            g.fillRoundedRectangle (bar.expanded (2.0f), 4.0f);
+            g.setColour (colour.withAlpha (a));
+            g.fillRoundedRectangle (bar, 2.0f);
+            g.setColour (juce::Colours::white.withAlpha (0.35f * a));
+            g.fillRect (bar.withHeight (1.5f).reduced (2.0f, 0.0f).translated (0.0f, 1.0f));
         }
     });
 
@@ -106,7 +113,8 @@ int StepGrid::stepAt (float x) const
 void StepGrid::paint (juce::Graphics& g)
 {
     const auto& layer = ctx.engine.layers[(size_t) ctx.engine.currentLayer];
-    const auto colour = cat::Colours::palette (ctx.engine.currentLayer == 0 ? 0 : ctx.engine.currentLayer == 1 ? 3 : ctx.engine.currentLayer == 2 ? 1 : 7);
+    static const juce::Colour leds[] = { juce::Colour (0xffffd23f), juce::Colour (0xff3fa9ff), juce::Colour (0xffff4f7b), juce::Colour (0xff4fe08a) };   // Eurorack LED colours
+    const auto colour = leds[juce::jlimit (0, 3, ctx.engine.currentLayer)];
     const int playStep = ctx.playheadSteps[(size_t) ctx.engine.currentLayer];
 
     auto full = getLocalBounds().toFloat().reduced (4.0f);
@@ -125,14 +133,41 @@ void StepGrid::paint (juce::Graphics& g)
         const bool inRange = s < layer.length;
         const float x = steps.getX() + s * w;
 
-        // Step cell
+        // Step cell: a Eurorack step button with its LED
         auto cell = juce::Rectangle<float> (x + 1.5f, steps.getY(), w - 3.0f, steps.getHeight());
-        juce::Colour fill = (s / 4) % 2 == 0 ? juce::Colour (0xff1a1d24) : juce::Colour (0xff15171c);
-        if (inRange && st.active && ! st.isRest)
-            fill = st.isTie ? colour.withAlpha (0.45f) : colour.withAlpha (0.35f + 0.5f * juce::jlimit (0.0f, 1.0f, st.velocity / 1.5f) * 1.4f);
-        if (! inRange) fill = fill.withAlpha (0.35f);
-        g.setColour (fill);
+        const bool lit = inRange && st.active && ! st.isRest;
+        g.setColour (juce::Colour (0xff0b0b0c).withAlpha (inRange ? 1.0f : 0.5f));
         g.fillRoundedRectangle (cell, 3.0f);
+        auto cap = cell.reduced (2.0f).withTrimmedBottom (2.0f);
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff3a3c43), 0.0f, cap.getY(), juce::Colour (0xff232428), 0.0f, cap.getBottom(), false));
+        if (inRange) g.fillRoundedRectangle (cap, 2.5f);
+        if ((s / 4) % 2 == 1 && inRange)
+        {
+            g.setColour (juce::Colours::white.withAlpha (0.035f));
+            g.fillRoundedRectangle (cap, 2.5f);
+        }
+        {
+            const float d = juce::jmin (cap.getWidth() * 0.62f, 14.0f);
+            auto led = juce::Rectangle<float> (d, d).withCentre ({ cap.getCentreX(), cap.getBottom() - d * 0.9f });
+            if (lit)
+            {
+                const float vel = juce::jlimit (0.3f, 1.0f, st.velocity / 1.2f);
+                const auto c = st.isTie ? colour.withAlpha (0.55f) : colour.withMultipliedBrightness (0.7f + 0.3f * vel);
+                g.setColour (c.withAlpha (0.28f));
+                g.fillEllipse (led.expanded (d * 0.5f));
+                g.setColour (c);
+                g.fillEllipse (led);
+                g.setColour (juce::Colours::white.withAlpha (0.55f));
+                g.fillEllipse (led.reduced (d * 0.3f).translated (-d * 0.12f, -d * 0.12f));
+            }
+            else
+            {
+                g.setColour (juce::Colour (0xff141416).withAlpha (inRange ? 1.0f : 0.4f));
+                g.fillEllipse (led);
+                g.setColour (colour.withAlpha (inRange ? 0.12f : 0.05f));
+                g.drawEllipse (led, 1.0f);
+            }
+        }
 
         if (inRange && st.active)
         {
@@ -176,9 +211,16 @@ void StepGrid::paint (juce::Graphics& g)
             g.setColour (juce::Colour (0xff15171c).withAlpha (inRange ? 1.0f : 0.4f));
             g.fillRoundedRectangle (bg, 2.0f);
             if (! inRange || ! st.active || st.isRest) return;
-            const float h = lane.getHeight() * juce::jlimit (0.0f, 1.0f, value / maxValue);
-            g.setColour (colour.withAlpha (0.85f));
-            g.fillRoundedRectangle (bg.withTop (bg.getBottom() - h), 2.0f);
+            const float frac = juce::jlimit (0.0f, 1.0f, value / maxValue);
+            const int segs = juce::jmax (4, (int) (lane.getHeight() / 6.0f));
+            const float sh = bg.getHeight() / (float) segs;
+            for (int k = 0; k < segs; ++k)
+            {
+                auto seg = juce::Rectangle<float> (bg.getX() + 1.0f, bg.getBottom() - sh * (float) (k + 1) + 1.0f, bg.getWidth() - 2.0f, sh - 2.0f);
+                const bool on = (float) (k + 1) / (float) segs <= frac + 0.001f;
+                g.setColour (on ? colour.withAlpha (0.9f) : colour.withAlpha (0.08f));
+                g.fillRoundedRectangle (seg, 1.0f);
+            }
             // 100 % reference line
             const float ref = lane.getBottom() - lane.getHeight() * (1.0f / maxValue);
             g.setColour (C::outline);

@@ -5,6 +5,7 @@ namespace cat
 PresetManager::PresetManager (juce::AudioProcessor& p, const juce::String& pluginName, Factory f, juce::StringArray extraUserExtensions)
     : link (pluginName), processor (p), plugin (pluginName), factory (std::move (f)), extensions (std::move (extraUserExtensions))
 {
+    applyTheme (pluginName);              // this Cat's own look (colours, knobs, font) before any window opens
     extensions.addIfNotAlreadyThere ("catpreset");
     loadFavourites();
     link.onChain = [this] (const juce::String& chain) { if (followChains) applyChain (chain, false); };

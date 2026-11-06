@@ -1,4 +1,5 @@
 #include "ChoirEngine.h"
+#include "LinkClient.h"
 
 namespace singcat
 {
@@ -912,7 +913,7 @@ void Engine::controlUpdate (Singer& s, int index, float dt)
 
     // ---- source
     const float loud = std::pow (s.velocity, 1.2f) * (settings.mpe ? 0.45f + 0.75f * ch.pressure : 1.0f + 0.3f * ch.pressure);
-    s.f0 = juce::jlimit (25.0f, 2500.0f, 440.0f * std::pow (2.0f, (semis - 69.0f) / 12.0f));
+    s.f0 = juce::jlimit (25.0f, 2500.0f, 440.0f * std::pow (2.0f, ((link != nullptr ? link->tuned (semis) : semis) - 69.0f) / 12.0f));
     s.voicing = loud;
     s.purrDepth = purr;
     s.aspiration = ti.breath + 0.6f * st.breath + 0.45f * settings.breath + 0.3f * purr;

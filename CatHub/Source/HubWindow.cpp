@@ -645,10 +645,16 @@ CatTab::CatTab (juce::AudioPluginInstance& plugin)
         naturalW = editor->getWidth();
         naturalH = editor->getHeight();
         addAndMakeVisible (editor.get());
+        editor->addComponentListener (this);
     }
 }
 
-CatTab::~CatTab() { editor.reset(); }     // the Cat's window always goes before the Cat itself
+CatTab::~CatTab()
+{
+    stopTimer();
+    if (editor != nullptr) editor->removeComponentListener (this);
+    editor.reset();                          // the Cat's window always goes before the Cat itself
+}
 
 void CatTab::paint (juce::Graphics& g)
 {
@@ -661,17 +667,44 @@ void CatTab::paint (juce::Graphics& g)
     }
 }
 
+juce::Rectangle<int> CatTab::targetBounds() const
+{
+    if (editor == nullptr || naturalW <= 0 || naturalH <= 0 || getWidth() <= 0 || getHeight() <= 0) return {};
+    if (! editor->isResizable()) return editor->getBounds().withPosition ((getWidth() - editor->getWidth()) / 2, (getHeight() - editor->getHeight()) / 2);
+    // Cat windows scale as one piece: as big as fits the tab, aspect kept, centred
+    const float k = juce::jmin ((float) getWidth() / (float) naturalW, (float) getHeight() / (float) naturalH);
+    const int w = juce::jmax (100, (int) ((float) naturalW * k)), h = juce::jmax (80, (int) ((float) naturalH * k));
+    return { juce::jmax (0, (getWidth() - w) / 2), juce::jmax (0, (getHeight() - h) / 2), w, h };
+}
+
+void CatTab::fit()
+{
+    const auto t = targetBounds();
+    if (t.isEmpty()) return;
+    if (std::abs (t.getWidth() - editor->getWidth()) > 2 || std::abs (t.getHeight() - editor->getHeight()) > 2)
+        editor->setSize (t.getWidth(), t.getHeight());
+    // (the plug-in may round its size to its shape: centre what it took)
+    editor->setTopLeftPosition (juce::jmax (0, (getWidth() - editor->getWidth()) / 2), juce::jmax (0, (getHeight() - editor->getHeight()) / 2));
+}
+
 void CatTab::resized()
 {
-    if (editor == nullptr || naturalW <= 0 || naturalH <= 0 || getWidth() <= 0 || getHeight() <= 0) return;
-    // Cat windows scale as one piece: make it as big as fits (up to 1.5x), aspect kept, centred.
-    if (editor->isResizable())
-    {
-        const float k = juce::jmin (1.5f, juce::jmin ((float) getWidth() / (float) naturalW, (float) getHeight() / (float) naturalH));
-        const int w = juce::jmax (100, (int) ((float) naturalW * k)), h = juce::jmax (80, (int) ((float) naturalH * k));
-        if (w != editor->getWidth() || h != editor->getHeight()) editor->setSize (w, h);
-    }
-    editor->setTopLeftPosition (juce::jmax (0, (getWidth() - editor->getWidth()) / 2), juce::jmax (0, (getHeight() - editor->getHeight()) / 2));
+    fit();
+    refitSoon();          // the plug-in's own window can answer later with its old size (when it is first shown)
+}
+
+void CatTab::componentMovedOrResized (juce::Component&, bool, bool wasResized)
+{
+    if (wasResized && ! isTimerRunning() && tries <= 8) startTimer (60);   // (keeps the tries: no endless tug of war)
+}
+
+void CatTab::timerCallback()
+{
+    fit();
+    const auto t = targetBounds();
+    const bool done = t.isEmpty() || editor == nullptr
+                   || (std::abs (t.getWidth() - editor->getWidth()) <= 2 && std::abs (t.getHeight() - editor->getHeight()) <= 2);
+    if (done || ++tries > 8) stopTimer();    // (never fight a plug-in that wants its own size forever)
 }
 
 //==============================================================================

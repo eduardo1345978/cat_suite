@@ -17,6 +17,7 @@ namespace cat
       events    births and deaths from Life-Cat (a ring of the last 64)
       linkAll   a "link everything" request from any Link panel
       transport play / stop + tempo shared by the standalone apps (they play in sync)
+      tuning    Micro-Cat's tuning: the pitch every MIDI key plays (Glide-, Sing-, Talk-Cat follow it)
 
     Every field is written with a sequence counter around it (seqlock), so readers on the audio
     thread see either the old or the new value, never half of each.
@@ -56,6 +57,10 @@ public:
     void publishTransport (bool playing, double bpm, juce::uint64 source);
     /** false if the bus is not available. startTicks: juce::Time high-resolution ticks of beat 0. */
     bool readTransport (bool& playing, double& bpm, juce::int64& startTicks) const;
+
+    // ---- tuning (any thread): pitches[k] = the pitch key k plays, in MIDI semitones (69 = A 440 Hz)
+    void publishTuning (const float* pitches128, bool active, juce::uint64 source);
+    bool readTuning (juce::uint32& seq, std::array<float, 128>& pitches, bool& active, juce::uint64& source) const;   // true if seq changed
 
     // ---- link all
     void requestLinkAll();

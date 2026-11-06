@@ -126,7 +126,7 @@ void EnvelopeEditor::timerCallback()
 
 juce::Rectangle<float> EnvelopeEditor::plotArea() const
 {
-    return getLocalBounds().toFloat().reduced (10.0f, 12.0f);
+    return getLocalBounds().toFloat().reduced (28.0f, 26.0f);
 }
 
 juce::Point<float> EnvelopeEditor::toScreen (float t, float v, int cycle) const
@@ -165,44 +165,86 @@ int EnvelopeEditor::segmentAt (float t) const
 
 void EnvelopeEditor::paint (juce::Graphics& g)
 {
-    g.setColour (juce::Colour (0xff1b1e25));
-    g.fillRoundedRectangle (getLocalBounds().toFloat(), 5.0f);
+    // Liquid chrome: a glass panel, semitone grid, a thick chrome curve with a soft blue glow, chrome handles
+    auto frame = getLocalBounds().toFloat().reduced (0.5f);
+    const float radius = juce::jmin (22.0f, frame.getHeight() * 0.12f);
+    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.05f), 0.0f, frame.getY(),
+                                             juce::Colours::white.withAlpha (0.01f), 0.0f, frame.getBottom(), false));
+    g.fillRoundedRectangle (frame, radius);
+    g.setColour (juce::Colours::black.withAlpha (0.25f));
+    g.fillRoundedRectangle (frame, radius);
+    g.setColour (juce::Colours::white.withAlpha (0.12f));
+    g.drawRoundedRectangle (frame, radius, 1.0f);
 
     const auto a = plotArea();
     const int n = cycles();
+    const float amount = processor.apvts.getRawParameterValue ("bendAmount")->load();
 
-    g.setColour (C::outline.withAlpha (0.6f));
-    g.drawHorizontalLine ((int) a.getCentreY(), a.getX(), a.getRight());
+    // grid: +amount ... -amount in semitones
+    g.setFont (cat::catFont (11.0f));
+    for (int i = 0; i <= 4; ++i)
+    {
+        const float y = a.getY() + a.getHeight() * (float) i / 4.0f;
+        g.setColour (juce::Colours::white.withAlpha (i == 2 ? 0.12f : 0.06f));
+        g.drawHorizontalLine (juce::roundToInt (y), frame.getX() + 2.0f, frame.getRight() - 2.0f);
+        const float st = amount * (1.0f - (float) i * 0.5f);
+        g.setColour (juce::Colour (0xff8890a0));
+        g.drawText ((st > 0.0f ? "+" : "") + juce::String (st, std::abs (st - std::round (st)) < 0.01f ? 0 : 1) + " st",
+                    juce::Rectangle<float> (frame.getX() + 12.0f, y - 15.0f, 60.0f, 13.0f), juce::Justification::centredLeft);
+    }
     for (int c = 1; c < n; ++c)
     {
         const float x = a.getX() + a.getWidth() * (float) c / (float) n;
-        g.setColour (C::outline.withAlpha (0.35f));
+        g.setColour (juce::Colours::white.withAlpha (0.06f));
         g.drawVerticalLine ((int) x, a.getY(), a.getBottom());
     }
 
-    g.setColour (curveColour);
-    g.strokePath (envelopePath (env, a, n, juce::jmax (48, 192 / n)), juce::PathStrokeType (1.8f));
+    const auto path = envelopePath (env, a, n, juce::jmax (48, 192 / n));
+    const float thick = juce::jlimit (6.0f, 14.0f, a.getHeight() * 0.045f);
+    // glow
+    for (int i = 3; i >= 1; --i)
+    {
+        g.setColour (juce::Colour (0xff9db4ff).withAlpha (0.06f));
+        g.strokePath (path, juce::PathStrokeType (thick + (float) i * 7.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
+    // chrome body
+    {
+        juce::ColourGradient chrome (juce::Colours::white, 0.0f, a.getY(), juce::Colour (0xff7e879a), 0.0f, a.getBottom(), false);
+        chrome.addColour (0.35, juce::Colour (0xffc3cbda));
+        chrome.addColour (0.5, juce::Colour (0xff4a5060));
+        chrome.addColour (0.65, juce::Colour (0xffe6ebf3));
+        g.setColour (juce::Colour (0xff0b0c0f));
+        g.strokePath (path, juce::PathStrokeType (thick + 2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setGradientFill (chrome);
+        g.strokePath (path, juce::PathStrokeType (thick, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setColour (juce::Colours::white.withAlpha (0.8f));
+        g.strokePath (path, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded),
+                      juce::AffineTransform::translation (0.0f, -thick * 0.28f));
+    }
 
     for (int c = 0; c < n; ++c)
         for (size_t i = 0; i < env.points.size(); ++i)
         {
             const auto p = toScreen (env.points[i].first, env.points[i].second, c);
-            const bool big = (int) i == dragNode;
-            g.setColour (juce::Colours::white);
-            g.fillEllipse (juce::Rectangle<float> (big ? 12.0f : 8.0f, big ? 12.0f : 8.0f).withCentre (p));
+            const float d = (int) i == dragNode ? 26.0f : 20.0f;
+            auto dot = juce::Rectangle<float> (d, d).withCentre (p);
+            g.setColour (juce::Colours::black.withAlpha (0.5f));
+            g.fillEllipse (dot.translated (0.0f, 3.0f));
+            juce::ColourGradient knob (juce::Colours::white, dot.getX(), dot.getY(), juce::Colour (0xff6e7789), dot.getRight(), dot.getBottom(), false);
+            knob.addColour (0.45, juce::Colour (0xffd6dce7));
+            knob.addColour (0.55, juce::Colour (0xff8d96a8));
+            g.setGradientFill (knob);
+            g.fillEllipse (dot);
+            g.setColour (juce::Colour (0xff0b0c0f));
+            g.drawEllipse (dot, 2.0f);
         }
 
     if (playhead >= 0.0f)
     {
         const float x = a.getX() + juce::jlimit (0.0f, 1.0f, playhead) * a.getWidth();
-        g.setColour (juce::Colours::white.withAlpha (0.7f));
-        g.drawVerticalLine ((int) x, a.getY() - 6.0f, a.getBottom() + 6.0f);
+        g.setColour (juce::Colours::white.withAlpha (0.5f));
+        g.drawVerticalLine ((int) x, frame.getY() + 4.0f, frame.getBottom() - 4.0f);
     }
-
-    g.setColour (C::textDim.withAlpha (0.7f));
-    g.setFont (cat::catFont (10.5f));
-    g.drawText ("+amount", a.withHeight (14.0f).translated (4.0f, -10.0f), juce::Justification::centredLeft);
-    g.drawText ("-amount", a.withTop (a.getBottom() - 4.0f).withHeight (14.0f).translated (4.0f, 0.0f), juce::Justification::centredLeft);
 }
 
 void EnvelopeEditor::mouseDown (const juce::MouseEvent& e)
