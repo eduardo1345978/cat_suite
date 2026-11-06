@@ -50,7 +50,7 @@ void panel (Graphics& g, Rectangle<float> r, const String& title)
 //==============================================================================
 SwarmScreen::SwarmScreen (GlitchCatProcessor& p) : processor (p)
 {
-    setTooltip ("The swarm: every pixel is a bug - left / right is where you hear it, up / down its pitch. "
+    setTooltip ("The bugs: every pixel is a bug - left / right is where you hear it, up / down its pitch. "
                 "Click the strip at the bottom to play (the magenta keys are drums)");
     setOpaque (true);
 }
@@ -219,7 +219,7 @@ void SwarmScreen::paint (Graphics& g)
         g.setColour (acid.withAlpha (0.75f));
         g.setFont (cat::lcdFont (28.0f));
         const bool blink = (frame / 15) % 2 == 0;
-        g.drawText (String ("PLAY SOME NOTES - THE SWARM IS WAITING") + (blink ? "_" : " "), plot, Justification::centred);
+        g.drawText (String ("PLAY SOME NOTES - THE BUGS ARE WAITING") + (blink ? "_" : " "), plot, Justification::centred);
     }
 
     // the drums: four flashing blocks top right
@@ -288,7 +288,7 @@ void SwarmScreen::paint (Graphics& g)
 MadnessKnob::MadnessKnob() : Slider (Slider::RotaryHorizontalVerticalDrag, Slider::NoTextBox)
 {
     setRotaryParameters (MathConstants<float>::pi * 1.25f, MathConstants<float>::pi * 2.75f, true);
-    setTooltip ("MADNESS: gentle (a warm, wobbly swarm on the beat) to insane (rolls, jumps, stutters, reversed bits, off the grid). "
+    setTooltip ("MADNESS: gentle (warm, wobbly bugs on the beat) to insane (rolls, jumps, stutters, reversed bits, off the grid). "
                 "The mod wheel turns it up too");
     setVelocityBasedMode (false);
     setMouseDragSensitivity (300);
@@ -380,7 +380,7 @@ GlitchCatEditor::GlitchCatEditor (GlitchCatProcessor& p) : processor (p)
 {
     addAndMakeVisible (presetBar);
     addAndMakeVisible (mutateButton);
-    mutateButton.setTooltip ("Shake the sound: new swarm, flight, tape, tone, shape and space round where they are (Madness stays)");
+    mutateButton.setTooltip ("Shake the sound: new bugs, flight, tape, tone, shape and space round where they are (Madness stays)");
     mutateButton.onClick = [this] { processor.mutate(); status = "MUTATED"; };
     addAndMakeVisible (screen);
     addAndMakeVisible (madness);
@@ -401,7 +401,7 @@ GlitchCatEditor::GlitchCatEditor (GlitchCatProcessor& p) : processor (p)
     tempo.getSlider().setTooltip ("The tempo when Cubase isn't playing (in Cubase it follows the project)");
     for (auto* c : { &voiceType, &kit, &beatMode, &beatStyle }) addAndMakeVisible (*c);
     voiceType.getCombo().setTooltip ("Whisper, vowels, a choir, a talking mouth - or My voice: drop a recording here or record it");
-    beatMode.getCombo().setTooltip ("Swarm beat: it drums along to your notes. Low keys: the keys below C2 play drums. Both: the low keys take the beat over");
+    beatMode.getCombo().setTooltip ("Bug beat: it drums along to your notes. Low keys: the keys below C2 play drums. Both: the low keys take the beat over");
 
     for (auto* b : { &loadButton, &recButton, &clearButton }) addAndMakeVisible (*b);
     loadButton.setTooltip ("Load a recording of your voice (wav, aiff, flac, mp3) - or drop it anywhere on Glitch-Cat");
@@ -455,10 +455,10 @@ void GlitchCatEditor::paint (Graphics& g)
     }
     g.setFont (cat::lcdFont (19.0f));
     g.setColour (acid.withAlpha (0.6f));
-    g.drawText ("every note is a swarm", logo.withTrimmedLeft (250.0f).withTrimmedTop (22.0f), Justification::centredLeft);
+    g.drawText ("every note falls apart into bugs", logo.withTrimmedLeft (250.0f).withTrimmedTop (22.0f), Justification::centredLeft);
 
     // panels
-    static const char* titles[] = { "SWARM", "SYNTH", "VOICE", "DRUMS", "OUT" };
+    static const char* titles[] = { "BUGS", "SYNTH", "VOICE", "DRUMS", "OUT" };
     for (int i = 0; i < 5; ++i) panel (g, panels[(size_t) i].toFloat(), titles[i]);
     panel (g, madnessArea.toFloat(), "MADNESS");
 
@@ -492,7 +492,7 @@ void GlitchCatEditor::paintOverChildren (Graphics& g)
     g.setColour (magenta);
     g.drawRect (getLocalBounds().reduced (4), 3);
     g.setFont (cat::lcdFont (40.0f));
-    g.drawText ("DROP YOUR VOICE INTO THE SWARM", getLocalBounds(), Justification::centred);
+    g.drawText ("FEED YOUR VOICE TO THE BUGS", getLocalBounds(), Justification::centred);
 }
 
 void GlitchCatEditor::resized()

@@ -1843,7 +1843,7 @@ void testGlitchCat()
         peakLevel = juce::jmax (peakLevel, audio.getMagnitude (0, blockSize));
         for (int i = 0; i < blockSize; ++i) finite &= std::isfinite (audio.getSample (0, i));
     }
-    check (finite && peakLevel > 0.02f && peakLevel <= 1.0f, "Glitch-Cat: a note makes the swarm sound");
+    check (finite && peakLevel > 0.02f && peakLevel <= 1.0f, "Glitch-Cat: a note makes the bugs sound");
     gl->releaseResources();
 }
 

@@ -29,7 +29,7 @@ AudioProcessorValueTreeState::ParameterLayout GlitchCatProcessor::createLayout()
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "doRolls", 1 }, "Madness rolls", true));
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "doStutter", 1 }, "Madness stutters", true));
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "doOdd", 1 }, "Madness odd rhythm", true));
-    unit ("swarm", "Swarm", 0.5f);
+    unit ("swarm", "Bugs", 0.5f);   // id kept for saved projects
     unit ("flight", "Flight", 0.5f);
     unit ("tape", "Tape", 0.3f);
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "attack", 1 }, "Attack", NormalisableRange<float> (0.001f, 3.0f, 0.0f, 0.3f), 0.02f, seconds()));

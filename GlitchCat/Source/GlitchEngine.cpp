@@ -3,7 +3,7 @@
 namespace glitch
 {
 juce::StringArray voiceTypeNames() { return { "Whisper", "Vowels", "Choir", "Mouth", "My voice" }; }
-juce::StringArray beatModeNames()  { return { "Off", "Swarm beat", "Low keys", "Swarm + keys" }; }
+juce::StringArray beatModeNames()  { return { "Off", "Bug beat", "Low keys", "Bugs + keys" }; }
 juce::StringArray beatStyleNames() { return { "Drill", "Broken", "Dust", "Rave" }; }
 
 namespace
@@ -116,6 +116,8 @@ void Engine::reset()
     lastGlitchStep = -1.0;
     std::fill (ringL.begin(), ringL.end(), 0.0f);
     std::fill (ringR.begin(), ringR.end(), 0.0f);
+    writePos = 0;          // the ring may have got smaller (a lower sample rate)
+    glitchAnchor = 0.0;
     drums.allOff();
     reverb.reset();
     tapeLpL = tapeLpR = 0.0f;

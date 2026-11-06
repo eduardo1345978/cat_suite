@@ -33,7 +33,7 @@ What is inside (folder VST3):
                  the free MTS-ESP library the installer offers)
     Hum-Cat    - sing or hum a tune: get the melody, chords, bass and drums as MIDI
                  (put it on the audio track with your microphone, or drop a recording on it)
-    Glitch-Cat - every note is a swarm: one MADNESS knob from a warm wobbly pad to rolls,
+    Glitch-Cat - every note falls apart into bugs: one MADNESS knob from a warm wobbly pad to rolls,
                  stutters, reversed bits and broken rhythms (an instrument, with its own beat)
     Molten     - an effect that melts the sound: HEAT from warm to molten (fat, dirty, never
                  louder - auto gain), drips that fall lower and lower, a tape-like wobble
