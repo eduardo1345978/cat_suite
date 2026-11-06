@@ -27,3 +27,5 @@ What is inside (folder VST3):
                  stutters, reversed bits and broken rhythms (an instrument, with its own beat)
     Molten     - an effect that melts the sound: HEAT from warm to molten (fat, dirty, never
                  louder - auto gain), drips that fall lower and lower, a tape-like wobble
+    Swarm      - a granular effect that lives: the sound becomes a cloud of grains (dreamy, dark,
+                 chopped in time, wild - drag the point on the nebula), LIFE, FREEZE, the dice

@@ -1879,6 +1879,39 @@ void testMolten()
     fx->releaseResources();
 }
 
+/** Swarm: loads as a VST3 audio effect, a sound goes in and a swarm comes out, silence stays silent. */
+void testSwarm()
+{
+    std::cout << "\n== Swarm ==" << std::endl;
+    auto fx = loadPlugin (SWARM_VST3);
+    if (fx == nullptr) { ++failures; return; }
+    check (fx->getTotalNumInputChannels() == 2 && fx->getTotalNumOutputChannels() == 2, "Swarm is a stereo audio effect");
+    check (fx->getNumPrograms() == 15 && fx->getProgramName (0) == "Night Choir", "Swarm has its 15 presets");
+    fx->setCurrentProgram (0);
+    fx->prepareToPlay (sampleRate, blockSize);
+    juce::AudioBuffer<float> audio (2, blockSize);
+    juce::MidiBuffer midi;
+    float peakLevel = 0.0f, silentPeak = 0.0f;
+    bool finite = true;
+    double ph = 0.0;
+    for (int b = 0; b < 1300; ++b)
+    {
+        for (int i = 0; i < blockSize; ++i)
+        {
+            const float v = b < 300 ? 0.3f * (float) std::sin (ph) : 0.0f;
+            ph += juce::MathConstants<double>::twoPi * 330.0 / sampleRate;
+            audio.setSample (0, i, v); audio.setSample (1, i, v);
+        }
+        fx->processBlock (audio, midi);
+        if (b > 100 && b < 300) peakLevel = juce::jmax (peakLevel, audio.getMagnitude (0, blockSize));
+        if (b > 1280) silentPeak = juce::jmax (silentPeak, audio.getMagnitude (0, blockSize));
+        for (int i = 0; i < blockSize; ++i) finite &= std::isfinite (audio.getSample (0, i));
+    }
+    check (finite && peakLevel > 0.05f && peakLevel <= 1.0f, "Swarm: a tone goes in, a swarm comes out (peak " + juce::String (peakLevel, 2) + ")");
+    check (silentPeak < 0.05f, "Swarm: after the sound stops it fades away (" + juce::String (silentPeak, 4) + ")");
+    fx->releaseResources();
+}
+
 int main()
 {
     juce::ScopedJuceInitialiser_GUI juceInit;
@@ -1903,6 +1936,7 @@ int main()
     testHumCat();
     testGlitchCat();
     testMolten();
+    testSwarm();
 
     std::cout << "\n" << (failures == 0 ? "ALL TESTS PASSED" : juce::String (failures) + " TEST(S) FAILED") << std::endl;
     return failures == 0 ? 0 : 1;

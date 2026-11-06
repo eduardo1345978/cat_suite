@@ -14,6 +14,7 @@ set "LOG=%~dp0install_log.txt"
 echo Installing to %DEST% > "%LOG%"
 for %%C in (Chord Patt Bend Drum Orbit Sing Bass Glide Talk Life Muse Echo Micro Phase Hum Glitch) do call :plugin %%C
 call :fx Molten
+call :fx Swarm
 echo. >> "%LOG%"
 echo Apps to %APPS% >> "%LOG%"
 call :app CatHub Cat-Hub.exe

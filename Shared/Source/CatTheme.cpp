@@ -139,6 +139,13 @@ namespace
             t.button = ButtonStyle::Glow; t.corner = 8.0f;
             font (t, SoraBold_ttf, SoraBold_ttfSize, 0.95f);
         }
+        else if (p.startsWith ("swarm"))      // deep space: black, nebula violet, star dust
+        {
+            t = make ("Deep Field", 0xff05050b, 0xff0b0b16, 0xff12121f, 0xff1a1a2a, 0xff2a2a40, 0xffe9e6f5, 0xff8f8aa8, 0xffb9a6ff);
+            t.knob = KnobStyle::Hardware; t.knobBody = juce::Colour (0xff12121f); t.knobRing = juce::Colour (0xff2a2a40); t.knobPointer = t.accent;
+            t.button = ButtonStyle::Glow; t.corner = 14.0f;
+            font (t, SyneExtraBold_ttf, SyneExtraBold_ttfSize, 1.0f);
+        }
         else if (p.startsWith ("glitch"))     // a broken screen: black, acid green, magenta errors
         {
             t = make ("Broken Screen", 0xff050607, 0xff0b0d10, 0xff12151a, 0xff1a1e24, 0xff2a313a, 0xffd9ffe9, 0xff6f9a84, 0xff3dff9a);
