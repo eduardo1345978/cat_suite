@@ -1,0 +1,40 @@
+; Cat Box Pocket: full-duplex I2S master, 16-bit stereo (32 BCLK per frame), 4 PIO cycles per bit.
+; side-set: bit 0 = BCLK, bit 1 = LRCLK (BCLK and LRCLK on consecutive pins).
+; out pin = data to the codec (DACDAT), in pin = data from the codec (ADCDAT).
+; Each 32-bit FIFO word = (right << 16) | left, both directions (I2S: LRCLK high = right).
+.program i2s_duplex
+.side_set 2
+
+bitloop1:
+    out pins, 1       side 0b10 [1]
+    in pins, 1        side 0b11
+    jmp x-- bitloop1  side 0b11
+    out pins, 1       side 0b00 [1]
+    in pins, 1        side 0b01
+    set x, 14         side 0b01
+bitloop0:
+    out pins, 1       side 0b00 [1]
+    in pins, 1        side 0b01
+    jmp x-- bitloop0  side 0b01
+    out pins, 1       side 0b10 [1]
+    in pins, 1        side 0b11
+public entry_point:
+    set x, 14         side 0b11
+
+% c-sdk {
+static inline void i2s_duplex_init (PIO pio, uint sm, uint offset, uint dout, uint din, uint clk_base, float div) {
+    pio_sm_config c = i2s_duplex_program_get_default_config (offset);
+    sm_config_set_out_pins (&c, dout, 1);
+    sm_config_set_in_pins (&c, din);
+    sm_config_set_sideset_pins (&c, clk_base);
+    sm_config_set_out_shift (&c, false, true, 32);
+    sm_config_set_in_shift (&c, false, true, 32);
+    sm_config_set_clkdiv (&c, div);
+    pio_gpio_init (pio, dout); pio_gpio_init (pio, clk_base); pio_gpio_init (pio, clk_base + 1);
+    gpio_set_function (din, pio == pio0 ? GPIO_FUNC_PIO0 : GPIO_FUNC_PIO1);
+    pio_sm_set_consecutive_pindirs (pio, sm, dout, 1, true);
+    pio_sm_set_consecutive_pindirs (pio, sm, clk_base, 2, true);
+    pio_sm_set_consecutive_pindirs (pio, sm, din, 1, false);
+    pio_sm_init (pio, sm, offset + i2s_duplex_offset_entry_point, &c);
+}
+%}

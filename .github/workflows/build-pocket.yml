@@ -1,0 +1,53 @@
+# Cat Box Pocket (the pocket sampler): tests the engine on Linux, builds the Pico Plus 2 firmware (.uf2).
+name: Build Cat Box Pocket
+
+on:
+  push:
+    branches: [ main, catbox ]
+    paths:
+      - 'CatBoxPocket/**'
+      - '.github/workflows/build-pocket.yml'
+  workflow_dispatch:
+
+jobs:
+  pocket:
+    name: Pocket (tests + Pico firmware)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Engine tests
+        run: |
+          CatBoxPocket/host/build.sh "$PWD/pocket-test" | tee pocket-test.txt
+          grep FAIL pocket-test.txt | head -20 | while IFS= read -r line; do echo "::error::$line"; done
+          python3 -c "t=open('pocket-test.txt').read(); print('::notice title=Pocket tests::' + t.strip().splitlines()[-1])"
+
+      - name: Toolchain and Pico SDK
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib cmake ninja-build
+          git clone --depth 1 --branch 2.1.1 https://github.com/raspberrypi/pico-sdk.git "$HOME/pico-sdk"
+          cd "$HOME/pico-sdk" && git submodule update --init --depth 1 lib/tinyusb
+
+      - name: Build the firmware
+        run: |
+          export PICO_SDK_PATH="$HOME/pico-sdk"
+          cmake -B pocket-build -S CatBoxPocket/pico -G Ninja -DCMAKE_BUILD_TYPE=Release
+          set +e
+          cmake --build pocket-build 2>&1 | tee build.log
+          status=${PIPESTATUS[0]}
+          grep -E "error|warning: unused" build.log | head -40 | while IFS= read -r line; do echo "::error::$line"; done
+          ls -la pocket-build/*.uf2 2>/dev/null
+          exit $status
+
+      - name: Keep the firmware and the demo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cat-Box-Pocket
+          path: |
+            pocket-build/cat_box_pocket.uf2
+            pocket-test/pocket-demo.wav
+            pocket-test.txt
+          retention-days: 30
