@@ -423,7 +423,7 @@ static void midiService () {
 static void syncIrq (uint gpio, uint32_t events) { if (gpio == pin::SYNC_IN && (events & GPIO_IRQ_EDGE_RISE)) engine.syncPulseIn (); }
 static void syncInit () {
     gpio_init (pin::SYNC_OUT); gpio_set_dir (pin::SYNC_OUT, GPIO_OUT); gpio_put (pin::SYNC_OUT, 0);
-    gpio_init (pin::SYNC_IN); gpio_set_dir (pin::SYNC_IN, GPIO_IN); gpio_pull_down (pin::SYNC_IN);
+    gpio_init (pin::SYNC_IN); gpio_set_dir (pin::SYNC_IN, GPIO_IN); gpio_disable_pulls (pin::SYNC_IN);   // 100k to GND outside (RP2350 E9)
     gpio_set_irq_enabled_with_callback (pin::SYNC_IN, GPIO_IRQ_EDGE_RISE, true, syncIrq);
 }
 
