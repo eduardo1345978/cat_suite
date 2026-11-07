@@ -42,7 +42,7 @@ constexpr uint32_t DISK_SECTORS = (16u - 2u) * 1024 * 1024 / 512;
 
 static Engine engine;
 static Ui ui (engine);
-static int16_t sramPool[32 * 1024];                  // fallback when the PSRAM does not answer (0.7 s)
+static int16_t sramPool[16 * 1024];                  // fallback when the PSRAM does not answer (0.3 s)
 
 // ------------------------------------------------------------------ PSRAM (QMI chip select 1)
 static size_t __no_inline_not_in_flash_func (psramSetup) () {

@@ -63,7 +63,7 @@ static void demoKit () {
     E->pats[1] = E->pats[0]; E->pat = 1;
     E->toggleStep (12, 4); E->toggleStep (15, 6); E->trig (1, 15, 6)->cond = C_1_2; E->toggleStep (11, 7);
     E->pat = 0;
-    E->bpm = 118; E->swing = 0.1f; E->delayAmt = 0.15f; E->reverbAmt = 0.2f; E->master = 0.85f; E->duckAmt = 0.3f;
+    E->bpm = 118; E->swing = 0.1f; E->delayAmt = 0.15f; E->reverbAmt = 0.2f; E->master = 0.85f; E->duckAmt = 0.15f;
     for (int i = 0; i < NSLOT; ++i) E->slots[i].saved = false;
 }
 

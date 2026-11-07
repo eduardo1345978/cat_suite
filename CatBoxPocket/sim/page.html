@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Cat Box Pocket Simulator</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -143,35 +144,97 @@ kbd { font: 500 12px var(--mono); background: var(--table2); border: 1px solid v
 
 <script id="wasm" type="application/octet-stream">__WASM__</script>
 <script>
+// The audio worklet: the engine runs here, in the browser's audio thread, so drawing the page never interrupts the sound.
+const WORKLET = `
+class Pocket extends AudioWorkletProcessor {
+  constructor (opt) {
+    super();
+    const o = opt.processorOptions, imp = {};
+    for (const i of WebAssembly.Module.imports(o.module)) (imp[i.module] ||= {})[i.name] = () => 0;
+    this.x = new WebAssembly.Instance(o.module, imp).exports; this.x._initialize();
+    const snap = new Uint8Array(o.memory), mem = this.x.memory;
+    if (mem.buffer.byteLength < snap.length) mem.grow(Math.ceil((snap.length - mem.buffer.byteLength) / 65536));
+    new Uint8Array(mem.buffer).set(snap);                       // the engine exactly as it was on the page
+    this.base = o.base; this.n = 0;
+    this.port.onmessage = (e) => this.msg(e.data);
+  }
+  msg (m) {
+    const x = this.x;
+    if (m.t === 'k') x.sim_key(m.k, m.d);
+    else if (m.t === 'e') x.sim_encoder(m.i, m.d);
+    else if (m.t === 'f') x.sim_fader(m.v);
+    else if (m.t === 'pcm') {
+      const n = Math.min(m.data.length, x.sim_pcm_max()); new Int16Array(x.memory.buffer, x.sim_pcm(), n).set(m.data.subarray(0, n));
+      const ok = x.sim_assign(x.sim_bank() * 16 + m.pad, n, m.rate);
+      this.port.postMessage({ t: 'assigned', ok, bank: x.sim_bank(), pad: m.pad, name: m.name, cut: n < m.data.length });
+    } else if (m.t === 'reset') {
+      if (m.wipe) new Uint8Array(x.memory.buffer, x.sim_disk(), x.sim_disk_size()).fill(0);
+      x.sim_init((Math.random() * 1e9) | 0, 1);
+    }
+  }
+  process (inputs, outputs) {
+    const x = this.x, out = outputs[0], inp = inputs[0] && inputs[0][0];
+    const m = out[0].length;
+    const ib = new Float32Array(x.memory.buffer, x.sim_in(), m);
+    if (inp) ib.set(inp); else ib.fill(0);
+    x.sim_process(m);
+    const o = new Float32Array(x.memory.buffer, x.sim_out(), m * 2);
+    const L = out[0], R = out[1] || out[0];
+    for (let i = 0; i < m; ++i) { L[i] = o[2 * i]; R[i] = o[2 * i + 1]; }
+    if ((++this.n & 7) === 0) {                                  // about 37 times a second: the screen and the disk
+      x.sim_tick((this.base + currentTime * 1000) | 0);
+      if (x.sim_busy() && x.sim_service()) this.port.postMessage({ t: 'disk', img: new Uint8Array(x.memory.buffer, x.sim_disk(), x.sim_disk_size()).slice() });
+      this.port.postMessage({ t: 'ui', fb: new Uint8Array(x.memory.buffer, x.sim_fb(), 1024).slice(), leds: new Uint8Array(x.memory.buffer, x.sim_leds(), 48).slice(),
+        level: x.sim_level(), sel: x.sim_sel(), bank: x.sim_bank(), usb: x.sim_wants_usb() });
+    }
+    return true;
+  }
+}
+registerProcessor('pocket', Pocket);
+`;
+
 (() => {
   const K = { SOUND: 16, PATTERN: 17, BPM: 18, FX: 19, SHIFT: 20, REC: 21, PLAY: 22, WRITE: 23, MUTE: 24, COPY: 25, PASTE: 26, CLEAR: 27, UNDO: 28, SONG: 29,
               FILL: 30, ACCENT: 31, KIT: 32, MENU: 33, SCENE: 34, LEN: 35, ENCA: 36 };
   const dev = document.getElementById('dev'), statusEl = document.getElementById('status');
   const say = (t) => { statusEl.textContent = t; };
-  // ---- the engine
+
+  // ---- the engine: on the page until the sound starts, then in the audio thread (or, if the browser can't, here)
   const bin = Uint8Array.from(atob(document.getElementById('wasm').textContent.trim()), c => c.charCodeAt(0));
   const mod = new WebAssembly.Module(bin);
   const imports = {}; for (const i of WebAssembly.Module.imports(mod)) (imports[i.module] ||= {})[i.name] = () => 0;
-  let x = null;
-  const boot = (demo) => {
-    const inst = new WebAssembly.Instance(mod, imports); x = inst.exports; x._initialize();
-    return x;
-  };
-  boot();
+  const x = new WebAssembly.Instance(mod, imports).exports; x._initialize();
   const mem = () => x.memory.buffer;
-  const cstr = (s) => { const b = new TextEncoder().encode(s + '\0'); new Uint8Array(mem(), x.sim_xfer() + 900000, b.length).set(b); return x.sim_xfer() + 900000; };
+  let mode = 'page', wnode = null;                      // 'page' = the engine here; 'worklet' = in the audio thread
+  let ui = null;                                        // the latest screen, LEDs and state from the worklet
+  const eng = {
+    key: (k, d) => mode === 'worklet' ? wnode.port.postMessage({ t: 'k', k, d }) : x.sim_key(k, d),
+    enc: (i, d) => mode === 'worklet' ? wnode.port.postMessage({ t: 'e', i, d }) : x.sim_encoder(i, d),
+    fader: (v) => mode === 'worklet' ? wnode.port.postMessage({ t: 'f', v }) : x.sim_fader(v),
+    sel: () => mode === 'worklet' ? (ui ? ui.sel : 0) : x.sim_sel(),
+    pcm: (pad, data, rate, name) => {
+      if (mode === 'worklet') { wnode.port.postMessage({ t: 'pcm', pad, data, rate, name }); return; }
+      const n = Math.min(data.length, x.sim_pcm_max()); new Int16Array(mem(), x.sim_pcm(), n).set(data.subarray(0, n));
+      assigned({ ok: x.sim_assign(x.sim_bank() * 16 + pad, n, rate), bank: x.sim_bank(), pad, name, cut: n < data.length });
+    },
+    reset: (wipe) => {
+      if (mode === 'worklet') { wnode.port.postMessage({ t: 'reset', wipe }); return; }
+      if (wipe) new Uint8Array(mem(), x.sim_disk(), x.sim_disk_size()).fill(0);
+      x.sim_init((Math.random() * 1e9) | 0, 1);
+    },
+  };
+  const assigned = (m) => say(m.ok ? `„${m.name}“ je na pade ${'ABCD'[m.bank]}${String(m.pad + 1).padStart(2, '0')}${m.cut ? ' (skrátené na 20 s)' : ''}.` : 'Na zvuk už nie je miesto v pamäti.');
 
   // ---- the disk lives in IndexedDB between visits
   const DB = 'catpocket', STORE = 'disk';
   const idb = () => new Promise((ok, no) => { try { const r = indexedDB.open(DB, 1); r.onupgradeneeded = () => r.result.createObjectStore(STORE); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); } catch (e) { no(e); } });
   const diskLoad = async () => { try { const db = await idb(); return await new Promise((ok) => { const q = db.transaction(STORE).objectStore(STORE).get('img'); q.onsuccess = () => ok(q.result || null); q.onerror = () => ok(null); }); } catch (e) { return null; } };
-  const diskSave = async () => { try { const db = await idb(); const img = new Uint8Array(mem(), x.sim_disk(), x.sim_disk_size()).slice(); db.transaction(STORE, 'readwrite').objectStore(STORE).put(img, 'img'); } catch (e) {} };
+  const diskSave = async (img) => { try { const db = await idb(); db.transaction(STORE, 'readwrite').objectStore(STORE).put(img, 'img'); } catch (e) {} };
   const diskWipe = async () => { try { const db = await idb(); db.transaction(STORE, 'readwrite').objectStore(STORE).delete('img'); } catch (e) {} };
-
-  const start = async (demo) => {
+  const start = async () => {
     const img = await diskLoad();
     if (img && img.length === x.sim_disk_size()) new Uint8Array(mem(), x.sim_disk(), img.length).set(img);
-    x.sim_init((Math.random() * 1e9) | 0, demo ? 1 : 1);
+    x.sim_init((Math.random() * 1e9) | 0, 1);
   };
 
   // ---- build the keys (positions in mm, as on the real board)
@@ -202,13 +265,14 @@ kbd { font: 500 12px var(--mono); background: var(--table2); border: 1px solid v
     const was = s.size > 0;
     if (down) s.add(src); else s.delete(src);
     const now = s.size > 0;
-    if (now !== was) { x.sim_key(k, now ? 1 : 0); const el = keyEls[k]; if (el) el.classList.toggle('down', now); }
+    if (now !== was) { eng.key(k, now ? 1 : 0); const el = keyEls[k]; if (el) el.classList.toggle('down', now); }
   };
+  const releaseAll = () => { for (const [k, s] of held) { if (s.size) eng.key(k, 0); s.clear(); keyEls[k] && keyEls[k].classList.remove('down', 'latch'); } };
   for (const k in keyEls) {
     const el = keyEls[k], kk = +k;
     el.addEventListener('pointerdown', (e) => {
       if (e.button === 2) return;
-      e.preventDefault(); ensureAudio (); el.setPointerCapture(e.pointerId); press(kk, 'p' + e.pointerId, true);
+      e.preventDefault(); ensureAudio(); el.setPointerCapture(e.pointerId); press(kk, 'p' + e.pointerId, true);
     });
     const up = (e) => press(kk, 'p' + e.pointerId, false);
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
@@ -230,7 +294,7 @@ kbd { font: 500 12px var(--mono); background: var(--table2); border: 1px solid v
 
   // ---- encoders: wheel, drag, click = push
   const knobs = [], angle = [0, 0, 0, 0];
-  const turn = (i, d) => { x.sim_encoder(i, d); angle[i] += d * 15; knobs[i].style.transform = `rotate(${angle[i]}deg)`; };
+  const turn = (i, d) => { eng.enc(i, d); angle[i] += d * 15; knobs[i].style.transform = `rotate(${angle[i]}deg)`; };
   [64, 80, 96, 112].forEach((mx, i) => {
     const el = document.createElement('div'); el.className = 'knob'; el.setAttribute('role', 'slider'); el.setAttribute('aria-label', 'Enkóder ' + 'ABCD'[i]);
     el.style.left = `calc(${mx} * var(--u))`; el.style.top = `calc(15 * var(--u))`; dev.append(el); knobs.push(el);
@@ -244,42 +308,60 @@ kbd { font: 500 12px var(--mono); background: var(--table2); border: 1px solid v
       while (drag.acc >= 7) { drag.acc -= 7; turn(i, 1); drag.moved = true; }
       while (drag.acc <= -7) { drag.acc += 7; turn(i, -1); drag.moved = true; }
     });
-    el.addEventListener('pointerup', () => { if (drag && ! drag.moved) { x.sim_key(K.ENCA + i, 1); x.sim_key(K.ENCA + i, 0); el.classList.add('push'); setTimeout(() => el.classList.remove('push'), 120); } drag = null; });
+    el.addEventListener('pointerup', () => { if (drag && ! drag.moved) { eng.key(K.ENCA + i, 1); eng.key(K.ENCA + i, 0); el.classList.add('push'); setTimeout(() => el.classList.remove('push'), 120); } drag = null; });
   });
   // ---- crossfader
   const fader = document.getElementById('fader'), fcap = document.getElementById('fcap');
-  fader.addEventListener('input', () => { const v = fader.value / 1000; x.sim_fader(v); fcap.style.left = `calc(${66 + v * 44} * var(--u))`; });
+  fader.addEventListener('input', () => { const v = fader.value / 1000; eng.fader(v); fcap.style.left = `calc(${66 + v * 44} * var(--u))`; });
 
   // ---- audio
-  let ctx = null, node = null, lineSrc = null, lineBuf = null;
-  const ensureAudio = () => {
+  let ctx = null, input = null, lineSrc = null, lineBuf = null, starting = false;
+  const ensureAudio = async () => {
     if (ctx) { if (ctx.state !== 'running') ctx.resume(); return; }
-    try { ctx = new AudioContext({ sampleRate: 48000 }); } catch (e) { ctx = new AudioContext(); }
-    if (ctx.sampleRate !== 48000) say('Prehliadač hrá na ' + ctx.sampleRate + ' Hz, zvuk bude mierne posunutý.');
-    node = ctx.createScriptProcessor(1024, 1, 2);
-    node.onaudioprocess = (ev) => {
-      const n = ev.outputBuffer.length;
-      const inp = ev.inputBuffer.getChannelData(0), L = ev.outputBuffer.getChannelData(0), R = ev.outputBuffer.getChannelData(1);
-      for (let o = 0; o < n; o += 512) {
-        const m = Math.min(512, n - o);
-        new Float32Array(mem(), x.sim_in(), m).set(inp.subarray(o, o + m));
-        x.sim_process(m);
-        const out = new Float32Array(mem(), x.sim_out(), m * 2);
-        for (let i = 0; i < m; ++i) { L[o + i] = out[2 * i]; R[o + i] = out[2 * i + 1]; }
-      }
-    };
-    const silent = ctx.createConstantSource ? ctx.createConstantSource() : null;
-    if (silent) { silent.offset.value = 0; silent.connect(node); silent.start(); }   // keeps the input alive
-    node.connect(ctx.destination);
+    if (starting) return; starting = true;
+    try { ctx = new AudioContext({ sampleRate: 48000, latencyHint: 'interactive' }); } catch (e) { ctx = new AudioContext({ latencyHint: 'interactive' }); }
+    input = ctx.createGain();
+    try {
+      // the audio thread: the engine moves there with everything it holds (patterns, sounds, disk)
+      try { await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: 'application/javascript' }))); }
+      catch (e1) { await ctx.audioWorklet.addModule('data:application/javascript;base64,' + btoa(WORKLET)); }   // a page opened from the disk
+      const memory = mem().slice(0);
+      wnode = new AudioWorkletNode(ctx, 'pocket', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2],
+        processorOptions: { module: mod, memory, base: performance.now() - ctx.currentTime * 1000 } });
+      wnode.port.onmessage = (e) => {
+        const m = e.data;
+        if (m.t === 'ui') { ui = m; window.__uiCount = (window.__uiCount || 0) + 1; if (m.usb) say('USB disk: v simulátore nie je počítač, súbory sú v prehliadači.'); }
+        else if (m.t === 'disk') diskSave(m.img);
+        else if (m.t === 'assigned') assigned(m);
+      };
+      input.connect(wnode); wnode.connect(ctx.destination);
+      mode = 'worklet'; window.__ctx = ctx;
+    } catch (err) {
+      console.warn('worklet: ' + (err && err.message));
+      // older browsers: the engine stays on the page (a bigger buffer, so it can't drop out)
+      const node = ctx.createScriptProcessor(2048, 1, 2);
+      node.onaudioprocess = (ev) => {
+        const n = ev.outputBuffer.length, inp = ev.inputBuffer.getChannelData(0), L = ev.outputBuffer.getChannelData(0), R = ev.outputBuffer.getChannelData(1);
+        for (let o = 0; o < n; o += 512) {
+          const m = Math.min(512, n - o);
+          new Float32Array(mem(), x.sim_in(), m).set(inp.subarray(o, o + m));
+          x.sim_process(m);
+          const out = new Float32Array(mem(), x.sim_out(), m * 2);
+          for (let i = 0; i < m; ++i) { L[o + i] = out[2 * i]; R[o + i] = out[2 * i + 1]; }
+        }
+      };
+      input.connect(node); node.connect(ctx.destination);
+    }
+    if (ctx.state !== 'running') ctx.resume();
     if (lineBuf) startLine();
     document.getElementById('start').textContent = 'Zvuk beží';
-    say('Zvuk beží. PLAY = medzerník.');
+    say(ctx.sampleRate === 48000 ? 'Zvuk beží. PLAY = medzerník.' : 'Zvuk beží (prehliadač prevzorkuje na ' + ctx.sampleRate + ' Hz). PLAY = medzerník.');
   };
   document.getElementById('start').addEventListener('click', ensureAudio);
   const startLine = () => {
     if (! ctx || ! lineBuf) return;
     if (lineSrc) try { lineSrc.stop(); } catch (e) {}
-    lineSrc = ctx.createBufferSource(); lineSrc.buffer = lineBuf; lineSrc.loop = true; lineSrc.connect(node); lineSrc.start();
+    lineSrc = ctx.createBufferSource(); lineSrc.buffer = lineBuf; lineSrc.loop = true; lineSrc.connect(input); lineSrc.start();
   };
 
   // ---- audio files: into a pad, or as the REC source
@@ -291,57 +373,63 @@ kbd { font: 500 12px var(--mono); background: var(--table2); border: 1px solid v
   const toPad = async (file, pad) => {
     try {
       const ab = await decode(file);
-      const n = Math.min(ab.length, x.sim_pcm_max());
+      const n = Math.min(ab.length, 48000 * 20);
       const chans = []; for (let c = 0; c < ab.numberOfChannels; ++c) chans.push(ab.getChannelData(c));
-      const pcm = new Int16Array(mem(), x.sim_pcm(), n);
+      const pcm = new Int16Array(n);
       for (let i = 0; i < n; ++i) { let s = 0; for (const ch of chans) s += ch[i]; s /= chans.length; pcm[i] = Math.max(-32767, Math.min(32767, Math.round(s * 32767))); }
-      const slot = x.sim_bank() * 16 + pad;
-      ensureAudio();
-      if (x.sim_assign(slot, n, ab.sampleRate | 0)) say(`„${file.name}“ je na pade ${'ABCD'[x.sim_bank()]}${String(pad + 1).padStart(2, '0')}${ab.length > n ? ' (skrátené na 20 s)' : ''}.`);
-      else say('Na zvuk už nie je miesto v pamäti.');
+      await ensureAudio();
+      eng.pcm(pad, pcm, ab.sampleRate | 0, file.name);
     } catch (e) { say('Tento súbor sa nedá prečítať ako zvuk.'); }
   };
-  document.getElementById('file').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) toPad(f, x.sim_sel() % 16); e.target.value = ''; });
+  document.getElementById('file').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) toPad(f, eng.sel() % 16); e.target.value = ''; });
   document.getElementById('linefile').addEventListener('change', async (e) => {
     const f = e.target.files[0]; e.target.value = ''; if (! f) return;
-    try { lineBuf = await decode(f); ensureAudio(); startLine(); say(`REC teraz nahráva z „${f.name}“ (hrá dookola). Monitor: BPM + pad 3.`); } catch (er) { say('Tento súbor sa nedá prečítať ako zvuk.'); }
+    try { lineBuf = await decode(f); await ensureAudio(); startLine(); say(`REC teraz nahráva z „${f.name}“ (hrá dookola). Monitor: BPM + pad 3.`); } catch (er) { say('Tento súbor sa nedá prečítať ako zvuk.'); }
   });
   dev.addEventListener('dragover', (e) => { e.preventDefault(); });
   dev.addEventListener('drop', (e) => {
     e.preventDefault(); const f = e.dataTransfer.files[0]; if (! f) return;
-    const t = e.target.closest('.k.pad'); let pad = x.sim_sel() % 16;
+    const t = e.target.closest('.k.pad'); let pad = eng.sel() % 16;
     if (t) for (const k in keyEls) if (keyEls[k] === t) pad = +k;
     toPad(f, pad);
   });
-  document.getElementById('demo').addEventListener('click', () => { const img = new Uint8Array(mem(), x.sim_disk(), x.sim_disk_size()).slice(); boot(); new Uint8Array(mem(), x.sim_disk(), img.length).set(img); x.sim_init((Math.random() * 1e9) | 0, 1); for (const [k, s] of held) { s.clear(); keyEls[k] && keyEls[k].classList.remove('down', 'latch'); } say('Nový demo projekt. Disk ostal.'); });
-  document.getElementById('wipe').addEventListener('click', async () => { await diskWipe(); boot(); x.sim_init((Math.random() * 1e9) | 0, 1); say('Disk je prázdny, demo projekt nahraný.'); });
+  document.getElementById('demo').addEventListener('click', () => { releaseAll(); eng.reset(false); say('Nový demo projekt. Disk ostal.'); });
+  document.getElementById('wipe').addEventListener('click', async () => { releaseAll(); await diskWipe(); eng.reset(true); say('Disk je prázdny, demo projekt nahraný.'); });
 
   // ---- screen and LEDs
   const scr = document.getElementById('scr'), g = scr.getContext('2d'), img = g.createImageData(128, 64), meter = document.getElementById('meter');
   const pads = []; for (let i = 0; i < 16; ++i) pads.push(keyEls[i]);
+  let lastFb = null;
   const frame = () => {
-    x.sim_tick(performance.now() | 0);
-    if (x.sim_busy()) { if (x.sim_service()) diskSave(); }
-    if (x.sim_wants_usb()) say('USB disk: v simulátore nie je počítač, súbory sú v prehliadači.');
-    const fb = new Uint8Array(mem(), x.sim_fb(), 1024), d = img.data;
-    for (let y = 0; y < 64; ++y) for (let xx = 0; xx < 128; ++xx) {
-      const on = fb[(y >> 3) * 128 + xx] >> (y & 7) & 1, p = (y * 128 + xx) * 4;
-      d[p] = on ? 216 : 4; d[p + 1] = on ? 236 : 5; d[p + 2] = on ? 255 : 8; d[p + 3] = 255;
+    let fb, rgb, level;
+    if (mode === 'page') {
+      x.sim_tick(performance.now() | 0);
+      if (x.sim_busy() && x.sim_service()) diskSave(new Uint8Array(mem(), x.sim_disk(), x.sim_disk_size()).slice());
+      if (x.sim_wants_usb()) say('USB disk: v simulátore nie je počítač, súbory sú v prehliadači.');
+      fb = new Uint8Array(mem(), x.sim_fb(), 1024); rgb = new Uint8Array(mem(), x.sim_leds(), 48); level = x.sim_level();
+    } else if (ui) { fb = ui.fb; rgb = ui.leds; level = ui.level; }
+    if (fb && fb !== lastFb) {
+      lastFb = fb;
+      const d = img.data;
+      for (let y = 0; y < 64; ++y) for (let xx = 0; xx < 128; ++xx) {
+        const on = fb[(y >> 3) * 128 + xx] >> (y & 7) & 1, p = (y * 128 + xx) * 4;
+        d[p] = on ? 216 : 4; d[p + 1] = on ? 236 : 5; d[p + 2] = on ? 255 : 8; d[p + 3] = 255;
+      }
+      g.putImageData(img, 0, 0);
+      for (let i = 0; i < 16; ++i) {
+        const r = rgb[i * 3], gg = rgb[i * 3 + 1], b = rgb[i * 3 + 2], el = pads[i];
+        const key = r + ',' + gg + ',' + b; if (el.dataset.led === key) continue; el.dataset.led = key;
+        if (r + gg + b === 0) { el.style.background = ''; el.style.boxShadow = ''; continue; }
+        // the LED's own colour at full strength, and how bright it is (0..1)
+        const mx = Math.max(r, gg, b), k = Math.min(1, mx / 140);
+        const c = `rgb(${Math.round(r / mx * 255)},${Math.round(gg / mx * 255)},${Math.round(b / mx * 255)})`;
+        el.style.background = `radial-gradient(circle at 50% 55%, color-mix(in srgb, ${c} ${Math.round(12 + 50 * k)}%, var(--pad)), var(--pad) 90%)`;
+        el.style.boxShadow = `0 calc(1.1*var(--u)) 0 #a9a59d, 0 0 calc(${1 + 6 * k}*var(--u)) color-mix(in srgb, ${c} ${Math.round(25 + 60 * k)}%, transparent)`;
+      }
+      meter.style.width = `calc(${Math.min(44, level * 60)} * var(--u))`;
     }
-    g.putImageData(img, 0, 0);
-    const rgb = new Uint8Array(mem(), x.sim_leds(), 48);
-    for (let i = 0; i < 16; ++i) {
-      const r = rgb[i * 3], gg = rgb[i * 3 + 1], b = rgb[i * 3 + 2], el = pads[i];
-      if (r + gg + b === 0) { el.style.background = ''; el.style.boxShadow = ''; continue; }
-      // the LED's own colour at full strength, and how bright it is (0..1)
-      const mx = Math.max(r, gg, b), k = Math.min(1, mx / 140);
-      const c = `rgb(${Math.round(r / mx * 255)},${Math.round(gg / mx * 255)},${Math.round(b / mx * 255)})`;
-      el.style.background = `radial-gradient(circle at 50% 55%, color-mix(in srgb, ${c} ${Math.round(12 + 50 * k)}%, var(--pad)), var(--pad) 90%)`;
-      el.style.boxShadow = `0 calc(1.1*var(--u)) 0 #a9a59d, 0 0 calc(${1 + 6 * k}*var(--u)) color-mix(in srgb, ${c} ${Math.round(25 + 60 * k)}%, transparent)`;
-    }
-    meter.style.width = `calc(${Math.min(44, x.sim_level() * 60)} * var(--u))`;
     requestAnimationFrame(frame);
   };
-  start(true).then(() => requestAnimationFrame(frame));
+  start().then(() => requestAnimationFrame(frame));
 })();
 </script>

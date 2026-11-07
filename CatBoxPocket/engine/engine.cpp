@@ -8,7 +8,7 @@ namespace pocket {
 
 static inline float clampf (float x, float a, float b) { return x < a ? a : (x > b ? b : x); }
 static inline float softclip (float x) { x = clampf (x, -1.5f, 1.5f); return x - x * x * x * (4.0f / 27.0f); }
-static inline int16_t toS16 (float x) { return (int16_t) clampf (x * 32767.0f, -32768.0f, 32767.0f); }
+static inline int16_t toS16 (float x) { return (int16_t) clampf (x * 32767.0f + (x >= 0 ? 0.5f : -0.5f), -32768.0f, 32767.0f); }   // rounded
 static constexpr float PI = 3.14159265358979f;
 
 uint32_t Engine::rng () { seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5; return seed; }
@@ -24,6 +24,12 @@ void Engine::init (int16_t* pool, uint32_t count, uint32_t s) {
     songLen = 0; songMode = false; songRow = songRep = 0;
     undoValid = false; arpN = 0; loopState = LOOP_OFF; loopSlot = -1; recSlot = -1;
     running = false;
+    static const int CL[NC] = {1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617}, AL[NAP] = {556, 441, 341, 225};
+    for (int c = 0; c < 2; ++c) {
+        for (int i = 0; i < NC; ++i) { combLen[c][i] = std::min (CMAX, (CL[i] + c * 23) * SR / 44100); combPos[c][i] = 0; combLp[c][i] = 0; }
+        for (int i = 0; i < NAP; ++i) { apLen[c][i] = std::min (AMAX, (AL[i] + c * 23) * SR / 44100); apPos[c][i] = 0; }
+    }
+    std::memset (comb, 0, sizeof comb); std::memset (ap, 0, sizeof ap);
 }
 
 // ------------------------------------------------------------------ names
@@ -178,16 +184,25 @@ void Engine::startVoice (Voice& v, int s, int pad, float semis, float vel, int8_
 
 void Engine::noteOn (int s, int pad, float semis, float vel, int8_t filterLock, int8_t panLock) {
     if (s < 0 || s >= NSLOT || slots[s].empty () || busy) return;
-    // the same pad retriggers its own voice (like a Pocket Operator), else take a free or the oldest one
+    // the same pad retriggers (like a Pocket Operator): its old voice fades out in 3 ms instead of being cut,
+    // and the new note takes a free voice, else one that is fading, else the oldest
+    for (auto& v : voices) if (v.on && v.pad == (uint8_t) (pad & 0xff) && v.slot == s) { v.relRate = std::max (v.relRate, 1.0f / (SR * 0.003f)); v.pad = 0xFF; }
     Voice* pick = nullptr;
-    for (auto& v : voices) if (v.on && v.pad == (uint8_t) (pad & 0xff) && v.slot == s) { pick = &v; break; }
-    if (! pick) for (auto& v : voices) if (! v.on) { pick = &v; break; }
+    for (auto& v : voices) if (! v.on) { pick = &v; break; }
+    if (! pick) for (auto& v : voices) if (v.relRate > 0 && (! pick || v.env < pick->env)) pick = &v;
     if (! pick) { pick = &voices[0]; for (auto& v : voices) if (v.age > pick->age) pick = &v; }
+    if (pick->on) stealFade (*pick);
     // choke group: this sound cuts the others of its group (open / closed hi-hat)
     if (const int g = slots[s].choke)
         for (auto& v : voices) if (&v != pick && v.on && slots[v.slot].choke == g) v.relRate = 1.0f / (SR * 0.004f);
     if (slots[s].duckSource) duckEnv = 1;
     startVoice (*pick, s, pad, semis, vel, filterLock, panLock);
+}
+
+// a voice that must be reused at once: keep its last output and fade that out instead of a click
+void Engine::stealFade (Voice& v) {
+    const float last = v.lastOut;
+    declick[0] += last * v.panL; declick[1] += last * v.panR;
 }
 
 void Engine::noteOff (int pad) {
@@ -260,6 +275,10 @@ float Engine::voiceSample (Voice& v) {
         }
     } else {
         x = at (v.pos);
+        if (! (sl.loopHold && v.held)) {       // the last 2 ms of a one-shot fade out (no click when a sample ends loud)
+            const float left = (sl.reverse ? v.pos - a : (b - 2) - v.pos) / std::max (1e-4f, inc);
+            if (left < 96) x *= std::max (0.0f, left) / 96.0f;
+        }
         v.pos += dir * inc;
         const bool out = sl.reverse ? v.pos < a : v.pos >= b - 2;
         if (out) {
@@ -633,7 +652,7 @@ void Engine::arpStep () {
 uint32_t Engine::renderStart (bool wholeSong) {
     play (false); allOff (); fx = 0; seqFx = 0; fxActive = 0; fxEnv = 0;
     std::memset (dbuf, 0, sizeof dbuf); std::memset (hist, 0, sizeof hist); std::memset (comb, 0, sizeof comb); std::memset (ap, 0, sizeof ap);
-    dlp = 0; for (auto& c : combLp) c = 0;
+    dlp = 0; for (auto& c : combLp) for (auto& v : c) v = 0; declick[0] = declick[1] = 0;
     double steps = 0;
     renderSongWas = songMode;
     if (wholeSong && songLen > 0) {
@@ -688,11 +707,18 @@ void Engine::fxProcess (float& l, float& r) {
         switch (fxActive) {
             case 1: case 2: case 3: case 4: {
                 const float L = loopLen (fxActive == 1 ? 1 : fxActive == 2 ? 2 : fxActive == 3 ? 4 : 8);
-                y[c] = histAt (c, fxStart - L + std::fmod ((float) fxT, L)); break;
+                const float ph = std::fmod ((float) fxT, L);
+                y[c] = histAt (c, fxStart - L + ph);
+                if (ph > L - 128 && 2 * L + 130 < HLEN) {          // the last 128 samples blend into what came before the loop start
+                    const float w = (ph - (L - 128)) / 128.0f;
+                    y[c] = y[c] * (1 - w) + histAt (c, fxStart - 2 * L + ph) * w;
+                }
+                break;
             }
             case 5: {     // stutter: 1/32 loop, gated
                 const float L = loopLen (0.5f); const float ph = std::fmod ((float) fxT, L);
-                y[c] = ph < L * 0.6f ? histAt (c, fxStart - L + ph) : 0; break;
+                const float on = L * 0.6f, g = std::min (1.0f, std::min (ph, on - ph) / 48.0f);   // 1 ms ramps at both ends of the gate
+                y[c] = ph < on ? histAt (c, fxStart - L + ph) * std::max (0.0f, g) : 0; break;
             }
             case 6: {     // tape stop over one beat
                 const float rr = std::max (0.0f, 1.0f - fxT / (st * 4));
@@ -778,6 +804,7 @@ void Engine::processRaw (const float* in, float* out, int n) {
             if (sl.drive > 0) x = softclip (x * (1 + 6 * sl.drive)) / (1 + sl.drive);
             x *= v.gain * v.lfoGain;
             if (! sl.duckSource) x *= duck;
+            v.lastOut = x;
             dryL += x * v.panL; dryR += x * v.panR;
             dsend += x * clampf (eDelay + sl.delay, 0, 1);
             rsend += x * clampf (eReverb + sl.reverb, 0, 1);
@@ -793,6 +820,8 @@ void Engine::processRaw (const float* in, float* out, int n) {
             ++loopPos;
         }
         if (monitor) { dryL += input; dryR += input; }
+        // voices that had to be reused at once fade out from where they were
+        dryL += declick[0]; dryR += declick[1]; declick[0] *= 0.993f; declick[1] *= 0.993f;
         // punch-in effects on the dry mix
         fxProcess (dryL, dryR);
         // delay: 3/16, filtered feedback
@@ -802,25 +831,32 @@ void Engine::processRaw (const float* in, float* out, int n) {
         dlp += (dout - dlp) * 0.35f;
         dbuf[dpos] = toS16 (dsend * 0.6f + dlp * 0.45f);
         dpos = (dpos + 1) % DLEN;
-        // reverb
-        float cs = 0;
-        for (int c = 0; c < NC; ++c) {
-            float& z = comb[c][combPos[c]];
-            const float o = z;
-            combLp[c] = o * 0.6f + combLp[c] * 0.4f;
-            z = rsend * 0.25f + combLp[c] * 0.82f;
-            combPos[c] = (combPos[c] + 1) % combLen[c];
-            cs += (c & 1) ? -o : o;
-        }
+        // reverb (Freeverb): 8 parallel damped combs, then 4 all-pass filters, a slightly different set for each side
         float rv[2];
-        for (int a = 0; a < 2; ++a) {
-            float& z = ap[a][apPos[a]];
-            const float buf = z; const float inp = a == 0 ? cs : -cs * 0.9f + buf * 0.1f;
-            z = inp + buf * 0.5f; rv[a] = buf - inp;
-            apPos[a] = (apPos[a] + 1) % apLen[a];
+        {
+            const float in = rsend * 0.1f, fb = 0.84f, d1 = 0.25f, d2 = 0.75f;   // a hot level inside: the int16 buffers keep the quiet tail
+            for (int c = 0; c < 2; ++c) {
+                float sum = 0;
+                for (int k = 0; k < NC; ++k) {
+                    int16_t& z = comb[c][k][combPos[c][k]];
+                    const float o = z * (1.0f / 32768.0f);
+                    combLp[c][k] = o * d2 + combLp[c][k] * d1;
+                    z = toS16 (in + combLp[c][k] * fb);
+                    if (++combPos[c][k] >= combLen[c][k]) combPos[c][k] = 0;
+                    sum += o;
+                }
+                for (int k = 0; k < NAP; ++k) {
+                    int16_t& z = ap[c][k][apPos[c][k]];
+                    const float bo = z * (1.0f / 32768.0f);
+                    z = toS16 (sum + bo * 0.5f);
+                    sum = bo - sum;
+                    if (++apPos[c][k] >= apLen[c][k]) apPos[c][k] = 0;
+                }
+                rv[c] = sum;
+            }
         }
-        float L = dryL + dlp * 0.8f + rv[0] * 0.5f;
-        float R = dryR + dlp * 0.8f + rv[1] * 0.5f;
+        float L = dryL + dlp * 0.8f + rv[0] * 0.48f;
+        float R = dryR + dlp * 0.8f + rv[1] * 0.48f;
         // master compressor (feed-forward, 4:1)
         if (compAmt > 0) {
             const float pk = std::max (std::fabs (L), std::fabs (R));

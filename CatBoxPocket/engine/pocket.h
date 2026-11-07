@@ -93,6 +93,7 @@ struct Voice {
     float lp = 0, bp = 0;            // state-variable filter
     float cut = 0, baseCut = 0, hp = 0;   // filter setting for this note and its coefficient (0 = off)
     float lfoPh = 0, lfoMul = 1, lfoGain = 1; uint32_t ctl = 0;
+    float lastOut = 0;               // the last sample it played (for a click-free steal)
     float hold = 0; float holdPh = 0;   // vintage sample-and-hold
     // time-stretch / freeze grains
     bool grains = false; float head = 0, headInc = 0, gPos[2] = {0, 0}, gPh[2] = {0, 0.5f}, gLen = 2400;
@@ -207,6 +208,7 @@ private:
     void startVoice (Voice& v, int slot, int pad, float semis, float vel, int8_t filterLock, int8_t panLock);
     float voiceSample (Voice& v);
     void voiceControl (Voice& v);
+    void stealFade (Voice& v);
     float sceneVal (int kind, int slot, float own) const;
     void seqTick ();
     void playStep (int st, int only);
@@ -247,9 +249,11 @@ private:
     float transpose = 1;                           // octave effects
     int seqFx = 0;                                 // effect locked on the playing step
     // reverb (Freeverb-like, mono in, two outputs)
-    static constexpr int NC = 4;
-    float comb[NC][1400] = {{0}}; int combLen[NC] = {1116, 1188, 1277, 1356}; int combPos[NC] = {0}; float combLp[NC] = {0};
-    float ap[2][560] = {{0}}; int apLen[2] = {556, 441}; int apPos[2] = {0, 0};
+    // reverb: Freeverb (8 combs + 4 all-pass filters a side, the right side a little longer), int16 buffers
+    static constexpr int NC = 8, NAP = 4, CMAX = 1792, AMAX = 640;
+    int16_t comb[2][NC][CMAX] = {{{0}}}; int combLen[2][NC] = {{0}}; int combPos[2][NC] = {{0}}; float combLp[2][NC] = {{0}};
+    int16_t ap[2][NAP][AMAX] = {{{0}}}; int apLen[2][NAP] = {{0}}; int apPos[2][NAP] = {{0}};
+    float declick[2] = {0, 0};      // what a cut voice was playing, faded out over a few ms
 };
 
 // ------------------------------------------------------------------ the UI (keys, encoders, screen, LEDs)
