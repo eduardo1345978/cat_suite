@@ -1,12 +1,15 @@
 // Cat Box Pocket on the Pimoroni Pico Plus 2 (RP2350B, 8 MB PSRAM) with a Waveshare WM8960 module.
-// Core 1 makes the sound (I2S over PIO + DMA), core 0 reads the keys, draws the OLED, drives the LEDs,
-// saves to the flash disk and serves it over USB. All the music is in ../engine.
+// Core 1 makes the sound (I2S over PIO + DMA). Core 0 reads the 36 keys and 4 encoders (two MCP23017),
+// the crossfader, MIDI (DIN and USB) and sync, draws the OLED, drives the LEDs, and works the disks:
+// the flash and a microSD card, both shown to a computer over USB. All the music is in ../engine.
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
 #include "pico/flash.h"
 #include "hardware/pio.h"
 #include "hardware/dma.h"
 #include "hardware/i2c.h"
+#include "hardware/spi.h"
+#include "hardware/uart.h"
 #include "hardware/clocks.h"
 #include "hardware/adc.h"
 #include "hardware/flash.h"
@@ -26,10 +29,13 @@ using namespace pocket;
 
 // ------------------------------------------------------------------ pins (see the wiring table in the design doc)
 namespace pin {
-constexpr uint LINE_DETECT = 0, LEDS = 2, ENC_B_PUSH = 3, SDA = 4, SCL = 5;
-constexpr uint ROW0 = 6, COL0 = 11;                 // rows 6..10, columns 11..15
+constexpr uint MIDI_TX = 0, MIDI_RX = 1;            // UART0, 31250 baud (TRS type A jacks)
+constexpr uint SDA = 4, SCL = 5;                    // I2C0: WM8960 0x1A, OLED 0x3C, MCP23017 0x20 (keys) and 0x21 (encoders)
+constexpr uint LINE_DETECT = 6, SYNC_OUT = 7, SYNC_IN = 8;
+constexpr uint SD_SCK = 10, SD_MOSI = 11, SD_MISO = 12, SD_CS = 13, SD_DETECT = 14;   // SPI1
 constexpr uint BCLK = 16, /* LRCLK = 17 */ DOUT = 18, DIN = 19, MCLK = 21;
-constexpr uint ENC_A1 = 20, ENC_A2 = 22, ENC_B1 = 26, ENC_B2 = 27, BATTERY = 28;
+constexpr uint LEDS = 22;
+constexpr uint FADER = 27, BATTERY = 28;            // ADC1, ADC2
 constexpr uint PSRAM_CS = 47;
 }
 constexpr uint32_t SYS_KHZ = 144000;                // 144 MHz / 12 = 12 MHz MCLK for the WM8960 PLL
@@ -38,7 +44,7 @@ constexpr uint32_t DISK_SECTORS = (16u - 2u) * 1024 * 1024 / 512;
 
 static Engine engine;
 static Ui ui (engine);
-static int16_t sramPool[64 * 1024];                  // fallback when the PSRAM does not answer (1.3 s)
+static int16_t sramPool[32 * 1024];                  // fallback when the PSRAM does not answer (0.7 s)
 
 // ------------------------------------------------------------------ PSRAM (QMI chip select 1)
 static size_t __no_inline_not_in_flash_func (psramSetup) () {
@@ -138,7 +144,6 @@ struct FlashDisk : BlockDev {
         dirty = false;
     }
 };
-static FlashDisk disk;
 
 // ------------------------------------------------------------------ WM8960 (I2C 0x1A, 9-bit registers)
 static void wm (uint8_t reg, uint16_t val) {
@@ -168,20 +173,101 @@ static void codecInit () {
     wm (0x15, 0x1C3); wm (0x16, 0x1C3);   // ADC volume 0 dB
 }
 
-// ------------------------------------------------------------------ OLED (SSD1306, I2C 0x3C)
+// ------------------------------------------------------------------ microSD card (SPI mode)
+struct SdCard : BlockDev {
+    bool ok = false, hc = false; uint32_t n = 0;
+    static void cs (bool on) { gpio_put (pin::SD_CS, ! on); }
+    static uint8_t x (uint8_t b) { uint8_t r; spi_write_read_blocking (spi1, &b, &r, 1); return r; }
+    static bool ready (uint32_t ms) { const uint32_t t = to_ms_since_boot (get_absolute_time ()); while (x (0xFF) != 0xFF) if (to_ms_since_boot (get_absolute_time ()) - t > ms) return false; return true; }
+    static uint8_t cmd (uint8_t c, uint32_t arg, uint8_t crc = 0x01) {
+        if (c != 0) ready (300);
+        x (0x40 | c); x (arg >> 24); x (arg >> 16); x (arg >> 8); x (arg); x (crc);
+        uint8_t r = 0xFF; for (int i = 0; i < 10 && (r & 0x80); ++i) r = x (0xFF);
+        return r;
+    }
+    static uint8_t acmd (uint8_t c, uint32_t arg) { cmd (55, 0); return cmd (c, arg); }
+    bool init () {
+        ok = false;
+        spi_init (spi1, 400 * 1000);
+        gpio_set_function (pin::SD_SCK, GPIO_FUNC_SPI); gpio_set_function (pin::SD_MOSI, GPIO_FUNC_SPI); gpio_set_function (pin::SD_MISO, GPIO_FUNC_SPI);
+        gpio_pull_up (pin::SD_MISO);
+        gpio_init (pin::SD_CS); gpio_set_dir (pin::SD_CS, GPIO_OUT); cs (false);
+        for (int i = 0; i < 10; ++i) x (0xFF);
+        cs (true);
+        uint8_t r = cmd (0, 0, 0x95);
+        if (r != 1) { cs (false); return false; }
+        bool v2 = false;
+        if (cmd (8, 0x1AA, 0x87) == 1) { uint8_t b[4]; for (auto& c : b) c = x (0xFF); v2 = b[2] == 1 && b[3] == 0xAA; }
+        const uint32_t t = to_ms_since_boot (get_absolute_time ());
+        do { r = acmd (41, v2 ? 0x40000000 : 0); } while (r != 0 && to_ms_since_boot (get_absolute_time ()) - t < 1500);
+        if (r != 0) { cs (false); return false; }
+        hc = false;
+        if (v2 && cmd (58, 0) == 0) { uint8_t b[4]; for (auto& c : b) c = x (0xFF); hc = b[0] & 0x40; }
+        if (! hc) cmd (16, 512);
+        // the size from the CSD
+        if (cmd (9, 0) == 0) {
+            uint8_t c[16]; int w = 0; while (x (0xFF) != 0xFE && ++w < 10000) {}
+            for (auto& b : c) b = x (0xFF); x (0xFF); x (0xFF);
+            if ((c[0] >> 6) == 1) n = ((((uint32_t) (c[7] & 0x3F) << 16) | (c[8] << 8) | c[9]) + 1) * 1024;
+            else {
+                const uint32_t cs = ((uint32_t) (c[6] & 3) << 10) | (c[7] << 2) | (c[8] >> 6), mult = ((c[9] & 3) << 1) | (c[10] >> 7), bl = c[5] & 15;
+                n = (cs + 1) << (mult + 2) << bl >> 9;
+            }
+        }
+        cs (false); x (0xFF);
+        spi_set_baudrate (spi1, 24 * 1000 * 1000);
+        ok = n > 0;
+        return ok;
+    }
+    uint32_t sectors () const override { return n; }
+    bool read (uint32_t s, uint8_t* b) override {
+        if (! ok || s >= n) return false;
+        cs (true);
+        bool good = false;
+        if (cmd (17, hc ? s : s * 512) == 0) {
+            int w = 0; uint8_t t; while ((t = x (0xFF)) == 0xFF && ++w < 100000) {}
+            if (t == 0xFE) { const uint8_t ff = 0xFF; for (int i = 0; i < 512; ++i) spi_write_read_blocking (spi1, &ff, b + i, 1); x (0xFF); x (0xFF); good = true; }
+        }
+        cs (false); x (0xFF);
+        return good;
+    }
+    bool write (uint32_t s, const uint8_t* b) override {
+        if (! ok || s >= n) return false;
+        cs (true);
+        bool good = false;
+        if (cmd (24, hc ? s : s * 512) == 0) {
+            x (0xFF); x (0xFE); spi_write_blocking (spi1, b, 512); x (0xFF); x (0xFF);
+            good = (x (0xFF) & 0x1F) == 0x05;
+            ready (500);
+        }
+        cs (false); x (0xFF);
+        return good;
+    }
+};
+static SdCard sd;
+static bool sdPresent () { return ! gpio_get (pin::SD_DETECT); }
+
+// ------------------------------------------------------------------ OLED (SH1106 1.3", I2C 0x3C): sent half a page at a time
 static void oledCmd (std::initializer_list<uint8_t> c) {
-    uint8_t b[16]; b[0] = 0x00; int n = 1; for (uint8_t x : c) b[n++] = x;
+    uint8_t b[24]; b[0] = 0x00; int n = 1; for (uint8_t v : c) b[n++] = v;
     i2c_write_blocking (i2c0, 0x3C, b, n, false);
 }
 static void oledInit () {
-    oledCmd ({0xAE, 0xD5, 0x80, 0xA8, 0x3F, 0xD3, 0x00, 0x40, 0x8D, 0x14, 0x20, 0x00, 0xA1, 0xC8});
-    oledCmd ({0xDA, 0x12, 0x81, 0xCF, 0xD9, 0xF1, 0xDB, 0x40, 0xA4, 0xA6, 0xAF});
+    oledCmd ({0xAE, 0xD5, 0x80, 0xA8, 0x3F, 0xD3, 0x00, 0x40, 0xAD, 0x8B, 0xA1, 0xC8});
+    oledCmd ({0xDA, 0x12, 0x81, 0xCF, 0xD9, 0x22, 0xDB, 0x40, 0xA4, 0xA6, 0xAF});
 }
-static void oledShow (const uint8_t* fb) {
-    oledCmd ({0x21, 0, 127, 0x22, 0, 7});
-    static uint8_t b[129];
-    for (int i = 0; i < 1024; i += 128) { b[0] = 0x40; std::memcpy (b + 1, fb + i, 128); i2c_write_blocking (i2c0, 0x3C, b, 129, false); }
+static uint8_t fbShown[1024];
+static int oledPart = -1;                             // -1 = idle, else 0..15
+static void oledStart (const uint8_t* fb) { std::memcpy (fbShown, fb, 1024); oledPart = 0; }
+static void oledStep () {
+    if (oledPart < 0) return;
+    const int page = oledPart / 2, half = oledPart % 2, col = 2 + half * 64;   // the SH1106 has 132 columns, the glass starts at 2
+    oledCmd ({(uint8_t) (0xB0 + page), (uint8_t) (col & 0x0F), (uint8_t) (0x10 | col >> 4)});
+    static uint8_t b[65]; b[0] = 0x40; std::memcpy (b + 1, fbShown + page * 128 + half * 64, 64);
+    i2c_write_blocking (i2c0, 0x3C, b, 65, false);
+    if (++oledPart >= 16) oledPart = -1;
 }
+static void oledAll (const uint8_t* fb) { oledStart (fb); while (oledPart >= 0) oledStep (); }
 
 // ------------------------------------------------------------------ audio: I2S duplex with DMA ping-pong, on core 1
 constexpr int N = 64;
@@ -240,47 +326,63 @@ static void core1Main () {
     for (;;) __wfi ();
 }
 
-// ------------------------------------------------------------------ keys (5x5 matrix + one push), encoders, LEDs
-static const uint8_t MATRIX[5][5] = {
-    {K_PAD0 + 0,  K_PAD0 + 1,  K_PAD0 + 2,  K_PAD0 + 3,  K_SOUND},
-    {K_PAD0 + 4,  K_PAD0 + 5,  K_PAD0 + 6,  K_PAD0 + 7,  K_PATTERN},
-    {K_PAD0 + 8,  K_PAD0 + 9,  K_PAD0 + 10, K_PAD0 + 11, K_BPM},
-    {K_PAD0 + 12, K_PAD0 + 13, K_PAD0 + 14, K_PAD0 + 15, K_FX},
-    {K_SHIFT,     K_REC,       K_PLAY,      K_WRITE,     K_ENCA}};
+// ------------------------------------------------------------------ keys: a 6 x 6 matrix on MCP23017 0x20 (rows GPA0-5, columns GPB0-5, a diode per key)
+// encoders: MCP23017 0x21 (GPA0-7 = A..D quadrature, GPB0-3 = the pushes)
+static const uint8_t MATRIX[6][6] = {
+    {K_PAD0 + 0,  K_PAD0 + 1,  K_PAD0 + 2,  K_PAD0 + 3,  K_SOUND, K_PATTERN},
+    {K_PAD0 + 4,  K_PAD0 + 5,  K_PAD0 + 6,  K_PAD0 + 7,  K_BPM,   K_FX},
+    {K_PAD0 + 8,  K_PAD0 + 9,  K_PAD0 + 10, K_PAD0 + 11, K_MUTE,  K_SCENE},
+    {K_PAD0 + 12, K_PAD0 + 13, K_PAD0 + 14, K_PAD0 + 15, K_FILL,  K_ACCENT},
+    {K_SHIFT,     K_REC,       K_PLAY,      K_WRITE,     K_COPY,  K_PASTE},
+    {K_CLEAR,     K_UNDO,      K_SONG,      K_KIT,       K_LEN,   K_MENU}};
+constexpr uint8_t MCP_KEYS = 0x20, MCP_ENC = 0x21;
+static bool mcpOk[2];
 static bool keyState[NKEY]; static uint8_t keyCount[NKEY];
 
+static bool mcpWrite (uint8_t addr, uint8_t reg, uint8_t v) { const uint8_t b[2] = {reg, v}; return i2c_write_blocking (i2c0, addr, b, 2, false) == 2; }
+static bool mcpRead (uint8_t addr, uint8_t reg, uint8_t* out, int n) {
+    if (i2c_write_blocking (i2c0, addr, &reg, 1, true) != 1) return false;
+    return i2c_read_blocking (i2c0, addr, out, n, false) == n;
+}
 static void keysInit () {
-    for (uint r = 0; r < 5; ++r) { gpio_init (pin::ROW0 + r); gpio_set_dir (pin::ROW0 + r, GPIO_IN); gpio_disable_pulls (pin::ROW0 + r); }
-    for (uint c = 0; c < 5; ++c) { gpio_init (pin::COL0 + c); gpio_set_dir (pin::COL0 + c, GPIO_IN); gpio_pull_up (pin::COL0 + c); }
-    for (uint p : {pin::ENC_B_PUSH, pin::ENC_A1, pin::ENC_A2, pin::ENC_B1, pin::ENC_B2, pin::LINE_DETECT}) { gpio_init (p); gpio_set_dir (p, GPIO_IN); gpio_pull_up (p); }
+    // keys: all rows inputs (high-Z) with the output latch at 0; a scanned row becomes an output (= low)
+    mcpOk[0] = mcpWrite (MCP_KEYS, 0x14, 0x00) && mcpWrite (MCP_KEYS, 0x00, 0xFF) && mcpWrite (MCP_KEYS, 0x01, 0xFF) && mcpWrite (MCP_KEYS, 0x0D, 0xFF);
+    mcpOk[1] = mcpWrite (MCP_ENC, 0x00, 0xFF) && mcpWrite (MCP_ENC, 0x01, 0xFF) && mcpWrite (MCP_ENC, 0x0C, 0xFF) && mcpWrite (MCP_ENC, 0x0D, 0xFF);
+    for (uint p : {pin::LINE_DETECT, pin::SD_DETECT}) { gpio_init (p); gpio_set_dir (p, GPIO_IN); gpio_pull_up (p); }
+}
+
+struct Encoder { uint8_t last = 0; int acc = 0; };
+static Encoder enc[4];
+static uint8_t encPush = 0;
+static void encodersPoll () {
+    uint8_t b[2];
+    if (! mcpOk[1] || ! mcpRead (MCP_ENC, 0x12, b, 2)) return;
+    static const int8_t T[16] = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0};
+    for (int i = 0; i < 4; ++i) {
+        const uint8_t s = (uint8_t) (b[0] >> (2 * i) & 3);
+        Encoder& e = enc[i];
+        e.acc += T[e.last << 2 | s]; e.last = s;
+        if (e.acc >= 4) { e.acc -= 4; ui.encoder (i, 1); }
+        if (e.acc <= -4) { e.acc += 4; ui.encoder (i, -1); }
+    }
+    encPush = (uint8_t) (~b[1] & 0x0F);
 }
 
 static void keysScan () {
     bool now[NKEY] = {false};
-    for (uint r = 0; r < 5; ++r) {
-        // drive one row low (the others float), read the columns
-        gpio_set_dir (pin::ROW0 + r, GPIO_OUT); gpio_put (pin::ROW0 + r, 0);
-        busy_wait_us_32 (5);
-        for (uint c = 0; c < 5; ++c) if (! gpio_get (pin::COL0 + c)) now[MATRIX[r][c]] = true;
-        gpio_set_dir (pin::ROW0 + r, GPIO_IN);
-    }
-    now[K_ENCB] = ! gpio_get (pin::ENC_B_PUSH);
+    if (mcpOk[0])
+        for (int r = 0; r < 6; ++r) {
+            mcpWrite (MCP_KEYS, 0x00, (uint8_t) ~(1u << r));         // this row low
+            uint8_t c = 0xFF; mcpRead (MCP_KEYS, 0x13, &c, 1);
+            for (int k = 0; k < 6; ++k) if (! (c >> k & 1)) now[MATRIX[r][k]] = true;
+        }
+    if (mcpOk[0]) mcpWrite (MCP_KEYS, 0x00, 0xFF);
+    for (int i = 0; i < 4; ++i) now[K_ENCA + i] = encPush >> i & 1;
     for (int k = 0; k < NKEY; ++k) {
-        // debounce: 4 equal scans (1 ms apart)
+        // debounce: 3 equal scans (2 ms apart)
         if (now[k] == keyState[k]) { keyCount[k] = 0; continue; }
-        if (++keyCount[k] >= 4) { keyState[k] = now[k]; keyCount[k] = 0; ui.key (k, now[k]); }
+        if (++keyCount[k] >= 3) { keyState[k] = now[k]; keyCount[k] = 0; ui.key (k, now[k]); }
     }
-}
-
-struct Encoder { uint a, b; uint8_t last = 0; int acc = 0; };
-static Encoder encA { pin::ENC_A1, pin::ENC_A2 }, encB { pin::ENC_B1, pin::ENC_B2 };
-static int encRead (Encoder& e) {
-    static const int8_t T[16] = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0};
-    const uint8_t s = (uint8_t) ((gpio_get (e.a) ? 2 : 0) | (gpio_get (e.b) ? 1 : 0));
-    e.acc += T[e.last << 2 | s]; e.last = s;
-    if (e.acc >= 4) { e.acc -= 4; return 1; }
-    if (e.acc <= -4) { e.acc += 4; return -1; }
-    return 0;
 }
 
 static PIO ledPio = pio0; static uint ledSm = 1;
@@ -291,34 +393,62 @@ static void ledsShow (const uint8_t* rgb) {
     }
 }
 
-static int batteryPercent () {
-    adc_select_input (2);
+static float adcVolts (uint input) {
+    adc_select_input (input);
     uint32_t s = 0; for (int i = 0; i < 8; ++i) s += adc_read ();
-    const float v = s / 8.0f * 3.3f / 4095.0f * 2.0f;       // 100k / 100k divider
+    return s / 8.0f * 3.3f / 4095.0f;
+}
+static int batteryPercent () {
+    const float v = adcVolts (2) * 2.0f;                      // 100k / 100k divider
     const int p = (int) std::lround ((v - 3.3f) / (4.15f - 3.3f) * 100.0f);
     return p < 0 ? 0 : (p > 100 ? 100 : p);
 }
 
-// ------------------------------------------------------------------ USB disk (mass storage)
+// ------------------------------------------------------------------ MIDI (DIN jacks and USB) and sync
+static void midiInit () {
+    uart_init (uart0, 31250);
+    gpio_set_function (pin::MIDI_TX, GPIO_FUNC_UART); gpio_set_function (pin::MIDI_RX, GPIO_FUNC_UART);
+    uart_set_fifo_enabled (uart0, true);
+}
+static void midiService () {
+    while (uart_is_readable (uart0)) engine.midiIn ((uint8_t) uart_getc (uart0));
+    if (tud_midi_available ()) { uint8_t b[64]; const uint32_t n = tud_midi_stream_read (b, sizeof b); for (uint32_t i = 0; i < n; ++i) engine.midiIn (b[i]); }
+    uint8_t out[64]; uint32_t n = 0; int b;
+    while (n < sizeof out && (b = engine.midiOutPop ()) >= 0) out[n++] = (uint8_t) b;
+    if (n) {
+        uart_write_blocking (uart0, out, n);
+        if (tud_midi_mounted ()) tud_midi_stream_write (0, out, n);
+    }
+}
+static void syncIrq (uint gpio, uint32_t events) { if (gpio == pin::SYNC_IN && (events & GPIO_IRQ_EDGE_RISE)) engine.syncPulseIn (); }
+static void syncInit () {
+    gpio_init (pin::SYNC_OUT); gpio_set_dir (pin::SYNC_OUT, GPIO_OUT); gpio_put (pin::SYNC_OUT, 0);
+    gpio_init (pin::SYNC_IN); gpio_set_dir (pin::SYNC_IN, GPIO_IN); gpio_pull_down (pin::SYNC_IN);
+    gpio_set_irq_enabled_with_callback (pin::SYNC_IN, GPIO_IRQ_EDGE_RISE, true, syncIrq);
+}
+
+// ------------------------------------------------------------------ USB disk (mass storage): the disk Ui uses (flash or card)
+static FlashDisk flashDisk;
 static bool usbReload = false;
+static BlockDev& activeDisk () { return ui.disk ? *ui.disk : (BlockDev&) flashDisk; }
 extern "C" {
 void tud_msc_inquiry_cb (uint8_t, uint8_t vendor[8], uint8_t product[16], uint8_t rev[4]) {
-    std::memcpy (vendor, "CatBox  ", 8); std::memcpy (product, "Pocket Disk     ", 16); std::memcpy (rev, "1.0 ", 4);
+    std::memcpy (vendor, "CatBox  ", 8); std::memcpy (product, "Pocket Disk     ", 16); std::memcpy (rev, "2.0 ", 4);
 }
 bool tud_msc_test_unit_ready_cb (uint8_t) {
     if (! ui.usbDisk) { tud_msc_set_sense (0, SCSI_SENSE_NOT_READY, 0x3A, 0x00); return false; }
     return true;
 }
-void tud_msc_capacity_cb (uint8_t, uint32_t* count, uint16_t* size) { *count = DISK_SECTORS; *size = 512; }
+void tud_msc_capacity_cb (uint8_t, uint32_t* count, uint16_t* size) { *count = activeDisk ().sectors (); *size = 512; }
 bool tud_msc_start_stop_cb (uint8_t, uint8_t, bool start, bool load_eject) {
-    if (load_eject && ! start) { disk.flush (); usbReload = true; }
+    if (load_eject && ! start) { activeDisk ().flush (); usbReload = true; }
     return true;
 }
 int32_t tud_msc_read10_cb (uint8_t, uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize) {
     uint8_t* p = (uint8_t*) buf; uint8_t tmp[512];
     for (uint32_t done = 0; done < bufsize; ) {
         const uint32_t s = lba + (offset + done) / 512, o = (offset + done) % 512, n = std::min<uint32_t> (512 - o, bufsize - done);
-        if (! disk.read (s, tmp)) return -1;
+        if (! activeDisk ().read (s, tmp)) return -1;
         std::memcpy (p + done, tmp + o, n); done += n;
     }
     return (int32_t) bufsize;
@@ -327,8 +457,9 @@ int32_t tud_msc_write10_cb (uint8_t, uint32_t lba, uint32_t offset, uint8_t* buf
     uint8_t tmp[512];
     for (uint32_t done = 0; done < bufsize; ) {
         const uint32_t s = lba + (offset + done) / 512, o = (offset + done) % 512, n = std::min<uint32_t> (512 - o, bufsize - done);
-        disk.read (s, tmp); std::memcpy (tmp + o, buf + done, n);
-        if (! disk.write (s, tmp)) return -1;
+        if (o != 0 || n != 512) activeDisk ().read (s, tmp);
+        std::memcpy (tmp + o, buf + done, n);
+        if (! activeDisk ().write (s, tmp)) return -1;
         done += n;
     }
     return (int32_t) bufsize;
@@ -339,6 +470,18 @@ int32_t tud_msc_scsi_cb (uint8_t lun, uint8_t const scsi_cmd[16], void*, uint16_
     tud_msc_set_sense (lun, SCSI_SENSE_ILLEGAL_REQUEST, 0x20, 0x00);
     return -1;
 }
+}
+
+// pick the disk: the card when one is in and readable, else the flash
+static void chooseDisk (bool preferCard) {
+    ui.sdPresent = sdPresent ();
+    bool card = false;
+    if (preferCard && ui.sdPresent && (sd.ok || sd.init ())) {
+        if (store::mounted (sd)) card = true;
+        else ui.say ("SD: FORMATUJ FAT32", 3000);
+    }
+    ui.disk = card ? (BlockDev*) &sd : (BlockDev*) &flashDisk;
+    ui.sdCard = card;
 }
 
 // ------------------------------------------------------------------ main (core 0)
@@ -359,45 +502,69 @@ int main () {
     codecInit ();
     oledInit ();
     keysInit ();
-    adc_init (); adc_gpio_init (pin::BATTERY);
+    midiInit ();
+    syncInit ();
+    adc_init (); adc_gpio_init (pin::BATTERY); adc_gpio_init (pin::FADER);
     ws2812_init (ledPio, ledSm, pio_add_program (ledPio, &ws2812_program), pin::LEDS, (float) clock_get_hz (clk_sys));
 
     // SHIFT held while switching on = USB disk
-    for (int i = 0; i < 30; ++i) { keysScan (); sleep_ms (1); }
+    for (int i = 0; i < 12; ++i) { encodersPoll (); keysScan (); sleep_ms (2); }
     ui.usbDisk = keyState[K_SHIFT];
 
-    // the flash disk: format it the first time, then load the project
+    // the disks: format the flash the first time; the card is used when it is FAT
     uint8_t fb[1024];
-    if (! store::mounted (disk)) { ui.say ("PRVE ZAPNUTIE...", 3000); ui.render (fb); oledShow (fb); store::format (disk); }
-    if (! ui.usbDisk) store::load (disk, engine, ui);
+    if (! store::mounted (flashDisk)) { ui.say ("PRVE ZAPNUTIE...", 3000); ui.render (fb); oledAll (fb); store::format (flashDisk); }
+    chooseDisk (true);
+    if (! ui.usbDisk) store::load (activeDisk (), engine, ui, 0);
     if (pool == sramPool) ui.say ("PSRAM CHYBA!", 4000);
+    if (! mcpOk[0] || ! mcpOk[1]) ui.say (! mcpOk[0] ? "MCP 0x20 CHYBA" : "MCP 0x21 CHYBA", 4000);
 
     tusb_init ();
     multicore_launch_core1 (core1Main);
 
-    uint32_t lastScreen = 0, lastLeds = 0, lastBat = 0, lastScan = 0;
+    uint32_t lastScreen = 0, lastLeds = 0, lastBat = 0, lastScan = 0, lastFader = 0, syncOffAt = 0;
+    bool cardWas = sdPresent ();
     for (;;) {
         tud_task ();
+        midiService ();
         const uint32_t ms = to_ms_since_boot (get_absolute_time ());
+        // sync out: a 5 ms pulse every 2 steps
+        if (engine.syncPulseOut) { engine.syncPulseOut = false; gpio_put (pin::SYNC_OUT, 1); syncOffAt = ms + 5; }
+        if (syncOffAt && ms >= syncOffAt) { gpio_put (pin::SYNC_OUT, 0); syncOffAt = 0; }
         if (ms != lastScan) {
+            encodersPoll ();
+            if (ms - lastScan >= 2) { keysScan (); ui.lineIn = ! gpio_get (pin::LINE_DETECT); }
             lastScan = ms;
-            keysScan ();
-            if (const int d = encRead (encA)) ui.encoder (0, d);
-            if (const int d = encRead (encB)) ui.encoder (1, d);
-            ui.lineIn = ! gpio_get (pin::LINE_DETECT);
             ui.tick (ms);
         }
-        if (ui.usbDisk && (usbReload || (keyState[K_PLAY]))) {
-            ui.usbDisk = false; usbReload = false;
-            store::load (disk, engine, ui); ui.say ("NACITANE");
+        if (ms - lastFader >= 10) { lastFader = ms; ui.fader (adcVolts (1) / 3.3f); }
+        // a card in or out
+        const bool card = sdPresent ();
+        if (card != cardWas) {
+            cardWas = card; ui.sdPresent = card;
+            if (! card && ui.sdCard) { sd.ok = false; chooseDisk (false); ui.say ("SD VYBRATA: FLASH"); }
+            else if (card) ui.say ("SD KARTA: MENU > DISK");
         }
-        if (ui.wantSave) {
-            ui.wantSave = false;
-            const bool ok = store::save (disk, engine, ui); disk.flush ();
-            ui.say (ok ? "ULOZENE" : "PLNY DISK!");
+        // USB disk
+        if (ui.wantUsb) { ui.wantUsb = false; activeDisk ().flush (); ui.usbDisk = true; }
+        if (ui.usbDisk && (usbReload || keyState[K_PLAY])) {
+            ui.usbDisk = false; usbReload = false;
+            store::load (activeDisk (), engine, ui, ui.project); ui.say ("NACITANE");
+        }
+        if (ui.wantSwapDisk) {
+            ui.wantSwapDisk = false;
+            chooseDisk (! ui.sdCard);
+            ui.say (ui.sdCard ? "DISK: SD KARTA" : "DISK: FLASH");
+        }
+        // disk work: show the message first (it can take a while)
+        if (ui.wantSave || ui.wantLoad || ui.wantKit >= 0 || ui.wantExport || ui.wantBrowse || ui.browseLoad >= 0) {
+            ui.render (fb); oledAll (fb);
+            ui.service ();
+            activeDisk ().flush ();
         }
         if (ms - lastBat > 5000) { lastBat = ms; ui.battery = batteryPercent (); }
-        if (ms - lastScreen >= 50) { lastScreen = ms; ui.render (fb); oledShow (fb); }
+        if (oledPart >= 0) oledStep ();
+        else if (ms - lastScreen >= 40) { lastScreen = ms; ui.render (fb); oledStart (fb); }
         if (ms - lastLeds >= 20) { lastLeds = ms; uint8_t rgb[48]; ui.leds (rgb); ledsShow (rgb); }
     }
 }

@@ -1,21 +1,24 @@
-// USB descriptors: one mass storage interface ("CAT POCKET").
+// USB descriptors: a mass storage interface ("Pocket Disk") and a MIDI interface ("Cat Box Pocket").
 #include "tusb.h"
 #include <string.h>
 
 static const tusb_desc_device_t dev = {
     .bLength = sizeof (tusb_desc_device_t), .bDescriptorType = TUSB_DESC_DEVICE, .bcdUSB = 0x0200,
     .bDeviceClass = 0x00, .bDeviceSubClass = 0x00, .bDeviceProtocol = 0x00, .bMaxPacketSize0 = CFG_TUD_ENDPOINT0_SIZE,
-    .idVendor = 0x2E8A, .idProduct = 0x10C7, .bcdDevice = 0x0100,
+    .idVendor = 0x2E8A, .idProduct = 0x10C7, .bcdDevice = 0x0200,
     .iManufacturer = 1, .iProduct = 2, .iSerialNumber = 3, .bNumConfigurations = 1 };
 
 uint8_t const* tud_descriptor_device_cb (void) { return (uint8_t const*) &dev; }
 
-#define EPNUM_MSC_OUT 0x01
-#define EPNUM_MSC_IN  0x81
-#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_MSC_DESC_LEN)
+#define EPNUM_MSC_OUT  0x01
+#define EPNUM_MSC_IN   0x81
+#define EPNUM_MIDI_OUT 0x02
+#define EPNUM_MIDI_IN  0x82
+#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_MSC_DESC_LEN + TUD_MIDI_DESC_LEN)
 static const uint8_t cfg[] = {
-    TUD_CONFIG_DESCRIPTOR (1, 1, 0, CONFIG_TOTAL_LEN, 0x00, 250),
-    TUD_MSC_DESCRIPTOR (0, 4, EPNUM_MSC_OUT, EPNUM_MSC_IN, 64) };
+    TUD_CONFIG_DESCRIPTOR (1, 3, 0, CONFIG_TOTAL_LEN, 0x00, 250),
+    TUD_MSC_DESCRIPTOR (0, 4, EPNUM_MSC_OUT, EPNUM_MSC_IN, 64),
+    TUD_MIDI_DESCRIPTOR (1, 2, EPNUM_MIDI_OUT, EPNUM_MIDI_IN, 64) };
 uint8_t const* tud_descriptor_configuration_cb (uint8_t index) { (void) index; return cfg; }
 
 static const char* strs[] = { "", "Cat Box", "Cat Box Pocket", "0001", "Pocket Disk" };

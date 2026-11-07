@@ -114,6 +114,8 @@ struct RamDisk : BlockDev {
     bool write (uint32_t s, const uint8_t* b) override { if (s >= sectors ()) return false; std::memcpy (&d[s * 512], b, 512); return true; }
 };
 
+#include "test_v2.inc"
+
 int main (int argc, char** argv) {
     const std::string dir = argc > 1 ? argv[1] : ".";
     U = new Ui (*E);
@@ -338,7 +340,7 @@ int main (int argc, char** argv) {
         E->slots[1].pitch = 5; E->bpm = 133; E->toggleStep (7, 1);
         const int16_t* d; const uint32_t n1 = E->slotData (1, &d); std::vector<int16_t> keep (d, d + n1);
         const Pattern pat0 = E->pats[0];
-        CHECK (store::save (disk, *E, *U), "save the project");
+        CHECK (store::save (disk, *E, *U, 0), "save the project");
         char names[80][13]; uint32_t sizes[80]; const int nf = store::list (disk, names, sizes, 80);
         int wavs = 0; for (int i = 0; i < nf; ++i) wavs += std::strstr (names[i], ".WAV") != nullptr;
         int filled = 0; for (auto& s : E->slots) filled += ! s.empty ();
@@ -351,7 +353,7 @@ int main (int argc, char** argv) {
           for (int i = 0; i < 1000; ++i) { const int32_t x = (int32_t) (4000000 * std::sin (i * 0.1)); for (int c = 0; c < 2; ++c) { uint8_t* p = h + 44 + i * 6 + c * 3; p[0] = x & 255; p[1] = (x >> 8) & 255; p[2] = (x >> 16) & 255; } } }
         CHECK (store::writeFile (disk, "KICK.WAV", w.data (), (uint32_t) w.size ()), "copy a WAV onto the disk");
         reset ();
-        CHECK (store::load (disk, *E, *U), "load the project");
+        CHECK (store::load (disk, *E, *U, 0), "load the project");
         const uint32_t n2 = E->slotData (1, &d);
         if (n2 != n1 || std::memcmp (d, keep.data (), n1 * 2)) { int bad = -1; for (uint32_t i = 0; i < std::min (n1, n2); ++i) if (d[i] != keep[i]) { bad = (int) i; break; } std::printf ("  A02: %u vs %u samples, first diff at %d\n", n2, n1, bad); }
         CHECK (n2 == n1 && std::memcmp (d, keep.data (), n1 * 2) == 0, "sound A02 came back sample for sample");
@@ -360,13 +362,15 @@ int main (int argc, char** argv) {
         CHECK (kick >= 0 && E->slots[kick].len == 1000, "the computer's WAV landed in an empty pad");
         if (kick >= 0) { const int16_t* k; E->slotData (kick, &k); CHECK (std::abs (k[16] - (int) (4000000 * std::sin (1.6) / 256)) < 4, "24-bit stereo -> mono 16-bit: %d", k[16]); }
         // a second save only rewrites what changed
-        { RamDisk before = disk; E->slots[2].pitch = 7; CHECK (store::save (disk, *E, *U), "save again (nothing recorded)");
+        { RamDisk before = disk; E->slots[2].pitch = 7; CHECK (store::save (disk, *E, *U, 0), "save again (nothing recorded)");
           size_t changed = 0; for (size_t i = 0; i < disk.d.size (); i += 512) changed += std::memcmp (&disk.d[i], &before.d[i], 512) != 0;
           CHECK (changed < 40, "an unchanged project rewrites only the project file: %zu sectors", changed); }
         // overwrite and space: a save again with fewer sounds deletes the old WAVs
-        E->clearSlot (1); CHECK (store::save (disk, *E, *U), "save again");
-        uint32_t got; uint8_t tmp[64]; CHECK (! store::readFile (disk, "A02.WAV", tmp, 64, &got), "the cleared pad's WAV is gone");
+        E->clearSlot (1); CHECK (store::save (disk, *E, *U, 0), "save again");
+        uint32_t got; uint8_t tmp[64]; CHECK (! store::readFile (disk, "P01A02.WAV", tmp, 64, &got), "the cleared pad's WAV is gone");
     }
+
+    v2Tests (dir);
 
     // ---- a demo: a beat with effects, written for listening
     reset ();
