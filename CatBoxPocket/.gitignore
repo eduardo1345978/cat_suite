@@ -1,1 +1,3 @@
 host/out/
+sim/out/pocket.wasm
+sim/out/build.log
