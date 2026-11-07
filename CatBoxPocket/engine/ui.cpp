@@ -26,9 +26,12 @@ static const uint8_t FONT[64][5] = {
 
 static const char* FXNAME[17] = {"", "LOOP 1/16", "LOOP 1/8", "LOOP 1/4", "LOOP 1/2", "STUTTER", "TAPE STOP", "REVERSE", "SCRATCH",
                                  "BITCRUSH", "FILTER DOWN", "FILTER UP", "OCTAVE UP", "OCTAVE DOWN", "RESTART", "FREEZE", "HALF TEMPO"};
-static const char* PAGENAME[5] = {"SOUND", "SAMPLE", "ENVELOPE", "LFO", "EFFECTS"};
-static const char* PAGE[5][4] = {{"TUNE", "FILT", "VOL", "PAN"}, {"STRT", "END", "MODE", "STRE"}, {"ATK", "DEC", "DRIV", "CHOK"},
-                                 {"LFO", "DPTH", "DEST", "VINT"}, {"DLY", "REV", "DUCK", "SIDE"}};
+static constexpr int NPAGE = 6;
+static const char* PAGENAME[NPAGE] = {"PLAY", "SAMPLE", "GRAIN", "ENVELOPE", "LFO", "MIX"};
+static const char* PAGE[NPAGE][4] = {{"TUNE", "FILT", "RESO", "MODE"}, {"STRT", "END", "REV", "DUCK"}, {"POS", "SIZE", "SPRD", "SPD"},
+                                     {"ATK", "DEC", "DRIV", "CHOK"}, {"LFO", "DPTH", "DEST", "VINT"}, {"VOL", "PAN", "DLY", "REV"}};
+static const char* MODENAME[5] = {"ONE", "LOOP", "STRCH", "GRAIN", "DRONE"};
+static int modeOf (const Slot& s) { return s.drone ? 4 : s.freeze ? 3 : s.stretch ? 2 : s.loopHold ? 1 : 0; }
 static const char* ARPNAME[6] = {"OFF", "UP", "DOWN", "UP-DOWN", "RANDOM", "AS PLAYED"};
 static const char* NOTENAME[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 
@@ -53,7 +56,7 @@ const char* Ui::help (int k) {
         case K_REC: return "REC+PAD: RECORDS WHILE HELD. REC+PLAY: RESAMPLE. SHIFT+REC: CHOP INTO A FREE BANK.";
         case K_PLAY: return "START / STOP. SHIFT+PLAY: LOOPER (RECORD, PLAY, OFF).";
         case K_WRITE: return "STEP MODE. HOLD WRITE AND PLAY: LIVE RECORDING. SHIFT+WRITE: SAVE PROJECT.";
-        case K_MUTE: return "MUTE+PAD: MUTE A SOUND. SHIFT+MUTE+PAD: SOLO. SHIFT+MUTE: UNMUTE ALL.";
+        case K_MUTE: return "MUTE+PAD: MUTE A SOUND. SHIFT+MUTE+PAD: SOLO. SHIFT+MUTE: UNMUTE ALL. MUTE ALONE: STOP DRONES.";
         case K_COPY: return "COPY+PAD: COPY A SOUND (IN STEPS A STEP). COPY ALONE: THE WHOLE PATTERN.";
         case K_PASTE: return "PASTE+PAD: PASTE A SOUND OR STEP. PASTE ALONE: PASTE THE PATTERN.";
         case K_CLEAR: return "CLEAR+PAD: CLEAR THE SOUND'S STEPS (IN STEPS A STEP). SHIFT+CLEAR+PAD: DELETE THE SAMPLE. ALONE: PATTERN.";
@@ -65,7 +68,7 @@ const char* Ui::help (int k) {
         case K_MENU: return "MENU: PROJECTS, BROWSER, EXPORT, DISK, SETTINGS. MENU + KEY: HELP.";
         case K_SCENE: return "SCENE+PAD 1/2: STORE SCENE A/B. PAD 3: CLEAR. THE CROSSFADER (OR SCENE+A) BLENDS.";
         case K_LEN: return "LEN+PAD: PATTERN LENGTH (4-64). LEN+A: EXACT. LEN+B: THE SOUND'S OWN LENGTH (POLYMETER).";
-        case K_ENCA: return "A: PARAMETER. PUSH: NEXT PAGE. IN THE MENU: CONFIRM.";
+        case K_ENCA: return "A: PARAMETER. PUSH: NEXT PAGE (PLAY, SAMPLE, GRAIN, ENVELOPE, LFO, MIX). IN THE MENU: CONFIRM.";
         case K_ENCB: return "B: PARAMETER. PUSH: PREVIOUS PAGE.";
         case K_ENCC: return "C: PARAMETER. PUSH: TRIM SILENCE AND NORMALIZE THE SOUND.";
         case K_ENCD: return "D: PARAMETER. PUSH: STEP PAGE (1-16, 17-32...).";
@@ -254,6 +257,7 @@ void Ui::key (int k, bool down) {
         case K_FX: if (! down) eng.fx = 0; break;
         case K_MUTE:
             if (! down && ! used[K_MUTE] && held[K_SHIFT]) { for (auto& s : eng.slots) s.mute = false; say ("ALL UNMUTED"); }
+            else if (! down && ! used[K_MUTE]) { eng.droneStop (-1); say ("DRONES STOPPED", 700); }
             break;
         case K_COPY:
             if (! down && ! used[K_COPY]) { clipPat = eng.pats[eng.pat]; clipKind = 3; std::snprintf (t, sizeof t, "PATTERN %d COPIED", eng.pat + 1); say (t); }
@@ -290,8 +294,8 @@ void Ui::key (int k, bool down) {
             if (! down && ! used[K_MENU]) { menu = true; browsing = false; menuProj = project; }
             if (! down) helpKey = -1;
             break;
-        case K_ENCA: if (down) page = (page + 1) % 5; break;
-        case K_ENCB: if (down) page = (page + 4) % 5; break;
+        case K_ENCA: if (down) { page = (page + 1) % NPAGE; say (PAGENAME[page], 500); } break;
+        case K_ENCB: if (down) { page = (page + NPAGE - 1) % NPAGE; say (PAGENAME[page], 500); } break;
         case K_ENCC:
             if (down) {
                 if (eng.slots[sel].empty ()) say ("EMPTY SOUND");
@@ -435,31 +439,42 @@ void Ui::encoder (int which, int d) {
     } else {
         s.saved = s.saved;       // parameters live in the project file, the WAV stays the same
         switch (page * 4 + which) {
-            case 0: s.pitch = clampf (s.pitch + d, -24, 24); break;
+            // PLAY: tune, filter, resonance, how it plays
+            case 0: s.pitch = clampf (s.pitch + d, -36, 36); break;
             case 1: s.filter = clampf (s.filter + d * 0.04f, -1, 1); if (std::fabs (s.filter) < 0.02f) s.filter = 0; break;
-            case 2: s.volume = clampf (s.volume + d * 0.05f, 0, 1); break;
-            case 3: s.pan = clampf (s.pan + d * 0.1f, -1, 1); if (std::fabs (s.pan) < 0.05f) s.pan = 0; break;
-            case 4: s.trimA = clampf (s.trimA + d * 0.01f, 0, s.trimB - 0.01f); break;
-            case 5: s.trimB = clampf (s.trimB + d * 0.01f, s.trimA + 0.01f, 1); break;
-            case 6: { int m = (s.reverse ? 1 : 0) + (s.loopHold ? 2 : 0); m = (m + (d > 0 ? 1 : 3)) % 4; s.reverse = m & 1; s.loopHold = m & 2; break; }
-            case 7: {   // off, auto, 1, 2, 4, 8, 16 beats, freeze
-                int m = s.freeze ? 7 : ! s.stretch ? 0 : s.beats == 0 ? 1 : 2 + (int) std::round (std::log2 ((float) s.beats));
-                m = std::max (0, std::min (7, m + d));
-                s.freeze = m == 7; s.stretch = m >= 1 && m <= 6; s.beats = (uint8_t) (m >= 2 && m <= 6 ? 1 << (m - 2) : 0);
+            case 2: s.reso = clampf (s.reso + d * 0.05f, 0, 1); break;
+            case 3: {
+                const int was = modeOf (s), m = std::max (0, std::min (4, was + d));
+                if (was == 4 && m != 4) eng.droneStop (sel);
+                s.loopHold = m == 1; s.stretch = m == 2; s.freeze = m == 3; s.drone = m == 4;
+                if (m == 4) say ("DRONE: PADS PLAY NOTES", 1500);
                 break;
             }
-            case 8: s.attack = clampf (s.attack + d * 0.01f, 0, 2); break;
-            case 9: s.decay = clampf (s.decay + d * 0.05f, 0, 4); break;
-            case 10: s.drive = clampf (s.drive + d * 0.05f, 0, 1); break;
-            case 11: s.choke = (uint8_t) ((s.choke + (d > 0 ? 1 : 4)) % 5); break;
-            case 12: s.lfoRate = clampf (s.lfoRate * (d > 0 ? 1.15f : 0.87f), 0.05f, 30); break;
-            case 13: s.lfoDepth = clampf (s.lfoDepth + d * 0.05f, 0, 1); break;
-            case 14: s.lfoTarget = (uint8_t) ((s.lfoTarget + (d > 0 ? 1 : 3)) % 4); break;
-            case 15: s.vintage = (uint8_t) ((s.vintage + (d > 0 ? 1 : 3)) % 4); break;
-            case 16: s.delay = clampf (s.delay + d * 0.05f, 0, 1); break;
-            case 17: s.reverb = clampf (s.reverb + d * 0.05f, 0, 1); break;
-            case 18: s.duckSource = d > 0; break;
-            default: eng.duckAmt = clampf (eng.duckAmt + d * 0.05f, 0, 1); break;
+            // SAMPLE
+            case 4: s.trimA = clampf (s.trimA + d * 0.01f, 0, s.trimB - 0.01f); break;
+            case 5: s.trimB = clampf (s.trimB + d * 0.01f, s.trimA + 0.01f, 1); break;
+            case 6: s.reverse = d > 0; break;
+            case 7: s.duckSource = d > 0; break;
+            // GRAIN (GRAIN and DRONE modes): where, how long, how scattered, how fast it moves
+            case 8: s.grainPos = clampf (s.grainPos + d * 0.01f, 0, 1); break;
+            case 9: s.grainSize = clampf (s.grainSize * (d > 0 ? 1.12f : 0.89f), 0.01f, 0.6f); break;
+            case 10: s.grainSpread = clampf (s.grainSpread + d * 0.02f, 0, 1); break;
+            case 11: s.grainSpeed = clampf (s.grainSpeed + d * 0.05f, -2, 2); if (std::fabs (s.grainSpeed) < 0.025f) s.grainSpeed = 0; break;
+            // ENVELOPE
+            case 12: s.attack = clampf (s.attack + d * 0.01f, 0, 2); break;
+            case 13: s.decay = clampf (s.decay + d * 0.05f, 0, 4); break;
+            case 14: s.drive = clampf (s.drive + d * 0.05f, 0, 1); break;
+            case 15: s.choke = (uint8_t) ((s.choke + (d > 0 ? 1 : 4)) % 5); break;
+            // LFO
+            case 16: s.lfoRate = clampf (s.lfoRate * (d > 0 ? 1.15f : 0.87f), 0.05f, 30); break;
+            case 17: s.lfoDepth = clampf (s.lfoDepth + d * 0.05f, 0, 1); break;
+            case 18: s.lfoTarget = (uint8_t) ((s.lfoTarget + (d > 0 ? 1 : 3)) % 4); break;
+            case 19: s.vintage = (uint8_t) ((s.vintage + (d > 0 ? 1 : 3)) % 4); break;
+            // MIX
+            case 20: s.volume = clampf (s.volume + d * 0.05f, 0, 1); break;
+            case 21: s.pan = clampf (s.pan + d * 0.1f, -1, 1); if (std::fabs (s.pan) < 0.05f) s.pan = 0; break;
+            case 22: s.delay = clampf (s.delay + d * 0.05f, 0, 1); break;
+            default: s.reverb = clampf (s.reverb + d * 0.05f, 0, 1); break;
         }
     }
 }
@@ -566,30 +581,33 @@ struct Fb {
 }
 
 static void valueText (const Engine& e, const Slot& s, int page, int i, char* v, int n) {
-    static const char* MODE[4] = {"NORM", "REV", "LOOP", "R+L"};
     static const char* TARGET[4] = {"PITCH", "FILTR", "VOL", "PAN"};
     static const char* VINT[4] = {"OFF", "SP12", "S950", "8BIT"};
     switch (page * 4 + i) {
         case 0: std::snprintf (v, n, "%+d", (int) s.pitch); break;
-        case 1: std::snprintf (v, n, "%s%d", s.filter < 0 ? "L" : s.filter > 0 ? "B" : "", (int) std::round (std::fabs (s.filter) * 100)); break;
-        case 2: std::snprintf (v, n, "%d", (int) std::round (s.volume * 100)); break;
-        case 3: if (s.pan == 0) std::snprintf (v, n, "C"); else std::snprintf (v, n, "%c%d", s.pan < 0 ? 'L' : 'R', (int) std::round (std::fabs (s.pan) * 100)); break;
+        case 1: std::snprintf (v, n, "%s%d", s.filter < 0 ? "L" : s.filter > 0 ? "H" : "", (int) std::round (std::fabs (s.filter) * 100)); break;
+        case 2: std::snprintf (v, n, "%d", (int) std::round (s.reso * 100)); break;
+        case 3: std::snprintf (v, n, "%s", MODENAME[modeOf (s)]); break;
         case 4: std::snprintf (v, n, "%d%%", (int) std::round (s.trimA * 100)); break;
         case 5: std::snprintf (v, n, "%d%%", (int) std::round (s.trimB * 100)); break;
-        case 6: std::snprintf (v, n, "%s", MODE[(s.reverse ? 1 : 0) + (s.loopHold ? 2 : 0)]); break;
-        case 7: if (s.freeze) std::snprintf (v, n, "FRZ"); else if (! s.stretch) std::snprintf (v, n, "OFF"); else if (s.beats == 0) std::snprintf (v, n, "AUTO"); else std::snprintf (v, n, "%dB", s.beats); break;
-        case 8: std::snprintf (v, n, "%dMS", (int) std::round (s.attack * 1000)); break;
-        case 9: if (s.decay == 0) std::snprintf (v, n, "OFF"); else std::snprintf (v, n, "%.2f", s.decay); break;
-        case 10: std::snprintf (v, n, "%d", (int) std::round (s.drive * 100)); break;
-        case 11: if (s.choke == 0) std::snprintf (v, n, "OFF"); else std::snprintf (v, n, "SK %d", s.choke); break;
-        case 12: std::snprintf (v, n, s.lfoRate < 10 ? "%.1f" : "%.0f", s.lfoRate); break;
-        case 13: std::snprintf (v, n, "%d", (int) std::round (s.lfoDepth * 100)); break;
-        case 14: std::snprintf (v, n, "%s", TARGET[s.lfoTarget % 4]); break;
-        case 15: std::snprintf (v, n, "%s", VINT[s.vintage % 4]); break;
-        case 16: std::snprintf (v, n, "%d", (int) std::round (s.delay * 100)); break;
-        case 17: std::snprintf (v, n, "%d", (int) std::round (s.reverb * 100)); break;
-        case 18: std::snprintf (v, n, "%s", s.duckSource ? "SRC" : "-"); break;
-        default: std::snprintf (v, n, "%d", (int) std::round (e.duckAmt * 100)); break;
+        case 6: std::snprintf (v, n, "%s", s.reverse ? "ON" : "OFF"); break;
+        case 7: std::snprintf (v, n, "%s", s.duckSource ? "SRC" : "-"); break;
+        case 8: std::snprintf (v, n, "%d%%", (int) std::round (s.grainPos * 100)); break;
+        case 9: std::snprintf (v, n, "%dMS", (int) std::round (s.grainSize * 1000)); break;
+        case 10: std::snprintf (v, n, "%d", (int) std::round (s.grainSpread * 100)); break;
+        case 11: if (s.grainSpeed == 0) std::snprintf (v, n, "FRZ"); else std::snprintf (v, n, "%+.2f", s.grainSpeed); break;
+        case 12: std::snprintf (v, n, "%dMS", (int) std::round (s.attack * 1000)); break;
+        case 13: if (s.decay == 0) std::snprintf (v, n, "OFF"); else std::snprintf (v, n, "%.2f", s.decay); break;
+        case 14: std::snprintf (v, n, "%d", (int) std::round (s.drive * 100)); break;
+        case 15: if (s.choke == 0) std::snprintf (v, n, "OFF"); else std::snprintf (v, n, "SK %d", s.choke); break;
+        case 16: std::snprintf (v, n, s.lfoRate < 10 ? "%.1f" : "%.0f", s.lfoRate); break;
+        case 17: std::snprintf (v, n, "%d", (int) std::round (s.lfoDepth * 100)); break;
+        case 18: std::snprintf (v, n, "%s", TARGET[s.lfoTarget % 4]); break;
+        case 19: std::snprintf (v, n, "%s", VINT[s.vintage % 4]); break;
+        case 20: std::snprintf (v, n, "%d", (int) std::round (s.volume * 100)); break;
+        case 21: if (s.pan == 0) std::snprintf (v, n, "C"); else std::snprintf (v, n, "%c%d", s.pan < 0 ? 'L' : 'R', (int) std::round (std::fabs (s.pan) * 100)); break;
+        case 22: std::snprintf (v, n, "%d", (int) std::round (s.delay * 100)); break;
+        default: std::snprintf (v, n, "%d", (int) std::round (s.reverb * 100)); break;
     }
 }
 
@@ -696,6 +714,8 @@ void Ui::render (uint8_t* buf) const {
         }
         const int xa = (int) (s.trimA * 127), xb = (int) (s.trimB * 127);
         for (int y = y0; y < y0 + h; y += 2) { f.px (xa, y); f.px (xb, y); }
+        if (s.freeze || s.drone) { const int xg = (int) ((s.trimA + s.grainPos * (s.trimB - s.trimA)) * 127); f.vline (xg, y0, y0 + h - 1); f.rect (xg - 1, y0, 3, 3, true); }
+        if (s.drone || s.freeze || s.loopHold || s.stretch) f.text (0, y0 + h - 7, MODENAME[modeOf (s)]);
         std::snprintf (t, sizeof t, "%.1fS", s.len / float (s.rate)); f.text (128 - 6 * (int) std::strlen (t), y0 + h - 7, t);
         if (s.mute) f.text (0, y0 + h - 7, "MUTE");
     } else {
@@ -736,7 +756,7 @@ void Ui::render (uint8_t* buf) const {
     } else {
         for (int i = 0; i < 4; ++i) { char v[12]; valueText (eng, s, page, i, v, sizeof v); f.text (i * 32, 47, PAGE[page][i]); f.text (i * 32, 56, v); }
         (void) PAGENAME;
-        for (int i = 0; i < 5; ++i) f.px (127, 47 + i * 3, i == page);
+        for (int i = 0; i < NPAGE; ++i) f.px (127, 46 + i * 3, i == page);
     }
     // a message over everything
     if (msgTime) {

@@ -50,7 +50,11 @@ struct Slot {
     float trimA = 0, trimB = 1;      // start / end within the slot (0..1)
     bool reverse = false, loopHold = false;
     bool stretch = false; uint8_t beats = 0;   // time-stretch to the tempo (beats 0 = auto)
-    bool freeze = false;             // granular freeze: plays a frozen grain cloud
+    bool freeze = false;             // GRAIN: plays a cloud of grains (the GRAIN page shapes it)
+    bool drone = false;              // DRONE: a grain cloud that keeps sounding; pads and steps glide it to new notes
+    float reso = 0;                  // filter resonance 0..1
+    float grainPos = 0, grainSize = 0.09f, grainSpread = 0.05f, grainSpeed = 0.05f;   // where (0..1), grain length (s), random spread, scan speed (1 = normal, 0 = frozen, < 0 backwards)
+    float glide = 0.08f;             // drone glide time (s)
     float attack = 0, decay = 0;     // seconds; decay 0 = play to the end
     uint8_t choke = 0;               // 1..4: a new sound of the group cuts the others
     float drive = 0;                 // 0..1 saturation
@@ -96,7 +100,8 @@ struct Voice {
     float lastOut = 0;               // the last sample it played (for a click-free steal)
     float hold = 0; float holdPh = 0;   // vintage sample-and-hold
     // time-stretch / freeze grains
-    bool grains = false; float head = 0, headInc = 0, gPos[2] = {0, 0}, gPh[2] = {0, 0.5f}, gLen = 2400;
+    bool grains = false; int nG = 2; float head = 0, headInc = 0, gPos[4] = {0, 0, 0, 0}, gPh[4] = {0, 0.5f, 0.25f, 0.75f}, gLen = 2400, lastPos = -1;
+    bool drone = false, filterLocked = false; float semis = 0, pitchNow = -999, incTarget = 1;
     uint32_t age = 0;
 };
 
@@ -109,8 +114,9 @@ public:
     void process (const float* in, float* out, int n);
 
     // ---- sounds
-    void noteOn (int slot, int pad, float semis = 0, float vel = 1, int8_t filterLock = NOLOCK, int8_t panLock = NOLOCK);
+    Voice* noteOn (int slot, int pad, float semis = 0, float vel = 1, int8_t filterLock = NOLOCK, int8_t panLock = NOLOCK);
     void noteOff (int pad);
+    void droneStop (int slot = -1);             // -1 = every drone
     void allOff ();
     // ---- recording (mic / line, the output = resampling)
     void recStart (int slot, bool resample);
@@ -316,6 +322,12 @@ private:
     // clipboard: 1 step, 2 sound, 3 pattern
     int clipKind = 0; Step clipStep; Pattern clipPat; Slot clipSlot;
 };
+
+// ------------------------------------------------------------------ the factory sounds and the demo project (synthesized)
+namespace factory {
+    void sounds (Engine& e);     // 56 sounds into banks A..D (D09..D16 stay free)
+    void project (Engine& e);    // 4 patterns, a song and a scene that use them
+}
 
 // ------------------------------------------------------------------ storage: FAT16 / FAT32 volume with WAV files
 // A project = PROJnn.CBP + PnnA01.WAV .. PnnD16.WAV; kits = KITnn.CBK; exports = EXPnn.WAV.

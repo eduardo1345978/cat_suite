@@ -53,6 +53,7 @@ static void addLfn (RamDisk& disk, const char* shortName, const char* longName) 
     }
 }
 
+static void v3Tests ();
 static void v2Tests (const std::string& dir) {
     // ---- pattern length and polymeter
     reset2 ();
@@ -286,8 +287,12 @@ static void v2Tests (const std::string& dir) {
     press (K_SCENE); press (K_PAD0 + 1); lift (K_PAD0 + 1); U->encoder (0, 10); lift (K_SCENE);
     CHECK (E->scenes[1].set && std::fabs (E->xfade - 0.5f) < 1e-4f, "SCENE + pad 2 stores B, SCENE + A moves the crossfader");
     U->fader (0.0f); CHECK (E->xfade == 0, "the crossfader");
-    U->page = 2; U->encoder (3, 1); U->encoder (1, 4); CHECK (E->slots[0].choke == 1 && std::fabs (E->slots[0].decay - 0.2f) < 1e-4f, "page OBALKA: choke, decay");
-    U->page = 1; U->encoder (3, 2); CHECK (E->slots[0].stretch && E->slots[0].beats == 1, "page VZORKA: stretch to 1 beat");
+    U->page = 3; U->encoder (3, 1); U->encoder (1, 4); CHECK (E->slots[0].choke == 1 && std::fabs (E->slots[0].decay - 0.2f) < 1e-4f, "page ENVELOPE: choke, decay");
+    U->page = 0; U->encoder (3, 1); U->encoder (3, 1); CHECK (E->slots[0].stretch && ! E->slots[0].loopHold, "page PLAY: MODE turns to STRCH");
+    U->encoder (3, 1); U->encoder (3, 1); CHECK (E->slots[0].drone && ! E->slots[0].stretch, "and on to DRONE");
+    U->encoder (2, 10); CHECK (std::fabs (E->slots[0].reso - 0.5f) < 1e-4f, "C = resonance");
+    U->encoder (3, -4); CHECK (! E->slots[0].drone && ! E->slots[0].freeze && ! E->slots[0].stretch && ! E->slots[0].loopHold, "back to ONE");
+    U->page = 2; U->encoder (0, 30); U->encoder (3, -1); CHECK (std::fabs (E->slots[0].grainPos - 0.3f) < 1e-4f && E->slots[0].grainSpeed == 0, "page GRAIN: position, speed 0 = frozen");
     press (K_SOUND); U->encoder (2, 1); U->encoder (0, 1); lift (K_SOUND); CHECK (E->scale == 1 && E->arpMode == 1, "SOUND + C / A = scale, arp");
     E->arpMode = 0; E->scale = 0;
     press (K_MENU); press (K_KIT); lift (K_KIT); CHECK (U->helpKey == K_KIT, "MENU + KIT = help"); writeScreen (dir + "/screen_help.pgm"); lift (K_MENU);
@@ -314,6 +319,49 @@ static void v2Tests (const std::string& dir) {
         CHECK (store::exists (disk, "PROJ01.CBP"), "SHIFT + WRITE saves the project");
         U->disk = nullptr;
     }
+    v3Tests ();
     U->stepMode = true; U->stepPage = 0; writeScreen (dir + "/screen_steps.pgm"); U->stepMode = false;
     U->page = 3; writeScreen (dir + "/screen_play.pgm");
+}
+
+// the factory sounds, drones and the grain page
+static void v3Tests () {
+    reset2 ();
+    factory::sounds (*E); factory::project (*E);
+    { int n = 0, peakOk = 0; for (int s = 0; s < NSLOT; ++s) if (! E->slots[s].empty ()) { ++n; const int16_t* d; const uint32_t len = E->slotData (s, &d); int m = 0; for (uint32_t i = 0; i < len; ++i) m = std::max (m, std::abs ((int) d[i])); peakOk += m > 12000 && m <= 32767; }
+      CHECK (n == 56 && peakOk == 56, "56 factory sounds, all at a healthy level: %d / %d", n, peakOk);
+      CHECK (E->memoryFree () > 25, "room left to record: %.0f s", E->memoryFree ()); }
+    CHECK (E->songLen == 5 && E->scenes[1].set, "the demo has a song and a scene");
+    for (int p = 0; p < 4; ++p) { E->pat = p; uint8_t ch[1] = {(uint8_t) p}; E->setChain (ch, 1); E->play (true); auto o = run (2.0f); E->play (false); E->allOff ();
+      float pk = 0; for (float v : o) pk = std::max (pk, std::fabs (v));
+      CHECK (rms (o) > 0.03f && pk <= 1.0f, "demo pattern %d plays (rms %.3f, peak %.2f)", p + 1, rms (o), pk); }
+    // a drone: keeps sounding past the end of a short sound, glides to new notes, stops on request
+    reset2 ();
+    { auto s = sine (220, 0.3f); E->assign (0, s.data (), (uint32_t) s.size (), SR); }
+    Slot& d = E->slots[0]; d.drone = true; d.grainSize = 0.05f; d.grainSpread = 0; d.grainSpeed = 0.2f; d.glide = 0.05f;
+    E->noteOn (0, 0); E->noteOff (0); auto o = run (2.0f);
+    CHECK (rms (o, (int) (1.8f * SR), 2 * SR) > 0.1f, "a drone keeps sounding after the pad is let go and past the sound's end");
+    CHECK (std::fabs (peakHz (o, SR, 8192, 180, 260) - 220) < 3, "the drone keeps the pitch: %.1f", peakHz (o, SR, 8192, 180, 260));
+    E->noteOn (0, 0, 7); o = run (0.5f);
+    { int on = 0; for (auto& v : E->voices) on += v.on; CHECK (on == 1, "a new note glides the same voice (%d voices)", on); }
+    CHECK (std::fabs (peakHz (o, SR / 4, 8192, 280, 380) - 329.6f) < 4, "glided a fifth up: %.1f", peakHz (o, SR / 4, 8192, 280, 380));
+    E->slots[0].pitch = 12; o = run (0.4f);
+    CHECK (std::fabs (peakHz (o, SR / 5, 8192, 600, 720) - 659.3f) < 6, "TUNE moves a sounding note live: %.1f", peakHz (o, SR / 5, 8192, 600, 720));
+    U->tick (50000); press (K_MUTE); lift (K_MUTE); o = run (0.3f);
+    CHECK (rms (o, SR / 5, (int) (0.3f * SR)) < 0.001f, "MUTE alone stops the drones");
+    E->slots[0].pitch = 0;
+    // GRAIN: the position knob picks the part of the sound that plays
+    { std::vector<int16_t> two (SR); for (int i = 0; i < SR; ++i) two[i] = (int16_t) (16000 * std::sin (2 * M_PI * (i < SR / 2 ? 300 : 600) * i / SR)); E->assign (1, two.data (), SR, SR); }
+    Slot& g = E->slots[1]; g.freeze = true; g.grainSpeed = 0; g.grainSpread = 0; g.grainSize = 0.06f; g.grainPos = 0.2f;
+    E->noteOn (1, 1); o = run (0.3f);
+    CHECK (std::fabs (peakHz (o, 4000, 8192, 250, 700) - 300) < 4, "GRAIN at 20%%: the first half (300 Hz): %.1f", peakHz (o, 4000, 8192, 250, 700));
+    g.grainPos = 0.8f; run (0.2f); o = run (0.3f);
+    CHECK (std::fabs (peakHz (o, 4000, 8192, 250, 700) - 600) < 4, "moved live to 80%%: the second half (600 Hz): %.1f", peakHz (o, 4000, 8192, 250, 700));
+    E->allOff ();
+    // RESO: a resonant low-pass rings at its cutoff
+    { std::vector<int16_t> n (SR / 2); for (auto& v : n) v = (int16_t) ((E->rng () & 0xFFFF) / 4 - 8192); E->assign (2, n.data (), SR / 2, SR); }
+    E->slots[2].filter = -0.4f; E->slots[2].reso = 0; E->noteOn (2, 2); o = run (0.3f); const float flat = peakHz (o, 2000, 8192, 100, 4000);
+    E->slots[2].reso = 1; E->noteOn (2, 2); o = run (0.3f);
+    { const float fc = 18000.0f * std::pow (2.0f, 9.0f * -0.4f), pk = peakHz (o, 2000, 8192, 100, 4000);
+      CHECK (std::fabs (pk - fc) < fc * 0.2f, "RESO rings at the cutoff (%.0f Hz, peak %.0f Hz; without it %.0f)", fc, pk, flat); }
 }

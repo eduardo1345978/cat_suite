@@ -491,20 +491,22 @@ static void putSlot (Out& w, const Slot& s) {
     w.u8 ((s.reverse ? 1 : 0) | (s.loopHold ? 2 : 0) | (s.stretch ? 4 : 0) | (s.freeze ? 8 : 0) | (s.duckSource ? 16 : 0) | (s.mute ? 32 : 0));
     w.u8 (s.beats); w.f (s.attack); w.f (s.decay); w.u8 (s.choke); w.f (s.drive);
     w.f (s.lfoRate); w.f (s.lfoDepth); w.u8 (s.lfoTarget); w.u8 (s.vintage); w.f (s.delay); w.f (s.reverb);
+    w.u8 (s.drone); w.f (s.reso); w.f (s.grainPos); w.f (s.grainSize); w.f (s.grainSpread); w.f (s.grainSpeed); w.f (s.glide);
 }
 static void getSlot (In& r, Slot& s) {
     s.pitch = r.f32 (); s.filter = r.f32 (); s.volume = r.f32 (); s.pan = r.f32 (); s.trimA = r.f32 (); s.trimB = r.f32 ();
     const uint32_t fl = r.u8 (); s.reverse = fl & 1; s.loopHold = fl & 2; s.stretch = fl & 4; s.freeze = fl & 8; s.duckSource = fl & 16; s.mute = fl & 32;
     s.beats = (uint8_t) r.u8 (); s.attack = r.f32 (); s.decay = r.f32 (); s.choke = (uint8_t) (r.u8 () % 5); s.drive = r.f32 ();
     s.lfoRate = r.f32 (); s.lfoDepth = r.f32 (); s.lfoTarget = (uint8_t) (r.u8 () % 4); s.vintage = (uint8_t) (r.u8 () % 4); s.delay = r.f32 (); s.reverb = r.f32 ();
+    s.drone = r.u8 (); s.reso = r.f32 (); s.grainPos = r.f32 (); s.grainSize = r.f32 (); s.grainSpread = r.f32 (); s.grainSpeed = r.f32 (); s.glide = r.f32 ();
 }
 static void copyParams (Slot& to, const Slot& p) {
     const int16_t b = to.block; const uint32_t st = to.start, len = to.len, rate = to.rate; const bool sv = to.saved;
     to = p; to.block = b; to.start = st; to.len = len; to.rate = rate; to.saved = sv;
 }
 
-static constexpr uint32_t MAGIC = 0x33504243;   // "CBP3"
-static constexpr uint32_t KITMAGIC = 0x324B4243; // "CBK2"
+static constexpr uint32_t MAGIC = 0x34504243;   // "CBP4"
+static constexpr uint32_t KITMAGIC = 0x334B4243; // "CBK3"
 
 static void serializeProject (Out& w, const Engine& e, const Ui& ui) {
     w.u32 (MAGIC); w.u32 (2);

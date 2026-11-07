@@ -153,8 +153,9 @@ void Engine::startVoice (Voice& v, int s, int pad, float semis, float vel, int8_
     v.env = 0; v.dec = 1;
     v.attInc = 1.0f / (SR * std::max (0.002f, sl.attack));
     v.decCoef = sl.decay > 0 ? std::exp (-6.9f / (sl.decay * SR)) : 1.0f;
-    const float semi = sceneVal (0, s, sl.pitch) + semis;
-    v.inc = (sl.rate / float (SR)) * std::pow (2.0f, semi / 12.0f);
+    v.semis = semis; v.drone = sl.drone; v.filterLocked = filterLock != NOLOCK;
+    v.pitchNow = sceneVal (0, s, sl.pitch) + semis;
+    v.inc = v.incTarget = (sl.rate / float (SR)) * std::pow (2.0f, v.pitchNow / 12.0f);
     const float a = sl.trimA * sl.len, b = std::max (a + 1, sl.trimB * sl.len);
     v.pos = sl.reverse ? b - 1 : a;
     float f = sceneVal (1, s, sl.filter);
@@ -163,11 +164,13 @@ void Engine::startVoice (Voice& v, int s, int pad, float semis, float vel, int8_
     if (v.cut < -0.02f || v.cut > 0.02f) v.hp = filterCoef (v.cut);
     v.pan = v.basePan = panLock != NOLOCK ? panLock / 100.0f : sl.pan;
     panGains (v, v.pan);
-    if (sl.stretch || sl.freeze) {
+    if (sl.stretch || sl.freeze || sl.drone) {
         v.grains = true;
-        v.gLen = SR * (sl.freeze ? 0.09f : 0.045f) * (sl.rate / float (SR));
-        v.head = v.pos;
-        if (sl.freeze) v.headInc = (sl.reverse ? -1.0f : 1.0f) * 0.03f * (sl.rate / float (SR));
+        const bool cloud = sl.freeze || sl.drone;
+        v.nG = cloud ? 4 : 2;
+        v.gLen = cloud ? std::max (32.0f, std::min (b - a - 2, sl.grainSize * sl.rate)) : SR * 0.045f * (sl.rate / float (SR));
+        v.head = cloud ? a + sl.grainPos * (b - a - 2) : v.pos; v.lastPos = sl.grainPos;
+        if (cloud) v.headInc = 0;     // the cloud reads its speed live
         else {
             const float secs = (b - a) / float (sl.rate);
             int beats = sl.beats;
@@ -178,12 +181,15 @@ void Engine::startVoice (Voice& v, int s, int pad, float semis, float vel, int8_
             const float target = beats * 60.0f / bpm;
             v.headInc = (sl.reverse ? -1.0f : 1.0f) * (secs / target) * (sl.rate / float (SR));
         }
-        v.gPos[0] = v.gPos[1] = v.head; v.gPh[0] = 0; v.gPh[1] = 0.5f;
+        for (int g = 0; g < 4; ++g) { v.gPos[g] = v.head; v.gPh[g] = g / (float) v.nG; }
     }
 }
 
-void Engine::noteOn (int s, int pad, float semis, float vel, int8_t filterLock, int8_t panLock) {
-    if (s < 0 || s >= NSLOT || slots[s].empty () || busy) return;
+Voice* Engine::noteOn (int s, int pad, float semis, float vel, int8_t filterLock, int8_t panLock) {
+    if (s < 0 || s >= NSLOT || slots[s].empty () || busy) return nullptr;
+    // a drone that is sounding glides to the new note instead of starting again
+    if (slots[s].drone)
+        for (auto& v : voices) if (v.on && v.drone && v.slot == s && v.relRate == 0) { v.semis = semis; v.gain = vel * sceneVal (2, s, slots[s].volume); return &v; }
     // the same pad retriggers (like a Pocket Operator): its old voice fades out in 3 ms instead of being cut,
     // and the new note takes a free voice, else one that is fading, else the oldest
     for (auto& v : voices) if (v.on && v.pad == (uint8_t) (pad & 0xff) && v.slot == s) { v.relRate = std::max (v.relRate, 1.0f / (SR * 0.003f)); v.pad = 0xFF; }
@@ -197,6 +203,11 @@ void Engine::noteOn (int s, int pad, float semis, float vel, int8_t filterLock, 
         for (auto& v : voices) if (&v != pick && v.on && slots[v.slot].choke == g) v.relRate = 1.0f / (SR * 0.004f);
     if (slots[s].duckSource) duckEnv = 1;
     startVoice (*pick, s, pad, semis, vel, filterLock, panLock);
+    return pick;
+}
+
+void Engine::droneStop (int s) {
+    for (auto& v : voices) if (v.on && v.drone && (s < 0 || v.slot == s)) { v.drone = false; v.held = false; }
 }
 
 // a voice that must be reused at once: keep its last output and fade that out instead of a click
@@ -206,7 +217,7 @@ void Engine::stealFade (Voice& v) {
 }
 
 void Engine::noteOff (int pad) {
-    for (auto& v : voices) if (v.on && v.pad == (uint8_t) (pad & 0xff)) v.held = false;
+    for (auto& v : voices) if (v.on && ! v.drone && v.pad == (uint8_t) (pad & 0xff)) v.held = false;
 }
 
 void Engine::allOff () { for (auto& v : voices) v.on = false; }
@@ -230,6 +241,17 @@ static float align (const int16_t* d, int a, int b, float head, float other, flo
 // control rate (every 32 samples): the LFO
 void Engine::voiceControl (Voice& v) {
     const Slot& sl = slots[v.slot];
+    // the knobs act on notes that are sounding: tune (a drone glides), filter
+    const float p = sceneVal (0, v.slot, sl.pitch) + v.semis;
+    if (p != v.pitchNow) { v.pitchNow = p; v.incTarget = (sl.rate / float (SR)) * std::pow (2.0f, p / 12.0f); }
+    if (v.inc != v.incTarget) {
+        if (v.drone && sl.glide > 0.001f) { v.inc += (v.incTarget - v.inc) * std::min (1.0f, 32.0f / (sl.glide * SR) * 2.3f); if (std::fabs (v.inc - v.incTarget) < 1e-6f) v.inc = v.incTarget; }
+        else v.inc = v.incTarget;
+    }
+    if (! v.filterLocked && ! (sl.lfoDepth > 0 && sl.lfoTarget == 1)) {
+        const float f = sceneVal (1, v.slot, sl.filter);
+        if (f != v.baseCut) { v.cut = v.baseCut = f; v.hp = (f < -0.02f || f > 0.02f) ? filterCoef (f) : 0; }
+    }
     if (sl.lfoDepth <= 0) return;
     v.lfoPh += sl.lfoRate * 32.0f / SR; if (v.lfoPh >= 1) v.lfoPh -= 1;
     const float w = std::sin (2 * PI * v.lfoPh), d = sl.lfoDepth;
@@ -255,23 +277,40 @@ float Engine::voiceSample (Voice& v) {
     const float inc = v.inc * transpose * v.lfoMul;
     if (v.grains) {
         x = 0;
-        for (int g = 0; g < 2; ++g) {
+        const bool cloud = sl.freeze || sl.drone;
+        const float span = b - a - 2;
+        if (cloud) {
+            // the GRAIN page works live: POS jumps the read head, SPEED moves it (0 = frozen), SIZE and SPREAD shape new grains
+            if (sl.grainPos != v.lastPos) { v.head = a + sl.grainPos * span; v.lastPos = sl.grainPos; }
+            v.head += sl.grainSpeed * dir * (sl.rate / float (SR));
+            if (v.head >= b - 2) v.head -= span; if (v.head < a) v.head += span;
+        }
+        const float norm = v.nG == 4 ? 0.5f : 1.0f;     // 4 overlapping windows add up to about 2
+        for (int g = 0; g < v.nG; ++g) {
             // smoothstep window: two grains half a period apart always sum to 1 (and no sin per sample)
             const float u = v.gPh[g] < 0.5f ? 2 * v.gPh[g] : 2 - 2 * v.gPh[g];
-            x += u * u * (3 - 2 * u) * at (v.gPos[g]);
+            x += u * u * (3 - 2 * u) * at (v.gPos[g]) * norm;
             v.gPos[g] += dir * inc;
+            if (v.gPos[g] >= b - 2) v.gPos[g] -= span; if (v.gPos[g] < a) v.gPos[g] += span;
             v.gPh[g] += 1.0f / v.gLen;
             if (v.gPh[g] >= 1) {
                 v.gPh[g] -= 1;
-                if (sl.freeze) v.gPos[g] = v.head + ((rng () & 1023) / 1023.0f - 0.5f) * v.gLen * 0.5f;
-                else v.gPos[g] = align (d, (int) a, (int) b, v.head, v.gPos[1 - g], dir);
+                if (cloud) {
+                    if (g == 0) v.gLen = std::max (32.0f, std::min (span, sl.grainSize * sl.rate));
+                    const float spray = ((rng () & 1023) / 1023.0f - 0.5f) * (sl.grainSpread * span + v.gLen * 0.25f);
+                    float p = v.head + spray; while (p >= b - 2) p -= span; while (p < a) p += span;
+                    // start where it continues the grain that is loudest now, so a note keeps a clean pitch
+                    v.gPos[g] = align (d, (int) a, (int) b, p, v.gPos[(g + v.nG / 2) % v.nG], dir);
+                } else v.gPos[g] = align (d, (int) a, (int) b, v.head, v.gPos[1 - g], dir);
             }
         }
-        v.head += v.headInc;
-        const bool out = sl.reverse ? v.head < a : v.head >= b - 2;
-        if (out) {
-            if (sl.freeze || (sl.loopHold && v.held)) v.head = sl.reverse ? b - 2 : a;
-            else if (v.relRate == 0) v.relRate = 1.0f / (SR * 0.05f);
+        if (! cloud) {
+            v.head += v.headInc;
+            const bool out = sl.reverse ? v.head < a : v.head >= b - 2;
+            if (out) {
+                if (sl.loopHold && v.held) v.head = sl.reverse ? b - 2 : a;
+                else if (v.relRate == 0) v.relRate = 1.0f / (SR * 0.05f);
+            }
         }
     } else {
         x = at (v.pos);
@@ -296,7 +335,7 @@ float Engine::voiceSample (Voice& v) {
     }
     // envelope: attack, then decay (if set); release when a held sound is let go (loop / freeze),
     // a grain voice ran out or a choke cut it
-    if (v.relRate == 0 && ! v.held && (sl.loopHold || sl.freeze)) v.relRate = 1.0f / (SR * 0.05f);
+    if (v.relRate == 0 && ! v.held && (sl.loopHold || sl.freeze || sl.drone)) v.relRate = 1.0f / (SR * 0.05f);
     if (v.relRate > 0) {
         v.env -= v.relRate;
         if (v.env <= 0) { v.on = false; return 0; }
@@ -524,7 +563,7 @@ void Engine::playStep (int st, int only) {
         const Trig& t = S.t[i];
         if (only >= 0 ? t.slot != only : polyIndex (pat, t.slot) >= 0) continue;
         if (slots[t.slot].mute || ! condOk (t)) continue;
-        noteOn (t.slot, t.slot, t.pitch == NOLOCK ? 0 : t.pitch, t.vel / 100.0f, t.filter, t.pan);
+        if (Voice* v = noteOn (t.slot, t.slot, t.pitch == NOLOCK ? 0 : t.pitch, t.vel / 100.0f, t.filter, t.pan)) v->held = v->drone;
     }
 }
 
@@ -795,7 +834,7 @@ void Engine::processRaw (const float* in, float* out, int n) {
             float x = voiceSample (v);
             if (! v.on) continue;
             if (v.hp > 0) {
-                const float g = v.hp, k = 1.2f;
+                const float g = v.hp, k = 1.2f - 1.08f * sl.reso;     // RESO: up to a singing peak
                 const float a1 = 1 / (1 + g * (g + k)), a2 = g * a1, a3 = g * a2;
                 const float v3 = x - v.bp, v1 = a1 * v.lp + a2 * v3, v2 = v.bp + a2 * v.lp + a3 * v3;
                 v.lp = 2 * v1 - v.lp; v.bp = 2 * v2 - v.bp;

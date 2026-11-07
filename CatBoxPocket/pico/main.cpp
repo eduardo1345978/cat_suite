@@ -486,7 +486,13 @@ int main () {
 
     // the disks: format the flash the first time; the card is used when it is FAT
     uint8_t fb[1024];
-    if (! store::mounted (flashDisk)) { ui.say ("FIRST START...", 3000); ui.render (fb); oledAll (fb); store::format (flashDisk); }
+    if (! store::mounted (flashDisk)) {
+        // the first start: a fresh disk with the factory sounds and the demo project as project 1
+        ui.say ("FIRST START...", 8000); ui.render (fb); oledAll (fb);
+        store::format (flashDisk);
+        factory::sounds (engine); factory::project (engine);
+        store::save (flashDisk, engine, ui, 0); flashDisk.flush ();
+    }
     chooseDisk (true);
     if (! ui.usbDisk) store::load (activeDisk (), engine, ui, 0);
     if (pool == sramPool) ui.say ("PSRAM ERROR!", 4000);

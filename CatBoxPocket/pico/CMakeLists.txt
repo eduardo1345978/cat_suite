@@ -11,7 +11,7 @@ pico_sdk_init ()
 
 add_executable (cat_box_pocket
     main.cpp usb_descriptors.c
-    ../engine/engine.cpp ../engine/ui.cpp ../engine/store.cpp)
+    ../engine/engine.cpp ../engine/ui.cpp ../engine/store.cpp ../engine/factory.cpp)
 pico_generate_pio_header (cat_box_pocket ${CMAKE_CURRENT_LIST_DIR}/i2s.pio)
 pico_generate_pio_header (cat_box_pocket ${CMAKE_CURRENT_LIST_DIR}/ws2812.pio)
 target_include_directories (cat_box_pocket PRIVATE ${CMAKE_CURRENT_LIST_DIR})
