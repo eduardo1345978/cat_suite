@@ -453,7 +453,7 @@ static void chooseDisk (bool preferCard) {
     bool card = false;
     if (preferCard && ui.sdPresent && (sd.ok || sd.init ())) {
         if (store::mounted (sd)) card = true;
-        else ui.say ("SD: FORMATUJ FAT32", 3000);
+        else ui.say ("SD: FORMAT AS FAT32", 3000);
     }
     ui.disk = card ? (BlockDev*) &sd : (BlockDev*) &flashDisk;
     ui.sdCard = card;
@@ -486,11 +486,11 @@ int main () {
 
     // the disks: format the flash the first time; the card is used when it is FAT
     uint8_t fb[1024];
-    if (! store::mounted (flashDisk)) { ui.say ("PRVE ZAPNUTIE...", 3000); ui.render (fb); oledAll (fb); store::format (flashDisk); }
+    if (! store::mounted (flashDisk)) { ui.say ("FIRST START...", 3000); ui.render (fb); oledAll (fb); store::format (flashDisk); }
     chooseDisk (true);
     if (! ui.usbDisk) store::load (activeDisk (), engine, ui, 0);
-    if (pool == sramPool) ui.say ("PSRAM CHYBA!", 4000);
-    if (! mcpOk[0] || ! mcpOk[1]) ui.say (! mcpOk[0] ? "MCP 0x20 CHYBA" : "MCP 0x21 CHYBA", 4000);
+    if (pool == sramPool) ui.say ("PSRAM ERROR!", 4000);
+    if (! mcpOk[0] || ! mcpOk[1]) ui.say (! mcpOk[0] ? "MCP 0x20 ERROR" : "MCP 0x21 ERROR", 4000);
 
     tusb_init ();
     multicore_launch_core1 (core1Main);
@@ -511,19 +511,19 @@ int main () {
         const bool card = sdPresent ();
         if (card != cardWas) {
             cardWas = card; ui.sdPresent = card;
-            if (! card && ui.sdCard) { sd.ok = false; chooseDisk (false); ui.say ("SD VYBRATA: FLASH"); }
-            else if (card) ui.say ("SD KARTA: MENU > DISK");
+            if (! card && ui.sdCard) { sd.ok = false; chooseDisk (false); ui.say ("SD OUT: FLASH"); }
+            else if (card) ui.say ("SD CARD: MENU > DISK");
         }
         // USB disk
         if (ui.wantUsb) { ui.wantUsb = false; activeDisk ().flush (); ui.usbDisk = true; }
         if (ui.usbDisk && (usbReload || keyState[K_PLAY])) {
             ui.usbDisk = false; usbReload = false;
-            store::load (activeDisk (), engine, ui, ui.project); ui.say ("NACITANE");
+            store::load (activeDisk (), engine, ui, ui.project); ui.say ("LOADED");
         }
         if (ui.wantSwapDisk) {
             ui.wantSwapDisk = false;
             chooseDisk (! ui.sdCard);
-            ui.say (ui.sdCard ? "DISK: SD KARTA" : "DISK: FLASH");
+            ui.say (ui.sdCard ? "DISK: SD CARD" : "DISK: FLASH");
         }
         // disk work: show the message first (it can take a while)
         if (ui.wantSave || ui.wantLoad || ui.wantKit >= 0 || ui.wantExport || ui.wantBrowse || ui.browseLoad >= 0) {

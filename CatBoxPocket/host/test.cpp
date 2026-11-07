@@ -329,7 +329,7 @@ int main (int argc, char** argv) {
     CHECK (U->page == 1 && E->slots[1].trimB < 0.85f, "push A = next page (trim)");
     writeScreen (dir + "/screen_play.pgm");
     U->stepMode = true; writeScreen (dir + "/screen_steps.pgm"); U->stepMode = false;
-    U->say ("CHOP -> BANKA B"); writeScreen (dir + "/screen_msg.pgm");
+    U->say ("CHOP -> BANK B"); writeScreen (dir + "/screen_msg.pgm");
     { uint8_t rgb[48]; U->leds (rgb); int lit = 0; for (int i = 0; i < 16; ++i) lit += rgb[i * 3] + rgb[i * 3 + 1] + rgb[i * 3 + 2] > 0; CHECK (lit >= 3, "LEDs show the recorded pads: %d", lit); }
 
     // ---- storage: FAT16 disk, save and load, WAVs from a computer

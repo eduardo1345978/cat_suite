@@ -25,50 +25,50 @@ static const uint8_t FONT[64][5] = {
     {0x04,0x02,0x01,0x02,0x04},{0x40,0x40,0x40,0x40,0x40}};
 
 static const char* FXNAME[17] = {"", "LOOP 1/16", "LOOP 1/8", "LOOP 1/4", "LOOP 1/2", "STUTTER", "TAPE STOP", "REVERSE", "SCRATCH",
-                                 "BITCRUSH", "FILTER DOLE", "FILTER HORE", "OKTAVA HORE", "OKTAVA DOLE", "RESTART", "FREEZE", "POL TEMPA"};
-static const char* PAGENAME[5] = {"ZVUK", "VZORKA", "OBALKA", "LFO", "EFEKTY"};
-static const char* PAGE[5][4] = {{"LAD", "FILT", "HLAS", "PAN"}, {"STAR", "KONI", "MOD", "STRE"}, {"ATAK", "DEC", "DRIV", "CHOK"},
-                                 {"LFO", "HLBK", "CIEL", "VINT"}, {"DLY", "REV", "DUCK", "SIDE"}};
-static const char* ARPNAME[6] = {"VYP", "HORE", "DOLE", "HORE-DOLE", "NAHODNE", "AKO HRAS"};
-static const char* NOTENAME[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "H"};
+                                 "BITCRUSH", "FILTER DOWN", "FILTER UP", "OCTAVE UP", "OCTAVE DOWN", "RESTART", "FREEZE", "HALF TEMPO"};
+static const char* PAGENAME[5] = {"SOUND", "SAMPLE", "ENVELOPE", "LFO", "EFFECTS"};
+static const char* PAGE[5][4] = {{"TUNE", "FILT", "VOL", "PAN"}, {"STRT", "END", "MODE", "STRE"}, {"ATK", "DEC", "DRIV", "CHOK"},
+                                 {"LFO", "DPTH", "DEST", "VINT"}, {"DLY", "REV", "DUCK", "SIDE"}};
+static const char* ARPNAME[6] = {"OFF", "UP", "DOWN", "UP-DOWN", "RANDOM", "AS PLAYED"};
+static const char* NOTENAME[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 
 enum MenuItem { M_PROJ, M_LOAD, M_SAVE, M_BROWSE, M_EXPPAT, M_EXPSONG, M_TRIM, M_THRESH, M_MONITOR, M_METRO,
                 M_SCALE, M_ROOT, M_ARP, M_DISK, M_USB, NMENU };
 
 const char* Ui::menuName (int i) {
-    static const char* N[NMENU] = {"PROJEKT", "NACITAJ PROJEKT", "ULOZ PROJEKT", "PREHLIADAC WAV", "EXPORT PATTERN", "EXPORT SONG",
-                                   "AUTO TRIM", "PRAH NAHRAVANIA", "MONITOR VSTUPU", "METRONOM",
-                                   "STUPNICA", "TONINA", "ARPEGGIO", "DISK", "USB DISK"};
+    static const char* N[NMENU] = {"PROJECT", "LOAD PROJECT", "SAVE PROJECT", "WAV BROWSER", "EXPORT PATTERN", "EXPORT SONG",
+                                   "AUTO TRIM", "REC THRESHOLD", "INPUT MONITOR", "METRONOME",
+                                   "SCALE", "ROOT NOTE", "ARPEGGIO", "DISK", "USB DISK"};
     return i >= 0 && i < NMENU ? N[i] : "";
 }
 
 const char* Ui::help (int k) {
-    if (k >= 0 && k < 16) return "PAD: HRA ZVUK. V REZIME KROKOV ZAPNE ALEBO VYPNE KROK. V KLAVESOCH HRA TONY STUPNICE.";
+    if (k >= 0 && k < 16) return "PAD: PLAYS A SOUND. IN STEP MODE TURNS A STEP ON OR OFF. IN KEYS MODE PLAYS NOTES OF THE SCALE.";
     switch (k) {
-        case K_SOUND: return "SOUND + PAD: VYBER ZVUK. +SHIFT+PAD 1-4: BANKA. SHIFT+SOUND: KLAVESY. SOUND+A..D: ARP, RYCHLOST, STUPNICA, TONINA.";
-        case K_PATTERN: return "PATTERN + PADY: PATTERN ALEBO RETAZ. SHIFT+PATTERN: CHAOS (SHIFT+PATTERN+A: MIERA).";
-        case K_BPM: return "TAP TEMPO. BPM+A..D: TEMPO, SWING, KOMPRESOR, HLASITOST. PAD 1 LO-FI, 2 METRONOM, 3 MONITOR, 4 PRAH.";
-        case K_FX: return "FX + PAD: 16 EFEKTOV KYM DRZIS. S WRITE ZAPISE DO KROKU. FX+A..D: DELAY, REVERB, SIDECHAIN, VSTUP.";
-        case K_SHIFT: return "DRUHE FUNKCIE. SHIFT+PAD: ROLL. SHIFT+A/B: HLASITOST, VSTUP. PRI ZAPNUTI: USB DISK.";
-        case K_REC: return "REC+PAD: NAHRAVA KYM DRZIS. REC+PLAY: RESAMPLING. SHIFT+REC: CHOP DO VOLNEJ BANKY.";
-        case K_PLAY: return "SPUSTI / ZASTAVI. SHIFT+PLAY: LOOPER (NAHRAVA, HRA, VYPNUTY).";
-        case K_WRITE: return "REZIM KROKOV. DRZ WRITE A HRAJ: LIVE NAHRAVANIE. SHIFT+WRITE: ULOZ PROJEKT.";
-        case K_MUTE: return "MUTE+PAD: STLMI ZVUK. SHIFT+MUTE+PAD: SOLO. SHIFT+MUTE: ZRUS VSETKY.";
-        case K_COPY: return "COPY+PAD: SKOPIRUJ ZVUK (V KROKOCH KROK). SAMOTNE COPY: CELY PATTERN.";
-        case K_PASTE: return "PASTE+PAD: VLOZ ZVUK ALEBO KROK. SAMOTNE PASTE: VLOZ PATTERN.";
-        case K_CLEAR: return "CLEAR+PAD: ZMAZ KROKY ZVUKU (V KROKOCH KROK). SHIFT+CLEAR+PAD: ZMAZ VZORKU. SAMOTNE: PATTERN.";
-        case K_UNDO: return "VRATI POSLEDNU ZMENU PATTERNU A ZVUKOV. ESTE RAZ = ZNOVA.";
-        case K_SONG: return "SONG: PIESEN ZAP/VYP. SONG+PAD: PRIDAJ PATTERN. SONG+A: OPAKOVANIA. SHIFT+SONG: ZMAZ.";
-        case K_FILL: return "FILL KYM DRZIS (KROKY S PODMIENKOU FILL). SHIFT+FILL: ZAMKNI.";
-        case K_ACCENT: return "DRZ PRI HRANI: PLNA SILA. DRZ KROK + ACCENT: PRIZVUK NA KROKU.";
-        case K_KIT: return "KIT+PAD: NACITAJ KIT DO BANKY. SHIFT+KIT+PAD: ULOZ BANKU AKO KIT.";
-        case K_MENU: return "MENU: PROJEKTY, PREHLIADAC, EXPORT, DISK, NASTAVENIA. MENU + KLAVES: NAPOVEDA.";
-        case K_SCENE: return "SCENE+PAD 1/2: ULOZ SCENU A/B. PAD 3: ZRUS. CROSSFADER (ALEBO SCENE+A) PRELIEVA.";
-        case K_LEN: return "LEN+PAD: DLZKA PATTERNU (4-64). LEN+A: PRESNE. LEN+B: VLASTNA DLZKA ZVUKU (POLYMETER).";
-        case K_ENCA: return "A: PARAMETER. STLAC: DALSIA STRANKA. V MENU: POTVRD.";
-        case K_ENCB: return "B: PARAMETER. STLAC: PREDOSLA STRANKA.";
-        case K_ENCC: return "C: PARAMETER. STLAC: OREZ TICHO A NORMALIZUJ ZVUK.";
-        case K_ENCD: return "D: PARAMETER. STLAC: STRANKA KROKOV (1-16, 17-32...).";
+        case K_SOUND: return "SOUND + PAD: PICK A SOUND. +SHIFT+PAD 1-4: BANK. SHIFT+SOUND: KEYS. SOUND+A..D: ARP, RATE, SCALE, ROOT.";
+        case K_PATTERN: return "PATTERN + PADS: PATTERN OR CHAIN. SHIFT+PATTERN: CHAOS (SHIFT+PATTERN+A: AMOUNT).";
+        case K_BPM: return "TAP TEMPO. BPM+A..D: TEMPO, SWING, COMPRESSOR, VOLUME. PAD 1 LO-FI, 2 METRONOME, 3 MONITOR, 4 THRESHOLD.";
+        case K_FX: return "FX + PAD: 16 EFFECTS WHILE HELD. WITH WRITE IT GOES INTO THE STEP. FX+A..D: DELAY, REVERB, SIDECHAIN, INPUT.";
+        case K_SHIFT: return "SECOND FUNCTIONS. SHIFT+PAD: ROLL. SHIFT+A/B: VOLUME, INPUT. AT POWER ON: USB DISK.";
+        case K_REC: return "REC+PAD: RECORDS WHILE HELD. REC+PLAY: RESAMPLE. SHIFT+REC: CHOP INTO A FREE BANK.";
+        case K_PLAY: return "START / STOP. SHIFT+PLAY: LOOPER (RECORD, PLAY, OFF).";
+        case K_WRITE: return "STEP MODE. HOLD WRITE AND PLAY: LIVE RECORDING. SHIFT+WRITE: SAVE PROJECT.";
+        case K_MUTE: return "MUTE+PAD: MUTE A SOUND. SHIFT+MUTE+PAD: SOLO. SHIFT+MUTE: UNMUTE ALL.";
+        case K_COPY: return "COPY+PAD: COPY A SOUND (IN STEPS A STEP). COPY ALONE: THE WHOLE PATTERN.";
+        case K_PASTE: return "PASTE+PAD: PASTE A SOUND OR STEP. PASTE ALONE: PASTE THE PATTERN.";
+        case K_CLEAR: return "CLEAR+PAD: CLEAR THE SOUND'S STEPS (IN STEPS A STEP). SHIFT+CLEAR+PAD: DELETE THE SAMPLE. ALONE: PATTERN.";
+        case K_UNDO: return "UNDOES THE LAST CHANGE TO THE PATTERN AND SOUNDS. AGAIN = REDO.";
+        case K_SONG: return "SONG: SONG MODE ON/OFF. SONG+PAD: ADD A PATTERN. SONG+A: REPEATS. SHIFT+SONG: CLEAR.";
+        case K_FILL: return "FILL WHILE HELD (STEPS WITH THE FILL CONDITION). SHIFT+FILL: LATCH.";
+        case K_ACCENT: return "HOLD WHILE PLAYING: FULL VELOCITY. HOLD A STEP + ACCENT: ACCENT ON THE STEP.";
+        case K_KIT: return "KIT+PAD: LOAD A KIT INTO THE BANK. SHIFT+KIT+PAD: SAVE THE BANK AS A KIT.";
+        case K_MENU: return "MENU: PROJECTS, BROWSER, EXPORT, DISK, SETTINGS. MENU + KEY: HELP.";
+        case K_SCENE: return "SCENE+PAD 1/2: STORE SCENE A/B. PAD 3: CLEAR. THE CROSSFADER (OR SCENE+A) BLENDS.";
+        case K_LEN: return "LEN+PAD: PATTERN LENGTH (4-64). LEN+A: EXACT. LEN+B: THE SOUND'S OWN LENGTH (POLYMETER).";
+        case K_ENCA: return "A: PARAMETER. PUSH: NEXT PAGE. IN THE MENU: CONFIRM.";
+        case K_ENCB: return "B: PARAMETER. PUSH: PREVIOUS PAGE.";
+        case K_ENCC: return "C: PARAMETER. PUSH: TRIM SILENCE AND NORMALIZE THE SOUND.";
+        case K_ENCD: return "D: PARAMETER. PUSH: STEP PAGE (1-16, 17-32...).";
         default: return "";
     }
 }
@@ -84,18 +84,18 @@ void Ui::padDown (int pad) {
     char t[32], nm[4];
     if (held[K_REC] && ! held[K_PLAY]) {
         sel = slot; eng.recStart (slot, false);
-        slotName (slot, nm); std::snprintf (t, sizeof t, eng.threshold ? "REC %s (CAKAM)" : "REC %s", nm); say (t, 600);
+        slotName (slot, nm); std::snprintf (t, sizeof t, eng.threshold ? "REC %s (WAITING)" : "REC %s", nm); say (t, 600);
     } else if (held[K_SOUND]) {
-        if (held[K_SHIFT] && pad < NBANK) { bank = pad; std::snprintf (t, sizeof t, "BANKA %c", 'A' + pad); say (t); }
+        if (held[K_SHIFT] && pad < NBANK) { bank = pad; std::snprintf (t, sizeof t, "BANK %c", 'A' + pad); say (t); }
         else { sel = slot; eng.arpSlot = slot; eng.noteOn (slot, slot, 0, vel () / 100.0f); }
     } else if (held[K_PATTERN]) {
         if (chainN < NCHAIN) chainBuf[chainN++] = (uint8_t) pad;
     } else if (held[K_BPM]) {
-        if (pad == 0) { eng.lofi = ! eng.lofi; say (eng.lofi ? "LO-FI 24K 12BIT" : "CISTY 48K"); }
-        else if (pad == 1) { eng.metronome = ! eng.metronome; say (eng.metronome ? "METRONOM ZAP" : "METRONOM VYP"); }
-        else if (pad == 2) { eng.monitor = ! eng.monitor; say (eng.monitor ? "MONITOR ZAP" : "MONITOR VYP"); }
-        else if (pad == 3) { eng.threshold = ! eng.threshold; say (eng.threshold ? "REC CAKA NA ZVUK" : "REC HNED"); }
-        else if (pad >= 12) { eng.master = 0.25f * (pad - 11); std::snprintf (t, sizeof t, "HLASITOST %d%%", (pad - 11) * 25); say (t); }
+        if (pad == 0) { eng.lofi = ! eng.lofi; say (eng.lofi ? "LO-FI 24K 12BIT" : "CLEAN 48K"); }
+        else if (pad == 1) { eng.metronome = ! eng.metronome; say (eng.metronome ? "METRONOME ON" : "METRONOME OFF"); }
+        else if (pad == 2) { eng.monitor = ! eng.monitor; say (eng.monitor ? "MONITOR ON" : "MONITOR OFF"); }
+        else if (pad == 3) { eng.threshold = ! eng.threshold; say (eng.threshold ? "REC WAITS FOR SOUND" : "REC AT ONCE"); }
+        else if (pad >= 12) { eng.master = 0.25f * (pad - 11); std::snprintf (t, sizeof t, "VOLUME %d%%", (pad - 11) * 25); say (t); }
     } else if (held[K_FX]) {
         eng.fx = pad + 1;
         if (held[K_WRITE] && eng.playing () && eng.step >= 0) eng.pats[eng.pat].s[eng.step].fx = (uint8_t) (pad + 1);
@@ -106,14 +106,14 @@ void Ui::padDown (int pad) {
             slotName (slot, nm); std::snprintf (t, sizeof t, "SOLO %s", nm); say (t);
         } else {
             eng.slots[slot].mute = ! eng.slots[slot].mute;
-            slotName (slot, nm); std::snprintf (t, sizeof t, "%s %s", nm, eng.slots[slot].mute ? "STLMENY" : "HRA"); say (t, 700);
+            slotName (slot, nm); std::snprintf (t, sizeof t, "%s %s", nm, eng.slots[slot].mute ? "MUTED" : "ON"); say (t, 700);
         }
     } else if (held[K_COPY]) {
-        if (stepMode) { clipStep = eng.pats[eng.pat].s[stepOf (pad)]; clipKind = 1; say ("KROK SKOPIROVANY", 700); }
-        else { clipSlot = eng.slots[slot]; clipKind = 2; slotName (slot, nm); std::snprintf (t, sizeof t, "%s SKOPIROVANY", nm); say (t, 700); }
+        if (stepMode) { clipStep = eng.pats[eng.pat].s[stepOf (pad)]; clipKind = 1; say ("STEP COPIED", 700); }
+        else { clipSlot = eng.slots[slot]; clipKind = 2; slotName (slot, nm); std::snprintf (t, sizeof t, "%s COPIED", nm); say (t, 700); }
     } else if (held[K_PASTE]) {
         eng.snapshot ();
-        if (stepMode && clipKind == 1) { eng.pats[eng.pat].s[stepOf (pad)] = clipStep; say ("KROK VLOZENY", 700); }
+        if (stepMode && clipKind == 1) { eng.pats[eng.pat].s[stepOf (pad)] = clipStep; say ("STEP PASTED", 700); }
         else if (clipKind == 2 && ! clipSlot.empty () && clipSlot.block >= 0 && eng.blocks[clipSlot.block].refs > 0) {
             // the same sample, its own parameters (the copy shares the memory)
             if (eng.slots[slot].block != clipSlot.block || eng.slots[slot].empty ()) {
@@ -121,27 +121,27 @@ void Ui::padDown (int pad) {
                 if (eng.blocks[clipSlot.block].refs > 0) { eng.blocks[clipSlot.block].refs++; eng.slots[slot] = clipSlot; }
             } else eng.slots[slot] = clipSlot;
             eng.slots[slot].saved = false; eng.slots[slot].mute = false;
-            sel = slot; slotName (slot, nm); std::snprintf (t, sizeof t, "VLOZENE DO %s", nm); say (t, 700);
-        } else say ("SCHRANKA PRAZDNA");
+            sel = slot; slotName (slot, nm); std::snprintf (t, sizeof t, "PASTED TO %s", nm); say (t, 700);
+        } else say ("CLIPBOARD EMPTY");
     } else if (held[K_CLEAR]) {
         eng.snapshot ();
-        if (stepMode) { eng.pats[eng.pat].s[stepOf (pad)] = Step (); say ("KROK ZMAZANY", 700); }
-        else if (held[K_SHIFT]) { eng.clearSlot (slot); slotName (slot, nm); std::snprintf (t, sizeof t, "%s ZMAZANY", nm); say (t); }
+        if (stepMode) { eng.pats[eng.pat].s[stepOf (pad)] = Step (); say ("STEP CLEARED", 700); }
+        else if (held[K_SHIFT]) { eng.clearSlot (slot); slotName (slot, nm); std::snprintf (t, sizeof t, "%s DELETED", nm); say (t); }
         else {
             for (int st = 0; st < NSTEP; ++st) if (eng.hasTrig (eng.pat, st, slot)) eng.toggleStep (st, slot);
-            slotName (slot, nm); std::snprintf (t, sizeof t, "KROKY %s PREC", nm); say (t, 700);
+            slotName (slot, nm); std::snprintf (t, sizeof t, "STEPS %s CLEARED", nm); say (t, 700);
         }
     } else if (held[K_SONG]) {
-        eng.songAdd (pad); std::snprintf (t, sizeof t, "SONG: %d. RIADOK P%d", eng.songLen, pad + 1); say (t, 700);
+        eng.songAdd (pad); std::snprintf (t, sizeof t, "SONG ROW %d: P%d", eng.songLen, pad + 1); say (t, 700);
     } else if (held[K_KIT]) {
         wantKit = pad; kitSave = held[K_SHIFT];
-        std::snprintf (t, sizeof t, kitSave ? "UKLADAM KIT %d" : "NACITAVAM KIT %d", pad + 1); say (t);
+        std::snprintf (t, sizeof t, kitSave ? "SAVING KIT %d" : "LOADING KIT %d", pad + 1); say (t);
     } else if (held[K_SCENE]) {
-        if (pad == 0 || pad == 1) { eng.sceneStore (pad); say (pad == 0 ? "SCENA A ULOZENA" : "SCENA B ULOZENA"); }
-        else if (pad == 2) { eng.sceneClear (); say ("SCENY ZRUSENE"); }
+        if (pad == 0 || pad == 1) { eng.sceneStore (pad); say (pad == 0 ? "SCENE A STORED" : "SCENE B STORED"); }
+        else if (pad == 2) { eng.sceneClear (); say ("SCENES CLEARED"); }
     } else if (held[K_LEN]) {
-        if (held[K_SHIFT]) { eng.setSlotLen (eng.pat, sel, pad + 1); slotName (sel, nm); std::snprintf (t, sizeof t, "%s DLZKA %d", nm, eng.slotLen (eng.pat, sel)); }
-        else { eng.pats[eng.pat].len = (uint8_t) ((pad + 1) * 4); std::snprintf (t, sizeof t, "PATTERN %d KROKOV", (pad + 1) * 4); }
+        if (held[K_SHIFT]) { eng.setSlotLen (eng.pat, sel, pad + 1); slotName (sel, nm); std::snprintf (t, sizeof t, "%s LENGTH %d", nm, eng.slotLen (eng.pat, sel)); }
+        else { eng.pats[eng.pat].len = (uint8_t) ((pad + 1) * 4); std::snprintf (t, sizeof t, "PATTERN %d STEPS", (pad + 1) * 4); }
         say (t);
     } else if (stepMode && ! keysMode) {
         const int st = stepOf (pad);
@@ -204,28 +204,28 @@ void Ui::key (int k, bool down) {
             if (held[K_REC]) { eng.recStart (sel, true); say ("RESAMPLING", 600); }
             else if (held[K_SHIFT]) {
                 eng.looperNext (sel);
-                say (eng.looper () == Engine::LOOP_REC ? "LOOPER: NAHRAVAM" : eng.looper () == Engine::LOOP_PLAY ? "LOOPER: HRA" : "LOOPER: VYPNUTY");
+                say (eng.looper () == Engine::LOOP_REC ? "LOOPER: REC" : eng.looper () == Engine::LOOP_PLAY ? "LOOPER: PLAY" : "LOOPER: OFF");
             } else eng.play (! eng.playing ());
             break;
         case K_REC:
             if (down) {
                 if (held[K_SHIFT]) {
                     const int b = eng.chop (sel);
-                    if (b < 0) say (eng.slots[sel].empty () ? "PRAZDNY ZVUK" : "ZIADNA VOLNA BANKA");
-                    else { bank = b; sel = b * 16; std::snprintf (t, sizeof t, "CHOP -> BANKA %c", 'A' + b); say (t); }
+                    if (b < 0) say (eng.slots[sel].empty () ? "EMPTY SOUND" : "NO FREE BANK");
+                    else { bank = b; sel = b * 16; std::snprintf (t, sizeof t, "CHOP -> BANK %c", 'A' + b); say (t); }
                 }
             } else if (eng.recording () && eng.recSlot == sel) eng.recStop ();
             break;
         case K_WRITE:
             if (down) {
                 writeLive = false;
-                if (held[K_SHIFT]) { wantSave = true; writeLive = true; say ("UKLADAM..."); }
+                if (held[K_SHIFT]) { wantSave = true; writeLive = true; say ("SAVING..."); }
             } else if (! writeLive && ! used[K_WRITE]) {
-                stepMode = ! stepMode; heldStep = -1; say (stepMode ? "KROKY" : "HRANIE", 600);
+                stepMode = ! stepMode; heldStep = -1; say (stepMode ? "STEPS" : "PLAY", 600);
             }
             break;
         case K_SOUND:
-            if (down && held[K_SHIFT]) { keysMode = ! keysMode; say (keysMode ? "KLAVESY" : "ZVUKY", 600); }
+            if (down && held[K_SHIFT]) { keysMode = ! keysMode; say (keysMode ? "KEYS" : "SOUNDS", 600); }
             break;
         case K_PATTERN:
             if (down) {
@@ -234,7 +234,7 @@ void Ui::key (int k, bool down) {
             } else if (chainN > 0) {
                 eng.setChain (chainBuf, chainN);
                 if (chainN == 1) std::snprintf (t, sizeof t, "PATTERN %d", chainBuf[0] + 1);
-                else std::snprintf (t, sizeof t, "RETAZ %d PATTERNOV", chainN);
+                else std::snprintf (t, sizeof t, "CHAIN OF %d", chainN);
                 say (t); chainN = 0;
             }
             break;
@@ -253,37 +253,37 @@ void Ui::key (int k, bool down) {
             break;
         case K_FX: if (! down) eng.fx = 0; break;
         case K_MUTE:
-            if (! down && ! used[K_MUTE] && held[K_SHIFT]) { for (auto& s : eng.slots) s.mute = false; say ("VSETKO HRA"); }
+            if (! down && ! used[K_MUTE] && held[K_SHIFT]) { for (auto& s : eng.slots) s.mute = false; say ("ALL UNMUTED"); }
             break;
         case K_COPY:
-            if (! down && ! used[K_COPY]) { clipPat = eng.pats[eng.pat]; clipKind = 3; std::snprintf (t, sizeof t, "PATTERN %d SKOPIROVANY", eng.pat + 1); say (t); }
+            if (! down && ! used[K_COPY]) { clipPat = eng.pats[eng.pat]; clipKind = 3; std::snprintf (t, sizeof t, "PATTERN %d COPIED", eng.pat + 1); say (t); }
             break;
         case K_PASTE:
             if (! down && ! used[K_PASTE]) {
-                if (clipKind == 3) { eng.snapshot (); eng.pats[eng.pat] = clipPat; std::snprintf (t, sizeof t, "VLOZENE DO P%d", eng.pat + 1); say (t); }
-                else say ("SCHRANKA PRAZDNA");
+                if (clipKind == 3) { eng.snapshot (); eng.pats[eng.pat] = clipPat; std::snprintf (t, sizeof t, "PASTED TO P%d", eng.pat + 1); say (t); }
+                else say ("CLIPBOARD EMPTY");
             }
             break;
         case K_CLEAR:
-            if (! down && ! used[K_CLEAR]) { eng.snapshot (); eng.clearPattern (eng.pat); std::snprintf (t, sizeof t, "PATTERN %d ZMAZANY", eng.pat + 1); say (t); }
+            if (! down && ! used[K_CLEAR]) { eng.snapshot (); eng.clearPattern (eng.pat); std::snprintf (t, sizeof t, "PATTERN %d CLEARED", eng.pat + 1); say (t); }
             break;
         case K_UNDO:
             if (down) { eng.undo (); say ("UNDO", 600); }
             break;
         case K_SONG:
-            if (down && held[K_SHIFT]) { eng.songLen = 0; eng.songMode = false; say ("SONG ZMAZANY"); }
+            if (down && held[K_SHIFT]) { eng.songLen = 0; eng.songMode = false; say ("SONG CLEARED"); }
             else if (! down && ! used[K_SONG]) {
-                if (eng.songLen == 0) say ("SONG JE PRAZDNY");
-                else { eng.songMode = ! eng.songMode; say (eng.songMode ? "SONG ZAP" : "SONG VYP"); }
+                if (eng.songLen == 0) say ("SONG IS EMPTY");
+                else { eng.songMode = ! eng.songMode; say (eng.songMode ? "SONG ON" : "SONG OFF"); }
             }
             break;
         case K_FILL:
-            if (down && held[K_SHIFT]) { fillLatch = ! fillLatch; say (fillLatch ? "FILL ZAMKNUTY" : "FILL VYP"); }
+            if (down && held[K_SHIFT]) { fillLatch = ! fillLatch; say (fillLatch ? "FILL LATCHED" : "FILL OFF"); }
             eng.fill = fillLatch || held[K_FILL];
             break;
         case K_ACCENT:
             if (down && stepMode && heldStep >= 0) {
-                if (Trig* tr = eng.trig (eng.pat, heldStep, sel)) { tr->vel = tr->vel >= 120 ? 100 : 127; stepTouched = true; say (tr->vel >= 120 ? "PRIZVUK" : "BEZ PRIZVUKU", 600); }
+                if (Trig* tr = eng.trig (eng.pat, heldStep, sel)) { tr->vel = tr->vel >= 120 ? 100 : 127; stepTouched = true; say (tr->vel >= 120 ? "ACCENT" : "NO ACCENT", 600); }
             }
             break;
         case K_MENU:
@@ -294,15 +294,15 @@ void Ui::key (int k, bool down) {
         case K_ENCB: if (down) page = (page + 4) % 5; break;
         case K_ENCC:
             if (down) {
-                if (eng.slots[sel].empty ()) say ("PRAZDNY ZVUK");
-                else { eng.trimNormalize (sel); say ("OREZANE + NORMALIZ."); }
+                if (eng.slots[sel].empty ()) say ("EMPTY SOUND");
+                else { eng.trimNormalize (sel); say ("TRIMMED + NORMALIZED"); }
             }
             break;
         case K_ENCD:
             if (down) {
                 const int pages = std::max (1, (std::max<int> (eng.pats[eng.pat].len, eng.slotLen (eng.pat, sel)) + 15) / 16);
                 stepPage = (stepPage + 1) % pages;
-                std::snprintf (t, sizeof t, "KROKY %d-%d", stepPage * 16 + 1, stepPage * 16 + 16); say (t, 700);
+                std::snprintf (t, sizeof t, "STEPS %d-%d", stepPage * 16 + 1, stepPage * 16 + 16); say (t, 700);
             }
             break;
         default: break;
@@ -328,20 +328,20 @@ void Ui::menuChange (int d) {
 
 void Ui::menuEnter () {
     if (browsing) {
-        if (nFiles > 0 && browseIdx < nFiles) { browseLoad = sel; say ("NACITAVAM..."); }
+        if (nFiles > 0 && browseIdx < nFiles) { browseLoad = sel; say ("LOADING..."); }
         return;
     }
     switch (menuItem) {
-        case M_LOAD: wantLoad = true; menu = false; say ("NACITAVAM..."); break;
-        case M_SAVE: wantSave = true; project = menuProj; menu = false; say ("UKLADAM..."); break;
+        case M_LOAD: wantLoad = true; menu = false; say ("LOADING..."); break;
+        case M_SAVE: wantSave = true; project = menuProj; menu = false; say ("SAVING..."); break;
         case M_BROWSE: wantBrowse = true; browsing = true; browseIdx = 0; nFiles = 0; break;
         case M_EXPPAT: wantExport = 1; menu = false; say ("EXPORT...", 4000); break;
         case M_EXPSONG:
-            if (eng.songLen == 0) say ("SONG JE PRAZDNY");
+            if (eng.songLen == 0) say ("SONG IS EMPTY");
             else { wantExport = 2; menu = false; say ("EXPORT...", 4000); }
             break;
         case M_DISK:
-            if (! sdPresent) say ("ZIADNA SD KARTA");
+            if (! sdPresent) say ("NO SD CARD");
             else { wantSwapDisk = true; menu = false; }
             break;
         case M_USB: wantUsb = true; menu = false; break;
@@ -364,8 +364,8 @@ void Ui::encoder (int which, int d) {
         switch (which) {
             case 0: eng.bpm = clampf (eng.bpm + d, 40, 240); std::snprintf (t, sizeof t, "TEMPO %d", (int) eng.bpm); break;
             case 1: eng.swing = clampf (eng.swing + d * 0.02f, 0, 0.5f); std::snprintf (t, sizeof t, "SWING %d%%", (int) std::round (50 + eng.swing * 50)); break;
-            case 2: eng.compAmt = clampf (eng.compAmt + d * 0.05f, 0, 1); std::snprintf (t, sizeof t, "KOMPRESOR %d%%", (int) std::round (eng.compAmt * 100)); break;
-            default: eng.master = clampf (eng.master + d * 0.05f, 0, 1); std::snprintf (t, sizeof t, "HLASITOST %d%%", (int) std::round (eng.master * 100)); break;
+            case 2: eng.compAmt = clampf (eng.compAmt + d * 0.05f, 0, 1); std::snprintf (t, sizeof t, "COMPRESSOR %d%%", (int) std::round (eng.compAmt * 100)); break;
+            default: eng.master = clampf (eng.master + d * 0.05f, 0, 1); std::snprintf (t, sizeof t, "VOLUME %d%%", (int) std::round (eng.master * 100)); break;
         }
         say (t);
     } else if (held[K_FX]) {
@@ -373,7 +373,7 @@ void Ui::encoder (int which, int d) {
             case 0: eng.delayAmt = clampf (eng.delayAmt + d * 0.05f, 0, 1); std::snprintf (t, sizeof t, "DELAY %d%%", (int) std::round (eng.delayAmt * 100)); break;
             case 1: eng.reverbAmt = clampf (eng.reverbAmt + d * 0.05f, 0, 1); std::snprintf (t, sizeof t, "REVERB %d%%", (int) std::round (eng.reverbAmt * 100)); break;
             case 2: eng.duckAmt = clampf (eng.duckAmt + d * 0.05f, 0, 1); std::snprintf (t, sizeof t, "SIDECHAIN %d%%", (int) std::round (eng.duckAmt * 100)); break;
-            default: eng.inGain = clampf (eng.inGain * (d > 0 ? 1.12f : 0.89f), 0.1f, 8); std::snprintf (t, sizeof t, "VSTUP x%.1f", eng.inGain); break;
+            default: eng.inGain = clampf (eng.inGain * (d > 0 ? 1.12f : 0.89f), 0.1f, 8); std::snprintf (t, sizeof t, "INPUT x%.1f", eng.inGain); break;
         }
         say (t);
     } else if (held[K_PATTERN] && held[K_SHIFT]) {
@@ -381,8 +381,8 @@ void Ui::encoder (int which, int d) {
         std::snprintf (t, sizeof t, "CHAOS %d%%", (int) std::round (chaosAmt * 100)); say (t);
     } else if (held[K_LEN]) {
         Pattern& P = eng.pats[eng.pat];
-        if (which == 0) { P.len = (uint8_t) std::max (1, std::min (NSTEP, P.len + d)); std::snprintf (t, sizeof t, "PATTERN %d KROKOV", P.len); }
-        else { eng.setSlotLen (eng.pat, sel, std::max (1, std::min (NSTEP, eng.slotLen (eng.pat, sel) + d))); slotName (sel, nm); std::snprintf (t, sizeof t, "%s DLZKA %d", nm, eng.slotLen (eng.pat, sel)); }
+        if (which == 0) { P.len = (uint8_t) std::max (1, std::min (NSTEP, P.len + d)); std::snprintf (t, sizeof t, "PATTERN %d STEPS", P.len); }
+        else { eng.setSlotLen (eng.pat, sel, std::max (1, std::min (NSTEP, eng.slotLen (eng.pat, sel) + d))); slotName (sel, nm); std::snprintf (t, sizeof t, "%s LENGTH %d", nm, eng.slotLen (eng.pat, sel)); }
         say (t);
     } else if (held[K_SONG]) {
         if (eng.songLen > 0) {
@@ -399,32 +399,32 @@ void Ui::encoder (int which, int d) {
                       int i = 0; while (i < 5 && divs[i] != eng.arpDiv) ++i;
                       i = std::max (0, std::min (5, i + (d > 0 ? 1 : -1))); eng.arpDiv = divs[i];
                       std::snprintf (t, sizeof t, "ARP 1/%d", (int) (eng.arpDiv * 4)); break; }
-            case 2: eng.scale = (eng.scale + (d > 0 ? 1 : NSCALE - 1)) % NSCALE; std::snprintf (t, sizeof t, "STUPNICA %s", Engine::scaleName (eng.scale)); break;
-            default: eng.root = (eng.root + (d > 0 ? 1 : 11)) % 12; std::snprintf (t, sizeof t, "TONINA %s", NOTENAME[eng.root]); break;
+            case 2: eng.scale = (eng.scale + (d > 0 ? 1 : NSCALE - 1)) % NSCALE; std::snprintf (t, sizeof t, "SCALE %s", Engine::scaleName (eng.scale)); break;
+            default: eng.root = (eng.root + (d > 0 ? 1 : 11)) % 12; std::snprintf (t, sizeof t, "ROOT %s", NOTENAME[eng.root]); break;
         }
         say (t);
     } else if (stepMode && heldStep >= 0) {
         Trig* tr = eng.trig (eng.pat, heldStep, sel);
         if (! tr) return;
         stepTouched = true;
-        if (held[K_SHIFT] && which == 0) { int p = tr->pan == NOLOCK ? 0 : tr->pan; p = std::max (-100, std::min (100, p + d * 10)); tr->pan = (int8_t) p; std::snprintf (t, sizeof t, "KROK PAN %+d", p); }
+        if (held[K_SHIFT] && which == 0) { int p = tr->pan == NOLOCK ? 0 : tr->pan; p = std::max (-100, std::min (100, p + d * 10)); tr->pan = (int8_t) p; std::snprintf (t, sizeof t, "STEP PAN %+d", p); }
         else switch (which) {
-            case 0: { int p = tr->pitch == NOLOCK ? 0 : tr->pitch; p = std::max (-24, std::min (24, p + d)); tr->pitch = (int8_t) p; std::snprintf (t, sizeof t, "KROK PITCH %+d", p); break; }
-            case 1: { int f = tr->filter == NOLOCK ? 0 : tr->filter; f = std::max (-100, std::min (100, f + d * 5)); tr->filter = (int8_t) f; std::snprintf (t, sizeof t, "KROK FILTER %+d", f); break; }
-            case 2: tr->vel = (uint8_t) std::max (1, std::min (127, tr->vel + d * 4)); std::snprintf (t, sizeof t, "KROK SILA %d", tr->vel); break;
-            default: tr->cond = (uint8_t) (((tr->cond + d) % NCOND + NCOND) % NCOND); std::snprintf (t, sizeof t, "PODMIENKA %s", Engine::condName (tr->cond)); break;
+            case 0: { int p = tr->pitch == NOLOCK ? 0 : tr->pitch; p = std::max (-24, std::min (24, p + d)); tr->pitch = (int8_t) p; std::snprintf (t, sizeof t, "STEP PITCH %+d", p); break; }
+            case 1: { int f = tr->filter == NOLOCK ? 0 : tr->filter; f = std::max (-100, std::min (100, f + d * 5)); tr->filter = (int8_t) f; std::snprintf (t, sizeof t, "STEP FILTER %+d", f); break; }
+            case 2: tr->vel = (uint8_t) std::max (1, std::min (127, tr->vel + d * 4)); std::snprintf (t, sizeof t, "STEP VEL %d", tr->vel); break;
+            default: tr->cond = (uint8_t) (((tr->cond + d) % NCOND + NCOND) % NCOND); std::snprintf (t, sizeof t, "CONDITION %s", Engine::condName (tr->cond)); break;
         }
         say (t);
     } else if (stepMode && held[K_SHIFT]) {
         const int L = eng.slotLen (eng.pat, sel);
         if (which == 0) euclidHits = std::max (0, std::min (L, euclidHits + d));
         else if (which == 1) euclidRot = (euclidRot + d + L * 8) % L;
-        if (which <= 1) { eng.euclid (sel, euclidHits, euclidRot); std::snprintf (t, sizeof t, "EUKLID %d/%d +%d", euclidHits, L, euclidRot); }
-        else { eng.nudge (eng.pat, which == 2 ? sel : -1, d > 0 ? 1 : -1); std::snprintf (t, sizeof t, which == 2 ? "POSUN ZVUKU %s" : "POSUN VSETKEHO %s", d > 0 ? ">" : "<"); }
+        if (which <= 1) { eng.euclid (sel, euclidHits, euclidRot); std::snprintf (t, sizeof t, "EUCLID %d/%d +%d", euclidHits, L, euclidRot); }
+        else { eng.nudge (eng.pat, which == 2 ? sel : -1, d > 0 ? 1 : -1); std::snprintf (t, sizeof t, which == 2 ? "NUDGE SOUND %s" : "NUDGE ALL %s", d > 0 ? ">" : "<"); }
         say (t);
     } else if (held[K_SHIFT]) {
-        if (which == 0) { eng.master = clampf (eng.master + d * 0.05f, 0, 1); std::snprintf (t, sizeof t, "HLASITOST %d%%", (int) std::round (eng.master * 100)); }
-        else if (which == 1) { eng.inGain = clampf (eng.inGain * (d > 0 ? 1.12f : 0.89f), 0.1f, 8); std::snprintf (t, sizeof t, "VSTUP x%.1f", eng.inGain); }
+        if (which == 0) { eng.master = clampf (eng.master + d * 0.05f, 0, 1); std::snprintf (t, sizeof t, "VOLUME %d%%", (int) std::round (eng.master * 100)); }
+        else if (which == 1) { eng.inGain = clampf (eng.inGain * (d > 0 ? 1.12f : 0.89f), 0.1f, 8); std::snprintf (t, sizeof t, "INPUT x%.1f", eng.inGain); }
         else return;
         say (t);
     } else if (eng.rollSlot >= 0 && which == 1) {
@@ -484,25 +484,25 @@ void Ui::service () {
     if (wantSave) {
         wantSave = false;
         const bool ok = store::save (*disk, eng, *this, project);
-        std::snprintf (t, sizeof t, ok ? "ULOZENE: PROJEKT %d" : "PLNY DISK!", project + 1); say (t);
+        std::snprintf (t, sizeof t, ok ? "SAVED: PROJECT %d" : "DISK FULL!", project + 1); say (t);
     }
     if (wantLoad) {
         wantLoad = false;
         const int p = menuProj;
-        std::snprintf (t, sizeof t, store::load (*disk, eng, *this, p) ? "PROJEKT %d" : "CHYBA DISKU", p + 1); say (t);
+        std::snprintf (t, sizeof t, store::load (*disk, eng, *this, p) ? "PROJECT %d" : "DISK ERROR", p + 1); say (t);
     }
     if (wantKit >= 0) {
         const int k = wantKit; wantKit = -1;
         const bool ok = kitSave ? store::saveKit (*disk, eng, bank, k) : store::loadKit (*disk, eng, bank, k);
-        if (kitSave) std::snprintf (t, sizeof t, ok ? "KIT %d ULOZENY" : "PLNY DISK!", k + 1);
-        else std::snprintf (t, sizeof t, ok ? "KIT %d -> BANKA %c" : "KIT %d NIE JE", k + 1, 'A' + bank);
+        if (kitSave) std::snprintf (t, sizeof t, ok ? "KIT %d SAVED" : "DISK FULL!", k + 1);
+        else std::snprintf (t, sizeof t, ok ? "KIT %d -> BANK %c" : "NO KIT %d", k + 1, 'A' + bank);
         say (t);
     }
     if (wantExport) {
         const bool song = wantExport == 2; wantExport = 0;
         char name[13];
         const bool ok = store::exportWav (*disk, eng, song, name);
-        std::snprintf (t, sizeof t, ok ? "ULOZENE %s" : "EXPORT ZLYHAL", name); say (t, 2500);
+        std::snprintf (t, sizeof t, ok ? "SAVED %s" : "EXPORT FAILED", name); say (t, 2500);
     }
     if (wantBrowse) {
         wantBrowse = false;
@@ -515,13 +515,13 @@ void Ui::service () {
             std::memcpy (files[nFiles], names[i], 13); std::memcpy (fileLong[nFiles], longs[i], 24); ++nFiles;
         }
         browseIdx = 0;
-        if (nFiles == 0) say ("ZIADNE WAV");
+        if (nFiles == 0) say ("NO WAVS");
     }
     if (browseLoad >= 0) {
         const int slot = browseLoad; browseLoad = -1;
         char nm[4]; slotName (slot, nm);
         if (browseIdx < nFiles && store::loadWavInto (*disk, files[browseIdx], eng, slot)) { std::snprintf (t, sizeof t, "-> %s", nm); say (t); eng.noteOn (slot, slot); }
-        else say ("NEDA SA NACITAT");
+        else say ("CAN'T LOAD");
     }
 }
 
@@ -567,28 +567,28 @@ struct Fb {
 
 static void valueText (const Engine& e, const Slot& s, int page, int i, char* v, int n) {
     static const char* MODE[4] = {"NORM", "REV", "LOOP", "R+L"};
-    static const char* TARGET[4] = {"PITCH", "FILTR", "HLAS", "PAN"};
-    static const char* VINT[4] = {"VYP", "SP12", "S950", "8BIT"};
+    static const char* TARGET[4] = {"PITCH", "FILTR", "VOL", "PAN"};
+    static const char* VINT[4] = {"OFF", "SP12", "S950", "8BIT"};
     switch (page * 4 + i) {
         case 0: std::snprintf (v, n, "%+d", (int) s.pitch); break;
-        case 1: std::snprintf (v, n, "%s%d", s.filter < 0 ? "L" : s.filter > 0 ? "H" : "", (int) std::round (std::fabs (s.filter) * 100)); break;
+        case 1: std::snprintf (v, n, "%s%d", s.filter < 0 ? "L" : s.filter > 0 ? "B" : "", (int) std::round (std::fabs (s.filter) * 100)); break;
         case 2: std::snprintf (v, n, "%d", (int) std::round (s.volume * 100)); break;
-        case 3: if (s.pan == 0) std::snprintf (v, n, "STRED"); else std::snprintf (v, n, "%c%d", s.pan < 0 ? 'L' : 'P', (int) std::round (std::fabs (s.pan) * 100)); break;
+        case 3: if (s.pan == 0) std::snprintf (v, n, "C"); else std::snprintf (v, n, "%c%d", s.pan < 0 ? 'L' : 'R', (int) std::round (std::fabs (s.pan) * 100)); break;
         case 4: std::snprintf (v, n, "%d%%", (int) std::round (s.trimA * 100)); break;
         case 5: std::snprintf (v, n, "%d%%", (int) std::round (s.trimB * 100)); break;
         case 6: std::snprintf (v, n, "%s", MODE[(s.reverse ? 1 : 0) + (s.loopHold ? 2 : 0)]); break;
-        case 7: if (s.freeze) std::snprintf (v, n, "FRZ"); else if (! s.stretch) std::snprintf (v, n, "VYP"); else if (s.beats == 0) std::snprintf (v, n, "AUTO"); else std::snprintf (v, n, "%dB", s.beats); break;
+        case 7: if (s.freeze) std::snprintf (v, n, "FRZ"); else if (! s.stretch) std::snprintf (v, n, "OFF"); else if (s.beats == 0) std::snprintf (v, n, "AUTO"); else std::snprintf (v, n, "%dB", s.beats); break;
         case 8: std::snprintf (v, n, "%dMS", (int) std::round (s.attack * 1000)); break;
-        case 9: if (s.decay == 0) std::snprintf (v, n, "VYP"); else std::snprintf (v, n, "%.2f", s.decay); break;
+        case 9: if (s.decay == 0) std::snprintf (v, n, "OFF"); else std::snprintf (v, n, "%.2f", s.decay); break;
         case 10: std::snprintf (v, n, "%d", (int) std::round (s.drive * 100)); break;
-        case 11: if (s.choke == 0) std::snprintf (v, n, "VYP"); else std::snprintf (v, n, "SK %d", s.choke); break;
-        case 12: std::snprintf (v, n, s.lfoRate < 10 ? "%.1fHZ" : "%.0fHZ", s.lfoRate); break;
+        case 11: if (s.choke == 0) std::snprintf (v, n, "OFF"); else std::snprintf (v, n, "SK %d", s.choke); break;
+        case 12: std::snprintf (v, n, s.lfoRate < 10 ? "%.1f" : "%.0f", s.lfoRate); break;
         case 13: std::snprintf (v, n, "%d", (int) std::round (s.lfoDepth * 100)); break;
         case 14: std::snprintf (v, n, "%s", TARGET[s.lfoTarget % 4]); break;
         case 15: std::snprintf (v, n, "%s", VINT[s.vintage % 4]); break;
         case 16: std::snprintf (v, n, "%d", (int) std::round (s.delay * 100)); break;
         case 17: std::snprintf (v, n, "%d", (int) std::round (s.reverb * 100)); break;
-        case 18: std::snprintf (v, n, "%s", s.duckSource ? "ZDROJ" : "-"); break;
+        case 18: std::snprintf (v, n, "%s", s.duckSource ? "SRC" : "-"); break;
         default: std::snprintf (v, n, "%d", (int) std::round (e.duckAmt * 100)); break;
     }
 }
@@ -599,9 +599,9 @@ void Ui::render (uint8_t* buf) const {
     char t[40], nm[4];
     if (usbDisk) {
         f.text (40, 6, "USB DISK");
-        f.text (4, 24, sdCard ? "SD KARTA" : "VNUTORNA PAMAT");
-        f.text (4, 36, "KOPIRUJ WAV Z PC");
-        f.text (4, 48, "VYSUN / PLAY = SPAT");
+        f.text (4, 24, sdCard ? "SD CARD" : "INTERNAL MEMORY");
+        f.text (4, 36, "COPY WAVS FROM PC");
+        f.text (4, 48, "EJECT / PLAY = BACK");
         return;
     }
     if (helpKey >= 0) {
@@ -609,10 +609,10 @@ void Ui::render (uint8_t* buf) const {
         return;
     }
     if (menu && browsing) {
-        f.text (0, 0, "PREHLIADAC");
+        f.text (0, 0, "BROWSER");
         slotName (sel, nm); std::snprintf (t, sizeof t, "-> %s", nm); f.text (128 - 6 * (int) std::strlen (t), 0, t);
         f.hline (0, 127, 9);
-        if (nFiles == 0) f.text (4, 24, "ZIADNE WAV SUBORY");
+        if (nFiles == 0) f.text (4, 24, "NO WAV FILES");
         const int top = std::max (0, std::min (browseIdx - 2, nFiles - 5));
         for (int i = 0; i < 5 && top + i < nFiles; ++i) {
             const int y = 12 + i * 10;
@@ -633,10 +633,10 @@ void Ui::render (uint8_t* buf) const {
             char v[16] = "";
             switch (it) {
                 case M_PROJ: std::snprintf (v, sizeof v, "%d", menuProj + 1); break;
-                case M_TRIM: std::snprintf (v, sizeof v, "%s", eng.autoTrim ? "ZAP" : "VYP"); break;
-                case M_THRESH: std::snprintf (v, sizeof v, "%s", eng.threshold ? "ZAP" : "VYP"); break;
-                case M_MONITOR: std::snprintf (v, sizeof v, "%s", eng.monitor ? "ZAP" : "VYP"); break;
-                case M_METRO: std::snprintf (v, sizeof v, "%s", eng.metronome ? "ZAP" : "VYP"); break;
+                case M_TRIM: std::snprintf (v, sizeof v, "%s", eng.autoTrim ? "ON" : "OFF"); break;
+                case M_THRESH: std::snprintf (v, sizeof v, "%s", eng.threshold ? "ON" : "OFF"); break;
+                case M_MONITOR: std::snprintf (v, sizeof v, "%s", eng.monitor ? "ON" : "OFF"); break;
+                case M_METRO: std::snprintf (v, sizeof v, "%s", eng.metronome ? "ON" : "OFF"); break;
                 case M_SCALE: std::snprintf (v, sizeof v, "%s", Engine::scaleName (eng.scale)); break;
                 case M_ROOT: std::snprintf (v, sizeof v, "%s", NOTENAME[eng.root % 12]); break;
                 case M_ARP: std::snprintf (v, sizeof v, "%s", ARPNAME[eng.arpMode % 6]); break;
@@ -655,7 +655,7 @@ void Ui::render (uint8_t* buf) const {
     // top line: slot, mode, pattern, tempo
     slotName (sel, nm);
     f.text (0, 0, nm);
-    const char* mode = keysMode ? (stepMode ? "K+KR" : (eng.arpMode ? "ARP" : "KLAV")) : (stepMode ? "KROK" : "");
+    const char* mode = keysMode ? (stepMode ? "K+ST" : (eng.arpMode ? "ARP" : "KEYS")) : (stepMode ? "STEP" : "");
     f.text (22, 0, mode);
     std::snprintf (t, sizeof t, "P%d", eng.pat + 1); f.text (50, 0, t);
     if (eng.songMode) f.text (68, 0, "S");
@@ -668,9 +668,9 @@ void Ui::render (uint8_t* buf) const {
     // middle: recording / steps / waveform
     const Slot& s = eng.slots[sel];
     if (eng.recording ()) {
-        std::snprintf (t, sizeof t, eng.recWaiting () ? "REC: CAKAM..." : "REC %.1fS", eng.recSeconds ()); f.text (28, 16, t);
+        std::snprintf (t, sizeof t, eng.recWaiting () ? "REC: WAITING..." : "REC %.1fS", eng.recSeconds ()); f.text (28, 16, t);
         const int w = (int) std::min (120.0f, eng.level * 240); f.rect (4, 27, 120, 7, false); f.rect (4, 27, w, 7, true);
-        std::snprintf (t, sizeof t, "%s  VOLNE %dS", lineIn ? "LINE" : "MIC", (int) eng.memoryFree ()); f.text (16, 37, t);
+        std::snprintf (t, sizeof t, "%s  FREE %dS", lineIn ? "LINE" : "MIC", (int) eng.memoryFree ()); f.text (16, 37, t);
     } else if (stepMode) {
         const int L = eng.slotLen (eng.pat, sel);
         for (int i = 0; i < 16; ++i) {
@@ -699,8 +699,8 @@ void Ui::render (uint8_t* buf) const {
         std::snprintf (t, sizeof t, "%.1fS", s.len / float (s.rate)); f.text (128 - 6 * (int) std::strlen (t), y0 + h - 7, t);
         if (s.mute) f.text (0, y0 + h - 7, "MUTE");
     } else {
-        f.text (16, 18, "PRAZDNY ZVUK");
-        f.text (10, 30, "REC + PAD = NAHRAJ");
+        f.text (16, 18, "EMPTY SOUND");
+        f.text (10, 30, "REC + PAD = RECORD");
     }
     // bottom: the encoder page or what the held key does
     f.hline (0, 127, 45);
@@ -712,27 +712,27 @@ void Ui::render (uint8_t* buf) const {
     if (held[K_BPM]) {
         std::snprintf (a, sizeof a, "%d", (int) eng.bpm); std::snprintf (b, sizeof b, "%d%%", (int) std::round (50 + eng.swing * 50));
         std::snprintf (c, sizeof c, "%d", (int) std::round (eng.compAmt * 100)); std::snprintf (d, sizeof d, "%d", (int) std::round (eng.master * 100));
-        four ("TEMP", "SWNG", "KOMP", "HLAS", a, b, c, d);
+        four ("TEMP", "SWNG", "COMP", "VOL", a, b, c, d);
         if (battery >= 0) { std::snprintf (t, sizeof t, "BAT %d%%  %dS", battery, (int) eng.memoryFree ()); f.text (0, 36, t); }
     } else if (held[K_FX]) {
         std::snprintf (a, sizeof a, "%d", (int) std::round (eng.delayAmt * 100)); std::snprintf (b, sizeof b, "%d", (int) std::round (eng.reverbAmt * 100));
         std::snprintf (c, sizeof c, "%d", (int) std::round (eng.duckAmt * 100)); std::snprintf (d, sizeof d, "X%.1f", eng.inGain);
-        four ("DLY", "REV", "SIDE", "VST", a, b, c, d);
+        four ("DLY", "REV", "SIDE", "IN", a, b, c, d);
     } else if (held[K_SOUND]) {
         std::snprintf (a, sizeof a, "%.5s", ARPNAME[eng.arpMode % 6]); std::snprintf (b, sizeof b, "1/%d", (int) (eng.arpDiv * 4));
         std::snprintf (c, sizeof c, "%.5s", Engine::scaleName (eng.scale)); std::snprintf (d, sizeof d, "%s", NOTENAME[eng.root % 12]);
-        four ("ARP", "RYCH", "STUP", "TON", a, b, c, d);
+        four ("ARP", "RATE", "SCAL", "ROOT", a, b, c, d);
     } else if (held[K_LEN]) {
         std::snprintf (a, sizeof a, "%d", eng.pats[eng.pat].len); std::snprintf (b, sizeof b, "%d", eng.slotLen (eng.pat, sel));
-        four ("PATT", "ZVUK", "", "", a, b, "", "");
+        four ("PATT", "SOUND", "", "", a, b, "", "");
     } else if (held[K_SONG]) {
-        std::snprintf (t, sizeof t, "SONG %d RIADKOV %s", eng.songLen, eng.songMode ? "ZAP" : "VYP"); f.text (0, 47, t);
+        std::snprintf (t, sizeof t, "SONG %d ROWS %s", eng.songLen, eng.songMode ? "ON" : "OFF"); f.text (0, 47, t);
         int x = 0; for (int i = std::max (0, eng.songLen - 5); i < eng.songLen; ++i) { std::snprintf (t, sizeof t, "%dX%d", eng.song[i].pat + 1, eng.song[i].repeats); x = f.text (x, 56, t) + 4; }
     } else if (stepMode && heldStep >= 0 && const_cast<Engine&> (eng).trig (eng.pat, heldStep, sel)) {
         const Trig* tr = const_cast<Engine&> (eng).trig (eng.pat, heldStep, sel);
         std::snprintf (a, sizeof a, "%+d", tr->pitch == NOLOCK ? 0 : tr->pitch); std::snprintf (b, sizeof b, tr->filter == NOLOCK ? "-" : "%+d", tr->filter);
         std::snprintf (c, sizeof c, "%d", tr->vel); std::snprintf (d, sizeof d, "%.5s", Engine::condName (tr->cond));
-        four ("LAD", "FILT", "SILA", "PODM", a, b, c, d);
+        four ("TUNE", "FILT", "VEL", "COND", a, b, c, d);
     } else {
         for (int i = 0; i < 4; ++i) { char v[12]; valueText (eng, s, page, i, v, sizeof v); f.text (i * 32, 47, PAGE[page][i]); f.text (i * 32, 56, v); }
         (void) PAGENAME;

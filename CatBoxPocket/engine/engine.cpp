@@ -28,7 +28,7 @@ void Engine::init (int16_t* pool, uint32_t count, uint32_t s) {
 
 // ------------------------------------------------------------------ names
 const char* Engine::condName (int c) {
-    static const char* N[NCOND] = {"VZDY", "1:2", "2:2", "1:3", "2:3", "3:3", "1:4", "2:4", "3:4", "4:4", "FILL", "!FILL", "PRVY", "!PRVY", "25%", "50%", "75%"};
+    static const char* N[NCOND] = {"ALWAYS", "1:2", "2:2", "1:3", "2:3", "3:3", "1:4", "2:4", "3:4", "4:4", "FILL", "!FILL", "1ST", "!1ST", "25%", "50%", "75%"};
     return c >= 0 && c < NCOND ? N[c] : "?";
 }
 static const int8_t SCALES[11][12] = {
@@ -37,7 +37,7 @@ static const int8_t SCALES[11][12] = {
     {0, 3, 5, 6, 7, 10}, {0, 2, 3, 5, 7, 8, 11}};
 static const int SCALELEN[11] = {12, 7, 7, 7, 7, 7, 7, 5, 5, 6, 7};
 const char* Engine::scaleName (int s) {
-    static const char* N[11] = {"CHROMA", "DUR", "MOL", "DOR", "FRYG", "LYD", "MIXO", "PENTA DUR", "PENTA MOL", "BLUES", "HARM MOL"};
+    static const char* N[11] = {"CHROMA", "MAJOR", "MINOR", "DOR", "PHRYG", "LYD", "MIXO", "PENTA MAJ", "PENTA MIN", "BLUES", "HARM MIN"};
     return s >= 0 && s < NSCALE ? N[s] : "?";
 }
 int Engine::scaleSize (int s) { return s >= 0 && s < NSCALE ? SCALELEN[s] : 12; }
