@@ -30,15 +30,14 @@ static const char* PAGENAME[5] = {"ZVUK", "VZORKA", "OBALKA", "LFO", "EFEKTY"};
 static const char* PAGE[5][4] = {{"LAD", "FILT", "HLAS", "PAN"}, {"STAR", "KONI", "MOD", "STRE"}, {"ATAK", "DEC", "DRIV", "CHOK"},
                                  {"LFO", "HLBK", "CIEL", "VINT"}, {"DLY", "REV", "DUCK", "SIDE"}};
 static const char* ARPNAME[6] = {"VYP", "HORE", "DOLE", "HORE-DOLE", "NAHODNE", "AKO HRAS"};
-static const char* SYNCNAME[3] = {"INTERNY", "MIDI CLOCK", "SYNC JACK"};
 static const char* NOTENAME[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "H"};
 
-enum MenuItem { M_PROJ, M_LOAD, M_SAVE, M_BROWSE, M_EXPPAT, M_EXPSONG, M_MIDI, M_SYNC, M_TRIM, M_THRESH, M_MONITOR, M_METRO,
+enum MenuItem { M_PROJ, M_LOAD, M_SAVE, M_BROWSE, M_EXPPAT, M_EXPSONG, M_TRIM, M_THRESH, M_MONITOR, M_METRO,
                 M_SCALE, M_ROOT, M_ARP, M_DISK, M_USB, NMENU };
 
 const char* Ui::menuName (int i) {
     static const char* N[NMENU] = {"PROJEKT", "NACITAJ PROJEKT", "ULOZ PROJEKT", "PREHLIADAC WAV", "EXPORT PATTERN", "EXPORT SONG",
-                                   "MIDI KANAL", "SYNC", "AUTO TRIM", "PRAH NAHRAVANIA", "MONITOR VSTUPU", "METRONOM",
+                                   "AUTO TRIM", "PRAH NAHRAVANIA", "MONITOR VSTUPU", "METRONOM",
                                    "STUPNICA", "TONINA", "ARPEGGIO", "DISK", "USB DISK"};
     return i >= 0 && i < NMENU ? N[i] : "";
 }
@@ -63,7 +62,7 @@ const char* Ui::help (int k) {
         case K_FILL: return "FILL KYM DRZIS (KROKY S PODMIENKOU FILL). SHIFT+FILL: ZAMKNI.";
         case K_ACCENT: return "DRZ PRI HRANI: PLNA SILA. DRZ KROK + ACCENT: PRIZVUK NA KROKU.";
         case K_KIT: return "KIT+PAD: NACITAJ KIT DO BANKY. SHIFT+KIT+PAD: ULOZ BANKU AKO KIT.";
-        case K_MENU: return "MENU: PROJEKTY, PREHLIADAC, EXPORT, MIDI, SYNC... MENU + KLAVES: NAPOVEDA.";
+        case K_MENU: return "MENU: PROJEKTY, PREHLIADAC, EXPORT, DISK, NASTAVENIA. MENU + KLAVES: NAPOVEDA.";
         case K_SCENE: return "SCENE+PAD 1/2: ULOZ SCENU A/B. PAD 3: ZRUS. CROSSFADER (ALEBO SCENE+A) PRELIEVA.";
         case K_LEN: return "LEN+PAD: DLZKA PATTERNU (4-64). LEN+A: PRESNE. LEN+B: VLASTNA DLZKA ZVUKU (POLYMETER).";
         case K_ENCA: return "A: PARAMETER. STLAC: DALSIA STRANKA. V MENU: POTVRD.";
@@ -315,8 +314,6 @@ void Ui::menuChange (int d) {
     char t[32];
     switch (menuItem) {
         case M_PROJ: menuProj = (menuProj + d + NPROJ * 4) % NPROJ; break;
-        case M_MIDI: eng.midiChannel = (eng.midiChannel + d + 64) % 16; break;
-        case M_SYNC: eng.syncMode = (eng.syncMode + d + 30) % 3; break;
         case M_TRIM: eng.autoTrim = ! eng.autoTrim; break;
         case M_THRESH: eng.threshold = ! eng.threshold; break;
         case M_MONITOR: eng.monitor = ! eng.monitor; break;
@@ -636,8 +633,6 @@ void Ui::render (uint8_t* buf) const {
             char v[16] = "";
             switch (it) {
                 case M_PROJ: std::snprintf (v, sizeof v, "%d", menuProj + 1); break;
-                case M_MIDI: std::snprintf (v, sizeof v, "%d", eng.midiChannel + 1); break;
-                case M_SYNC: std::snprintf (v, sizeof v, "%s", SYNCNAME[eng.syncMode % 3]); break;
                 case M_TRIM: std::snprintf (v, sizeof v, "%s", eng.autoTrim ? "ZAP" : "VYP"); break;
                 case M_THRESH: std::snprintf (v, sizeof v, "%s", eng.threshold ? "ZAP" : "VYP"); break;
                 case M_MONITOR: std::snprintf (v, sizeof v, "%s", eng.monitor ? "ZAP" : "VYP"); break;
@@ -668,7 +663,6 @@ void Ui::render (uint8_t* buf) const {
     std::snprintf (t, sizeof t, "%d", (int) eng.bpm); f.text (128 - 6 * (int) std::strlen (t), 0, t);
     if (eng.playing ()) { for (int i = 0; i < 4; ++i) f.vline (82 + i, 1 + i, 7 - i); }   // a play triangle
     if (eng.lofi) f.text (90, 0, "LF");
-    if (eng.syncMode) f.text (90, 0, eng.syncMode == 1 ? "MI" : "SY");
     if (eng.scenes[0].set || eng.scenes[1].set) { f.rect (0, 10, 128, 2, false); f.hline (0, (int) std::round (eng.xfade * 127), 11); }
     f.hline (0, 127, 9);
     // middle: recording / steps / waveform

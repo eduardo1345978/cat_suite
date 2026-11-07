@@ -17,7 +17,7 @@ pico_generate_pio_header (cat_box_pocket ${CMAKE_CURRENT_LIST_DIR}/ws2812.pio)
 target_include_directories (cat_box_pocket PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 target_compile_options (cat_box_pocket PRIVATE -O2 -Wall -Wno-misleading-indentation)
 target_link_libraries (cat_box_pocket PRIVATE
-    pico_stdlib pico_multicore pico_flash hardware_pio hardware_dma hardware_i2c hardware_spi hardware_uart hardware_adc hardware_flash
+    pico_stdlib pico_multicore pico_flash hardware_pio hardware_dma hardware_i2c hardware_spi hardware_adc hardware_flash
     tinyusb_device tinyusb_board)
 pico_set_program_name (cat_box_pocket "Cat Box Pocket")
 pico_enable_stdio_usb (cat_box_pocket 0)

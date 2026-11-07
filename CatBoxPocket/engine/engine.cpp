@@ -1,4 +1,4 @@
-// Cat Box Pocket: the sound engine (voices, sequencer, recording, effects, MIDI and sync).
+// Cat Box Pocket: the sound engine (voices, sequencer, recording, effects).
 #include "pocket.h"
 #include <cmath>
 #include <cstring>
@@ -23,7 +23,7 @@ void Engine::init (int16_t* pool, uint32_t count, uint32_t s) {
     chain[0] = 0; chainLen = 1; chainPos = 0; pat = 0; step = -1; loops = 0;
     songLen = 0; songMode = false; songRow = songRep = 0;
     undoValid = false; arpN = 0; loopState = LOOP_OFF; loopSlot = -1; recSlot = -1;
-    running = false; mHead = mTail = 0; mStatus = 0; mCount = 0;
+    running = false;
 }
 
 // ------------------------------------------------------------------ names
@@ -325,13 +325,8 @@ void Engine::play (bool on) {
         step = -1; nextStep = 0; stepClock = 1; chainPos = 0; loopPos = 0; loops = 0; songRow = 0; songRep = 0;
         pat = songMode && songLen > 0 ? song[0].pat : chain[0];
         for (auto& p : polyPos) p = 0;
-        midiClock = 1; extHalf = 0;
-        if (syncMode == 0) midiOut (0xFA, 0, 0, 1);
     } else {
         step = -1; seqFx = 0;
-        for (int i = 0; i < nMidiOn; ++i) midiOut ((uint8_t) (0x80 | midiChannel), midiOnNote[i], 0);
-        nMidiOn = 0;
-        if (syncMode == 0) midiOut (0xFC, 0, 0, 1);
     }
     running = on;
 }
@@ -511,9 +506,6 @@ void Engine::playStep (int st, int only) {
         if (only >= 0 ? t.slot != only : polyIndex (pat, t.slot) >= 0) continue;
         if (slots[t.slot].mute || ! condOk (t)) continue;
         noteOn (t.slot, t.slot, t.pitch == NOLOCK ? 0 : t.pitch, t.vel / 100.0f, t.filter, t.pan);
-        const uint8_t note = (uint8_t) (36 + t.slot);
-        midiOut ((uint8_t) (0x90 | midiChannel), note, (uint8_t) std::min<int> (127, std::max<int> (1, t.vel)));
-        if (nMidiOn < 16) midiOnNote[nMidiOn++] = note;
     }
 }
 
@@ -532,8 +524,6 @@ void Engine::advancePattern () {
 
 void Engine::seqTick () {
     const int fxNow = fx ? fx : seqFx;
-    for (int i = 0; i < nMidiOn; ++i) midiOut ((uint8_t) (0x80 | midiChannel), midiOnNote[i], 0);
-    nMidiOn = 0;
     const Pattern& P = pats[pat];
     const int len = std::max (1, std::min (NSTEP, (int) P.len));
     // effect 14 (restart) loops the playing beat, 16 = half tempo
@@ -550,11 +540,9 @@ void Engine::seqTick () {
     }
     seqFx = P.s[step].fx;
     if (step % 4 == 0 && metronome) { clickEnv = 1; clickHz = step == 0 ? 1600.0f : 1000.0f; clickPh = 0; }
-    if (step % 2 == 0) syncPulseOut = true;
     nextStep = step + 1;
     if (nextStep >= len) { nextStep = 0; if (fxNow != 14) advancePattern (); }
     double l = stepSamples ();
-    if (syncMode != 0 && extStepLen > 0) l = extStepLen;
     l *= (step % 2 == 0) ? (1.0 + swing) : (1.0 - swing);
     if (fxNow == 16) l *= 2;
     stepLenNow = l;
@@ -641,65 +629,6 @@ void Engine::arpStep () {
     lastArpPad = order[arpIdx];
 }
 
-// ------------------------------------------------------------------ MIDI and sync
-void Engine::midiOut (uint8_t a, uint8_t b, uint8_t c, int n) {
-    const uint8_t m[3] = {a, b, c};
-    for (int i = 0; i < n; ++i) {
-        const int nx = (mHead + 1) & 255;
-        if (nx == mTail) return;                  // full: drop
-        mOut[mHead] = m[i]; mHead = nx;
-    }
-}
-int Engine::midiOutPop () {
-    if (mTail == mHead) return -1;
-    const int b = mOut[mTail]; mTail = (mTail + 1) & 255;
-    return b;
-}
-void Engine::midiIn (uint8_t b) {
-    if (b >= 0xF8) {                              // real time
-        if (syncMode != 1) return;
-        if (b == 0xF8) {
-            const uint32_t now = frames;
-            if (clockCount % 6 == 0) {
-                if (lastClockFrame && now > lastClockFrame) extStepLen = (float) (now - lastClockFrame);
-                if (extStepLen > 0) bpm = clampf (std::round (SR * 60.0f / (extStepLen * 4) * 10) / 10, 30, 300);
-                lastClockFrame = now;
-                extPending = extPending + 1;
-            }
-            ++clockCount;
-        } else if (b == 0xFA || b == 0xFB) { clockCount = 0; lastClockFrame = 0; extStart = true; }
-        else if (b == 0xFC) extStop = true;
-        return;
-    }
-    if (b >= 0xF0) { mStatus = 0; return; }
-    if (b & 0x80) { mStatus = b; mCount = 0; return; }
-    if (! mStatus) return;
-    mData[mCount++] = b;
-    const int type = mStatus & 0xF0, ch = mStatus & 15;
-    const int need = (type == 0xC0 || type == 0xD0) ? 1 : 2;
-    if (mCount < need) return;
-    mCount = 0;
-    if (ch != midiChannel) return;
-    const int note = mData[0], vel = mData[1];
-    if (type == 0x90 && vel > 0) { if (note >= 36 && note < 36 + NSLOT) noteOn (note - 36, note - 36, 0, vel / 100.0f); }
-    else if (type == 0x80 || type == 0x90) { if (note >= 36 && note < 36 + NSLOT) noteOff (note - 36); }
-    else if (type == 0xB0) {
-        if (note == 1) xfade = vel / 127.0f;
-        else if (note == 7) master = vel / 127.0f;
-    }
-}
-void Engine::syncPulseIn () {
-    if (syncMode != 2) return;
-    const uint32_t now = frames;
-    if (lastPulseFrame && now > lastPulseFrame && now - lastPulseFrame < (uint32_t) SR * 2) {
-        extStepLen = (now - lastPulseFrame) * 0.5f;          // two steps per pulse
-        bpm = clampf (std::round (SR * 60.0f / (extStepLen * 4) * 10) / 10, 30, 300);
-    }
-    lastPulseFrame = now;
-    if (! running) extStart = true;
-    extPulses = extPulses + 1;
-}
-
 // ------------------------------------------------------------------ export
 uint32_t Engine::renderStart (bool wholeSong) {
     play (false); allOff (); fx = 0; seqFx = 0; fxActive = 0; fxEnv = 0;
@@ -716,13 +645,10 @@ uint32_t Engine::renderStart (bool wholeSong) {
     }
     renderMusic = (uint32_t) (steps * stepSamples ());
     renderFrames = renderMusic + SR;              // one second of tail (delay, reverb)
-    const int keepSync = syncMode; syncMode = 0;
     play (true);
-    syncMode = keepSync;
-    mHead = mTail = 0;                            // no MIDI out while rendering
     return renderFrames;
 }
-void Engine::renderEnd () { play (false); allOff (); songMode = renderSongWas; mHead = mTail = 0; }
+void Engine::renderEnd () { play (false); allOff (); songMode = renderSongWas; }
 
 // ------------------------------------------------------------------ effects
 float Engine::histAt (int ch, float p) const {
@@ -815,25 +741,13 @@ void Engine::processRaw (const float* in, float* out, int n) {
     // the crossfader moves the master sends too
     const float eDelay = scenes[0].set || scenes[1].set ? (scenes[0].set ? scenes[0].delay : delayAmt) * (1 - xfade) + (scenes[1].set ? scenes[1].delay : delayAmt) * xfade : delayAmt;
     const float eReverb = scenes[0].set || scenes[1].set ? (scenes[0].set ? scenes[0].reverb : reverbAmt) * (1 - xfade) + (scenes[1].set ? scenes[1].reverb : reverbAmt) * xfade : reverbAmt;
-    // external sync starts and stops between blocks
-    if (extStart) { extStart = false; if (! running) { const int k = syncMode; syncMode = 0; play (true); syncMode = k; stepClock = 1e18; } }
-    if (extStop) { extStop = false; play (false); }
     const float compTh = std::pow (10.0f, (-4.0f - 22.0f * compAmt) / 20.0f), makeup = 1 + compAmt * 0.9f;
     for (int i = 0; i < n; ++i) {
         const float input = (in ? in[i] : 0) * inGain;
-        // sequencer: the internal clock, MIDI clock steps or sync pulses (2 steps each)
+        // sequencer
         if (running) {
             stepClock -= 1;
-            if (syncMode == 0) { while (stepClock <= 0) seqTick (); }
-            else {
-                while (extPending > 0) { extPending = extPending - 1; seqTick (); }
-                while (extPulses > 0) { extPulses = extPulses - 1; seqTick (); extHalf = std::max (1.0f, extStepLen); }
-                if (extHalf > 0 && (extHalf -= 1) <= 0) { extHalf = 0; seqTick (); }
-            }
-            if (syncMode == 0) {             // MIDI clock out: 24 per beat
-                midiClock -= 1;
-                if (midiClock <= 0) { midiOut (0xF8, 0, 0, 1); midiClock += stepSamples () / 6; }
-            }
+            while (stepClock <= 0) seqTick ();
         }
         if (rollSlot >= 0) {
             rollClock -= 1;

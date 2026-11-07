@@ -1,6 +1,6 @@
 // Cat Box Pocket on the Pimoroni Pico Plus 2 (RP2350B, 8 MB PSRAM) with a Waveshare WM8960 module.
 // Core 1 makes the sound (I2S over PIO + DMA). Core 0 reads the 36 keys and 4 encoders (two MCP23017),
-// the crossfader, MIDI (DIN and USB) and sync, draws the OLED, drives the LEDs, and works the disks:
+// and the crossfader, draws the OLED, drives the LEDs, and works the disks:
 // the flash and a microSD card, both shown to a computer over USB. All the music is in ../engine.
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
@@ -9,7 +9,6 @@
 #include "hardware/dma.h"
 #include "hardware/i2c.h"
 #include "hardware/spi.h"
-#include "hardware/uart.h"
 #include "hardware/clocks.h"
 #include "hardware/adc.h"
 #include "hardware/flash.h"
@@ -29,9 +28,8 @@ using namespace pocket;
 
 // ------------------------------------------------------------------ pins (see the wiring table in the design doc)
 namespace pin {
-constexpr uint MIDI_TX = 0, MIDI_RX = 1;            // UART0, 31250 baud (TRS type A jacks)
 constexpr uint SDA = 4, SCL = 5;                    // I2C0: WM8960 0x1A, OLED 0x3C, MCP23017 0x20 (keys) and 0x21 (encoders)
-constexpr uint LINE_DETECT = 6, SYNC_OUT = 7, SYNC_IN = 8;
+constexpr uint LINE_DETECT = 6;
 constexpr uint SD_SCK = 10, SD_MOSI = 11, SD_MISO = 12, SD_CS = 13, SD_DETECT = 14;   // SPI1
 constexpr uint BCLK = 16, /* LRCLK = 17 */ DOUT = 18, DIN = 19, MCLK = 21;
 constexpr uint LEDS = 22;
@@ -404,36 +402,13 @@ static int batteryPercent () {
     return p < 0 ? 0 : (p > 100 ? 100 : p);
 }
 
-// ------------------------------------------------------------------ MIDI (DIN jacks and USB) and sync
-static void midiInit () {
-    uart_init (uart0, 31250);
-    gpio_set_function (pin::MIDI_TX, GPIO_FUNC_UART); gpio_set_function (pin::MIDI_RX, GPIO_FUNC_UART);
-    uart_set_fifo_enabled (uart0, true);
-}
-static void midiService () {
-    while (uart_is_readable (uart0)) engine.midiIn ((uint8_t) uart_getc (uart0));
-    if (tud_midi_available ()) { uint8_t b[64]; const uint32_t n = tud_midi_stream_read (b, sizeof b); for (uint32_t i = 0; i < n; ++i) engine.midiIn (b[i]); }
-    uint8_t out[64]; uint32_t n = 0; int b;
-    while (n < sizeof out && (b = engine.midiOutPop ()) >= 0) out[n++] = (uint8_t) b;
-    if (n) {
-        uart_write_blocking (uart0, out, n);
-        if (tud_midi_mounted ()) tud_midi_stream_write (0, out, n);
-    }
-}
-static void syncIrq (uint gpio, uint32_t events) { if (gpio == pin::SYNC_IN && (events & GPIO_IRQ_EDGE_RISE)) engine.syncPulseIn (); }
-static void syncInit () {
-    gpio_init (pin::SYNC_OUT); gpio_set_dir (pin::SYNC_OUT, GPIO_OUT); gpio_put (pin::SYNC_OUT, 0);
-    gpio_init (pin::SYNC_IN); gpio_set_dir (pin::SYNC_IN, GPIO_IN); gpio_disable_pulls (pin::SYNC_IN);   // 100k to GND outside (RP2350 E9)
-    gpio_set_irq_enabled_with_callback (pin::SYNC_IN, GPIO_IRQ_EDGE_RISE, true, syncIrq);
-}
-
 // ------------------------------------------------------------------ USB disk (mass storage): the disk Ui uses (flash or card)
 static FlashDisk flashDisk;
 static bool usbReload = false;
 static BlockDev& activeDisk () { return ui.disk ? *ui.disk : (BlockDev&) flashDisk; }
 extern "C" {
 void tud_msc_inquiry_cb (uint8_t, uint8_t vendor[8], uint8_t product[16], uint8_t rev[4]) {
-    std::memcpy (vendor, "CatBox  ", 8); std::memcpy (product, "Pocket Disk     ", 16); std::memcpy (rev, "2.0 ", 4);
+    std::memcpy (vendor, "CatBox  ", 8); std::memcpy (product, "Pocket Disk     ", 16); std::memcpy (rev, "2.1 ", 4);
 }
 bool tud_msc_test_unit_ready_cb (uint8_t) {
     if (! ui.usbDisk) { tud_msc_set_sense (0, SCSI_SENSE_NOT_READY, 0x3A, 0x00); return false; }
@@ -502,8 +477,6 @@ int main () {
     codecInit ();
     oledInit ();
     keysInit ();
-    midiInit ();
-    syncInit ();
     adc_init (); adc_gpio_init (pin::BATTERY); adc_gpio_init (pin::FADER);
     ws2812_init (ledPio, ledSm, pio_add_program (ledPio, &ws2812_program), pin::LEDS, (float) clock_get_hz (clk_sys));
 
@@ -522,15 +495,11 @@ int main () {
     tusb_init ();
     multicore_launch_core1 (core1Main);
 
-    uint32_t lastScreen = 0, lastLeds = 0, lastBat = 0, lastScan = 0, lastFader = 0, syncOffAt = 0;
+    uint32_t lastScreen = 0, lastLeds = 0, lastBat = 0, lastScan = 0, lastFader = 0;
     bool cardWas = sdPresent ();
     for (;;) {
         tud_task ();
-        midiService ();
         const uint32_t ms = to_ms_since_boot (get_absolute_time ());
-        // sync out: a 5 ms pulse every 2 steps
-        if (engine.syncPulseOut) { engine.syncPulseOut = false; gpio_put (pin::SYNC_OUT, 1); syncOffAt = ms + 5; }
-        if (syncOffAt && ms >= syncOffAt) { gpio_put (pin::SYNC_OUT, 0); syncOffAt = 0; }
         if (ms != lastScan) {
             encodersPoll ();
             if (ms - lastScan >= 2) { keysScan (); ui.lineIn = ! gpio_get (pin::LINE_DETECT); }

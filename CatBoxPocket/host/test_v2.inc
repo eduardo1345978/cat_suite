@@ -1,11 +1,10 @@
-// Cat Box Pocket v2 tests: the sequencer, sound, mix, MIDI / sync, disks and the bigger UI.
+// Cat Box Pocket v2 tests: the sequencer, sound, mix, disks and the bigger UI.
 // (included by test.cpp: uses its helpers)
 
 static void reset2 () {
     reset ();
-    E->compAmt = 0; E->duckAmt = 0; E->metronome = false; E->syncMode = 0; E->scale = 0; E->root = 0; E->arpMode = 0; E->arpDiv = 4;
-    E->threshold = false; E->autoTrim = true; E->monitor = false; E->fill = false; E->midiChannel = 0;
-    while (E->midiOutPop () >= 0) {}
+    E->compAmt = 0; E->duckAmt = 0; E->metronome = false; E->scale = 0; E->root = 0; E->arpMode = 0; E->arpDiv = 4;
+    E->threshold = false; E->autoTrim = true; E->monitor = false; E->fill = false;
 }
 static std::vector<int16_t> click (float hz = 200, int n = 2000, float amp = 0.5f) {
     std::vector<int16_t> s (n);
@@ -174,38 +173,6 @@ static void v2Tests (const std::string& dir) {
     CHECK (std::fabs (freq (o, 2000, 9000) - 622.3f) < 6, "half way: +6 semitones: %.0f", freq (o, 2000, 9000));
     E->sceneClear (); E->xfade = 0;
 
-    // ---- MIDI in and out
-    reset2 ();
-    { auto k = click (); E->assign (0, k.data (), (uint32_t) k.size (), SR); E->assign (5, k.data (), (uint32_t) k.size (), SR); }
-    E->midiIn (0x90); E->midiIn (36 + 5); E->midiIn (100);
-    { bool on = false; for (auto& v : E->voices) on |= v.on && v.slot == 5; CHECK (on, "MIDI note 41 plays pad A06"); }
-    E->midiIn (0xB0); E->midiIn (1); E->midiIn (127); CHECK (E->xfade == 1, "MIDI CC 1 = crossfader");
-    E->midiIn (0x91); E->midiIn (36); E->midiIn (100);
-    { int on = 0; for (auto& v : E->voices) on += v.on && v.slot == 0; CHECK (on == 0, "another channel is ignored"); }
-    E->xfade = 0; E->toggleStep (0, 0);
-    E->play (true); run (0.5f); E->play (false);
-    { std::vector<int> b; int x; while ((x = E->midiOutPop ()) >= 0) b.push_back (x);
-      int clocks = 0; bool note = false, start = b.size () && b[0] == 0xFA, stop = b.size () && b.back () == 0xFC;
-      for (size_t i = 0; i < b.size (); ++i) { clocks += b[i] == 0xF8; if (b[i] == 0x90 && i + 2 < b.size () && b[i + 1] == 36) note = true; }
-      CHECK (start && stop && note && clocks == 24, "MIDI out: start, 24 clocks a beat (%d in half a second), the note, stop", clocks); }
-    // follow a MIDI clock at 100 BPM: one clock every 1200 samples
-    E->syncMode = 1; E->clearPattern (0); for (int s : {0, 4, 8, 12}) E->toggleStep (s, 0);
-    E->midiIn (0xFA);
-    { std::vector<float> all; for (int c = 0; c < 96; ++c) { E->midiIn (0xF8); auto x = run (1200.0f / SR); all.insert (all.end (), x.begin (), x.end ()); }
-      auto on = onsets (all); CHECK (on.size () == 4 && on.size () >= 2 && std::abs (on[1] - on[0] - 24 * 1200) < 80, "MIDI clock in: a kick every beat at 100 BPM (%zu)", on.size ());
-      CHECK (std::fabs (E->bpm - 100) < 1, "the tempo follows the clock: %.1f", E->bpm); }
-    E->midiIn (0xFC); run (0.01f); CHECK (! E->playing (), "MIDI stop");
-    // follow sync pulses (2 a beat) at 90 BPM
-    E->syncMode = 2; E->syncPulseOut = false;
-    { std::vector<float> all; const float every = 60.0f / 90 / 2;
-      for (int p = 0; p < 8; ++p) { E->syncPulseIn (); auto x = run (every); all.insert (all.end (), x.begin (), x.end ()); }
-      auto on = onsets (all); CHECK (on.size () == 4, "sync pulses start it and drive 16 steps: %zu kicks", on.size ());
-      if (on.size () >= 3) CHECK (std::abs (on[2] - on[1] - (int) (2 * every * SR)) < 80, "the steps between pulses are evenly spaced");
-      CHECK (std::fabs (E->bpm - 90) < 1, "pulse tempo: %.1f", E->bpm); }
-    E->play (false); E->syncMode = 0;
-    E->play (true); E->syncPulseOut = false; run (0.3f); E->play (false);
-    CHECK (E->syncPulseOut, "sync pulses go out while playing");
-
     // ---- recording: wait for the sound, cut the silence; trim + normalize
     reset2 ();
     { std::vector<float> in (SR / 2, 0.0f); for (int i = SR / 5; i < SR / 2; ++i) in[i] = 0.3f * std::sin (2 * M_PI * 300 * i / SR);
@@ -326,8 +293,9 @@ static void v2Tests (const std::string& dir) {
     press (K_MENU); press (K_KIT); lift (K_KIT); CHECK (U->helpKey == K_KIT, "MENU + KIT = help"); writeScreen (dir + "/screen_help.pgm"); lift (K_MENU);
     CHECK (! U->menu, "the help does not open the menu");
     press (K_MENU); lift (K_MENU); CHECK (U->menu, "MENU opens the menu");
-    U->encoder (0, 6); U->encoder (1, 1); CHECK (E->midiChannel == 1, "menu: MIDI channel 2");
-    U->encoder (0, -2); writeScreen (dir + "/screen_menu.pgm"); press (K_ENCA); lift (K_ENCA);
+    U->encoder (0, 9); U->encoder (1, 1); CHECK (E->metronome, "menu: METRONOM");
+    U->encoder (1, 1); CHECK (! E->metronome, "and off again");
+    U->encoder (0, -5); writeScreen (dir + "/screen_menu.pgm"); press (K_ENCA); lift (K_ENCA);
     CHECK (U->wantExport == 1 && ! U->menu, "menu: EXPORT PATTERN");
     {
         RamDisk disk (28672); store::format (disk); U->disk = &disk;

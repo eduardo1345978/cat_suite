@@ -1,7 +1,7 @@
 # Cat Box Pocket
 
 Vreckový sampler ako Pocket Operator na steroidoch: Pico Plus 2, zvuková doska WM8960, 16 padov,
-20 funkčných tlačidiel, 4 enkódery, crossfader, OLED 1,3", 16 LED, microSD, MIDI a sync. Návrh, nákupný
+20 funkčných tlačidiel, 4 enkódery, crossfader, OLED 1,3", 16 LED a microSD. Návrh, nákupný
 zoznam a zapojenie sú v dokumente „Cat Box Pocket – vreckový sampler“.
 
 ## Čo vie
@@ -14,8 +14,7 @@ zoznam a zapojenie sú v dokumente „Cat Box Pocket – vreckový sampler“.
 - chop, trim + normalizácia, reverse, loop pri držaní, time-stretch, granulárne zmrazenie, resampling, overdub looper
 - 16 punch-in efektov, delay, reverb, kompresor, sidechain, dve scény a crossfader
 - 16 projektov, kity, prehliadač WAV, export patternu alebo piesne do stereo WAV
-- vnútorná flash aj microSD (FAT16 / FAT32), cez USB-C sa ukážu ako disk; zároveň USB MIDI
-- MIDI in / out (jack aj USB, noty 36–99 = pady, MIDI clock), sync in / out 2 pulzy na dobu
+- vnútorná flash aj microSD (FAT16 / FAT32), cez USB-C sa ukážu ako disk
 
 ## Ovládanie
 
@@ -33,13 +32,13 @@ Drž MENU a stlač ľubovoľné tlačidlo: displej napíše, čo robí. Celá ta
 | MUTE, COPY, PASTE, CLEAR, UNDO | + pad = zvuk (v krokoch krok), samotné = pattern |
 | FILL, ACCENT, SCENE, KIT | fill, plná sila, scény A / B, kity |
 | BPM, FX + A–D | tempo, swing, kompresor, hlasitosť · delay, reverb, sidechain, vstup |
-| MENU | projekty, prehliadač, export, MIDI, sync, disk, USB disk |
+| MENU | projekty, prehliadač, export, nastavenia, disk, USB disk |
 
 ## Súbory
 
 - `engine/` celý nástroj bez hardvéru (zvuk, sekvencer, ovládanie, displej, disky)
-- `host/` testy na PC: `host/build.sh` (193 testov, vytvorí aj `pocket-demo.wav` a obrázky displeja)
-- `pico/` vrstva pre Pico Plus 2 (I2S, WM8960, SH1106, 2× MCP23017, microSD, MIDI, sync, crossfader, LED, PSRAM, flash, USB disk + MIDI)
+- `host/` testy na PC: `host/build.sh` (183 testov, vytvorí aj `pocket-demo.wav` a obrázky displeja)
+- `pico/` vrstva pre Pico Plus 2 (I2S, WM8960, SH1106, 2× MCP23017, microSD, crossfader, LED, PSRAM, flash, USB disk)
 
 ## Nahratie firmvéru
 

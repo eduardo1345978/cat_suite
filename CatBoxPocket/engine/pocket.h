@@ -155,11 +155,6 @@ public:
     int padSemis (int pad) const;                // pad -> semitones in the scale
     void arpPress (int pad);
     void arpRelease (int pad);
-    // ---- MIDI and sync (the platform feeds bytes in and drains bytes out)
-    void midiIn (uint8_t b);
-    int midiOutPop ();                           // -1 = empty
-    void syncPulseIn ();                         // a pulse on the sync jack (2 per beat, like a Pocket Operator)
-    bool syncPulseOut = false;                   // the platform sends a pulse and clears it
     // ---- offline rendering (export)
     uint32_t renderStart (bool wholeSong);       // stops, clears the effects and plays from the top; returns the frames
     void renderEnd ();
@@ -181,8 +176,6 @@ public:
     bool lofi = false, monitor = false, metronome = false, autoTrim = true, threshold = false;
     int scale = 0, root = 0;         // keys mode: scale index, root note
     int arpMode = 0; float arpDiv = 4; int arpSlot = 0;   // 0 off, 1 up, 2 down, 3 up-down, 4 random, 5 as played
-    int midiChannel = 0;             // 0..15
-    int syncMode = 0;                // 0 internal (sends MIDI clock), 1 follows MIDI clock, 2 follows the sync jack
     int fx = 0;                      // punch-in effect held (1..16)
     int rollSlot = -1, rollPad = 0; float rollDiv = 4;   // roll: retrigger every 1/rollDiv beat
     float level = 0, gr = 0;         // output meter, compressor gain reduction
@@ -221,13 +214,9 @@ private:
     int polyIndex (int p, int slot) const;
     void fxProcess (float& l, float& r);
     float histAt (int ch, float pos) const;
-    void midiOut (uint8_t a, uint8_t b, uint8_t c, int n = 3);
     void advancePattern ();
     void arpStep ();
     uint8_t polyPos[NPOLY] = {0};
-    uint8_t midiOnNote[16]; int nMidiOn = 0;
-    double midiClock = 0; float extHalf = 0; float extStepLen = 0;
-    volatile int extPending = 0, extPulses = 0; volatile bool extStart = false, extStop = false;
     bool renderSongWas = false;
 
     bool running = false;
@@ -244,10 +233,6 @@ private:
     uint8_t arpHeld[16]; int arpN = 0, arpIdx = 0, arpDir = 1; double arpClock = 0; int arpPad = -1;
     // roll
     double rollClock = 0;
-    // MIDI
-    uint8_t mOut[256]; volatile int mHead = 0, mTail = 0;
-    uint8_t mStatus = 0, mData[2] = {0, 0}; int mCount = 0; int clockCount = 0; uint32_t lastClockFrame = 0;
-    uint32_t lastPulseFrame = 0;
     // ducking / compressor / metronome
     float duckEnv = 0, compEnv = 0; float clickPh = 0, clickEnv = 0, clickHz = 1000;
     // effects

@@ -503,14 +503,14 @@ static void copyParams (Slot& to, const Slot& p) {
     to = p; to.block = b; to.start = st; to.len = len; to.rate = rate; to.saved = sv;
 }
 
-static constexpr uint32_t MAGIC = 0x32504243;   // "CBP2"
+static constexpr uint32_t MAGIC = 0x33504243;   // "CBP3"
 static constexpr uint32_t KITMAGIC = 0x324B4243; // "CBK2"
 
 static void serializeProject (Out& w, const Engine& e, const Ui& ui) {
     w.u32 (MAGIC); w.u32 (2);
     w.f (e.bpm); w.f (e.swing); w.f (e.delayAmt); w.f (e.reverbAmt); w.f (e.master); w.f (e.inGain); w.f (e.compAmt); w.f (e.duckAmt);
     w.u8 ((e.lofi ? 1 : 0) | (e.metronome ? 2 : 0) | (e.autoTrim ? 4 : 0) | (e.threshold ? 8 : 0) | (e.songMode ? 16 : 0));
-    w.u8 (e.scale); w.u8 ((uint8_t) e.root); w.u8 (e.arpMode); w.f (e.arpDiv); w.u8 (e.midiChannel); w.u8 (e.syncMode);
+    w.u8 (e.scale); w.u8 ((uint8_t) e.root); w.u8 (e.arpMode); w.f (e.arpDiv);
     w.u8 (ui.bank); w.u8 (ui.sel);
     w.u8 (e.chainLen); for (int i = 0; i < NCHAIN; ++i) w.u8 (e.chain[i]);
     w.u8 (e.songLen); for (int i = 0; i < e.songLen; ++i) { w.u8 (e.song[i].pat); w.u8 (e.song[i].repeats); }
@@ -587,7 +587,7 @@ bool load (BlockDev& d, Engine& e, Ui& ui, int project) {
         if (r.u32 () == MAGIC && r.u32 () == 2) {
             e.bpm = r.f32 (); e.swing = r.f32 (); e.delayAmt = r.f32 (); e.reverbAmt = r.f32 (); e.master = r.f32 (); e.inGain = r.f32 (); e.compAmt = r.f32 (); e.duckAmt = r.f32 ();
             const uint32_t fl = r.u8 (); e.lofi = fl & 1; e.metronome = fl & 2; e.autoTrim = fl & 4; e.threshold = fl & 8; e.songMode = fl & 16;
-            e.scale = (int) r.u8 () % NSCALE; e.root = (int8_t) r.u8 (); e.arpMode = (int) r.u8 () % 6; e.arpDiv = r.f32 (); e.midiChannel = (int) r.u8 () & 15; e.syncMode = (int) r.u8 () % 3;
+            e.scale = (int) r.u8 () % NSCALE; e.root = (int8_t) r.u8 (); e.arpMode = (int) r.u8 () % 6; e.arpDiv = r.f32 ();
             ui.bank = (int) r.u8 () % NBANK; ui.sel = (int) r.u8 () % NSLOT;
             e.chainLen = std::max<int> (1, std::min<int> (NCHAIN, (int) r.u8 ()));
             for (int i = 0; i < NCHAIN; ++i) e.chain[i] = (uint8_t) (r.u8 () % NPAT);
