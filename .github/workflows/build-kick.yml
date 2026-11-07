@@ -25,6 +25,8 @@ jobs:
           cd kick && git log -1 --format='KICK sources: %h %cd' | tee ../kick-version.txt
           # AudIO is a JUCE module; the release lacks the small CMake file that adds it
           printf 'juce_add_module("${CMAKE_CURRENT_LIST_DIR}/AudIO")\n' > AudIO/juce_modules.cmake
+          # the serial port module was left out of the release (no licence): a stand-in
+          cp -r ../KickSim/juce_serialport Kick/modules/3rdParty/juce_serialport
           # our fixes, if any
           if [ -d ../KickSim/patches ]; then for p in ../KickSim/patches/*.patch; do [ -f "$p" ] && git apply --whitespace=nowarn "$p" && echo "applied $p"; done; fi
 
