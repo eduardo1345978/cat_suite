@@ -1,0 +1,73 @@
+# Behringer KICK (open source, AGPL-3.0): builds its desktop simulator KT_KickEM for Windows from
+# https://github.com/MusicTribeOpenSource/0700-AAM. Nothing of it is stored in this repository.
+name: Build KICK Simulator
+
+on:
+  push:
+    branches: [ main, catbox ]
+    paths:
+      - '.github/workflows/build-kick.yml'
+      - 'KickSim/**'
+  workflow_dispatch:
+
+jobs:
+  windows:
+    name: KICK simulator (Windows)
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get the KICK sources
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/MusicTribeOpenSource/0700-AAM kick
+          cd kick && git log -1 --format='KICK sources: %h %cd' | tee ../kick-version.txt
+          # AudIO is a JUCE module; the release lacks the small CMake file that adds it
+          printf 'juce_add_module("${CMAKE_CURRENT_LIST_DIR}/AudIO")\n' > AudIO/juce_modules.cmake
+          # our fixes, if any
+          if [ -d ../KickSim/patches ]; then for p in ../KickSim/patches/*.patch; do [ -f "$p" ] && git apply --whitespace=nowarn "$p" && echo "applied $p"; done; fi
+
+      - name: Configure
+        shell: bash
+        run: |
+          W="$(cygpath -m "$PWD")"
+          cmake -S kick/Kick -B build -G "Visual Studio 17 2022" -A x64 \
+            -DKICK_SIMULATOR=ON -DTIMESTAMP=OFF \
+            -DCPM_AudIO_SOURCE="$W/kick/AudIO" -DCPM_COM_PROTOCOL_SOURCE="$W/kick/ComProtocol" \
+            -DCPM_SOURCE_CACHE="$W/.cpm" 2>&1 | tee configure.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Build
+        shell: bash
+        run: |
+          set +e
+          cmake --build build --config Release --target KT_KickEM --parallel 4 -- /p:CL_MPCount=4 /v:minimal 2>&1 | tee build.log
+          status=${PIPESTATUS[0]}
+          grep -E " error |error C|error LNK|fatal error" build.log | sort -u | head -60 | while IFS= read -r line; do echo "::error::$line"; done
+          exit $status
+
+      - name: Package
+        if: success()
+        shell: bash
+        run: |
+          exe=$(find build -name 'KT_KickEM.exe' | head -1); echo "exe: $exe"
+          mkdir -p out/KickSimulator
+          cp "$exe" out/KickSimulator/
+          for d in assets demos templates; do [ -d "kick/Kick/$d" ] && cp -r "kick/Kick/$d" out/KickSimulator/; done
+          mkdir -p out/KickSimulator/samples out/KickSimulator/projects
+          [ -d KickSim/samples ] && cp -r KickSim/samples/. out/KickSimulator/samples/ || true
+          cp kick/LICENSE out/KickSimulator/LICENSE-AGPL.txt
+          cp kick-version.txt out/KickSimulator/
+          du -sh out/KickSimulator
+
+      - name: Keep the program
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: KICK-Simulator-Windows
+          path: |
+            out/KickSimulator
+            configure.log
+            build.log
+          retention-days: 30
