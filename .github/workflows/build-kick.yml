@@ -44,7 +44,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          cmake --build build --config Release --target KT_KickEM --parallel 4 -- /p:CL_MPCount=4 /v:minimal 2>&1 | tee build.log
+          MSYS_NO_PATHCONV=1 cmake --build build --config Release --target KT_KickEM --parallel 4 -- /v:minimal 2>&1 | tee build.log
           status=${PIPESTATUS[0]}
           grep -E " error |error C|error LNK|fatal error" build.log | sort -u | head -60 | while IFS= read -r line; do echo "::error::$line"; done
           exit $status
