@@ -21,8 +21,8 @@ AudioProcessorValueTreeState::ParameterLayout SwarmProcessor::createLayout()
     AudioProcessorValueTreeState::ParameterLayout l;
     l.add (unit ("x", "Nebula X (dream/dark - pulse/wild)", 0.3f));
     l.add (unit ("y", "Nebula Y (dream/pulse - dark/wild)", 0.3f));
-    l.add (unit ("grain", "Grain", 0.45f, AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int)
-               { const float ms = swarm::grainMs (v); return ms < 100.0f ? String (roundToInt (ms)) + " ms" : String (ms / 1000.0f, 2) + " s"; })));
+    l.add (unit ("grain", "Grain", 0.53f, AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int)
+               { const float ms = swarm::grainMs (v); return ms < 10.0f ? String (ms, 1) + " ms" : ms < 100.0f ? String (roundToInt (ms)) + " ms" : String (ms / 1000.0f, 2) + " s"; })));
     l.add (unit ("density", "Density", 0.55f));
     l.add (unit ("pitch", "Pitch", 0.5f));
     l.add (unit ("scatter", "Scatter", 0.4f));
@@ -99,6 +99,10 @@ const std::vector<SwarmProcessor::Preset>& SwarmProcessor::presets()
         { "Riser Bloom",      { { "x", 0.25f }, { "y", 0.0f }, { "grain", 0.7f }, { "density", 0.85f }, { "pitch", 0.9f }, { "updown", 1.0f }, { "scatter", 0.7f }, { "life", 0.8f }, { "lifespeed", 0.8f }, { "space", 0.9f }, { "tone", 0.7f }, { "mix", 0.8f } } },
         { "Black Hole",       { { "x", 0.0f }, { "y", 1.0f }, { "grain", 1.0f }, { "density", 0.6f }, { "pitch", 0.7f }, { "updown", 0.0f }, { "scatter", 0.8f }, { "reach", 1.0f }, { "life", 0.7f }, { "lifespeed", 0.2f }, { "space", 1.0f }, { "size", 1.0f }, { "tone", 0.2f }, { "dirt", 0.3f }, { "mix", 0.85f } } },
         { "Radio From Mars",  { { "x", 0.7f }, { "y", 0.85f }, { "grain", 0.35f }, { "density", 0.65f }, { "pitch", 0.55f }, { "scale", 6 }, { "scatter", 0.6f }, { "life", 0.85f }, { "lifespeed", 0.75f }, { "space", 0.4f }, { "tone", 0.7f }, { "dirt", 0.55f }, { "mix", 0.65f }, { "detune", 0.6f } } },
+        // micro grains (2 .. 20 ms): fizz, crackle, buzz
+        { "Fizz Cloud",       { { "x", 0.15f }, { "y", 0.2f }, { "micro", 0.05f }, { "density", 0.9f }, { "pitch", 0.6f }, { "updown", 0.8f }, { "scatter", 0.7f }, { "life", 0.6f }, { "space", 0.7f }, { "tone", 0.6f }, { "mix", 0.55f }, { "width", 1.0f } } },
+        { "Electric Moss",    { { "x", 0.8f }, { "y", 0.8f }, { "micro", 0.08f }, { "density", 0.8f }, { "pitch", 0.5f }, { "scale", 3 }, { "scatter", 0.8f }, { "life", 0.8f }, { "lifespeed", 0.7f }, { "space", 0.35f }, { "tone", 0.55f }, { "dirt", 0.25f }, { "mix", 0.6f } } },
+        { "Buzz Saw Grid",    { { "x", 1.0f }, { "y", 0.05f }, { "micro", 0.1f }, { "density", 1.0f }, { "pitch", 0.2f }, { "scatter", 0.1f }, { "life", 0.3f }, { "space", 0.2f }, { "dirt", 0.35f }, { "mix", 0.7f }, { "sync", 0 } } },
         { "Comet Tail",       { { "x", 0.25f }, { "y", 0.2f }, { "grain", 0.85f }, { "density", 0.5f }, { "pitch", 0.35f }, { "scatter", 0.55f }, { "life", 0.6f }, { "space", 0.95f }, { "tone", 0.55f }, { "dirt", 0.0f }, { "mix", 0.7f } } },
     };
     return list;
@@ -116,14 +120,15 @@ void SwarmProcessor::applyPreset (int index)
     for (auto* prm : getParameters())
         if (auto* rp = dynamic_cast<RangedAudioParameter*> (prm))
             if (rp->getParameterID() != "output" && rp->getParameterID() != "freeze") rp->setValueNotifyingHost (rp->getDefaultValue());
-    for (auto& [id, v] : presets()[(size_t) index].values) set (id, v);
+    for (auto& [id, v] : presets()[(size_t) index].values)
+        set (id == "micro" ? String ("grain") : id, id == "grain" ? swarm::microEnd + (1.0f - swarm::microEnd) * v : v);   // preset grain sizes are in the 20 ms .. 0.8 s range
 }
 
 void SwarmProcessor::randomise()
 {
     auto r = [this] (float lo, float hi) { return lo + (hi - lo) * dice.nextFloat(); };
     set ("x", r (0.0f, 1.0f)); set ("y", r (0.0f, 1.0f));
-    set ("grain", r (0.15f, 0.85f)); set ("density", r (0.3f, 0.85f)); set ("pitch", r (0.15f, 0.85f));
+    set ("grain", dice.nextFloat() < 0.15f ? r (0.0f, swarm::microEnd) : r (0.25f, 0.9f)); set ("density", r (0.3f, 0.85f)); set ("pitch", r (0.15f, 0.85f));
     set ("scatter", r (0.1f, 0.85f)); set ("life", r (0.25f, 0.9f)); set ("space", r (0.2f, 0.85f));
     set ("tone", r (0.3f, 0.7f)); set ("dirt", dice.nextFloat() < 0.5f ? 0.0f : r (0.05f, 0.4f));
     // the finer ones: mostly left on auto, sometimes pushed

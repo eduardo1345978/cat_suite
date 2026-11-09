@@ -64,7 +64,13 @@ struct Settings
     double ppq = -1.0;               // host position in quarter notes (-1 = not playing)
 };
 
-inline float grainMs (float v) noexcept { return 20.0f * std::pow (40.0f, juce::jlimit (0.0f, 1.0f, v)); }   // 20 ms .. 0.8 s
+/** GRAIN: the first part of the slider is the micro range (2 .. 20 ms: crackle, buzz, fizz), the rest 20 ms .. 0.8 s. */
+constexpr float microEnd = 0.15f;
+inline float grainMs (float v) noexcept
+{
+    v = juce::jlimit (0.0f, 1.0f, v);
+    return v < microEnd ? 2.0f * std::pow (10.0f, v / microEnd) : 20.0f * std::pow (40.0f, (v - microEnd) / (1.0f - microEnd));
+}
 
 /** One grain, as the screen sees it. */
 struct GrainEvent { float x, y, semis, pan, seconds, level; bool reverse; };

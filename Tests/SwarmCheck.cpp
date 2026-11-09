@@ -189,14 +189,32 @@ int main()
         {
             auto p = make();
             calm (*p);
-            set (*p, "x", x); set (*p, "y", y); set (*p, "grain", 0.0f); set (*p, "density", 1.0f); set (*p, "shape", shape);
+            set (*p, "x", x); set (*p, "y", y); set (*p, "grain", 0.15f); set (*p, "density", 1.0f); set (*p, "shape", shape);
             const auto [l, r] = run (*p, sine (4.0, 330.0, 0.3f));
             const auto sp = spectrum (l, (size_t) (2.0 * sr), 16);
             const double hf = 10.0 * std::log10 (band (sp, 3000.0, 20000.0, 16) / (band (sp, 20.0, 20000.0, 16) + 1e-30));
             res << String (hf, 1) << " ";
             ok &= hf < -32.0;
         }
-        check (ok, "no clicks with the shortest grains (PULSE, WILD, fully chopped): above 3 kHz " + res.trim() + " dB (< -32)");
+        check (ok, "no clicks with 20 ms grains (PULSE, WILD, fully chopped): above 3 kHz " + res.trim() + " dB (< -32)");
+    }
+
+    // micro grains (2 ms, GRAIN at 0): a fizz, but every grain is a smooth bump - no jumps in the sound
+    {
+        String res;
+        bool ok = true;
+        for (auto [x, y, shape] : { std::tuple { 1.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 0.5f }, { 0.0f, 0.0f, 0.5f } })
+        {
+            auto p = make();
+            calm (*p);
+            set (*p, "x", x); set (*p, "y", y); set (*p, "grain", 0.0f); set (*p, "density", 1.0f); set (*p, "shape", shape);
+            const auto [l, r] = run (*p, sine (3.0, 330.0, 0.3f));
+            float jump = 0.0f, level = 0.0f;
+            for (size_t i = (size_t) sr + 1; i < l.size(); ++i) { jump = jmax (jump, std::abs (l[i] - l[i - 1])); level = jmax (level, std::abs (l[i])); }
+            res << String (jump / jmax (1.0e-6f, level), 3) << " ";
+            ok &= jump < 0.25f * level && level > 0.01f;
+        }
+        check (ok, "micro grains (2 ms) are smooth: the biggest step between samples is " + res.trim() + " of the peak (a click would be ~1)");
     }
 
     // MORE: UP / DOWN all the way up = no grain goes down; WIDTH 0 = mono; DUCK steps back while the sound plays

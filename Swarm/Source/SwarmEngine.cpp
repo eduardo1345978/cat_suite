@@ -290,9 +290,9 @@ void Engine::startGrain (const Settings& s, const Character& c, double aligned)
     // its length
     float ms = grainMs (s.grain) * c.size * (1.0f + lifeSize) * (1.0f - 0.3f * life * env);
     if (c.chaos > 0.05f) ms *= std::pow (2.0f, c.chaos * (rnd() * 3.2f - 1.6f));
-    int len = (int) (juce::jlimit (20.0f, 1500.0f, ms) * 0.001f * (float) sr);     // shorter than 20 ms is a click, not a grain
+    int len = (int) (juce::jlimit (1.5f, 1500.0f, ms) * 0.001f * (float) sr);
     if (aligned >= 0.0) len = juce::jmin (len, (int) (aligned * 0.92));        // a chop stays inside its step
-    len = juce::jmax ((int) (0.012 * sr), len);
+    len = juce::jmax ((int) (0.0015 * sr), len);
     const double span = len * ratio;
     const float rv = juce::jlimit (0.0f, 1.0f, s.reverse);
     const float revP = rv < 0.5f ? c.rev * rv * 2.0f : c.rev + (1.0f - c.rev) * (rv - 0.5f) * 2.0f;
@@ -326,7 +326,8 @@ void Engine::startGrain (const Settings& s, const Character& c, double aligned)
     // SHAPE: soft (a full raised cosine) .. chopped (flat with short fades); the fades never get shorter than 5 ms
     const float base = aligned >= 0.0 ? 0.12f : c.soft, sh = juce::jlimit (0.0f, 1.0f, s.shape);
     const float tk = sh < 0.5f ? 1.0f + (base - 1.0f) * sh * 2.0f : base + (0.06f - base) * (sh - 0.5f) * 2.0f;
-    const float minFade = juce::jmin (1.0f, 2.0f * 0.005f * (float) sr / (float) len);
+    // the fades never get shorter than 5 ms; micro grains (under 15 ms) are one whole smooth bump (no edges = no clicks)
+    const float minFade = len < (int) (0.015 * sr) ? 1.0f : juce::jmin (1.0f, 2.0f * 0.005f * (float) sr / (float) len);
     g->tukey = juce::jmax (minFade, tk);
 
     const double rateNow = (double) juce::jmax (1.0f, 3.0f * std::pow (60.0f, s.density) * c.dens);
