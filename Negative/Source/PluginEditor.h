@@ -106,6 +106,10 @@ public:
     void resized() override;
     bool isInterestedInFileDrag (const juce::StringArray&) override;
     void filesDropped (const juce::StringArray&, int, int) override;
+    void fileDragEnter (const juce::StringArray&, int, int) override;
+    void fileDragMove (const juce::StringArray&, int, int) override;
+    void fileDragExit (const juce::StringArray&) override;
+    void paintOverChildren (juce::Graphics&) override;
 
 private:
     void timerCallback() override;
@@ -113,7 +117,8 @@ private:
     void openSound();
     void savePicture();
     void saveWav();
-    bool loadAny (const juce::File&);
+    bool loadAny (const juce::File&, bool asSong);
+    int dropZone = 0;                   // while a file is dragged over: 1 = the photo, 2 = the song
 
     NegativeProcessor& processor;
     juce::StringArray modes = negative::modeNames();
@@ -127,7 +132,7 @@ private:
     juce::TextEditor textBox;
     juce::ComboBox fontBox;
     void setTool (negui::PhotoView::Tool);
-    negui::Chip openPhotoB { "Open photo" }, openSoundB { "Open sound" }, songX { "x" },
+    negui::Chip openPhotoB { "Open photo / sound" }, openSoundB { "Hide in a song" }, songX { "x" },
                 invertB { "Negative" }, syncB { "Play with Cubase" }, playB { "Play", true }, saveWavB { "Save .wav" }, savePicB { "Save picture" };
     juce::AudioProcessorValueTreeState::ButtonAttachment invertA { processor.apvts, "invert", invertB }, syncA { processor.apvts, "sync", syncB };
     negui::DragChip dragChip { processor };

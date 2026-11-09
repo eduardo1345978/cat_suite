@@ -49,6 +49,8 @@ public:
     juce::Image getPhoto() const;
     juce::String getPhotoName() const;
     bool loadPhotoFile (const juce::File&);
+    /** A sound becomes the photo: its spectrogram (LOW .. HIGH), so it can be seen, painted on and played back. */
+    bool loadSoundAsPhoto (const juce::File&);
     /** A sound to hide the photo in (the standalone program): it plays with PLAY and goes into the saved .wav. */
     bool loadSongFile (const juce::File&);
     void clearSong();
@@ -73,6 +75,7 @@ private:
     void parameterChanged (const juce::String&, float) override;
     void run() override;
     void markDirty();
+    bool readAudio (const juce::File&, double maxSeconds, juce::AudioBuffer<float>& out, double& rate);
     float p (const char* id) const { return apvts.getRawParameterValue (id)->load(); }
 
     mutable juce::CriticalSection dataLock;               // the message thread and the render thread

@@ -299,6 +299,29 @@ int main()
             undone = std::abs (brightness (p->getPhoto()) - beforeText) < 1.0;
         }
         check (view != nullptr && painted && erased, "the brush paints on the photo, the eraser takes it off");
+        // dropping a .wav on the window: up top it becomes the photo (its spectrogram), on the spectrogram it's the song
+        {
+            const auto dir = File::getSpecialLocation (File::tempDirectory).getChildFile ("negative-drop");
+            dir.createDirectory();
+            const auto wavFile = dir.getChildFile ("my beat.wav");
+            {
+                const auto x = sound (testPicture(), 0, 40.0f, 16000.0f, 3.0);
+                wavFile.deleteFile();
+                WavAudioFormat wav;
+                std::unique_ptr<AudioFormatWriter> w (wav.createWriterFor (wavFile.createOutputStream().release(), sr, 2, 24, {}, 0));
+                w->writeFromAudioSampleBuffer (x, 0, x.getNumSamples());
+            }
+            StringArray files { wavFile.getFullPathName() };
+            const bool interested = ed.isInterestedInFileDrag (files);
+            ed.filesDropped (files, 150, 150);
+            const auto asPhoto = p->getPhoto();
+            const bool becamePhoto = p->getPhotoName() == "my beat" && likeness (testPicture(), asPhoto) > 0.6;
+            ed.filesDropped (files, 500, 450);
+            const bool becameSong = p->getSongName() == "my beat" && p->getPhotoName() == "my beat";
+            check (interested && becamePhoto && becameSong, "drop a .wav: up top it becomes the photo (likeness " + String (likeness (testPicture(), asPhoto), 2)
+                                                                + "), on the spectrogram it's the song to hide the photo in");
+            dir.deleteRecursively();
+        }
         check (wrote && undone, "text goes onto the photo in all " + String ((int) negui::textFonts().size()) + " fonts, and Undo takes it back");
     }
 

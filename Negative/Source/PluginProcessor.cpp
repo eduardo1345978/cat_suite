@@ -307,18 +307,40 @@ bool NegativeProcessor::loadPhotoFile (const File& f)
     return true;
 }
 
-bool NegativeProcessor::loadSongFile (const File& f)
+bool NegativeProcessor::readAudio (const File& f, double maxSeconds, AudioBuffer<float>& in, double& rate)
 {
     std::unique_ptr<AudioFormatReader> reader (formats.createReaderFor (f));
     if (reader == nullptr || reader->numChannels < 1 || reader->numChannels > 32 || reader->sampleRate < 4000.0 || reader->sampleRate > 768000.0) return false;
-    const auto maxLen = (int64) (reader->sampleRate * 600.0);                 // up to 10 minutes
-    const int len = (int) jmin (reader->lengthInSamples, maxLen);
+    const int len = (int) jmin (reader->lengthInSamples, (int64) (reader->sampleRate * maxSeconds));
     if (len <= 0) return false;
-    AudioBuffer<float> in (2, len);
+    in.setSize (2, len);
     reader->read (&in, 0, len, 0, true, reader->numChannels > 1);
     if (reader->numChannels == 1) in.copyFrom (1, 0, in, 0, 0, len);
+    rate = reader->sampleRate;
+    return true;
+}
+
+bool NegativeProcessor::loadSoundAsPhoto (const File& f)
+{
+    AudioBuffer<float> in;
+    double rate = 48000.0;
+    if (! readAudio (f, 120.0, in, rate)) return false;
+    const float low = p ("low"), high = jmin ((float) (rate * 0.5), p ("high"));
+    const int width = jlimit (200, 1600, (int) (in.getNumSamples() / rate * 100.0));      // ~100 columns a second
+    auto img = negative::analyse (in, rate, low, high, width, 400);
+    if (! img.isValid()) return false;
+    setPhoto (img, f.getFileNameWithoutExtension());
+    return true;
+}
+
+bool NegativeProcessor::loadSongFile (const File& f)
+{
+    AudioBuffer<float> in;
+    double rate = 48000.0;
+    if (! readAudio (f, 600.0, in, rate)) return false;                           // up to 10 minutes
+    const int len = in.getNumSamples();
     // to the sample rate the photo is made in
-    const double ratio = reader->sampleRate / sr.load();
+    const double ratio = rate / sr.load();
     AudioBuffer<float> out;
     if (std::abs (ratio - 1.0) < 1.0e-9) out = std::move (in);     // the same rate: exactly as it is
     else

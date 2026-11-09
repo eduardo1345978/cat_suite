@@ -355,8 +355,8 @@ NegativeEditor::NegativeEditor (NegativeProcessor& p) : processor (p)
     }
     openPhotoB.onClick = [this] { openPhoto(); };
     openSoundB.onClick = [this] { openSound(); };
-    openPhotoB.setTooltip ("Open a photo (jpg, png, gif) - or drop one on the window");
-    openSoundB.setTooltip ("Open a sound (wav, mp3, aiff, flac): the photo is hidden in it (PLAY and Save .wav)");
+    openPhotoB.setTooltip ("Open a photo (jpg, png, gif) - or a sound (wav, mp3, aiff, flac): it becomes the photo (its spectrogram). Or drop one on the window");
+    openSoundB.setTooltip ("Open a song (wav, mp3, aiff, flac) to hide the photo in (PLAY and Save .wav). Or drop it on the spectrogram");
     // painting on the photo: brush, eraser, text, undo, clear
     for (auto* b : { &brushB, &eraserB, &textB }) b->setClickingTogglesState (false);
     brushB.onClick = [this] { setTool (negui::PhotoView::Tool::brush); };
@@ -476,7 +476,7 @@ void NegativeEditor::resized()
     int bx = 368;
     for (auto* c : std::initializer_list<Component*> { &openPhotoB, &openSoundB })
     {
-        c->setBounds (bx, 230, 104, 30); bx += 112;
+        c->setBounds (bx, 230, 136, 30); bx += 144;
     }
     songX.setBounds (32 + 300 - 26, 76 + 6, 20, 20);
     invertB.setBounds (getWidth() - 32 - 92 - (processor.isStandalone() ? 0 : 140), 230, 92, 30);
@@ -525,16 +525,17 @@ void NegativeEditor::timerCallback()
     undoB.setEnabled (photo.canUndo());
 }
 
-bool NegativeEditor::loadAny (const File& f)
+bool NegativeEditor::loadAny (const File& f, bool asSong)
 {
-    const auto ext = f.getFileExtension().toLowerCase();
-    if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif")
-    {
-        if (! processor.loadPhotoFile (f)) return false;
-        photo.refresh();
-        return true;
-    }
-    return processor.loadSongFile (f);
+    const bool isImage = f.hasFileExtension ("png;jpg;jpeg;gif");
+    bool ok;
+    if (isImage) ok = processor.loadPhotoFile (f);
+    else if (asSong) ok = processor.loadSongFile (f);
+    else ok = processor.loadSoundAsPhoto (f);
+    status = ok ? String() : "couldn't open " + f.getFileName();
+    if (ok && (isImage || ! asSong)) photo.refresh();
+    repaint();
+    return ok;
 }
 
 bool NegativeEditor::isInterestedInFileDrag (const StringArray& files)
@@ -544,29 +545,58 @@ bool NegativeEditor::isInterestedInFileDrag (const StringArray& files)
     return false;
 }
 
-void NegativeEditor::filesDropped (const StringArray& files, int, int)
+void NegativeEditor::fileDragEnter (const StringArray& files, int x, int y) { fileDragMove (files, x, y); }
+
+void NegativeEditor::fileDragMove (const StringArray&, int, int y)
 {
-    for (auto& f : files) loadAny (File (f));
+    const int z = y >= spectrum.getY() ? 2 : 1;
+    if (z != dropZone) { dropZone = z; repaint(); }
+}
+
+void NegativeEditor::fileDragExit (const StringArray&) { dropZone = 0; repaint(); }
+
+void NegativeEditor::filesDropped (const StringArray& files, int, int y)
+{
+    // dropped on the spectrogram: a song to hide the photo in; anywhere else: it becomes the photo
+    const bool asSong = y >= spectrum.getY();
+    dropZone = 0;
+    for (auto& f : files) loadAny (File (f), asSong && ! File (f).hasFileExtension ("png;jpg;jpeg;gif"));
     repaint();
+}
+
+void NegativeEditor::paintOverChildren (Graphics& g)
+{
+    if (dropZone == 0) return;
+    const auto photoArea = Rectangle<int> (0, 0, getWidth(), spectrum.getY()).toFloat().reduced (8.0f);
+    const auto songArea = spectrum.getBounds().toFloat().reduced (4.0f);
+    const auto on = dropZone == 1 ? photoArea : songArea;
+    g.setColour (bg.withAlpha (0.82f));
+    g.fillRoundedRectangle (on, 12.0f);
+    g.setColour (ink);
+    g.drawRoundedRectangle (on, 12.0f, 1.5f);
+    g.setFont (uiFont (17.0f));
+    g.drawText (dropZone == 1 ? "drop: a photo, or a sound that becomes the photo" : "drop: a song to hide the photo in", on, Justification::centred);
+    g.setFont (uiFont (12.0f));
+    g.setColour (ink.withAlpha (0.55f));
+    g.drawText (dropZone == 1 ? "(on the spectrogram below: hide the photo in it instead)" : "(higher up: the sound becomes the photo instead)",
+                on.translated (0.0f, 24.0f), Justification::centred);
 }
 
 void NegativeEditor::openPhoto()
 {
-    chooser = std::make_unique<FileChooser> ("Open a photo", File(), "*.png;*.jpg;*.jpeg;*.gif");
+    chooser = std::make_unique<FileChooser> ("Open a photo, or a sound to turn into the photo", File(), "*.png;*.jpg;*.jpeg;*.gif;*.wav;*.aif;*.aiff;*.flac;*.mp3;*.ogg");
     chooser->launchAsync (FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles, [this] (const FileChooser& fc)
     {
-        if (fc.getResult().existsAsFile()) status = loadAny (fc.getResult()) ? String() : "couldn't open that photo";
-        repaint();
+        if (fc.getResult().existsAsFile()) loadAny (fc.getResult(), false);
     });
 }
 
 void NegativeEditor::openSound()
 {
-    chooser = std::make_unique<FileChooser> ("Open a sound to hide the photo in", File(), "*.wav;*.aif;*.aiff;*.flac;*.mp3;*.ogg");
+    chooser = std::make_unique<FileChooser> ("Open a song to hide the photo in", File(), "*.wav;*.aif;*.aiff;*.flac;*.mp3;*.ogg");
     chooser->launchAsync (FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles, [this] (const FileChooser& fc)
     {
-        if (fc.getResult().existsAsFile()) status = processor.loadSongFile (fc.getResult()) ? String() : "couldn't open that sound";
-        repaint();
+        if (fc.getResult().existsAsFile()) loadAny (fc.getResult(), true);
     });
 }
 
