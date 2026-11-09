@@ -26,11 +26,15 @@ namespace swarm
 juce::StringArray syncNames();       // grid for PULSE
 double syncBeats (int index);
 juce::StringArray scaleNames();
+juce::StringArray echoNames();       // the echo's time
+double echoBeats (int index);
+juce::StringArray splitNames();      // where the dry lows end
+double splitHz (int index);
 
 struct Settings
 {
     float x = 0.5f, y = 0.5f;        // the nebula (0,0 = DREAM top left, 1,0 = PULSE, 0,1 = DARK, 1,1 = WILD)
-    float grain = 0.45f;             // grain size 15 .. 600 ms
+    float grain = 0.45f;             // grain size 20 ms .. 0.8 s
     float density = 0.6f;
     float pitch = 0.5f;              // how often grains jump to other notes
     float scatter = 0.4f;
@@ -43,11 +47,24 @@ struct Settings
     bool freeze = false;
     int sync = 1;
     int scale = 0;                   // which notes the grains may jump to (from the note they were cut from)
+    // MORE: finer control (0.5 = what the nebula's character does by itself)
+    float shape = 0.5f;              // 0 soft .. 1 chopped
+    float reverse = 0.5f;            // 0 never .. 1 always
+    float upDown = 0.5f;             // 0 jumps only down .. 1 only up
+    float detune = 0.0f;             // random cents per grain (0 .. 50)
+    float width = 0.67f;             // stereo spread 0 .. 150 %
+    float reach = 0.5f;              // how far back in time grains are taken from
+    float lifeSpeed = 0.5f;          // how fast LIFE wanders (x0.25 .. x4)
+    float echo = 0.5f;               // echo amount (0.5 = the character's)
+    int echoTime = 2;
+    float size = 0.5f;               // reverb length
+    float duck = 0.0f;               // the swarm ducks under what's coming in
+    int split = 2;
     double bpm = 120.0;
     double ppq = -1.0;               // host position in quarter notes (-1 = not playing)
 };
 
-inline float grainMs (float v) noexcept { return 15.0f * std::pow (40.0f, juce::jlimit (0.0f, 1.0f, v)); }
+inline float grainMs (float v) noexcept { return 20.0f * std::pow (40.0f, juce::jlimit (0.0f, 1.0f, v)); }   // 20 ms .. 0.8 s
 
 /** One grain, as the screen sees it. */
 struct GrainEvent { float x, y, semis, pan, seconds, level; bool reverse; };
@@ -118,6 +135,9 @@ private:
     int preDelayPos = 0;
 
     double inPow = 0.0, inPowAll = 0.0, outPow = 0.0;
+    int splitNow = -1;
+    void setSplit (int index);
+    float duckEnv = 0.0f;
     std::array<Biquad, 4> inLp;             // high-pass: to measure only what the swarm replaces (above 120 Hz)
     float agGain = 1.0f;
     juce::SmoothedValue<float> sMix, sOut, sSpace, sDirt, sTone, sEcho;

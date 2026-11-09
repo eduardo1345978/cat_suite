@@ -52,6 +52,19 @@ private:
     juce::AudioProcessorValueTreeState::SliderAttachment attachment;
 };
 
+/** MORE: the finer controls, on a dark glass panel over the bottom of the nebula. */
+class MorePanel : public juce::Component
+{
+public:
+    explicit MorePanel (SwarmProcessor&);
+    void paint (juce::Graphics&) override;
+    void resized() override;
+
+private:
+    std::vector<std::unique_ptr<DustSlider>> sliders;
+    cat::ParamCombo echoTime, split;
+};
+
 class SwarmEditor : public juce::Component, private juce::Timer
 {
 public:
@@ -81,6 +94,9 @@ private:
     cat::ParamCombo grid { processor.apvts, "sync", "grid", nullptr, 34 }, notes { processor.apvts, "scale", "notes", nullptr, 42 };
     std::vector<std::unique_ptr<DustSlider>> sliders;
     Pill freeze { "FREEZE" };
+    juce::TextButton more { "MORE" };
+    MorePanel morePanel { processor };
+    void showMore (bool);
     juce::AudioProcessorValueTreeState::ButtonAttachment freezeAttachment { processor.apvts, "freeze", freeze };
     juce::uint32 lastTick = 0;
 

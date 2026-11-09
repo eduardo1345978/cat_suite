@@ -181,6 +181,49 @@ int main()
         check (ok, "no clicks: energy above 3 kHz from a 330 Hz tone (DREAM, DARK < -40 dB, PULSE chops < -30 dB): " + res.trim() + " dB");
     }
 
+    // the shortest grains (GRAIN at 0, chopped) still don't click
+    {
+        String res;
+        bool ok = true;
+        for (auto [x, y, shape] : { std::tuple { 1.0f, 0.0f, 0.5f }, { 1.0f, 1.0f, 0.5f }, { 1.0f, 0.0f, 1.0f }, { 0.5f, 0.5f, 1.0f } })
+        {
+            auto p = make();
+            calm (*p);
+            set (*p, "x", x); set (*p, "y", y); set (*p, "grain", 0.0f); set (*p, "density", 1.0f); set (*p, "shape", shape);
+            const auto [l, r] = run (*p, sine (4.0, 330.0, 0.3f));
+            const auto sp = spectrum (l, (size_t) (2.0 * sr), 16);
+            const double hf = 10.0 * std::log10 (band (sp, 3000.0, 20000.0, 16) / (band (sp, 20.0, 20000.0, 16) + 1e-30));
+            res << String (hf, 1) << " ";
+            ok &= hf < -32.0;
+        }
+        check (ok, "no clicks with the shortest grains (PULSE, WILD, fully chopped): above 3 kHz " + res.trim() + " dB (< -32)");
+    }
+
+    // MORE: UP / DOWN all the way up = no grain goes down; WIDTH 0 = mono; DUCK steps back while the sound plays
+    {
+        auto p = make();
+        calm (*p);
+        set (*p, "x", 0.5f); set (*p, "y", 0.5f); set (*p, "pitch", 1.0f); set (*p, "grain", 0.7f); set (*p, "updown", 1.0f); set (*p, "width", 0.0f);
+        const auto [l, r] = run (*p, sine (5.0, 440.0, 0.3f));
+        const int bits = 17;
+        const auto sp = spectrum (l, (size_t) (2.0 * sr), bits);
+        const double total = band (sp, 40.0, 20000.0, bits), below = band (sp, 40.0, 400.0, bits);
+        double diff = 0.0;
+        for (size_t i = (size_t) (2.0 * sr); i < l.size(); ++i) diff = jmax (diff, (double) std::abs (l[i] - r[i]));
+        check (below / total < 0.01 && diff < 1.0e-4, "UP only: " + String (100.0 * below / total, 2) + "% of the sound under the note; WIDTH 0: left = right");
+
+        auto dk = [] (float duck)
+        {
+            auto q = make();
+            set (*q, "x", 0.2f); set (*q, "y", 0.2f); set (*q, "mix", 1.0f); set (*q, "duck", duck); set (*q, "space", 0.0f);
+            const auto in = musical (4.0, 0.3f);
+            const auto [ql, qr] = run (*q, in);
+            return rms (ql, (size_t) (2.0 * sr), ql.size());
+        };
+        const double d0 = dk (0.0f), d1 = dk (1.0f);
+        check (d1 < d0 * 0.5, "DUCK: the swarm steps back under a playing sound (" + String (20.0 * std::log10 (d1 / d0), 1) + " dB)");
+    }
+
     // pitched grains only land on allowed notes
     {
         auto p = make();

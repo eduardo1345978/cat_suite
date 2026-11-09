@@ -49,6 +49,7 @@ public:
     /** A new sound that still sounds good: everything but MIX, OUTPUT, FREEZE, the grid and the notes. */
     void randomise();
     std::atomic<int> currentPreset { 0 };
+    bool moreOpen = false;          // the MORE panel (remembered while the window is closed)
     cat::PresetManager presetManager { *this, "Swarm",
         { [] { juce::StringArray n; for (auto& p : presets()) n.add (p.name); return n; },
           [this] (int i) { applyPreset (i); }, [this] { return currentPreset.load(); } } };

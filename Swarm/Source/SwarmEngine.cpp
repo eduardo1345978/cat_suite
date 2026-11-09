@@ -8,6 +8,18 @@ double syncBeats (int i)
     static const double b[] = { 0.125, 0.25, 0.5, 1.0, 1.0 / 6.0, 1.0 / 3.0 };
     return b[juce::jlimit (0, 5, i)];
 }
+juce::StringArray echoNames()  { return { "1/16", "1/8", "1/8.", "1/4", "1/4.", "1/2" }; }
+double echoBeats (int i)
+{
+    static const double b[] = { 0.25, 0.5, 0.75, 1.0, 1.5, 2.0 };
+    return b[juce::jlimit (0, 5, i)];
+}
+juce::StringArray splitNames() { return { "60 Hz", "90 Hz", "120 Hz", "180 Hz", "250 Hz" }; }
+double splitHz (int i)
+{
+    static const double f[] = { 60.0, 90.0, 120.0, 180.0, 250.0 };
+    return f[juce::jlimit (0, 4, i)];
+}
 juce::StringArray scaleNames() { return { "Octaves", "Major", "Minor", "Pentatonic", "Dorian", "Dreamy (lydian)", "Dark (phrygian)" }; }
 
 namespace
@@ -103,13 +115,25 @@ void Engine::prepare (double sampleRate, int maxBlock)
     wetL.assign ((size_t) n, 0.0f); wetR.assign ((size_t) n, 0.0f);
     dryL.assign ((size_t) n, 0.0f); dryR.assign ((size_t) n, 0.0f);
     for (auto* s : { &sMix, &sOut, &sSpace, &sDirt, &sTone, &sEcho }) s->reset (sr, 0.05);
+    splitNow = -1;
+    setSplit (2);
+    reset();
+}
+
+void Engine::setSplit (int index)
+{
+    index = juce::jlimit (0, 4, index);
+    if (index == splitNow) return;
+    splitNow = index;
+    const double f = splitHz (index);
     for (int k = 0; k < 4; ++k)
     {
-        wetHp[(size_t) k] = highPass (sr, 120.0, 0.70710678);
-        dryLp[(size_t) k] = lowPass (sr, 120.0, 0.70710678);
-        inLp[(size_t) k] = highPass (sr, 120.0, 0.70710678);
+        // new coefficients, the filters keep their state (no click when it's changed while playing)
+        auto set = [] (Biquad& b, const Biquad& c) { b.b0 = c.b0; b.b1 = c.b1; b.b2 = c.b2; b.a1 = c.a1; b.a2 = c.a2; };
+        set (wetHp[(size_t) k], highPass (sr, f, 0.70710678));
+        set (dryLp[(size_t) k], lowPass (sr, f, 0.70710678));
+        set (inLp[(size_t) k], highPass (sr, f, 0.70710678));
     }
-    reset();
 }
 
 void Engine::reset()
@@ -137,6 +161,7 @@ void Engine::reset()
     modPhase = 0.0;
     inPow = inPowAll = outPow = 0.0;
     agGain = 1.0f;
+    duckEnv = 0.0f;
     activeGrains = 0;
     frozen = false;
     eventFifo.reset();
@@ -207,7 +232,7 @@ void Engine::stepLife (const Settings& s, int n)
         return;
     }
     // the attractor runs faster when the sound is loud
-    const double rate = (0.12 + 1.5 * (double) env) * (0.35 + 0.65 * (double) life);
+    const double rate = (0.12 + 1.5 * (double) env) * (0.35 + 0.65 * (double) life) * std::pow (4.0, (double) s.lifeSpeed * 2.0 - 1.0);
     double t = (double) n / sr * rate * 0.6;
     while (t > 0.0)
     {
@@ -240,7 +265,8 @@ void Engine::startGrain (const Settings& s, const Character& c, double aligned)
     const float pAmt = juce::jlimit (0.0f, 1.0f, s.pitch) * 2.0f;
     float semis = 0.0f;
     {
-        const float up = c.up * pAmt, down = c.down * pAmt, fifth = c.fifth * pAmt, jump = c.scaleJump * pAmt;
+        const float ud = juce::jlimit (0.0f, 1.0f, s.upDown) * 2.0f;          // 1 = the character's own balance
+        const float up = c.up * pAmt * ud, down = c.down * pAmt * (2.0f - ud), fifth = c.fifth * pAmt, jump = c.scaleJump * pAmt;
         const float r = rnd() * juce::jmax (1.0f, up + down + fifth + jump);
         const auto& steps = scaleSteps (s.scale);
         if (r < up) semis = (c.chaos > 0.5f && rnd() < 0.3f) ? 24.0f : 12.0f;
@@ -252,16 +278,25 @@ void Engine::startGrain (const Settings& s, const Character& c, double aligned)
             if (semis > 0.0f && rnd() < 0.35f) semis -= 12.0f;
         }
     }
+    {
+        // UP / DOWN: a jump the wrong way is folded an octave into the right direction
+        const float ud = juce::jlimit (0.0f, 1.0f, s.upDown) * 2.0f;
+        if (semis < 0.0f && rnd() >= juce::jmin (1.0f, 2.0f - ud)) while (semis < 0.0f) semis += 12.0f;
+        if (semis > 0.0f && rnd() >= juce::jmin (1.0f, ud)) while (semis > 0.0f) semis -= 12.0f;
+    }
+    if (s.detune > 0.001f) semis += (rnd() + rnd() - 1.0f) * 0.5f * s.detune;    // up to +-50 cents
     const double ratio = std::pow (2.0, (double) semis / 12.0);
 
     // its length
     float ms = grainMs (s.grain) * c.size * (1.0f + lifeSize) * (1.0f - 0.3f * life * env);
     if (c.chaos > 0.05f) ms *= std::pow (2.0f, c.chaos * (rnd() * 3.2f - 1.6f));
-    int len = (int) (juce::jlimit (8.0f, 1500.0f, ms) * 0.001f * (float) sr);
+    int len = (int) (juce::jlimit (20.0f, 1500.0f, ms) * 0.001f * (float) sr);     // shorter than 20 ms is a click, not a grain
     if (aligned >= 0.0) len = juce::jmin (len, (int) (aligned * 0.92));        // a chop stays inside its step
-    len = juce::jmax (64, len);
+    len = juce::jmax ((int) (0.012 * sr), len);
     const double span = len * ratio;
-    const bool reverse = rnd() < c.rev;
+    const float rv = juce::jlimit (0.0f, 1.0f, s.reverse);
+    const float revP = rv < 0.5f ? c.rev * rv * 2.0f : c.rev + (1.0f - c.rev) * (rv - 0.5f) * 2.0f;
+    const bool reverse = rnd() < revP;
 
     // where in the sound it comes from
     double start;
@@ -276,8 +311,9 @@ void Engine::startGrain (const Settings& s, const Character& c, double aligned)
     else
     {
         const double minDelay = 64.0 + (ratio > 1.0 ? span - len : 0.0) + (reverse ? span : 0.0);
-        double delay = minDelay + (double) rnd() * sr * (0.02 + 1.2 * scat) * (aligned >= 0.0 ? 0.25 : 1.0);
-        if (rnd() < 0.12f * life) delay += sr * (1.0 + rnd() * 5.0);          // it remembers something from before
+        const double reachK = juce::jlimit (0.0, 1.0, (double) s.reach) * 2.0;
+        double delay = minDelay + (double) rnd() * sr * (0.02 + 1.2 * scat) * (aligned >= 0.0 ? 0.25 : 1.0) * reachK;
+        if (rnd() < 0.12f * life * (float) reachK) delay += sr * (1.0 + rnd() * 5.0);          // it remembers something from before
         delay = juce::jmin (delay, (double) ringMask - span - 16.0);
         start = (double) writePos - delay;
     }
@@ -287,13 +323,16 @@ void Engine::startGrain (const Settings& s, const Character& c, double aligned)
     g->step = reverse ? -ratio : ratio;
     g->pos = reverse ? start + span : start;
     // the shorter the fade, the more it chops; never under 3 ms, so it never clicks
-    const float minFade = juce::jmin (1.0f, 2.0f * 0.003f * (float) sr / (float) len);
-    g->tukey = juce::jmax (minFade, aligned >= 0.0 ? 0.12f : c.soft);
+    // SHAPE: soft (a full raised cosine) .. chopped (flat with short fades); the fades never get shorter than 5 ms
+    const float base = aligned >= 0.0 ? 0.12f : c.soft, sh = juce::jlimit (0.0f, 1.0f, s.shape);
+    const float tk = sh < 0.5f ? 1.0f + (base - 1.0f) * sh * 2.0f : base + (0.06f - base) * (sh - 0.5f) * 2.0f;
+    const float minFade = juce::jmin (1.0f, 2.0f * 0.005f * (float) sr / (float) len);
+    g->tukey = juce::jmax (minFade, tk);
 
     const double rateNow = (double) juce::jmax (1.0f, 3.0f * std::pow (60.0f, s.density) * c.dens);
     const float overlap = (float) (rateNow * len / sr);
     const float amp = 0.9f / std::sqrt (1.0f + overlap * 0.5f);
-    const float pan = (rnd() * 2.0f - 1.0f) * c.spread * (0.35f + 0.65f * scat);
+    const float pan = juce::jlimit (-1.0f, 1.0f, (rnd() * 2.0f - 1.0f) * c.spread * (0.35f + 0.65f * scat) * s.width * 1.5f);
     const float th = (pan + 1.0f) * pi * 0.25f;
     g->gl = std::cos (th) * amp * 1.41421356f;
     g->gr = std::sin (th) * amp * 1.41421356f;
@@ -329,7 +368,12 @@ void Engine::process (juce::AudioBuffer<float>& buffer, const Settings& s)
     sSpace.setTargetValue (juce::jlimit (0.0f, 1.0f, s.space + c.space * (0.4f + s.space)));
     sDirt.setTargetValue (juce::jlimit (0.0f, 1.0f, s.dirt + c.dirt));
     sTone.setTargetValue (juce::jlimit (0.0f, 1.0f, s.tone + c.tone));
-    sEcho.setTargetValue (juce::jlimit (0.0f, 1.0f, c.echo * (0.3f + s.space)));
+    {
+        const float e = juce::jlimit (0.0f, 1.0f, s.echo);
+        const float k = e < 0.5f ? e * 2.0f : 1.0f + (e - 0.5f) * 6.0f;     // 0.5 = the character's own, 1 = 4x
+        sEcho.setTargetValue (juce::jlimit (0.0f, 0.9f, c.echo * (0.3f + s.space) * k));
+    }
+    setSplit (s.split);
 
     const double spb = sr * 60.0 / juce::jlimit (30.0, 300.0, s.bpm);
     const double grid = syncBeats (s.sync);
@@ -339,14 +383,14 @@ void Engine::process (juce::AudioBuffer<float>& buffer, const Settings& s)
     const float envA = 1.0f - std::exp (-1.0f / (0.01f * (float) sr)), envR = 1.0f - std::exp (-1.0f / (0.3f * (float) sr));
     const float pc = 1.0f - std::exp (-1.0f / (0.4f * (float) sr));
     const float agc = 1.0f - std::exp (-1.0f / (0.6f * (float) sr));
-    const double echoBeats = 0.75;
-    const int echoD = juce::jlimit (1, (int) echoL.size() - 2, (int) (echoBeats * spb));
+    const int echoD = juce::jlimit (1, (int) echoL.size() - 2, (int) (echoBeats (s.echoTime) * spb));
     std::array<float, numLines> decay {};
     {
-        const float sp = sSpace.getTargetValue(), rt60 = 1.2f + 10.0f * sp * sp;
+        const float sp = sSpace.getTargetValue(), rt60 = (1.2f + 10.0f * sp * sp) * (0.3f + 1.4f * juce::jlimit (0.0f, 1.0f, s.size));
         for (int k = 0; k < numLines; ++k) decay[(size_t) k] = std::pow (10.0f, -3.0f * (float) lineLen[(size_t) k] / (rt60 * (float) sr));
     }
 
+    const float widthK = juce::jlimit (0.0f, 1.5f, s.width * 1.5f);
     int active = 0;
     for (int i = 0; i < n; ++i)
     {
@@ -490,6 +534,11 @@ void Engine::process (juce::AudioBuffer<float>& buffer, const Settings& s)
         }
         l = l * (1.0f - 0.35f * space) + rvL * 0.32f * space;
         r = r * (1.0f - 0.35f * space) + rvR * 0.32f * space;
+        {
+            // WIDTH works on the whole swarm (grains, echo and room): 0 = mono, 150% = wider
+            const float mid = 0.5f * (l + r), side = 0.5f * (l - r) * widthK;
+            l = mid + side; r = mid - side;
+        }
         wetL[(size_t) i] = l; wetR[(size_t) i] = r;
         outPow += ((double) (l * l + r * r) * 0.5 - outPow) * pc;
     }
@@ -502,14 +551,19 @@ void Engine::process (juce::AudioBuffer<float>& buffer, const Settings& s)
     }
     autoGainDb = juce::Decibels::gainToDecibels (agGain);
 
+    const float duck = juce::jlimit (0.0f, 1.0f, s.duck);
+    const float dA = 1.0f - std::exp (-1.0f / (0.003f * (float) sr)), dR = 1.0f - std::exp (-1.0f / (0.15f * (float) sr));
     for (int i = 0; i < n; ++i)
     {
         const float m = sMix.getNextValue(), og = sOut.getNextValue();
+        const float a = 0.5f * (std::abs (dryL[(size_t) i]) + std::abs (dryR[(size_t) i]));
+        duckEnv += (a - duckEnv) * (a > duckEnv ? dA : dR);
+        const float dg = 1.0f - duck * juce::jmin (1.0f, duckEnv * 4.0f);
         const float lowL = dryLp[1].run (dryLp[0].run (dryL[(size_t) i]));
         const float lowR = dryLp[3].run (dryLp[2].run (dryR[(size_t) i]));
         // the lows stay dry and solid; MIX only swaps what's above them for the swarm
-        const float ol = (1.0f - m) * dryL[(size_t) i] + m * (lowL + wetL[(size_t) i] * agGain);
-        const float orr = (1.0f - m) * dryR[(size_t) i] + m * (lowR + wetR[(size_t) i] * agGain);
+        const float ol = (1.0f - m) * dryL[(size_t) i] + m * (lowL + wetL[(size_t) i] * agGain * dg);
+        const float orr = (1.0f - m) * dryR[(size_t) i] + m * (lowR + wetR[(size_t) i] * agGain * dg);
         L[i] = ol * og;
         if (R != L) R[i] = orr * og;
     }

@@ -1886,7 +1886,7 @@ void testSwarm()
     auto fx = loadPlugin (SWARM_VST3);
     if (fx == nullptr) { ++failures; return; }
     check (fx->getTotalNumInputChannels() == 2 && fx->getTotalNumOutputChannels() == 2, "Swarm is a stereo audio effect");
-    check (fx->getNumPrograms() == 15 && fx->getProgramName (0) == "Night Choir", "Swarm has its 15 presets");
+    check (fx->getNumPrograms() == 32 && fx->getProgramName (0) == "Night Choir", "Swarm has its 32 presets");
     fx->setCurrentProgram (0);
     fx->prepareToPlay (sampleRate, blockSize);
     juce::AudioBuffer<float> audio (2, blockSize);

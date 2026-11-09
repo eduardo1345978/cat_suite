@@ -35,6 +35,26 @@ AudioProcessorValueTreeState::ParameterLayout SwarmProcessor::createLayout()
     l.add (std::make_unique<AudioParameterBool> (ParameterID { "freeze", 1 }, "Freeze", false));
     l.add (std::make_unique<AudioParameterChoice> (ParameterID { "sync", 1 }, "Grid", swarm::syncNames(), 1));
     l.add (std::make_unique<AudioParameterChoice> (ParameterID { "scale", 1 }, "Notes", swarm::scaleNames(), 0));
+    // MORE
+    auto rel = [] (float v, int) { const int d = roundToInt ((v - 0.5f) * 200.0f); return d == 0 ? String ("auto") : (d > 0 ? "+" : "") + String (d) + "%"; };
+    l.add (unit ("shape", "Shape (soft - chopped)", 0.5f, AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int)
+               { return v < 0.45f ? "soft " + String (roundToInt ((0.5f - v) * 200.0f)) : v > 0.55f ? "chop " + String (roundToInt ((v - 0.5f) * 200.0f)) : String ("auto"); })));
+    l.add (unit ("reverse", "Reverse", 0.5f, AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int)
+               { return v < 0.01f ? String ("never") : v > 0.99f ? String ("always") : std::abs (v - 0.5f) < 0.03f ? String ("auto") : String (roundToInt (v * 100.0f)) + "%"; })));
+    l.add (unit ("updown", "Up / down", 0.5f, AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int)
+               { return v < 0.45f ? "down " + String (roundToInt ((0.5f - v) * 200.0f)) : v > 0.55f ? "up " + String (roundToInt ((v - 0.5f) * 200.0f)) : String ("both"); })));
+    l.add (unit ("detune", "Detune", 0.0f, AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String::fromUTF8 ("\xc2\xb1") + String (roundToInt (v * 50.0f)) + " ct"; })));
+    l.add (unit ("width", "Width", 0.67f, AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v * 150.0f)) + "%"; })));
+    l.add (unit ("reach", "Reach (how far back)", 0.5f, AudioParameterFloatAttributes().withStringFromValueFunction (rel)));
+    l.add (unit ("lifespeed", "Life speed", 0.5f, AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int)
+               { return "x" + String (std::pow (4.0f, v * 2.0f - 1.0f), 2); })));
+    l.add (unit ("echo", "Echo", 0.5f, AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int)
+               { return v < 0.01f ? String ("off") : std::abs (v - 0.5f) < 0.03f ? String ("auto") : "x" + String (v < 0.5f ? v * 2.0f : 1.0f + (v - 0.5f) * 6.0f, 1); })));
+    l.add (std::make_unique<AudioParameterChoice> (ParameterID { "echotime", 1 }, "Echo time", swarm::echoNames(), 2));
+    l.add (unit ("size", "Reverb size", 0.5f, AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int)
+               { return "x" + String (0.3f + 1.4f * v, 1); })));
+    l.add (unit ("duck", "Duck", 0.0f));
+    l.add (std::make_unique<AudioParameterChoice> (ParameterID { "split", 1 }, "Dry lows below", swarm::splitNames(), 2));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { "output", 1 }, "Output", NormalisableRange<float> (-12.0f, 12.0f), 0.0f,
                AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return (v > 0.05f ? "+" : "") + String (v, 1) + " dB"; })));
     return l;
@@ -57,6 +77,28 @@ const std::vector<SwarmProcessor::Preset>& SwarmProcessor::presets()
         { "Insect Choir",     { { "x", 0.75f }, { "y", 0.75f }, { "grain", 0.15f }, { "density", 0.9f }, { "pitch", 0.6f }, { "scatter", 0.8f }, { "life", 0.8f }, { "space", 0.35f }, { "tone", 0.6f }, { "dirt", 0.15f }, { "mix", 0.6f }, { "scale", 4 } } },
         { "Supernova",        { { "x", 0.95f }, { "y", 0.95f }, { "grain", 0.45f }, { "density", 0.85f }, { "pitch", 0.85f }, { "scatter", 0.9f }, { "life", 1.0f }, { "space", 0.7f }, { "tone", 0.55f }, { "dirt", 0.35f }, { "mix", 0.8f } } },
         { "Lo-fi Stardust",   { { "x", 0.4f }, { "y", 0.55f }, { "grain", 0.4f }, { "density", 0.5f }, { "pitch", 0.25f }, { "scatter", 0.4f }, { "life", 0.4f }, { "space", 0.4f }, { "tone", 0.3f }, { "dirt", 0.35f }, { "mix", 0.5f } } },
+        // vocals
+        { "Angel Shimmer",    { { "x", 0.05f }, { "y", 0.05f }, { "grain", 0.6f }, { "density", 0.6f }, { "pitch", 0.6f }, { "updown", 0.85f }, { "scatter", 0.3f }, { "life", 0.4f }, { "space", 0.7f }, { "size", 0.7f }, { "tone", 0.65f }, { "mix", 0.45f }, { "duck", 0.4f }, { "detune", 0.25f } } },
+        { "Whisper Cloud",    { { "x", 0.3f }, { "y", 0.45f }, { "grain", 0.3f }, { "density", 0.8f }, { "pitch", 0.15f }, { "scatter", 0.75f }, { "reverse", 0.8f }, { "life", 0.55f }, { "space", 0.5f }, { "tone", 0.6f }, { "dirt", 0.05f }, { "mix", 0.5f }, { "width", 1.0f } } },
+        { "Vocal Chop Grid",  { { "x", 1.0f }, { "y", 0.1f }, { "grain", 0.35f }, { "density", 0.75f }, { "pitch", 0.45f }, { "scale", 2 }, { "scatter", 0.15f }, { "life", 0.3f }, { "space", 0.25f }, { "shape", 0.75f }, { "mix", 0.7f }, { "sync", 1 } } },
+        { "Ghost Backing",    { { "x", 0.2f }, { "y", 0.65f }, { "grain", 0.65f }, { "density", 0.5f }, { "pitch", 0.5f }, { "updown", 0.2f }, { "scatter", 0.5f }, { "life", 0.6f }, { "space", 0.75f }, { "tone", 0.35f }, { "mix", 0.4f }, { "duck", 0.6f }, { "reach", 0.8f } } },
+        // pads and chords
+        { "Endless Pad",      { { "x", 0.15f }, { "y", 0.3f }, { "grain", 0.9f }, { "density", 0.7f }, { "pitch", 0.35f }, { "scatter", 0.6f }, { "life", 0.5f }, { "lifespeed", 0.25f }, { "space", 0.85f }, { "size", 0.85f }, { "tone", 0.5f }, { "mix", 0.85f }, { "width", 1.0f } } },
+        { "Frozen Choir",     { { "x", 0.1f }, { "y", 0.4f }, { "grain", 0.75f }, { "density", 0.65f }, { "pitch", 0.55f }, { "scale", 5 }, { "scatter", 0.45f }, { "life", 0.45f }, { "space", 0.7f }, { "tone", 0.55f }, { "mix", 0.75f }, { "detune", 0.3f } } },
+        { "Tape Ocean",       { { "x", 0.35f }, { "y", 0.7f }, { "grain", 0.8f }, { "density", 0.55f }, { "pitch", 0.2f }, { "scatter", 0.55f }, { "life", 0.6f }, { "lifespeed", 0.3f }, { "space", 0.6f }, { "tone", 0.35f }, { "dirt", 0.3f }, { "mix", 0.7f }, { "detune", 0.5f } } },
+        // leads and melodies
+        { "Octave Comet",     { { "x", 0.4f }, { "y", 0.2f }, { "grain", 0.5f }, { "density", 0.55f }, { "pitch", 0.75f }, { "updown", 1.0f }, { "scatter", 0.35f }, { "life", 0.45f }, { "space", 0.5f }, { "echo", 0.75f }, { "tone", 0.6f }, { "mix", 0.45f } } },
+        { "Glitter Arp",      { { "x", 0.85f }, { "y", 0.05f }, { "grain", 0.25f }, { "density", 0.7f }, { "pitch", 0.85f }, { "scale", 3 }, { "updown", 0.75f }, { "scatter", 0.25f }, { "life", 0.4f }, { "space", 0.4f }, { "echotime", 1 }, { "echo", 0.7f }, { "tone", 0.7f }, { "mix", 0.55f }, { "sync", 0 } } },
+        { "Mirror Lead",      { { "x", 0.45f }, { "y", 0.35f }, { "grain", 0.55f }, { "density", 0.5f }, { "pitch", 0.4f }, { "reverse", 1.0f }, { "scatter", 0.3f }, { "life", 0.35f }, { "space", 0.45f }, { "tone", 0.55f }, { "mix", 0.5f } } },
+        // drums and loops
+        { "Drum Shatter",     { { "x", 0.95f }, { "y", 0.55f }, { "grain", 0.2f }, { "density", 0.8f }, { "pitch", 0.35f }, { "scatter", 0.4f }, { "life", 0.5f }, { "space", 0.25f }, { "shape", 0.85f }, { "dirt", 0.3f }, { "mix", 0.6f }, { "sync", 0 } } },
+        { "Breakbeat Mincer", { { "x", 1.0f }, { "y", 0.3f }, { "grain", 0.3f }, { "density", 0.9f }, { "pitch", 0.25f }, { "reverse", 0.7f }, { "scatter", 0.2f }, { "life", 0.4f }, { "space", 0.15f }, { "shape", 0.8f }, { "mix", 0.75f }, { "sync", 1 } } },
+        { "Half-time Haze",   { { "x", 0.6f }, { "y", 0.6f }, { "grain", 0.5f }, { "density", 0.5f }, { "pitch", 0.3f }, { "updown", 0.0f }, { "scatter", 0.35f }, { "life", 0.45f }, { "space", 0.5f }, { "echotime", 3 }, { "echo", 0.65f }, { "tone", 0.4f }, { "mix", 0.5f }, { "sync", 3 } } },
+        // whole mix and fx
+        { "Mix Glue Dust",    { { "x", 0.4f }, { "y", 0.4f }, { "grain", 0.55f }, { "density", 0.55f }, { "pitch", 0.1f }, { "scatter", 0.3f }, { "life", 0.3f }, { "space", 0.35f }, { "tone", 0.5f }, { "dirt", 0.1f }, { "mix", 0.2f }, { "duck", 0.3f } } },
+        { "Riser Bloom",      { { "x", 0.25f }, { "y", 0.0f }, { "grain", 0.7f }, { "density", 0.85f }, { "pitch", 0.9f }, { "updown", 1.0f }, { "scatter", 0.7f }, { "life", 0.8f }, { "lifespeed", 0.8f }, { "space", 0.9f }, { "tone", 0.7f }, { "mix", 0.8f } } },
+        { "Black Hole",       { { "x", 0.0f }, { "y", 1.0f }, { "grain", 1.0f }, { "density", 0.6f }, { "pitch", 0.7f }, { "updown", 0.0f }, { "scatter", 0.8f }, { "reach", 1.0f }, { "life", 0.7f }, { "lifespeed", 0.2f }, { "space", 1.0f }, { "size", 1.0f }, { "tone", 0.2f }, { "dirt", 0.3f }, { "mix", 0.85f } } },
+        { "Radio From Mars",  { { "x", 0.7f }, { "y", 0.85f }, { "grain", 0.35f }, { "density", 0.65f }, { "pitch", 0.55f }, { "scale", 6 }, { "scatter", 0.6f }, { "life", 0.85f }, { "lifespeed", 0.75f }, { "space", 0.4f }, { "tone", 0.7f }, { "dirt", 0.55f }, { "mix", 0.65f }, { "detune", 0.6f } } },
         { "Comet Tail",       { { "x", 0.25f }, { "y", 0.2f }, { "grain", 0.85f }, { "density", 0.5f }, { "pitch", 0.35f }, { "scatter", 0.55f }, { "life", 0.6f }, { "space", 0.95f }, { "tone", 0.55f }, { "dirt", 0.0f }, { "mix", 0.7f } } },
     };
     return list;
@@ -84,6 +126,11 @@ void SwarmProcessor::randomise()
     set ("grain", r (0.15f, 0.85f)); set ("density", r (0.3f, 0.85f)); set ("pitch", r (0.15f, 0.85f));
     set ("scatter", r (0.1f, 0.85f)); set ("life", r (0.25f, 0.9f)); set ("space", r (0.2f, 0.85f));
     set ("tone", r (0.3f, 0.7f)); set ("dirt", dice.nextFloat() < 0.5f ? 0.0f : r (0.05f, 0.4f));
+    // the finer ones: mostly left on auto, sometimes pushed
+    auto maybe = [this, &r] (const char* id, float lo, float hi, float def) { set (id, dice.nextFloat() < 0.35f ? r (lo, hi) : def); };
+    maybe ("shape", 0.2f, 0.85f, 0.5f); maybe ("reverse", 0.2f, 0.9f, 0.5f); maybe ("updown", 0.1f, 0.9f, 0.5f);
+    maybe ("detune", 0.05f, 0.5f, 0.0f); maybe ("width", 0.5f, 1.0f, 0.67f); maybe ("reach", 0.25f, 0.9f, 0.5f);
+    maybe ("lifespeed", 0.2f, 0.8f, 0.5f); maybe ("echo", 0.2f, 0.8f, 0.5f); maybe ("size", 0.3f, 0.9f, 0.5f);
     currentPreset = -1;
 }
 
@@ -131,6 +178,9 @@ void SwarmProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer&)
     s.scatter = p ("scatter"); s.life = p ("life"); s.space = p ("space"); s.tone = p ("tone"); s.dirt = p ("dirt");
     s.mix = p ("mix"); s.outDb = p ("output"); s.freeze = p ("freeze") > 0.5f;
     s.sync = roundToInt (p ("sync")); s.scale = roundToInt (p ("scale"));
+    s.shape = p ("shape"); s.reverse = p ("reverse"); s.upDown = p ("updown"); s.detune = p ("detune"); s.width = p ("width");
+    s.reach = p ("reach"); s.lifeSpeed = p ("lifespeed"); s.echo = p ("echo"); s.echoTime = roundToInt (p ("echotime"));
+    s.size = p ("size"); s.duck = p ("duck"); s.split = roundToInt (p ("split"));
     s.bpm = lastBpm;
 
     // the engine works in blocks it was prepared for

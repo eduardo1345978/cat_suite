@@ -288,6 +288,57 @@ void DustSlider::paint (Graphics& g)
 }
 
 //==============================================================================
+MorePanel::MorePanel (SwarmProcessor& p)
+    : echoTime (p.apvts, "echotime", "echo", nullptr, 40), split (p.apvts, "split", "dry lows", nullptr, 58)
+{
+    const std::tuple<const char*, const char*, const char*> list[] = {
+        { "shape", "SHAPE", "Soft (round grains) or chopped (flat with short fades). The middle: what the nebula does" },
+        { "reverse", "REVERSE", "How many grains play backwards (the middle: what the nebula does)" },
+        { "updown", "UP / DOWN", "Pitch jumps: only down, both, or only up" },
+        { "detune", "DETUNE", "Every grain a little out of tune (up to 50 cents): wide, choir-like" },
+        { "width", "WIDTH", "How wide the swarm flies in stereo (0 = mono, 150 = wider than the speakers)" },
+        { "reach", "REACH", "How far back in time the grains are taken from (and how often it digs up old bits)" },
+        { "lifespeed", "SPEED", "LIFE SPEED: how fast LIFE wanders and breathes" },
+        { "echo", "ECHO", "The tempo echo after the grains (the middle: what the nebula does)" },
+        { "size", "SIZE", "How long the reverb is" },
+        { "duck", "DUCK", "The swarm steps back while the sound plays and blooms in the gaps (keeps vocals clear)" } };
+    for (auto& [id, cap, tip] : list)
+    {
+        auto sl = std::make_unique<DustSlider> (p.apvts, id, cap);
+        sl->setTooltip (tip);
+        sl->setDoubleClickReturnValue (true, (double) p.apvts.getParameter (id)->convertFrom0to1 (p.apvts.getParameter (id)->getDefaultValue()));
+        addAndMakeVisible (*sl);
+        sliders.push_back (std::move (sl));
+    }
+    echoTime.getCombo().setTooltip ("How far apart the echoes are (in time with Cubase)");
+    split.getCombo().setTooltip ("Everything below this stays dry and solid (bass, kick)");
+    addAndMakeVisible (echoTime);
+    addAndMakeVisible (split);
+}
+
+void MorePanel::paint (Graphics& g)
+{
+    const auto b = getLocalBounds().toFloat().reduced (0.5f);
+    g.setColour (Colour (0xff0b0b16).withAlpha (0.86f));
+    g.fillRoundedRectangle (b, 14.0f);
+    g.setColour (Colours::white.withAlpha (0.14f));
+    g.drawRoundedRectangle (b, 14.0f, 1.0f);
+    g.setFont (cat::displayFont (11.0f).withExtraKerningFactor (0.4f));
+    g.setColour (Colours::white.withAlpha (0.45f));
+    g.drawText ("MORE", b.reduced (16.0f, 8.0f).withHeight (14.0f), Justification::centredLeft);
+    g.setFont (cat::catFont (10.5f));
+    g.setColour (Colours::white.withAlpha (0.38f));
+    g.drawText ("double-click a slider: back to auto", b.reduced (16.0f, 8.0f).withHeight (14.0f), Justification::centredRight);
+}
+
+void MorePanel::resized()
+{
+    for (size_t i = 0; i < sliders.size(); ++i) sliders[i]->setBounds (16 + (int) i * 76, 30, 64, 50);
+    echoTime.setBounds (getWidth() - 186, 30, 170, 24);
+    split.setBounds (getWidth() - 186, 58, 170, 24);
+}
+
+//==============================================================================
 void SwarmEditor::Pill::paintButton (Graphics& g, bool over, bool)
 {
     const auto b = getLocalBounds().toFloat().reduced (1.0f);
@@ -349,17 +400,36 @@ SwarmEditor::SwarmEditor (SwarmProcessor& p) : processor (p)
     {
         auto s = std::make_unique<DustSlider> (processor.apvts, id, cap);
         s->setTooltip (tips[i++]);
+        s->setDoubleClickReturnValue (true, (double) processor.apvts.getParameter (id)->convertFrom0to1 (processor.apvts.getParameter (id)->getDefaultValue()));
         addAndMakeVisible (*s);
         sliders.push_back (std::move (s));
     }
     freeze.setClickingTogglesState (true);
     freeze.setTooltip ("Hold the last seconds and let the swarm play them forever");
     addAndMakeVisible (freeze);
+    more.setTooltip ("More controls: shape, reverse, up / down, detune, width, reach, life speed, echo, reverb size, duck, dry lows");
+    more.setColour (TextButton::buttonColourId, Colours::transparentBlack);
+    more.setColour (TextButton::buttonOnColourId, Colours::white.withAlpha (0.12f));
+    more.setColour (TextButton::textColourOffId, Colours::white.withAlpha (0.6f));
+    more.setColour (TextButton::textColourOnId, Colours::white);
+    more.setClickingTogglesState (true);
+    more.onClick = [this] { showMore (more.getToggleState()); };
+    addAndMakeVisible (more);
+    addChildComponent (morePanel);
+    more.setToggleState (processor.moreOpen, dontSendNotification);
+    morePanel.setVisible (processor.moreOpen);
     setSize (designW, designH);
     startTimerHz (30);
 }
 
 SwarmEditor::~SwarmEditor() { stopTimer(); }
+
+void SwarmEditor::showMore (bool on)
+{
+    processor.moreOpen = on;
+    morePanel.setVisible (on);
+    if (on) morePanel.toFront (false);
+}
 
 void SwarmEditor::paint (Graphics& g)
 {
@@ -374,7 +444,9 @@ void SwarmEditor::resized()
     grid.setBounds (330, 34, 112, 26);
     notes.setBounds (452, 34, 168, 26);
     for (size_t i = 0; i < sliders.size(); ++i) sliders[i]->setBounds (34 + (int) i * 82, stripY + 10, 70, 50);
-    freeze.setBounds (790, stripY + 12, 170, 50);
+    freeze.setBounds (790, stripY + 8, 170, 46);
+    more.setBounds (790, stripY + 60, 170, 24);
+    morePanel.setBounds (20, stripY - 100, designW - 40, 92);
 }
 
 void SwarmEditor::timerCallback()
