@@ -1,0 +1,47 @@
+name: Wiki
+
+# Copies docs/ into the GitHub wiki (Wiki tab) whenever the docs change.
+# The wiki has to exist first: create any first page once on the Wiki tab (this job then replaces it).
+
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**", ".github/scripts/docs_to_wiki.py", ".github/workflows/wiki.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki
+  cancel-in-progress: false
+
+jobs:
+  wiki:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Get the wiki
+        env:
+          TOKEN: ${{ secrets.WIKI_TOKEN || github.token }}
+        run: |
+          git clone "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" wiki || {
+            echo "::error::The wiki does not exist yet. Open the Wiki tab, click 'Create the first page', save it, then run this again."
+            exit 1; }
+
+      - name: Turn docs/ into wiki pages
+        run: |
+          rm -f wiki/Home.md                      # the placeholder first page
+          python3 .github/scripts/docs_to_wiki.py . wiki "$GITHUB_REPOSITORY"
+
+      - name: Publish
+        working-directory: wiki
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "The wiki is up to date."; exit 0; fi
+          git commit -m "Wiki from docs/ at ${GITHUB_SHA::7}"
+          git push
