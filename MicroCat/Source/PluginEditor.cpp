@@ -668,7 +668,7 @@ void MicroCatEditor::paintListBoxItem (int row, juce::Graphics& g, int w, int h,
 void MicroCatEditor::selectedRowsChanged (int row)
 {
     if (updatingList || ! juce::isPositiveAndBelow (row, (int) shown.size())) return;
-    if (shownLibraryIndex[(size_t) row] >= 0) processor.applyPreset (shownLibraryIndex[(size_t) row]);
+    if (shownLibraryIndex[(size_t) row] >= 0) processor.pickPreset (shownLibraryIndex[(size_t) row]);
     else { processor.setTuning (shown[(size_t) row], true); }
     circle.selected = 1;
     status = {};

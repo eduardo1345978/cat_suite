@@ -38,7 +38,9 @@ public:
     // programs = the built-in tunings
     int getNumPrograms() override;
     int getCurrentProgram() override { return juce::jmax (0, currentPreset.load()); }
-    void setCurrentProgram (int i) override { applyPreset (i); }
+    void setCurrentProgram (int i) override;
+    /** A tuning picked on the screen: applied, and the host's program parameter is told (so it never sends the old one back). */
+    void pickPreset (int index);
     const juce::String getProgramName (int i) override;
     void changeProgramName (int, const juce::String&) override {}
 
@@ -71,6 +73,8 @@ public:
     void previewNote (int key, bool on);
 
     micro::Engine engine;
+    micro::Engine ownEngine;
+    std::atomic<int> hostProgram { 0 };  // the program the host last knows about (a re-send of it changes nothing)            // the copy that feeds the own sound: always tuned, even when MTS-ESP takes over the MIDI out
 
     /** Cat Link: the pitch (MIDI semitones, fractional) every key plays now; out-of-range keys keep k. */
     std::array<float, 128> keyPitches() const;
@@ -100,7 +104,7 @@ private:
     int mappingFor (const micro::TuningData&) const;
     int engineVersion = 0, lastForced = -1;
     juce::MidiMessageCollector preview;
-    juce::MidiBuffer previewBuffer, outBuffer;
+    juce::MidiBuffer previewBuffer, outBuffer, ownBuffer;
     hub::KeysSynth synth;          // Micro-Cat's own sound: plays the tuned MPE notes it makes
     int synthSound = -1;
     bool synthWasOn = false;

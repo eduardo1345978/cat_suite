@@ -256,7 +256,7 @@ bool LinkBus::readTuning (juce::uint32& seq, std::array<float, 128>& pitches, bo
         {
             // the bus is a file anyone on this computer can write: only take sane pitches
             const float v = shared->tuningPitch[k];
-            p[(size_t) k] = std::isfinite (v) && v > -60.0f && v < 200.0f ? v : (float) k;
+            p[(size_t) k] = std::isfinite (v) && v > -400.0f && v < 600.0f ? v : (float) k;   // (wide: a 5-EDO keyboard reaches far)
         }
         const bool a = shared->tuningActive != 0u;
         const auto src = shared->tuningSource;

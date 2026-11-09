@@ -51,6 +51,7 @@ MicroCatProcessor::MicroCatProcessor()
         if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (prm))
             refs[r->getParameterID().toStdString()] = apvts.getRawParameterValue (r->getParameterID());
     outBuffer.ensureSize (4096);
+    ownBuffer.ensureSize (4096);
     previewBuffer.ensureSize (512);
     preview.reset (48000.0);
     applyPreset (0);
@@ -154,6 +155,21 @@ const juce::String MicroCatProcessor::getProgramName (int i)
     return juce::isPositiveAndBelow (i, (int) library().size()) ? library()[(size_t) i].name : juce::String();
 }
 
+void MicroCatProcessor::setCurrentProgram (int i)
+{
+    // hosts send the program parameter again now and then (loading, starting the transport, automation): the same value
+    // again must not throw away the tuning that's playing (a picked or edited one)
+    if (i == hostProgram.exchange (i)) return;
+    applyPreset (i);
+}
+
+void MicroCatProcessor::pickPreset (int index)
+{
+    applyPreset (index);
+    hostProgram = index;
+    updateHostDisplay (ChangeDetails().withProgramChanged (true));
+}
+
 void MicroCatProcessor::applyPreset (int index)
 {
     if (! juce::isPositiveAndBelow (index, (int) library().size())) return;
@@ -255,6 +271,7 @@ void MicroCatProcessor::prepareToPlay (double sampleRate, int)
     synth.prepare (sampleRate > 0.0 ? sampleRate : 48000.0);
     synthSound = -1;
     engine.reset();
+    ownEngine.reset();
     engineVersion = 0;
 }
 
@@ -269,6 +286,8 @@ void MicroCatProcessor::syncEngineTuning()
     b.mapping = mappingFor (b);
     engine.setTuning (a);
     engine.setTuningB (b);
+    ownEngine.setTuning (a);
+    ownEngine.setTuningB (b);
     engineVersion = v;
 }
 
@@ -299,9 +318,12 @@ void MicroCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
     outBuffer.clear();
     auto settings = currentSettings();
-    if (mtsConnected.load (std::memory_order_relaxed)) settings.bypass = true;   // MTS-ESP tunes the synths: the notes go out as they are
     settings.blockSize = n;
     settings.blockSeconds = n / juce::jmax (1000.0, getSampleRate());
+    const auto ownSettings = settings;                                            // the own sound always plays the tuning
+    if (mtsConnected.load (std::memory_order_relaxed)) settings.bypass = true;   // MTS-ESP tunes the synths: the notes go out as they are
+    ownBuffer.clear();
+    ownEngine.process (midi, ownBuffer, ownSettings);
     engine.process (midi, outBuffer, settings);
 
     // its own sound: the tuned MPE notes it just made, played by the built-in keys
@@ -314,7 +336,7 @@ void MicroCatProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         auto* l = buffer.getWritePointer (0);
         auto* r = buffer.getWritePointer (juce::jmin (1, buffer.getNumChannels() - 1));
         int pos = 0;
-        for (const auto meta : outBuffer)
+        for (const auto meta : ownBuffer)
         {
             const int at = juce::jlimit (0, n, meta.samplePosition);
             if (at > pos) { synth.render (l + pos, r + pos, at - pos); pos = at; }

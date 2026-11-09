@@ -56,6 +56,35 @@ static void onMessageThread (std::function<void()> f)
 
 static double centsOf (const KeyPitch& k, double rootHz) { return 1200.0 * std::log2 (k.hz / rootHz); }
 
+/** Micro-Cat's own sound: hold a key for ~0.6 s, return the pitch heard (Hz) and the peak. */
+static std::pair<double, float> ownPitch (MicroCatProcessor& m, int key)
+{
+    auto setP = [&m] (const char* id, float v) { auto* prm = m.apvts.getParameter (id); prm->setValueNotifyingHost (prm->convertTo0to1 (v)); };
+    setP ("mapping", 1.0f);
+    setP ("sound", 4.0f);
+    const double sr = 48000.0;
+    const int bs = 512;
+    m.setRateAndBufferSizeDetails (sr, bs);
+    m.prepareToPlay (sr, bs);
+    std::vector<float> out;
+    for (int b = 0; b < 60; ++b)
+    {
+        AudioBuffer<float> audio (2, bs);
+        MidiBuffer midi;
+        if (b == 0) midi.addEvent (MidiMessage::noteOn (1, key, (uint8) 100), 0);
+        m.processBlock (audio, midi);
+        for (int i = 0; i < bs; ++i) out.push_back (audio.getSample (0, i));
+    }
+    float peak = 0.0f;
+    for (auto x : out) peak = std::max (peak, std::abs (x));
+    const int start = (int) out.size() - 12000, len = 9000;
+    auto ac = [&] (int lag) { double a = 0.0; for (int i = 0; i < len; ++i) a += (double) out[(size_t) (start + i)] * (double) out[(size_t) (start + i + lag)]; return a; };
+    int bestLag = 0; double best = -1.0e30;
+    for (int lag = 120; lag <= 240; ++lag) { const double a = ac (lag); if (a > best) { best = a; bestLag = lag; } }
+    const double y0 = ac (bestLag - 1), y1 = ac (bestLag), y2 = ac (bestLag + 1);
+    return { sr / (bestLag + 0.5 * (y0 - y2) / (y0 - 2.0 * y1 + y2)), peak };
+}
+
 int main()
 {
     ScopedJuceInitialiser_GUI init;
@@ -336,6 +365,24 @@ int main()
         check (r.getTuningB().name == "24-EDO" && std::abs (r.currentSettings().morph - 0.5f) < 1e-3f, "a saved project keeps tuning B and the morph");
     }
 
+    // the host sends its program parameter again (Cubase does when loading / starting): a picked tuning stays
+    {
+        MicroCatProcessor m;
+        const int idx = [] { for (int i = 0; i < (int) library().size(); ++i) if (library()[(size_t) i].name == "24-EDO") return i; return -1; }();
+        m.setCurrentProgram (0);                   // what the host knows
+        m.pickPreset (idx);                        // picked on the screen
+        m.setCurrentProgram (idx);                 // the host follows (it was told)
+        m.setCurrentProgram (idx);                 // ... and sends it again
+        const bool kept = m.getTuning().name == "24-EDO";
+        m.setTuning (*find ("19-EDO"), true);     // an edited / own tuning
+        m.setCurrentProgram (idx);                 // the host sends its (old) program again
+        check (kept && m.getTuning().name == "19-EDO", "the host sending the program again doesn't throw away the tuning that's playing");
+        m.setCurrentProgram (3);
+        check (m.getTuning().name == library()[3].name, "the host choosing another program does change it");
+        const auto [hz, pk] = ownPitch (m, 60);
+        juce::ignoreUnused (hz, pk);
+    }
+
     // its own sound: Micro-Cat plays the tuning itself (no other synth), and it really is in tune
     {
         MicroCatProcessor m;
@@ -450,6 +497,13 @@ int main()
                 check (String (MTS_GetScaleName (client)) == "24-EDO" && a->mts.numClients() >= 1, "MTS-ESP: the scale's name and the synth count");
                 const auto [note, bends] = playOne (*a);
                 check (note == 64 && bends == 0, "MTS-ESP on: the MIDI out plays the notes as they are (the synths tune themselves)");
+                {
+                    // ... but Micro-Cat's own sound still plays the tuning (it used to fall back to normal notes here)
+                    const auto [hz, pk] = ownPitch (*a, 61);
+                    const double want = C4 * std::pow (2.0, 0.5 / 12.0);
+                    check (pk > 0.02f && std::abs (1200.0 * std::log2 (hz / want)) < 5.0,
+                           "MTS-ESP on: the own sound still plays 24-EDO (C#4 = " + String (hz, 2) + " Hz, wanted " + String (want, 2) + ")");
+                }
                 onMessageThread ([&] { if (auto* prm = a->apvts.getParameter ("bypass")) prm->setValueNotifyingHost (1.0f); });
                 Thread::sleep (400);
                 check (std::abs (MTS_NoteToFrequency (client, 61, -1) - MicroCatProcessor::concertHz (61)) < 1e-3, "MTS-ESP: bypass sends normal tuning");
