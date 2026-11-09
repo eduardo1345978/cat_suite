@@ -15,11 +15,13 @@ echo Installing to %DEST% > "%LOG%"
 for %%C in (Chord Patt Bend Drum Orbit Sing Bass Glide Talk Life Muse Echo Micro Phase Hum Glitch) do call :plugin %%C
 call :fx Molten
 call :fx Swarm
+call :fx Negative
 echo. >> "%LOG%"
 echo Apps to %APPS% >> "%LOG%"
 call :app CatHub Cat-Hub.exe
 call :app CatOcean Cat-Ocean.exe
 call :app MuseCat Standalone\Muse-Cat.exe
+call :app Negative Standalone\Negative.exe
 copy /Y "packaging\Cat-Ocean-YouTube-Description.txt" "%APPS%\" >> "%LOG%" 2>&1
 echo INSTALL FINISHED >> "%LOG%"
 exit /b 0

@@ -139,6 +139,11 @@ namespace
             t.button = ButtonStyle::Glow; t.corner = 8.0f;
             font (t, SoraBold_ttf, SoraBold_ttfSize, 0.95f);
         }
+        else if (p.startsWith ("negative"))   // a plain tool: near-black, off-white, nothing else
+        {
+            t = make ("Tool", 0xff0b0b0c, 0xff121214, 0xff18181b, 0xff202024, 0xff2c2c31, 0xffe8e6e1, 0xff8a8884, 0xffe8e6e1);
+            t.button = ButtonStyle::Flat; t.corner = 15.0f;
+        }
         else if (p.startsWith ("swarm"))      // deep space: black, nebula violet, star dust
         {
             t = make ("Deep Field", 0xff05050b, 0xff0b0b16, 0xff12121f, 0xff1a1a2a, 0xff2a2a40, 0xffe9e6f5, 0xff8f8aa8, 0xffb9a6ff);

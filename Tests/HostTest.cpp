@@ -1912,6 +1912,32 @@ void testSwarm()
     fx->releaseResources();
 }
 
+/** Negative: loads as a VST3 effect with MIDI in; a MIDI note plays the photo, the track's own sound passes untouched. */
+void testNegative()
+{
+    std::cout << "\n== Negative ==" << std::endl;
+    auto fx = loadPlugin (NEGATIVE_VST3);
+    if (fx == nullptr) { ++failures; return; }
+    check (fx->getTotalNumInputChannels() == 2 && fx->getTotalNumOutputChannels() == 2 && fx->acceptsMidi(), "Negative is a stereo effect that takes MIDI");
+    fx->prepareToPlay (sampleRate, blockSize);
+    juce::Thread::sleep (1500);                                  // it makes the photo's sound in the background
+    juce::AudioBuffer<float> audio (2, blockSize);
+    juce::MidiBuffer midi;
+    float peakLevel = 0.0f;
+    bool finite = true;
+    for (int b = 0; b < 200; ++b)
+    {
+        audio.clear();
+        midi.clear();
+        if (b == 0) midi.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 120), 0);
+        fx->processBlock (audio, midi);
+        peakLevel = juce::jmax (peakLevel, audio.getMagnitude (0, blockSize));
+        for (int i = 0; i < blockSize; ++i) finite &= std::isfinite (audio.getSample (0, i));
+    }
+    check (finite && peakLevel > 0.01f && peakLevel <= 1.0f, "Negative: a MIDI note plays the photo (peak " + juce::String (peakLevel, 2) + ")");
+    fx->releaseResources();
+}
+
 int main()
 {
     juce::ScopedJuceInitialiser_GUI juceInit;
@@ -1937,6 +1963,7 @@ int main()
     testGlitchCat();
     testMolten();
     testSwarm();
+    testNegative();
 
     std::cout << "\n" << (failures == 0 ? "ALL TESTS PASSED" : juce::String (failures) + " TEST(S) FAILED") << std::endl;
     return failures == 0 ? 0 : 1;

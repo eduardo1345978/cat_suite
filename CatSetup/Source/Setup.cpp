@@ -30,6 +30,7 @@ const std::vector<Item>& catalog()
         { "Glitch-Cat", "Glitch-Cat", "Every note falls apart into bugs",  Kind::Plugin, 0xff3dff9a },
         { "Molten",     "Molten",     "The sound melts (warm and fat)",    Kind::Plugin, 0xffff6a1f },
         { "Swarm",      "Swarm",      "The sound becomes living star dust", Kind::Plugin, 0xffb9a6ff },
+        { "Negative",   "Negative",   "A photo you can hear",               Kind::Plugin, 0xffe8e6e1 },
         { "app:Cat-Hub",   "Cat Hub",   "Every Cat jamming together",       Kind::App, 0xff8fa3f0, true },
         { "app:Cat-Ocean", "Cat Ocean", "The endless ocean for YouTube",    Kind::App, 0xff2ce8f5, true },
         { "app:Cat-Box",   "Cat Box",   "The groovebox",                    Kind::App, 0xffd9dde3, true },
@@ -38,6 +39,7 @@ const std::vector<Item>& catalog()
         { "app:Glide-Cat", "Glide-Cat app", "The glide synth on its own",      Kind::App, 0xffff9c3a, true },
         { "app:Life-Cat",  "Life-Cat app",  "Watch the ecosystem play",        Kind::App, 0xff5cffd6, true },
         { "app:Muse-Cat",  "Muse-Cat app",  "Write songs without Cubase",      Kind::App, 0xff4fd1ff, true },
+        { "app:Negative",  "Negative app",  "Photos to sound, sounds to pictures", Kind::App, 0xffe8e6e1, true },
         { mtsId, "MTS-ESP library", "Lets Micro-Cat tune Vital, Surge, Serum ... (by ODDSound)", Kind::Extra, 0xffb5a98e },
     };
     return items;
