@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   mac:
-    runs-on: macos-14
+    runs-on: macos-15         # (macos-14 is no longer offered for this repo: every run was cancelled at once)
     timeout-minutes: 180
 
     steps:

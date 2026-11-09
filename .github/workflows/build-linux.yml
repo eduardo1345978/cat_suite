@@ -1,0 +1,115 @@
+# Builds every Cat Suite plug-in for Linux (x86_64 VST3 for Reaper, Bitwig, Ardour, Renoise, Waveform ...) plus the
+# sound apps (standalone), runs the host tests on the real Linux binaries, and adds Cat-Suite-Linux.tar.gz to the
+# "latest" release (next to the Windows and Mac downloads):
+#   Cat-Suite-Linux.tar.gz   VST3/*.vst3 + Apps/ + Hub Cats/ + install.sh + README-linux.txt
+name: Build Linux plug-ins
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:        # "Run workflow" button on the Actions page
+
+permissions:
+  contents: write           # needed to add the archive to the release
+
+concurrency:
+  group: linux-build-${{ github.ref }}
+  cancel-in-progress: false  # a running build always finishes (and publishes); newer pushes wait their turn
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04     # an older glibc, so the files run on most distributions from 2022 on
+    timeout-minutes: 180
+
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Install what JUCE needs on Linux
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build libasound2-dev libjack-jackd2-dev ladspa-sdk \
+            libcurl4-openssl-dev libfreetype-dev libfontconfig1-dev libx11-dev libxcomposite-dev libxcursor-dev \
+            libxext-dev libxinerama-dev libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev xvfb
+
+      - name: Reuse the JUCE download
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: linux-juce-8.0.15-${{ hashFiles('cmake/JuceSetup.cmake') }}
+
+      - name: Configure (VST3 + standalone apps, with tests)
+        run: >
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DCAT_BUILD_TESTS=ON "-DCAT_PLUGIN_FORMATS=VST3;Standalone" -DCAT_SOUND_STANDALONE=ON
+
+      - name: Build everything
+        run: |
+          set +e
+          cmake --build build --parallel 4 2>&1 | tee build.log
+          code=${PIPESTATUS[0]}
+          grep -E "error:|undefined reference" build.log | sort -u | head -40 | sed 's/^/::error::/'
+          exit $code
+
+      - name: Run the tests (they load the Linux .vst3 files)
+        run: |
+          host=$(find build/Tests -type f -name CatSuiteHostTest -perm -u+x | head -1)
+          echo "test host: $host"
+          set +e
+          xvfb-run -a "$host" 2>&1 | tee test.log
+          code=${PIPESTATUS[0]}
+          grep -E "FAIL|Could not|TEST\(S\) FAILED|Segmentation|Abort|exception" test.log | head -40 | sed 's/^/::error::/'
+          [ $code -ne 0 ] && echo "::error::test host exit code $code (last lines: $(tail -3 test.log | tr '\n' ' '))"
+          exit $code
+
+      - name: Package
+        run: |
+          set -e
+          pkg="pkg/Cat-Suite"
+          mkdir -p "$pkg/VST3" "$pkg/Apps" "$pkg/Hub Cats"
+          for b in $(find build -maxdepth 5 -type d -name "*.vst3" -path "*_artefacts/Release/VST3/*" | grep -v Contents); do
+            cp -r "$b" "$pkg/VST3/"
+            echo "packed $(basename "$b")"
+          done
+          count=$(find "$pkg/VST3" -maxdepth 1 -type d -name "*.vst3" | wc -l)
+          if [ "$count" -lt 19 ]; then echo "::error::Only $count plug-ins were packed"; exit 1; fi
+          # the sound apps
+          for p in SingCat:Sing-Cat TalkCat:Talk-Cat GlideCat:Glide-Cat LifeCat:Life-Cat MuseCat:Muse-Cat Negative:Negative; do
+            t=${p%%:*}; n=${p##*:}
+            cp "build/$t/${t}_artefacts/Release/Standalone/$n" "$pkg/Apps/"
+          done
+          cp build/CatHub/CatHub_artefacts/Release/Cat-Hub build/CatOcean/CatOcean_artefacts/Release/Cat-Ocean build/CatBox/CatBox_artefacts/Release/Cat-Box "$pkg/Apps/"
+          for n in Chord-Cat Bass-Cat Drum-Cat Life-Cat Patt-Cat Bend-Cat Orbit-Cat Glide-Cat Sing-Cat Talk-Cat; do cp -r "$pkg/VST3/$n.vst3" "$pkg/Hub Cats/"; done
+          apps=$(ls "$pkg/Apps" | wc -l)
+          if [ "$apps" -ne 9 ]; then echo "::error::Only $apps apps were packed"; exit 1; fi
+          # the Hub plays a jam offline with these exact files; every Cat must be heard
+          xvfb-run -a "$pkg/Apps/Cat-Hub" --selftest "$PWD/$pkg/Hub Cats" "$PWD/hub-test.wav" 16 || { echo "::error::Cat Hub self test failed"; cat hub-test.txt || true; exit 1; }
+          cp packaging/install-linux.sh "$pkg/install.sh"
+          chmod +x "$pkg/install.sh" "$pkg"/Apps/*
+          cp packaging/README-linux.txt "$pkg/"
+          cp LICENSE "$pkg/LICENSE.txt"
+          cp THIRD-PARTY-NOTICES.txt "$pkg/"
+          cp -r licenses "$pkg/licenses"
+          tar -C pkg -czf Cat-Suite-Linux.tar.gz Cat-Suite
+          ls -la Cat-Suite-Linux.tar.gz
+
+      - name: Keep the archive on the Actions page
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cat-Suite-Linux
+          path: Cat-Suite-Linux.tar.gz
+          retention-days: 30
+
+      - name: Add to the "latest" release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # the Windows build creates / updates the release; wait for it to exist, then add (or replace) the archive
+          for try in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            if gh release view latest > /dev/null 2>&1 && gh release upload latest Cat-Suite-Linux.tar.gz --clobber; then
+              echo "Cat-Suite-Linux.tar.gz is on the release"; exit 0
+            fi
+            echo "release not ready (try $try), waiting"; sleep 300
+          done
+          echo "::error::Could not add Cat-Suite-Linux.tar.gz to the release"; exit 1
