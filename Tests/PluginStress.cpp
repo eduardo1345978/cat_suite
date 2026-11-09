@@ -209,7 +209,9 @@ int main (int argc, char** argv)
             else std::cout << "no button " << click << std::endl;
         }
         pump (2000);
-        auto img = ed->createComponentSnapshot (ed->getLocalBounds());
+        // CAT_SNAPSHOT_SCALE: a sharper picture (e.g. 2 for the README)
+        const float scale = jlimit (0.5f, 4.0f, (float) SystemStats::getEnvironmentVariable ("CAT_SNAPSHOT_SCALE", "1").getDoubleValue());
+        auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, scale);
         File f (shot);
         f.deleteFile();
         if (auto os = f.createOutputStream()) PNGImageFormat().writeImageToStream (img, *os);

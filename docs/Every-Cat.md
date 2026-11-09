@@ -1,0 +1,9 @@
+# What every Cat can do
+
+- **Preset bar**: star a preset to make it a favourite, step through all presets or favourites only, save your own presets (the plug-in's complete state) and open them from the menu. They live in `%APPDATA%\CatSuite\<Plug-in>\Presets`.
+- **Chains** (preset bar menu): one name loads a matching preset in every Cat that is open, e.g. *Trap Night* sets Chord-Cat, Patt-Cat, Bend-Cat, Drum-Cat and Bass-Cat together. Ten chains.
+- **Follow Drum**: Drum-Cat shares its swing and timing feel; Chord-Cat, Patt-Cat, Orbit-Cat and Bass-Cat follow it when Follow Drum is on.
+- **Chord-Cat STRUM tab**: 10 directions (incl. root first, low-then-high, outside-in, guitar down/up strokes), 16 timing shapes + curve, octave stack, tilt or target velocity, Classic sliding window, Round Trip repeats, synced bursts with muted chops, strum on release, live strum view, 24 strum presets and a dice.
+- **Sing-Cat**: Stage / Lips / 3D face views, a microphone pair you drag on the stage (level, timing and tone follow each singer's distance and angle), and lyrics (each note sings the next syllable).
+
+Every plug-in has its own **music-reactive cat**: Chord-Cat wears headphones, Patt-Cat is a tabby, Bend-Cat has a pitch wave and a curly tail, Drum-Cat plays a snare, Orbit-Cat wears a space helmet with a planet circling it, Sing-Cat sings into a microphone, Bass-Cat plays a bass guitar and Glide-Cat is wrapped in coloured glide lines Talk-Cat wears an idol headset with music notes floating up and Life-Cat has a sprout on its head with tiny creatures swimming around it. Each cat nods to the beat, twitches its ears and flicks its tail on notes, its eyes glow with how hard you play, and it appears big on a short boot screen when the window opens (click to skip). Every plug-in also has **Surprise** (randomise within musical ranges) with a one-step **undo** arrow; Bend-Cat's Surprise never touches Bend Range / MPE settings, which must match your instrument.
