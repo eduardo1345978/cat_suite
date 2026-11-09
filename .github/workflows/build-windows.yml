@@ -114,7 +114,7 @@ jobs:
           Copy-Item THIRD-PARTY-NOTICES.txt $snd
           Copy-Item licenses "$snd\licenses" -Recurse
           Compress-Archive -Path "$snd\*" -DestinationPath Cat-Sound-Apps-Windows.zip -Force
-          if ((Get-ChildItem "$snd\Apps" -Filter *.exe).Count -ne 8) { throw "Sound apps missing" }
+          if ((Get-ChildItem "$snd\Apps" -Filter *.exe).Count -ne 9) { throw "Sound apps missing" }
           Copy-Item packaging\Get-Cat-Sound-Apps.bat .
           # Cat Suite Setup: the installer / updater (its self test installs, updates and removes a fake release)
           Copy-Item "build\CatSetup\CatSetup_artefacts\Release\Cat-Suite-Setup.exe" .
