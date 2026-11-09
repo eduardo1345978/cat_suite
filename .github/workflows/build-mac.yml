@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   mac:
-    runs-on: macos-15         # (macos-14 is no longer offered for this repo: every run was cancelled at once)
+    runs-on: macos-15-intel   # (arm64 macos-14/15 runners never start for this repo; Intel builds the universal binary fine)
     timeout-minutes: 180
 
     steps:
