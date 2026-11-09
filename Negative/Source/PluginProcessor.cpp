@@ -37,8 +37,7 @@ AudioProcessorValueTreeState::ParameterLayout NegativeProcessor::createLayout()
 }
 
 NegativeProcessor::NegativeProcessor()
-    : AudioProcessor (BusesProperties().withInput ("Input", AudioChannelSet::stereo(), true)
-                                       .withOutput ("Output", AudioChannelSet::stereo(), true)),
+    : AudioProcessor (BusesProperties().withOutput ("Output", AudioChannelSet::stereo(), true)),   // an instrument: sound out only
       Thread ("Negative render"),
       apvts (*this, nullptr, "Negative", createLayout())
 {
@@ -75,8 +74,7 @@ NegativeProcessor::~NegativeProcessor()
 bool NegativeProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
     const auto out = layouts.getMainOutputChannelSet();
-    if (out != AudioChannelSet::mono() && out != AudioChannelSet::stereo()) return false;
-    return layouts.getMainInputChannelSet() == out;
+    return out == AudioChannelSet::mono() || out == AudioChannelSet::stereo();
 }
 
 void NegativeProcessor::markDirty()
@@ -174,8 +172,7 @@ void NegativeProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& mi
 {
     ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
-    for (int ch = getTotalNumInputChannels(); ch < buffer.getNumChannels(); ++ch) buffer.clear (ch, 0, n);
-    if (isStandalone()) buffer.clear();              // the program: no microphone feeding back
+    buffer.clear();                                  // an instrument: only the photo comes out
 
     double ppq = -1.0, bpm = hostBpm.load();
     bool playing = false;

@@ -1,5 +1,7 @@
 #include "PluginEditor.h"
 #include "CatTheme.h"
+#include "CatFonts.h"
+#include <map>
 
 using namespace juce;
 
@@ -60,7 +62,48 @@ void Chip::paintButton (Graphics& g, bool over, bool down)
 }
 
 //==============================================================================
-PhotoView::PhotoView (NegativeProcessor& p) : processor (p) { refresh(); }
+Font TextFont::font (float height) const
+{
+    if (data != nullptr)
+    {
+        static std::map<const char*, Typeface::Ptr> cache;
+        auto& tf = cache[data];
+        if (tf == nullptr) tf = Typeface::createSystemTypefaceFor (data, (size_t) size);
+        if (tf != nullptr) return Font (FontOptions (tf).withHeight (height));
+    }
+    if (name == "Serif") return Font (FontOptions (Font::getDefaultSerifFontName(), height, Font::bold));
+    if (name == "Mono") return Font (FontOptions (Font::getDefaultMonospacedFontName(), height, Font::bold));
+    return Font (FontOptions (Font::getDefaultSansSerifFontName(), height, Font::bold));
+}
+
+const std::vector<TextFont>& textFonts()
+{
+    using namespace CatFonts;
+    static const std::vector<TextFont> list {
+        { "Sans" }, { "Serif" }, { "Mono" },
+        { "Archivo Black", ArchivoBlackRegular_ttf, ArchivoBlackRegular_ttfSize },
+        { "Bebas Neue", BebasNeueRegular_ttf, BebasNeueRegular_ttfSize },
+        { "Oswald", OswaldSemiBold_ttf, OswaldSemiBold_ttfSize },
+        { "Barlow Condensed", BarlowCondensedBold_ttf, BarlowCondensedBold_ttfSize },
+        { "Roboto Condensed", RobotoCondensedBold_ttf, RobotoCondensedBold_ttfSize },
+        { "Sora", SoraBold_ttf, SoraBold_ttfSize },
+        { "Syne", SyneExtraBold_ttf, SyneExtraBold_ttfSize },
+        { "Exo 2", Exo2Bold_ttf, Exo2Bold_ttfSize },
+        { "Rajdhani", RajdhaniBold_ttf, RajdhaniBold_ttfSize },
+        { "Michroma", MichromaRegular_ttf, MichromaRegular_ttfSize },
+        { "Orbitron", OrbitronExtraBold_ttf, OrbitronExtraBold_ttfSize },
+        { "Playfair Italic", PlayfairDisplayBoldItalic_ttf, PlayfairDisplayBoldItalic_ttfSize },
+        { "Cormorant SC", CormorantSCBold_ttf, CormorantSCBold_ttfSize },
+        { "VT323 (pixel)", VT323Regular_ttf, VT323Regular_ttfSize },
+    };
+    return list;
+}
+
+PhotoView::PhotoView (NegativeProcessor& p) : processor (p)
+{
+    setMouseCursor (MouseCursor::CrosshairCursor);
+    refresh();
+}
 
 void PhotoView::refresh() { shown = processor.getPhoto(); repaint(); }
 
@@ -71,34 +114,65 @@ Rectangle<float> PhotoView::imageArea() const
     return RectanglePlacement (RectanglePlacement::centred).appliedTo (shown.getBounds().toFloat(), b);
 }
 
+Point<float> PhotoView::toImage (Point<float> pos) const
+{
+    const auto a = imageArea();
+    const float k = shown.isValid() ? (float) shown.getWidth() / a.getWidth() : 1.0f;
+    return { (pos.x - a.getX()) * k, (pos.y - a.getY()) * k };
+}
+
+void PhotoView::stampText (Image& img, Point<float> centre, const String& t, int fontIndex, float size)
+{
+    if (! img.isValid() || t.trim().isEmpty()) return;
+    const auto& fonts = textFonts();
+    const auto& f = fonts[(size_t) jlimit (0, (int) fonts.size() - 1, fontIndex)];
+    const float h = jmax (6.0f, (float) img.getHeight() * (0.05f + 0.6f * jlimit (0.0f, 1.0f, size)));
+    Graphics g (img);
+    g.setColour (Colours::white);
+    g.setFont (f.font (h));
+    const float w = (float) img.getWidth() * 4.0f;
+    g.drawText (t, Rectangle<float> (w, h * 1.4f).withCentre (centre), Justification::centred, false);
+}
+
 void PhotoView::paint (Graphics& g)
 {
     const auto b = getLocalBounds().toFloat();
     g.setColour (Colours::black);
     g.fillRect (b);
+    const auto a = imageArea();
     if (shown.isValid())
     {
         g.setImageResamplingQuality (Graphics::highResamplingQuality);
-        g.drawImage (shown, imageArea());
+        g.drawImage (shown, a);
     }
-    g.setColour (drawing ? ink : Colours::white.withAlpha (0.18f));
-    g.drawRect (b, 1.0f);
-    if (drawing)
+    if (hovering && shown.isValid())
     {
-        g.setFont (uiFont (11.0f));
-        g.setColour (ink.withAlpha (0.7f));
-        g.drawText ("draw: drag  ·  erase: right-click or shift", b.reduced (8.0f).removeFromBottom (14.0f), Justification::centredLeft);
+        const float k = a.getWidth() / (float) shown.getWidth();
+        if (tool == Tool::text)
+        {
+            // where the text will go
+            const auto& f = textFonts()[(size_t) jlimit (0, (int) textFonts().size() - 1, fontIndex)];
+            const float h = jmax (6.0f, (float) shown.getHeight() * (0.05f + 0.6f * textSize)) * k;
+            g.setColour (Colours::white.withAlpha (0.55f));
+            g.setFont (f.font (h));
+            g.drawText (text, Rectangle<float> (a.getWidth() * 4.0f, h * 1.4f).withCentre (hover), Justification::centred, false);
+        }
+        else
+        {
+            const float r = jmax (1.5f, (float) shown.getHeight() * (0.005f + 0.08f * brush)) * k;
+            g.setColour (tool == Tool::eraser ? Colours::red.withAlpha (0.7f) : Colours::white.withAlpha (0.7f));
+            g.drawEllipse (Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (hover), 1.0f);
+        }
     }
+    g.setColour (Colours::white.withAlpha (0.18f));
+    g.drawRect (b, 1.0f);
 }
 
 void PhotoView::paintAt (Point<float> pos, bool erase)
 {
     if (! shown.isValid()) return;
-    const auto a = imageArea();
-    const float sx = (float) shown.getWidth() / a.getWidth();
-    const Point<float> p ((pos.x - a.getX()) * sx, (pos.y - a.getY()) * sx);
-    const Point<float> q ((last.x - a.getX()) * sx, (last.y - a.getY()) * sx);
-    const float r = jmax (2.0f, (float) shown.getHeight() * 0.02f);
+    const auto p = toImage (pos), q = toImage (last);
+    const float r = jmax (1.5f, (float) shown.getHeight() * (0.005f + 0.08f * brush));
     Graphics g (shown);
     g.setColour (erase ? Colours::black : Colours::white);
     g.drawLine (juce::Line<float> (q, p), r * 2.0f);
@@ -107,25 +181,67 @@ void PhotoView::paintAt (Point<float> pos, bool erase)
     repaint();
 }
 
+void PhotoView::remember()
+{
+    history.push_back (shown.createCopy());
+    if (history.size() > 30) history.erase (history.begin());
+}
+
+void PhotoView::commit()
+{
+    const auto name = processor.getPhotoName();
+    processor.setPhoto (shown, name.isEmpty() ? String ("drawing") : name);
+}
+
 void PhotoView::mouseDown (const MouseEvent& e)
 {
-    if (! drawing) return;
-    shown = shown.createCopy();
+    if (! shown.isValid()) return;
+    remember();
+    shown = shown.createCopy();                  // paint on our own copy (the processor still has the old one)
+    if (tool == Tool::text)
+    {
+        stampText (shown, toImage (e.position), text, fontIndex, textSize);
+        repaint();
+        commit();
+        return;
+    }
     stroking = true;
     last = e.position;
-    paintAt (e.position, e.mods.isRightButtonDown() || e.mods.isShiftDown());
+    paintAt (e.position, tool == Tool::eraser || e.mods.isRightButtonDown() || e.mods.isShiftDown());
 }
 
 void PhotoView::mouseDrag (const MouseEvent& e)
 {
-    if (stroking) paintAt (e.position, e.mods.isRightButtonDown() || e.mods.isShiftDown());
+    hover = e.position;
+    if (stroking) paintAt (e.position, tool == Tool::eraser || e.mods.isRightButtonDown() || e.mods.isShiftDown());
 }
 
 void PhotoView::mouseUp (const MouseEvent&)
 {
     if (! stroking) return;
     stroking = false;
-    processor.setPhoto (shown, processor.getPhotoName().startsWith ("drawing") ? processor.getPhotoName() : "drawing");
+    commit();
+}
+
+void PhotoView::mouseMove (const MouseEvent& e) { hover = e.position; hovering = true; repaint(); }
+void PhotoView::mouseExit (const MouseEvent&) { hovering = false; repaint(); }
+
+void PhotoView::undo()
+{
+    if (history.empty()) return;
+    shown = history.back();
+    history.pop_back();
+    repaint();
+    commit();
+}
+
+void PhotoView::clear()
+{
+    remember();
+    Image black (Image::RGB, 800, 300, true);
+    shown = black;
+    repaint();
+    processor.setPhoto (black, "drawing");
 }
 
 //==============================================================================
@@ -229,7 +345,7 @@ NegativeEditor::NegativeEditor (NegativeProcessor& p) : processor (p)
         { "length", "LENGTH", "How long the photo plays (in bars, at Cubase's tempo)" },
         { "contrast", "CONTRAST", "More contrast: the dark parts go quiet, only the bright ones sound" },
         { "soft", "SOFT", "Blurs the photo: smoother, less hiss" },
-        { "level", "LEVEL", "How loud the photo is added to the track (low = hidden: you only see it in a spectrogram)" } };
+        { "level", "LEVEL", "How loud the photo plays (low and high up = hidden in the song: you only see it in a spectrogram)" } };
     for (auto& [id, cap, tip] : list)
     {
         auto l = std::make_unique<negui::Line> (processor.apvts, id, cap);
@@ -241,17 +357,50 @@ NegativeEditor::NegativeEditor (NegativeProcessor& p) : processor (p)
     openSoundB.onClick = [this] { openSound(); };
     openPhotoB.setTooltip ("Open a photo (jpg, png, gif) - or drop one on the window");
     openSoundB.setTooltip ("Open a sound (wav, mp3, aiff, flac): the photo is hidden in it (PLAY and Save .wav)");
-    drawB.setClickingTogglesState (true);
-    drawB.onClick = [this] { photo.drawing = drawB.getToggleState(); clearB.setVisible (photo.drawing); photo.repaint(); };
-    drawB.setTooltip ("Draw on the photo with the mouse (white = sound, right-click = erase)");
-    clearB.onClick = [this]
+    // painting on the photo: brush, eraser, text, undo, clear
+    for (auto* b : { &brushB, &eraserB, &textB }) b->setClickingTogglesState (false);
+    brushB.onClick = [this] { setTool (negui::PhotoView::Tool::brush); };
+    eraserB.onClick = [this] { setTool (negui::PhotoView::Tool::eraser); };
+    textB.onClick = [this] { setTool (negui::PhotoView::Tool::text); };
+    undoB.onClick = [this] { photo.undo(); };
+    clearB.onClick = [this] { photo.clear(); };
+    brushB.setTooltip ("Paint on the photo (white = sound). Right-click or shift: erase");
+    eraserB.setTooltip ("Paint black (silence)");
+    textB.setTooltip ("Write text: type it, pick a font and a size, then click on the photo where it goes");
+    undoB.setTooltip ("Take back the last stroke or text");
+    clearB.setTooltip ("A black page to paint on");
+    for (auto* sl : { &brushSize, &textSize })
     {
-        Image black (Image::RGB, 800, 300, true);
-        processor.setPhoto (black, "drawing");
-        photo.refresh();
-    };
-    clearB.setTooltip ("A black page to draw on");
-    addChildComponent (clearB);
+        sl->setRange (0.0, 1.0);
+        sl->setColour (Slider::trackColourId, ink);
+        sl->setColour (Slider::thumbColourId, ink);
+        sl->setColour (Slider::backgroundColourId, faint);
+    }
+    brushSize.setValue (photo.brush, dontSendNotification);
+    textSize.setValue (photo.textSize, dontSendNotification);
+    brushSize.onValueChange = [this] { photo.brush = (float) brushSize.getValue(); };
+    textSize.onValueChange = [this] { photo.textSize = (float) textSize.getValue(); photo.repaint(); };
+    brushSize.setTooltip ("Brush size");
+    textSize.setTooltip ("Text size");
+    textBox.setText (photo.text, false);
+    textBox.setFont (uiFont (14.0f));
+    textBox.setColour (TextEditor::backgroundColourId, Colours::transparentBlack);
+    textBox.setColour (TextEditor::outlineColourId, Colours::white.withAlpha (0.26f));
+    textBox.setColour (TextEditor::focusedOutlineColourId, ink);
+    textBox.setColour (TextEditor::textColourId, ink);
+    textBox.setIndents (10, 5);
+    textBox.onTextChange = [this] { photo.text = textBox.getText(); photo.repaint(); };
+    textBox.setTooltip ("The text to write on the photo");
+    int fi = 1;
+    for (auto& f : negui::textFonts()) fontBox.addItem (f.name, fi++);
+    fontBox.setSelectedId (1, dontSendNotification);
+    fontBox.onChange = [this] { photo.fontIndex = fontBox.getSelectedId() - 1; photo.repaint(); };
+    fontBox.setTooltip ("The font");
+    for (auto* c : std::initializer_list<Component*> { &brushB, &eraserB, &textB, &undoB, &clearB, &brushSize })
+        addAndMakeVisible (c);
+    for (auto* c : std::initializer_list<Component*> { &textBox, &fontBox, &textSize })
+        addChildComponent (c);
+    setTool (negui::PhotoView::Tool::brush);
     songX.onClick = [this] { processor.clearSong(); };
     songX.setTooltip ("Take the sound out");
     addChildComponent (songX);
@@ -266,7 +415,7 @@ NegativeEditor::NegativeEditor (NegativeProcessor& p) : processor (p)
     saveWavB.setTooltip ("Save the sound (with the opened sound, if there is one) as a .wav");
     savePicB.setTooltip ("Save the spectrogram as a picture (.png)");
     dragChip.setTooltip ("Drag the sound straight onto a Cubase track");
-    for (auto* c : std::initializer_list<Component*> { &openPhotoB, &openSoundB, &drawB, &invertB, &playB, &saveWavB, &savePicB, &dragChip })
+    for (auto* c : std::initializer_list<Component*> { &openPhotoB, &openSoundB, &invertB, &playB, &saveWavB, &savePicB, &dragChip })
         addAndMakeVisible (c);
     if (! processor.isStandalone()) addAndMakeVisible (syncB);
     setSize (designW, designH);
@@ -288,16 +437,17 @@ void NegativeEditor::paint (Graphics& g)
     g.setFont (uiFont (12.0f));
     g.setColour (ink.withAlpha (0.45f));
     g.drawText ("a photo you can hear", 32, 42, 200, 16, Justification::centredLeft);
+    g.setColour (ink.withAlpha (0.3f));
 
     // under the photo: its name, and the sound it hides in
     auto cap = String (processor.getPhotoName());
     const auto song = processor.getSongName();
     if (song.isNotEmpty()) cap << "  in  " << song;
-    g.drawText (cap.isEmpty() ? "drop a photo or a sound here" : cap, 32, 290, 300, 16, Justification::centredLeft);
+    g.drawText (cap.isEmpty() ? "drop a photo or a sound on the window" : cap, 32, 58, 220, 14, Justification::centredLeft);
     if (status.isNotEmpty())
     {
         g.setColour (ink.withAlpha (0.7f));
-        g.drawText (status, getWidth() - 432, 290, 400, 16, Justification::centredRight);
+        g.drawText (status, getWidth() - 432, 588, 180, 16, Justification::centredRight);
     }
 }
 
@@ -312,13 +462,22 @@ void NegativeEditor::resized()
     photo.setBounds (32, 76, 300, 206);
     for (size_t i = 0; i < lines.size(); ++i)
         lines[i]->setBounds (368 + (int) (i % 3) * 206, 80 + (int) (i / 3) * 70, 186, 56);
-    int bx = 368;
-    for (auto* c : std::initializer_list<Component*> { &openPhotoB, &openSoundB, &drawB })
+    // under the photo: the tools; the brush size or the text options next to them
+    int tx = 32;
+    for (auto* c : std::initializer_list<Component*> { &brushB, &eraserB, &textB, &undoB, &clearB })
     {
-        const int w = c == &drawB ? 64 : 104;
-        c->setBounds (bx, 230, w, 30); bx += w + 8;
+        const int w = c == &eraserB ? 66 : 56;
+        c->setBounds (tx, 288, w, 26); tx += w + 4;
     }
-    clearB.setBounds (bx, 230, 64, 30);
+    brushSize.setBounds (368, 288, 160, 26);
+    textBox.setBounds (368, 288, 230, 26);
+    fontBox.setBounds (606, 288, 170, 26);
+    textSize.setBounds (784, 288, 120, 26);
+    int bx = 368;
+    for (auto* c : std::initializer_list<Component*> { &openPhotoB, &openSoundB })
+    {
+        c->setBounds (bx, 230, 104, 30); bx += 112;
+    }
     songX.setBounds (32 + 300 - 26, 76 + 6, 20, 20);
     invertB.setBounds (getWidth() - 32 - 92 - (processor.isStandalone() ? 0 : 140), 230, 92, 30);
     syncB.setBounds (getWidth() - 32 - 132, 230, 132, 30);
@@ -328,6 +487,21 @@ void NegativeEditor::resized()
     dragChip.setBounds (136, 570, 120, 32);
     saveWavB.setBounds (getWidth() - 32 - 230, 570, 110, 32);
     savePicB.setBounds (getWidth() - 32 - 112, 570, 112, 32);
+}
+
+void NegativeEditor::setTool (negui::PhotoView::Tool t)
+{
+    photo.tool = t;
+    const bool text = t == negui::PhotoView::Tool::text;
+    brushB.setToggleState (t == negui::PhotoView::Tool::brush, dontSendNotification);
+    eraserB.setToggleState (t == negui::PhotoView::Tool::eraser, dontSendNotification);
+    textB.setToggleState (text, dontSendNotification);
+    brushSize.setVisible (! text);
+    textBox.setVisible (text);
+    fontBox.setVisible (text);
+    textSize.setVisible (text);
+    if (text) textBox.grabKeyboardFocus();
+    photo.repaint();
 }
 
 void NegativeEditor::timerCallback()
@@ -346,8 +520,9 @@ void NegativeEditor::timerCallback()
         playB.setButtonText (processor.previewing.load() ? "Stop" : "Play");
     }
     const int rc = processor.getRenderCount();
-    if (rc != lastRender) { lastRender = rc; spectrum.refresh(); if (! photo.drawing) photo.refresh(); repaint (0, 286, getWidth(), 24); }
+    if (rc != lastRender) { lastRender = rc; spectrum.refresh(); repaint (0, 40, 300, 34); }
     else spectrum.repaint();
+    undoB.setEnabled (photo.canUndo());
 }
 
 bool NegativeEditor::loadAny (const File& f)

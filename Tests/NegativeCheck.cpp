@@ -2,6 +2,7 @@
 // the musical way only plays notes of the key, MIDI plays it higher, it follows Cubase, it hides in a track without
 // touching it, it opens and saves sounds, and the photo is saved with the project.
 #include "PluginProcessor.h"
+#include "PluginEditor.h"
 #include <cstdio>
 
 using namespace juce;
@@ -29,7 +30,7 @@ struct Head : AudioPlayHead
 static std::unique_ptr<NegativeProcessor> make()
 {
     auto p = std::make_unique<NegativeProcessor>();
-    p->setPlayConfigDetails (2, 2, sr, block);
+    p->setPlayConfigDetails (0, 2, sr, block);
     p->prepareToPlay (sr, block);
     return p;
 }
@@ -159,7 +160,7 @@ int main()
         const double f = peakHz (rec, 0.3, 0.4);
         check (std::abs (1200.0 * std::log2 (f / 880.0)) < 20.0, "MIDI C5 plays the photo an octave higher (" + String (f, 1) + " Hz)");
 
-        // the input goes through untouched when nothing plays (the key is let go first)
+        // an instrument: silent when nothing plays (the key is let go first)
         midi.clear(); midi.addEvent (MidiMessage::noteOff (1, 72), 0);
         for (int b = 0; b < 20; ++b) { buf.clear(); p->processBlock (buf, midi); midi.clear(); }
         set (*p, "sync", 1.0f);
@@ -167,11 +168,9 @@ int main()
         p->setPlayHead (&head);
         midi.clear();
         buf.clear();
-        for (int i = 0; i < block; ++i) { buf.setSample (0, i, 0.25f); buf.setSample (1, i, -0.25f); }
+        for (int i = 0; i < block; ++i) { buf.setSample (0, i, 0.25f); buf.setSample (1, i, -0.25f); }   // junk in the buffer
         p->processBlock (buf, midi);
-        bool same = true;
-        for (int i = 0; i < block; ++i) same &= buf.getSample (0, i) == 0.25f && buf.getSample (1, i) == -0.25f;
-        check (same, "stopped: the track's sound passes through untouched");
+        check (buf.getMagnitude (0, block) == 0.0f, "an instrument: stopped and no notes = silence");
         p->setPlayHead (nullptr);
     }
 
@@ -246,6 +245,61 @@ int main()
         const auto img = q->getPhoto();
         check (img.isValid() && likeness (pic, img) > 0.95 && q->getPhotoName() == "my photo" && q->apvts.getRawParameterValue ("mode")->load() == 2.0f,
                "saved project: the photo, its name and the settings come back");
+    }
+
+    // painting on the photo in the window: brush, eraser, text in every font, undo
+    {
+        auto p = make();
+        Image black (Image::RGB, 400, 200, true);
+        p->setPhoto (black, "page");
+        p->waitForRender();
+        NegativeEditor ed (*p);
+        ed.setBounds (0, 0, 1000, 620);
+        negui::PhotoView* view = nullptr;
+        for (auto* c : ed.getChildren()) if (auto* v = dynamic_cast<negui::PhotoView*> (c)) view = v;
+        auto src = Desktop::getInstance().getMainMouseSource();
+        auto ev = [&] (Point<float> pos, bool drag)
+        {
+            return MouseEvent (src, pos, ModifierKeys (ModifierKeys::leftButtonModifier), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                               view, view, Time::getCurrentTime(), { 40.0f, 100.0f }, Time::getCurrentTime(), 1, drag);
+        };
+        auto brightness = [] (const Image& img)
+        {
+            double s = 0.0;
+            for (int y = 0; y < img.getHeight(); y += 2) for (int x = 0; x < img.getWidth(); x += 2) s += img.getPixelAt (x, y).getBrightness();
+            return s;
+        };
+        bool painted = false, erased = false, wrote = true, undone = false;
+        if (view != nullptr)
+        {
+            view->tool = negui::PhotoView::Tool::brush;
+            view->mouseDown (ev ({ 40.0f, 100.0f }, false));
+            for (int i = 1; i <= 20; ++i) view->mouseDrag (ev ({ 40.0f + i * 10.0f, 100.0f }, true));
+            view->mouseUp (ev ({ 240.0f, 100.0f }, true));
+            const double afterBrush = brightness (p->getPhoto());
+            painted = afterBrush > 100.0;
+            view->tool = negui::PhotoView::Tool::eraser;
+            view->mouseDown (ev ({ 40.0f, 100.0f }, false));
+            for (int i = 1; i <= 20; ++i) view->mouseDrag (ev ({ 40.0f + i * 10.0f, 100.0f }, true));
+            view->mouseUp (ev ({ 240.0f, 100.0f }, true));
+            erased = brightness (p->getPhoto()) < afterBrush * 0.2;
+            // text, in every font
+            for (int f = 0; f < (int) negui::textFonts().size(); ++f)
+            {
+                Image page (Image::RGB, 400, 200, true);
+                negui::PhotoView::stampText (page, { 200.0f, 100.0f }, "Hi", f, 0.4f);
+                wrote &= brightness (page) > 80.0;
+            }
+            view->tool = negui::PhotoView::Tool::text;
+            view->text = "NEGATIVE";
+            const double beforeText = brightness (p->getPhoto());
+            view->mouseDown (ev ({ 150.0f, 100.0f }, false));
+            wrote &= brightness (p->getPhoto()) > beforeText + 200.0;
+            view->undo();
+            undone = std::abs (brightness (p->getPhoto()) - beforeText) < 1.0;
+        }
+        check (view != nullptr && painted && erased, "the brush paints on the photo, the eraser takes it off");
+        check (wrote && undone, "text goes onto the photo in all " + String ((int) negui::textFonts().size()) + " fonts, and Undo takes it back");
     }
 
     std::printf (failures == 0 ? "NEGATIVE CHECK PASSED\n" : "NEGATIVE CHECK FAILED (%d)\n", failures);

@@ -4,9 +4,8 @@ if(NOT TARGET cat_shared)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../Shared ${CMAKE_BINARY_DIR}/Shared)
 endif()
 
-# Negative: a photo becomes sound (and its spectrogram shows the photo). An effect with MIDI in (play the photo on
-# notes, or in time with Cubase, or hide it in the track), and a standalone program (open photos and sounds, draw,
-# save .wav / pictures).
+# Negative: a photo becomes sound (and its spectrogram shows the photo). A VST3 instrument (play the photo on MIDI
+# notes, or in time with Cubase) and a standalone program (open photos and sounds, draw, save .wav / pictures).
 juce_add_plugin(Negative
     VERSION                    1.0.0
     COMPANY_NAME               "Cat Suite"
@@ -16,12 +15,12 @@ juce_add_plugin(Negative
     PRODUCT_NAME               "Negative"
     DESCRIPTION                "A photo you can hear: photo to spectrogram to sound"
     FORMATS                    VST3 Standalone
-    IS_SYNTH                   FALSE
+    IS_SYNTH                   TRUE
     IS_MIDI_EFFECT             FALSE
     NEEDS_MIDI_INPUT           TRUE
     NEEDS_MIDI_OUTPUT          FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
-    VST3_CATEGORIES            Fx Generator
+    VST3_CATEGORIES            Instrument Synth
     COPY_PLUGIN_AFTER_BUILD    ${CAT_COPY_AFTER_BUILD})
 
 target_sources(Negative PRIVATE Source/NegativeCore.cpp Source/PluginProcessor.cpp Source/PluginEditor.cpp)
@@ -36,7 +35,7 @@ target_compile_definitions(Negative
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
         JUCE_DISPLAY_SPLASH_SCREEN=0
-        CAT_INSTRUMENT_MODE=0)
+        CAT_INSTRUMENT_MODE=1)
 target_link_libraries(Negative
     PRIVATE
         cat_shared

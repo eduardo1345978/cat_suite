@@ -40,4 +40,4 @@ What is inside (folder VST3):
     Swarm      - a granular effect that lives: the sound becomes a cloud of grains (dreamy, dark,
                  chopped in time, wild - drag the point on the nebula), LIFE, FREEZE, the dice
     Negative   - a photo you can hear: a photo becomes sound (its spectrogram shows the photo),
-                 exact / musical / texture, draw, hide it in a song; also a program (Negative.exe)
+                 exact / musical / texture, paint and write text on it, hide it in a song; an instrument, and a program (Negative.exe)

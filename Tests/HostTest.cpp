@@ -1912,13 +1912,13 @@ void testSwarm()
     fx->releaseResources();
 }
 
-/** Negative: loads as a VST3 effect with MIDI in; a MIDI note plays the photo, the track's own sound passes untouched. */
+/** Negative: loads as a VST3 instrument; a MIDI note plays the photo. */
 void testNegative()
 {
     std::cout << "\n== Negative ==" << std::endl;
     auto fx = loadPlugin (NEGATIVE_VST3);
     if (fx == nullptr) { ++failures; return; }
-    check (fx->getTotalNumInputChannels() == 2 && fx->getTotalNumOutputChannels() == 2 && fx->acceptsMidi(), "Negative is a stereo effect that takes MIDI");
+    check (fx->getPluginDescription().isInstrument && fx->getTotalNumOutputChannels() == 2 && fx->acceptsMidi(), "Negative is a stereo instrument");
     fx->prepareToPlay (sampleRate, blockSize);
     juce::Thread::sleep (1500);                                  // it makes the photo's sound in the background
     juce::AudioBuffer<float> audio (2, blockSize);

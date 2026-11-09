@@ -6,9 +6,9 @@
 
 /**
     Negative: a photo you can hear. The picture is turned into sound in the background (whenever it or a setting
-    changes) and then played: with Cubase in time (SYNC), on MIDI notes (C4 = as it is, other keys play it higher or
-    lower), or with PLAY. What comes in passes through unchanged; the photo is added at LEVEL, so at a low LEVEL in a
-    high range it hides in the track and only shows in a spectrogram.
+    changes) and then played (a VST3 instrument): with Cubase in time (SYNC), on MIDI notes (C4 = as it is, other keys
+    play it higher or lower), or with PLAY, at LEVEL. At a low LEVEL in a high range it hides in a song and only shows
+    in a spectrogram.
 
     In the standalone program it also opens sounds (a song to hide the photo in) and saves .wav files and pictures.
 */

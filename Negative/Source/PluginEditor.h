@@ -27,25 +27,47 @@ public:
     bool primary;
 };
 
-/** The photo (and the place to draw on it). */
+/** The fonts you can write with. */
+struct TextFont { juce::String name; juce::Font font (float height) const; const char* data = nullptr; int size = 0; };
+const std::vector<TextFont>& textFonts();
+
+/** The photo, and the place to paint on it: brush, eraser, text in different fonts, undo. */
 class PhotoView : public juce::Component
 {
 public:
+    enum class Tool { brush, eraser, text };
     explicit PhotoView (NegativeProcessor&);
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
-    bool drawing = false;
+    void mouseMove (const juce::MouseEvent&) override;
+    void mouseExit (const juce::MouseEvent&) override;
     void refresh();
+    void undo();
+    void clear();
+    bool canUndo() const noexcept { return ! history.empty(); }
+
+    Tool tool = Tool::brush;
+    float brush = 0.3f;                 // 0..1: brush size
+    juce::String text { "HELLO" };
+    int fontIndex = 0;
+    float textSize = 0.35f;             // 0..1: text height (part of the photo's height)
+
+    /** Draws the text into an image at a point given in the image's own pixels (also used by the tests). */
+    static void stampText (juce::Image&, juce::Point<float> centre, const juce::String&, int fontIndex, float size);
+    juce::Point<float> toImage (juce::Point<float> viewPos) const;
 
 private:
     juce::Rectangle<float> imageArea() const;
     void paintAt (juce::Point<float>, bool erase);
+    void remember();
+    void commit();
     NegativeProcessor& processor;
     juce::Image shown;
-    bool stroking = false;
-    juce::Point<float> last;
+    std::vector<juce::Image> history;
+    bool stroking = false, hovering = false;
+    juce::Point<float> last, hover;
 };
 
 /** The spectrogram of what comes out, with Hz and bars, and where it plays now. */
@@ -100,7 +122,12 @@ private:
     negui::PhotoView photo { processor };
     negui::SpectrumView spectrum { processor };
     std::vector<std::unique_ptr<negui::Line>> lines;
-    negui::Chip openPhotoB { "Open photo" }, openSoundB { "Open sound" }, drawB { "Draw" }, clearB { "Clear" }, songX { "x" },
+    negui::Chip brushB { "Brush" }, eraserB { "Eraser" }, textB { "Text" }, undoB { "Undo" }, clearB { "Clear" };
+    juce::Slider brushSize { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox }, textSize { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };
+    juce::TextEditor textBox;
+    juce::ComboBox fontBox;
+    void setTool (negui::PhotoView::Tool);
+    negui::Chip openPhotoB { "Open photo" }, openSoundB { "Open sound" }, songX { "x" },
                 invertB { "Negative" }, syncB { "Play with Cubase" }, playB { "Play", true }, saveWavB { "Save .wav" }, savePicB { "Save picture" };
     juce::AudioProcessorValueTreeState::ButtonAttachment invertA { processor.apvts, "invert", invertB }, syncA { processor.apvts, "sync", syncB };
     negui::DragChip dragChip { processor };
