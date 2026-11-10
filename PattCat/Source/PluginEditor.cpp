@@ -254,7 +254,7 @@ PattCatEditor::PattCatEditor (PattCatProcessor& p)
     clearChordsButton.setTooltip ("Advance mode: forget the memorised chord sequence");
     clearChordsButton.onClick = [this] { processor.clearChordMemory(); };
 
-    dragButton.setTooltip ("Drag one loop of the pattern (played on the last chord) onto a Cubase track");
+    dragButton.setTooltip ("Drag one loop of the pattern (played on the last chord) onto a track in your DAW");
     dragButton.onDragOut = [this]
     {
         const auto seq = processor.buildPatternSequence();

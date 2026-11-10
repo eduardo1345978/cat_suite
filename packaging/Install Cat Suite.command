@@ -27,12 +27,12 @@ for p in VST3/*.vst3; do
 done
 echo
 if [ "$failed" = 1 ]; then
-    echo "  Some plug-ins could not be installed. Quit Cubase and run this again."
+    echo "  Some plug-ins could not be installed. Quit your DAW and run this again."
 else
     echo "  Done! All Cats are installed in:"
     echo "  $DEST"
     echo
-    echo "  In Cubase: Studio > VST Plug-in Manager > Rescan."
+    echo "  Rescan the plug-ins in your DAW (Cubase: Studio > VST Plug-in Manager > Rescan)."
 fi
 
 # Micro-Cat's MTS-ESP mode needs ODDSound's free MTS-ESP library (one tuning for every MTS-ESP synth)

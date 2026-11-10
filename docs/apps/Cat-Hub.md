@@ -1,6 +1,6 @@
 # Cat Hub
 
-One window where **all the Cats jam together** without Cubase (Windows and Linux).
+One window where **all the Cats jam together** without a DAW (Windows and Linux).
 
 ![Cat Hub](../screenshots/hub.jpg)
 

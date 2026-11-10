@@ -119,7 +119,7 @@ MoltenEditor::MoltenEditor (MoltenProcessor& p) : processor (p)
     mix.getSlider().setTooltip ("MIX: how much of the melted sound you hear");
     addAndMakeVisible (dripTime);
     addAndMakeVisible (monoBass);
-    dripTime.getCombo().setTooltip ("How far apart the drips fall (in time with Cubase)");
+    dripTime.getCombo().setTooltip ("How far apart the drips fall (in time with the DAW)");
     monoBass.setTooltip ("Keeps everything under ~120 Hz in the middle (solid 808s and kicks)");
     setSize (designW, designH);
     startTimerHz (30);

@@ -243,7 +243,7 @@ BassCatEditor::BassCatEditor (BassCatProcessor& p)
     octave = cat::Stepper::forParameter (p.apvts, "octave", "Octave", [] (int v) { return v > 0 ? "+" + juce::String (v) : juce::String (v); });
     channel = cat::Stepper::forParameter (p.apvts, "outChannel", "Ch");
 
-    dragButton.setTooltip ("Drag the bass line onto a Cubase MIDI track (played against the held chord)");
+    dragButton.setTooltip ("Drag the bass line onto a MIDI track in your DAW (played against the held chord)");
     dragButton.onDragOut = [this]
     {
         const auto seq = processor.buildPatternSequence();

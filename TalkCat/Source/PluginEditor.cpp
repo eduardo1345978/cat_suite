@@ -1594,9 +1594,9 @@ namespace
             text.onTextChange = [this] { dirty = true; };
             addAndMakeVisible (text);
             restart.onClick = [this] { processor.restartLiveLyrics(); };
-            restart.setTooltip ("Start the live lyrics from the first syllable again (also happens when Cubase starts playing)");
+            restart.setTooltip ("Start the live lyrics from the first syllable again (also happens when the DAW starts playing)");
             record.setClickingTogglesState (true);
-            record.setTooltip ("Record: notes you play while Cubase plays are written into the piano roll (with their live syllable)");
+            record.setTooltip ("Record: notes you play while the DAW plays are written into the piano roll (with their live syllable)");
             record.onClick = [this] { processor.recordArmed = record.getToggleState(); };
             for (auto* b : { &restart, &record }) addAndMakeVisible (*b);
             bend = knob ("bendRange", "Bend Range", C::slate);
@@ -1663,10 +1663,10 @@ TalkCatEditor::TalkCatEditor (TalkCatProcessor& p)
     songsButton.onClick = [this] { showSongsMenu(); };
     undoButton.onClick = [this] { processor.undo(); roll.reload(); };
     redoButton.onClick = [this] { processor.redo(); roll.reload(); };
-    mode.getCombo().setTooltip ("Score = sing the piano roll in sync with Cubase; Live = sing what you play (MIDI); or both");
+    mode.getCombo().setTooltip ("Score = sing the piano roll in sync with the DAW; Live = sing what you play (MIDI); or both");
     languageBox.getCombo().setTooltip ("Language of the lyrics: English, Slovak, Japanese (romaji) or Cat");
     styleBox.getCombo().setTooltip ("Singing style: how the pitch moves (scoops, vibrato, falls) and the voice colour");
-    dragButton.setTooltip ("Drag the melody (with lyrics) onto a Cubase MIDI track");
+    dragButton.setTooltip ("Drag the melody (with lyrics) onto a MIDI track in your DAW");
     dragButton.onDragOut = [this]
     {
         auto seq = processor.getScore().toMidi();
@@ -1717,14 +1717,14 @@ TalkCatEditor::TalkCatEditor (TalkCatProcessor& p)
     startStepper = std::make_unique<cat::Stepper> ("Start", 1, 999, [this] { return roll.edit.startBar; },
                                                    [this] (int v) { roll.edit.startBar = v; roll.commit(); },
                                                    [] (int v) { return "Bar " + juce::String (v); });
-    startStepper->setTooltip ("Where in the Cubase project the song starts");
+    startStepper->setTooltip ("Where in the DAW project the song starts");
     loopToggle.onClick = [this] { roll.edit.loop = loopToggle.getToggleState(); roll.commit(); };
     loopToggle.setTooltip ("Repeat the song over and over (for loops / jamming)");
     followToggle.setToggleState (true, juce::dontSendNotification);
     followToggle.onClick = [this] { roll.follow = followToggle.getToggleState(); };
     followToggle.setTooltip ("Scroll with the playhead");
     recordButton.setClickingTogglesState (true);
-    recordButton.setTooltip ("Record notes you play (MIDI) into the piano roll while Cubase plays");
+    recordButton.setTooltip ("Record notes you play (MIDI) into the piano roll while the DAW plays");
     recordButton.onClick = [this] { processor.recordArmed = recordButton.getToggleState(); };
     infoLabel.setFont (cat::catFont (12.0f));
     infoLabel.setColour (juce::Label::textColourId, C::textDim);

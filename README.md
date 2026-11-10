@@ -1,6 +1,6 @@
 # Cat Suite
 
-**Free music plug-ins and apps, each with its own cat.** Chords, patterns, drums, bass lines, choirs, singers, synths, tunings, granular clouds, lava, endless risers and photos you can hear: 20 plug-ins (VST3) for Cubase and every other DAW, plus apps that jam on their own.
+**Free music plug-ins and apps, each with its own cat.** Chords, patterns, drums, bass lines, choirs, singers, synths, tunings, granular clouds, lava, endless risers and photos you can hear: 20 plug-ins (VST3) for any DAW (Cubase, FL Studio, Ableton, Reaper, Bitwig, Studio One ...), plus apps that jam on their own.
 
 [![Windows](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-windows.yml/badge.svg)](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-windows.yml)
 [![Mac](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-mac.yml/badge.svg)](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-mac.yml)
@@ -17,7 +17,7 @@
 | **macOS 11+** (Apple Silicon and Intel) | **[Cat-Suite-Mac.zip](https://github.com/eduardo1345978/cat_suite/releases/latest/download/Cat-Suite-Mac.zip)** | all 20 plug-ins, *Install Cat Suite.command* |
 | **Linux** (64-bit, 2022+) | **[Cat-Suite-Linux.tar.gz](https://github.com/eduardo1345978/cat_suite/releases/latest/download/Cat-Suite-Linux.tar.gz)** | all plug-ins + apps, `./install.sh` |
 
-Step by step, the other downloads and what to do when Windows warns: **[Install](docs/Install.md)**. Then **[Using it in Cubase](docs/Cubase.md)**.
+Step by step, the other downloads and what to do when Windows warns: **[Install](docs/Install.md)**. Then **[Using it in your DAW](docs/DAW.md)**.
 
 ## Plug-ins
 
@@ -85,7 +85,7 @@ Also: **[Cat Ocean](docs/apps/Cat-Ocean.md)** (an endless YouTube live stream of
 
 ## Documentation
 
-**[All the docs](docs/README.md)** · [Install](docs/Install.md) · [Using it in Cubase](docs/Cubase.md) · [What every Cat can do](docs/Every-Cat.md) · [Cat Link](docs/Cat-Link.md) · [The composer](docs/Composer.md) · [FAQ](docs/FAQ.md) · [Building it yourself](docs/Building.md) · [Roadmap](docs/ROADMAP.md)
+**[All the docs](docs/README.md)** · [Install](docs/Install.md) · [Using it in your DAW](docs/DAW.md) · [What every Cat can do](docs/Every-Cat.md) · [Cat Link](docs/Cat-Link.md) · [The composer](docs/Composer.md) · [FAQ](docs/FAQ.md) · [Building it yourself](docs/Building.md) · [Roadmap](docs/ROADMAP.md)
 
 Every change pushed to `main` is built and tested automatically on Windows, macOS and Linux (the **Actions** tab); the newest build becomes the **latest** release.
 

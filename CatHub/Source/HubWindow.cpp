@@ -777,13 +777,13 @@ ComposePage::ComposePage (HubMain& o, HubEngine& e) : owner (o), engine (e)
             if (! engine.isPlaying()) engine.setPlaying (true);
         });
     };
-    exportButton.setTooltip ("Save the song: as a WAV, as one WAV per part (stems), or as a MIDI file for Cubase");
+    exportButton.setTooltip ("Save the song: as a WAV, as one WAV per part (stems), or as a MIDI file for your DAW");
     exportButton.onClick = [this]
     {
         juce::PopupMenu m;
         m.addItem (1, "The song as a WAV file");
         m.addItem (2, "Each part as its own WAV (stems)");
-        m.addItem (3, "MIDI file (all parts, with the words) for Cubase");
+        m.addItem (3, "MIDI file (all parts, with the words) for your DAW");
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (exportButton),
                          [sp = juce::Component::SafePointer<HubMain> (&owner)] (int r) { if (sp != nullptr && r > 0) sp->exportSong (r - 1); });
     };
@@ -2226,7 +2226,7 @@ std::vector<Tutorial::Step> HubMain::tutorialSteps()
 {
     auto at = [this] (juce::Component& c) { return [this, &c] { return c.isShowing() ? boundsOf (c) : juce::Rectangle<int>(); }; };
     std::vector<Tutorial::Step> s;
-    s.push_back ({ "Welcome to the Cat Hub!", "Chord-Cat, Bass-Cat, Drum-Cat and Life-Cat play together here - no Cubase needed. "
+    s.push_back ({ "Welcome to the Cat Hub!", "Chord-Cat, Bass-Cat, Drum-Cat and Life-Cat play together here - no DAW needed. "
                    "This short tour shows you around. You can watch it again any time with the ? button.", {} });
     s.push_back ({ "Press Play", "Start and stop every Cat at once. The Space bar does the same.", at (playButton) });
     s.push_back ({ "Pick a style", "Lo-fi, Trap, House, Neo Soul, Ambient... One click sets every Cat, sound, effect and the tempo.", at (styleBox) });

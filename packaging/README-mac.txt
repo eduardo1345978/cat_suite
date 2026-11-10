@@ -4,11 +4,11 @@ CAT SUITE - Mac plug-ins (VST3)
 Works on every Mac with macOS 11 (Big Sur) or newer: Apple Silicon (M1, M2, M3, M4) and Intel.
 
 How to install
-1. Quit Cubase.
+1. Quit your DAW (Cubase, Ableton, Reaper ...).
 2. Right-click (or Control-click) "Install Cat Suite.command" and choose Open, then Open again.
    (The first time macOS asks because the Cats are not from the App Store. Double-clicking
    only works after this.)
-3. Open Cubase and rescan: Studio > VST Plug-in Manager > Rescan.
+3. Open your DAW and rescan the plug-ins (Cubase: Studio > VST Plug-in Manager > Rescan).
 
 The plug-ins are copied to your own VST3 folder (no password needed):
     ~/Library/Audio/Plug-Ins/VST3

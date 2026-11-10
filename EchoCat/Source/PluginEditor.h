@@ -69,7 +69,7 @@ private:
 
     EchoCatProcessor& processor;
     cat::PresetBar presetBar { processor.presetManager, "Preset" };
-    cat::ParamToggle freezeButton { processor.apvts, "freeze", "Freeze" }, syncButton { processor.apvts, "sync", "In time with Cubase" };
+    cat::ParamToggle freezeButton { processor.apvts, "freeze", "Freeze" }, syncButton { processor.apvts, "sync", "In time with DAW" };
     cat::ParamCombo divisionBox { processor.apvts, "division", "Echo", nullptr, 44 },
                     modeBox { processor.apvts, "mode", "Mode", nullptr, 50 };
     StepsEditor stepsEditor { processor };

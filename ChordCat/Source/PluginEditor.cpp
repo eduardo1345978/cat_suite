@@ -816,7 +816,7 @@ PerformPanel::PerformPanel (ChordCatEditor& o, ChordCatProcessor& p)
     recordButton.setTooltip ("MIDI Capture: records what you play as chords, quantised to 1/16");
     recordButton.onClick = [this] { processor.setCapturing (recordButton.getToggleState()); };
 
-    dragCaptureButton.setTooltip ("Drag the captured performance onto a Cubase MIDI track");
+    dragCaptureButton.setTooltip ("Drag the captured performance onto a MIDI track in your DAW");
     dragCaptureButton.onDragOut = [this] { owner.dragSequenceOut (processor.getCaptureSequence(), "Chord-Cat Capture"); };
     startTimerHz (5);
 }
@@ -891,9 +891,9 @@ GeneratePanel::GeneratePanel (ChordCatEditor& o, ChordCatProcessor& p)
     moodScaleButton.setTooltip ("Let the mood choose the scale (Dark/Sad = minor, Tension = harmonic minor...)");
 
     scaleLock.setTooltip ("Quantise programmed chords to diatonic chords of the key; chromatic chords are flagged");
-    chordTrackSync.setTooltip ("Follow incoming chords (route Cubase's Chord Track / chord MIDI into Chord-Cat): "
+    chordTrackSync.setTooltip ("Follow incoming chords (route your DAW's chord track / chord MIDI into Chord-Cat): "
                                "each new chord is written to the next pad and re-voiced");
-    importButton.setTooltip ("Import chords from a MIDI file (e.g. Cubase Chord Track exported via 'Chords to MIDI')");
+    importButton.setTooltip ("Import chords from a MIDI file (e.g. a chord track exported as MIDI)");
     importButton.onClick = [this] { chooseImportFile(); };
 
     chordCount = std::make_unique<cat::Stepper> ("Chords", 4, 16, [this] { return numChords; }, [this] (int v) { numChords = v; });
@@ -1220,7 +1220,7 @@ ChordCatEditor::ChordCatEditor (ChordCatProcessor& p)
     aButton.setTooltip ("A/B compare: progression A");
     bButton.setTooltip ("A/B compare: progression B");
 
-    dragButton.setTooltip ("Drag the whole progression (with chord-name markers) onto a Cubase track");
+    dragButton.setTooltip ("Drag the whole progression (with chord-name markers) onto a track in your DAW");
     dragButton.setColour (juce::TextButton::buttonColourId, C::raised);
     dragButton.onDragOut = [this] { dragSequenceOut (processor.buildProgressionSequence(), "Chord-Cat Progression"); };
 

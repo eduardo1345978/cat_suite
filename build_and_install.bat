@@ -26,7 +26,7 @@ call "%~dp0install_vst3.bat"
 type "%~dp0install_log.txt" >> "%LOG%" 2>nul
 echo === DONE === >> "%LOG%"
 echo.
-echo Done. Rescan in Cubase: Studio ^> VST Plug-in Manager.
+echo Done. Rescan the plug-ins in your DAW (Cubase: Studio ^> VST Plug-in Manager).
 pause
 exit /b 0
 

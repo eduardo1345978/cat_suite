@@ -133,7 +133,7 @@ private:
     juce::ComboBox fontBox;
     void setTool (negui::PhotoView::Tool);
     negui::Chip openPhotoB { "Open photo / sound" }, openSoundB { "Hide in a song" }, songX { "x" },
-                invertB { "Negative" }, syncB { "Play with Cubase" }, playB { "Play", true }, saveWavB { "Save .wav" }, savePicB { "Save picture" };
+                invertB { "Negative" }, syncB { "Play with DAW" }, playB { "Play", true }, saveWavB { "Save .wav" }, savePicB { "Save picture" };
     juce::AudioProcessorValueTreeState::ButtonAttachment invertA { processor.apvts, "invert", invertB }, syncA { processor.apvts, "sync", syncB };
     negui::DragChip dragChip { processor };
     std::unique_ptr<juce::FileChooser> chooser;

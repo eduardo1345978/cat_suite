@@ -524,7 +524,7 @@ MicroCatEditor::MicroCatEditor (MicroCatProcessor& p) : processor (p)
         if (juce::isPositiveAndBelow (i, (int) library().size())) processor.setTuningB (library()[(size_t) i]);
     };
     morph.setSliderStyle (juce::Slider::LinearBar);
-    morph.setTooltip ("Morph: 0% = tuning A, 100% = tuning B. Turn it while notes ring: they glide (automate it in Cubase!)");
+    morph.setTooltip ("Morph: 0% = tuning A, 100% = tuning B. Turn it while notes ring: they glide (automate it in your DAW!)");
     morphAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.apvts, "morph", morph);
     addAndMakeVisible (justBox);
     addAndMakeVisible (tuningBBox);

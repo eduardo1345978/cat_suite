@@ -31,12 +31,12 @@ for /D %%P in ("VST3\*.vst3") do (
 
 echo.
 if "%FAILED%"=="1" (
-    echo   Some plug-ins could not be installed. Close Cubase and run this again.
+    echo   Some plug-ins could not be installed. Close your DAW and run this again.
 ) else (
     echo   Done! All Cats are installed in:
     echo   %DEST%
     echo.
-    echo   In Cubase: Studio ^> VST Plug-in Manager ^> Rescan.
+    echo   Rescan the plug-ins in your DAW (Cubase: Studio ^> VST Plug-in Manager ^> Rescan).
 )
 rem Micro-Cat's MTS-ESP mode needs ODDSound's free MTS-ESP library (one tuning for every MTS-ESP synth)
 if exist "%CommonProgramFiles%\MTS-ESP\LIBMTS.dll" goto mtsDone

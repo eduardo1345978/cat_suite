@@ -266,7 +266,7 @@ DrumCatEditor::DrumCatEditor (DrumCatProcessor& p)
     presetStepper = std::make_unique<cat::PresetBar> (p.presetManager);
     addAndMakeVisible (*presetStepper);
 
-    dragButton.setTooltip ("Drag the pattern onto a Cubase MIDI track");
+    dragButton.setTooltip ("Drag the pattern onto a MIDI track in your DAW");
     dragButton.onDragOut = [this]
     {
         const auto seq = processor.buildPatternSequence();

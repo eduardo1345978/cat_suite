@@ -29,12 +29,12 @@ AudioProcessorValueTreeState::ParameterLayout HumCatProcessor::createLayout()
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "sensitivity", 1 }, "Sensitivity", NormalisableRange<float> (0.0f, 1.0f), 0.5f,
                                                        AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v * 100.0f)) + " %"; })));
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "trim", 1 }, "Start at first note", true));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "tempo", 1 }, "Tempo (no Cubase)", NormalisableRange<float> (50.0f, 200.0f, 1.0f), 110.0f,
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "tempo", 1 }, "Tempo (no DAW)", NormalisableRange<float> (50.0f, 200.0f, 1.0f), 110.0f,
                                                        AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v)) + " BPM"; })));
     for (int part = 0; part < humcat::NumParts; ++part)
         layout.add (std::make_unique<AudioParameterBool> (ParameterID { "out" + humcat::partNames()[part], 1 }, humcat::partNames()[part], true));
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "ownSound", 1 }, "Own sound", true));
-    layout.add (std::make_unique<AudioParameterBool> (ParameterID { "withHost", 1 }, "Play with Cubase", true));
+    layout.add (std::make_unique<AudioParameterBool> (ParameterID { "withHost", 1 }, "Play with DAW", true));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "leadSound", 1 }, "Lead sound", hub::KeysSynth::soundNames(), 2));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "chordSound", 1 }, "Chord sound", hub::KeysSynth::soundNames(), 1));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "kit", 1 }, "Drum kit", hub::DrumKit::soundNames(), 0));

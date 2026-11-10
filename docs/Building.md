@@ -17,9 +17,9 @@ xcopy /E /I build\OrbitCat\OrbitCat_artefacts\Release\VST3\Orbit-Cat.vst3 "C:\Pr
 xcopy /E /I build\SingCat\SingCat_artefacts\Release\VST3\Sing-Cat.vst3   "C:\Program Files\Common Files\VST3\Sing-Cat.vst3"
 ```
 
-Or simply double-click **`build_and_install.bat`**: it builds, runs the tests and installs all seven into your **user** VST3 folder, `%LOCALAPPDATA%\Programs\Common\VST3`, which Cubase also scans. No administrator rights are needed. (`install_vst3.bat` does just the copy.)
+Or simply double-click **`build_and_install.bat`**: it builds, runs the tests and installs all seven into your **user** VST3 folder, `%LOCALAPPDATA%\Programs\Common\VST3`, which every DAW scans. No administrator rights are needed. (`install_vst3.bat` does just the copy.)
 
-Then rescan in Cubase via *Studio > VST Plug-in Manager*.
+Then rescan the plug-ins in your DAW (Cubase: *Studio > VST Plug-in Manager*).
 
 | CMake option | Default | Meaning |
 |---|---|---|

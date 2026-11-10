@@ -11,7 +11,7 @@ The instruments that make their own sound, as standalone apps AND as VST3 plug-i
     Cat Ocean  - an endless pixel ocean for YouTube live streams: viewers get fish through the chat
 
 How to install
-1. Close Cubase and any open Cat apps.
+1. Close your DAW and any open Cat apps.
 2. Double-click "Install-Cat-Sound-Apps.bat".
 3. Start the apps from the Start menu or the Desktop.
 
@@ -25,7 +25,7 @@ Playing with the computer keyboard (standalone apps)
 Cat Hub
     Press Play: the Hub walks through Chord-Cat's pads (one chord per bar), Bass-Cat
     plays a bass line to the chords, Drum-Cat plays the drums and Life-Cat's creatures
-    sing along - all at the same tempo. No Cubase needed.
+    sing along - all at the same tempo. No DAW needed.
     Space                  play / stop
     1 - 8                  hold one of Chord-Cat's pads yourself
     Jam tab                sound, volume, room (reverb), mute / solo for each Cat

@@ -58,7 +58,7 @@ private:
     HumCatProcessor& processor;
     cat::PresetBar presetBar { processor.presetManager, "Preset" };
     RecButton rec { processor };
-    juce::TextButton loadButton { "Load recording" }, clearButton { "Clear" }, demoButton { "Demo tune" }, playButton { "Play" }, dragSong { "Drag song to Cubase" };
+    juce::TextButton loadButton { "Load recording" }, clearButton { "Clear" }, demoButton { "Demo tune" }, playButton { "Play" }, dragSong { "Drag song to DAW" };
     SongView view { processor };
     std::unique_ptr<juce::FileChooser> chooser;
 
@@ -76,7 +76,7 @@ private:
                     scale { processor.apvts, "scale", "Scale", nullptr, 46 },
                     grid { processor.apvts, "grid", "Grid", nullptr, 42 };
     cat::ParamToggle snap { processor.apvts, "snap", "Snap to key" }, trim { processor.apvts, "trim", "Start at 1st note" },
-                     withHost { processor.apvts, "withHost", "Play with Cubase" }, ownSound { processor.apvts, "ownSound", "Own sound" };
+                     withHost { processor.apvts, "withHost", "Play with DAW" }, ownSound { processor.apvts, "ownSound", "Own sound" };
     cat::Knob sensitivity { processor.apvts, "sensitivity", "Ears" }, leadOct { processor.apvts, "leadOct", "Lead oct" },
               tempo { processor.apvts, "tempo", "Tempo" }, volume { processor.apvts, "volume", "Volume" };
 

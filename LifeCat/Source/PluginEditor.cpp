@@ -1415,7 +1415,7 @@ LifeCatEditor::LifeCatEditor (LifeCatProcessor& p)
     bigButton.setToggleState (processor.bigView, juce::dontSendNotification);
     bigButton.setTooltip ("Let the world fill the window (the settings slide away)");
     bigButton.onClick = [this] { setBigView (bigButton.getToggleState()); };
-    dragButton.setTooltip ("Drag the last 8 bars the creatures sang onto a Cubase MIDI track");
+    dragButton.setTooltip ("Drag the last 8 bars the creatures sang onto a MIDI track in your DAW");
     dragButton.onDragOut = [this]
     {
         const auto seq = processor.takeRecording();
@@ -1487,7 +1487,7 @@ LifeCatEditor::LifeCatEditor (LifeCatProcessor& p)
     midiInfo.setColour (juce::Label::textColourId, C::textDim);
     midiInfo.setJustificationType (juce::Justification::topLeft);
     midiInfo.setText ("MIDI Out sends every note the creatures sing, so you can play any instrument with the ecosystem "
-                      "(in Cubase: route this track's MIDI output to another instrument track).\n\n"
+                      "(in your DAW: route this track's MIDI output to another instrument track).\n\n"
                       "One channel per kind: grazers 1, hunters 2, drifters 3, pollinators 4, scavengers 5, giants 6, swarms 7.\n\n"
                       "Notes you play IN are used by the 'Held chord' note mode. Drag MIDI (top right) exports the last 8 bars.",
                       juce::dontSendNotification);

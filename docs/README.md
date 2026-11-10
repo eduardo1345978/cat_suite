@@ -1,6 +1,6 @@
 # Cat Suite documentation
 
-**Start here:** [Install](Install.md) · [Using it in Cubase](Cubase.md) · [FAQ](FAQ.md)
+**Start here:** [Install](Install.md) · [Using it in your DAW](DAW.md) · [FAQ](FAQ.md)
 
 ## Plug-ins
 

@@ -278,7 +278,7 @@ public:
         setup (onButton, "Link this Cat", LinkClient::On, "Turn Cat Link on or off for this Cat");
         if (client.caps.key) setup (keyButton, "Share key & scale", LinkClient::Key, "Change the key or scale here and the other Cats follow (and the other way round)");
         if (client.caps.sendChords) setup (chordButton, "Send my chords to the others", LinkClient::Chords, "Bass-Cat, Patt-Cat, Life-Cat... can follow these chords without MIDI routing");
-        else if (client.caps.receiveChords) setup (chordButton, client.caps.receiveChordsText, LinkClient::Chords, "Play along with Chord-Cat without routing MIDI in Cubase");
+        else if (client.caps.receiveChords) setup (chordButton, client.caps.receiveChordsText, LinkClient::Chords, "Play along with Chord-Cat without routing MIDI in your DAW");
         if (client.caps.sendTuning) setup (tuningButton, "Send my tuning to Glide / Sing / Talk-Cat", LinkClient::Tuning, "They play in this tuning straight away, no MPE or MIDI routing needed");
         else if (client.caps.receiveTuning) setup (tuningButton, "Play in Micro-Cat's tuning", LinkClient::Tuning, "Follow the tuning picked in Micro-Cat (microtonal), without MIDI routing");
         if (client.caps.sendLife) setup (lifeButton, "Send births & deaths", LinkClient::Life, "Drum-Cat can answer them with hits");

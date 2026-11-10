@@ -341,13 +341,13 @@ EchoCatEditor::EchoCatEditor (EchoCatProcessor& p) : processor (p)
 {
     setSize (designW, designH);
     freezeButton.setTooltip ("Hold the echoes: nothing new goes in, what is there repeats forever");
-    syncButton.setTooltip ("The echo time follows Cubase's tempo (else set it in ms)");
+    syncButton.setTooltip ("The echo time follows the DAW's tempo (else set it in ms)");
     divisionBox.getCombo().setTooltip ("How long between echoes, as a note length");
 
     timeSection.addTop (&syncButton);
     timeSection.addTop (&divisionBox);
     timeKnob = knob ("timeMs", "Time", cat::Colours::accent);
-    timeKnob->getSlider().setTooltip ("The echo time when it is not in time with Cubase");
+    timeKnob->getSlider().setTooltip ("The echo time when it is not in time with the DAW");
     timeSection.addKnob (timeKnob);
     auto* fbk = knob ("feedback", "Feedback", cat::Colours::accent);
     fbk->getSlider().setTooltip ("How many echoes: a few ... nearly forever");
@@ -414,7 +414,7 @@ void EchoCatEditor::paint (juce::Graphics& g)
     cat::CatLookAndFeel::drawLogo (g, logoArea.toFloat(), "ECHO", "CAT");
     g.setColour (cat::Colours::textDim);
     g.setFont (cat::catFont (12.0f));
-    g.drawFittedText ("Put Echo-Cat on a vocal or instrument track (or an FX channel with Dry at 0%). Echo time follows Cubase's tempo.",
+    g.drawFittedText ("Put Echo-Cat on a vocal or instrument track (or an FX channel with Dry at 0%). Echo time follows the DAW's tempo.",
                       infoArea, juce::Justification::centredLeft, 1);
 }
 

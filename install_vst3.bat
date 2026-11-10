@@ -30,7 +30,7 @@ exit /b 0
 :plugin
 set "SRC=build\%1Cat\%1Cat_artefacts\Release\VST3\%1-Cat.vst3"
 if not exist "%SRC%" (echo NOT BUILT: %1-Cat >> "%LOG%" & exit /b 0)
-xcopy /E /I /Y "%SRC%" "%DEST%\%1-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: %1-Cat (is Cubase still running?) >> "%LOG%"
+xcopy /E /I /Y "%SRC%" "%DEST%\%1-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: %1-Cat (is your DAW still running?) >> "%LOG%"
 if /I not "%1"=="Muse" if /I not "%1"=="Echo" if /I not "%1"=="Micro" xcopy /E /I /Y "%SRC%" "%APPS%\Hub Cats\%1-Cat.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Hub Cats\%1-Cat (is Cat Hub still running?) >> "%LOG%"
 exit /b 0
 
@@ -38,7 +38,7 @@ exit /b 0
 rem an effect without "-Cat" in its name (Molten): only into the VST3 folder
 set "SRC=build\%1\%1_artefacts\Release\VST3\%1.vst3"
 if not exist "%SRC%" (echo NOT BUILT: %1 >> "%LOG%" & exit /b 0)
-xcopy /E /I /Y "%SRC%" "%DEST%\%1.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: %1 (is Cubase still running?) >> "%LOG%"
+xcopy /E /I /Y "%SRC%" "%DEST%\%1.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: %1 (is your DAW still running?) >> "%LOG%"
 exit /b 0
 
 :app

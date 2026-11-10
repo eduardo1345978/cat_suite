@@ -167,12 +167,12 @@ PhaseCatEditor::PhaseCatEditor (PhaseCatProcessor& p) : processor (p)
         b->onClick = [this, i] { processor.engine.requestModulation (i); };
         addAndMakeVisible (b);
     }
-    resetModButton.setTooltip ("Back to Cubase's beat at the next bar");
+    resetModButton.setTooltip ("Back to the DAW's beat at the next bar");
     resetModButton.onClick = [this] { processor.engine.requestResetModulation(); };
     realignButton.setTooltip ("All lanes back together (phasing starts again) at the next bar");
     realignButton.onClick = [this] { processor.engine.requestRealign(); };
     playButton.setClickingTogglesState (true);
-    playButton.setTooltip ("Play without Cubase (Cubase's Play also starts it)");
+    playButton.setTooltip ("Play without a DAW (the DAW's Play also starts it)");
     playButton.onClick = [this] { processor.freeRun = playButton.getToggleState(); };
     rissetBars.getSlider().setTooltip ("How many bars one turn of the endless speed-up takes");
     rissetDown.setTooltip ("Risset lanes seem to slow down forever instead");
@@ -210,7 +210,7 @@ void PhaseCatEditor::paint (juce::Graphics& g)
     g.drawText ("RISSET RHYTHM + NOTES", rissetArea.withHeight (18), juce::Justification::centredLeft);
     g.setFont (cat::catFont (11.5f));
     g.drawFittedText ("Put Phase-Cat on a MIDI track and route its MIDI Out to Drum-Cat or any drum instrument (channel " + juce::String (juce::roundToInt (processor.apvts.getRawParameterValue ("channel")->load()))
-                      + "). It follows Cubase's tempo and Play.", infoArea, juce::Justification::centredLeft, 1);
+                      + "). It follows the DAW's tempo and Play.", infoArea, juce::Justification::centredLeft, 1);
 }
 
 void PhaseCatEditor::resized()

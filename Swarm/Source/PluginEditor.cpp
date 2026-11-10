@@ -34,7 +34,7 @@ Colour NebulaView::colourAt (float x, float y, bool dustCol)
 NebulaView::NebulaView (SwarmProcessor& p)
     : processor (p), px (*p.apvts.getParameter ("x")), py (*p.apvts.getParameter ("y"))
 {
-    setTooltip ("Drag the point: DREAM (top left), PULSE (top right, in time with Cubase), DARK (bottom left), WILD (bottom right). "
+    setTooltip ("Drag the point: DREAM (top left), PULSE (top right, in time with the DAW), DARK (bottom left), WILD (bottom right). "
                 "The small light is where LIFE has taken it. Double-click for the middle.");
     setMouseCursor (MouseCursor::CrosshairCursor);
     sparks.reserve (1200);
@@ -310,7 +310,7 @@ MorePanel::MorePanel (SwarmProcessor& p)
         addAndMakeVisible (*sl);
         sliders.push_back (std::move (sl));
     }
-    echoTime.getCombo().setTooltip ("How far apart the echoes are (in time with Cubase)");
+    echoTime.getCombo().setTooltip ("How far apart the echoes are (in time with the DAW)");
     split.getCombo().setTooltip ("Everything below this stays dry and solid (bass, kick)");
     addAndMakeVisible (echoTime);
     addAndMakeVisible (split);
@@ -381,7 +381,7 @@ SwarmEditor::SwarmEditor (SwarmProcessor& p) : processor (p)
     dice.onClick = [this] { processor.randomise(); };
     addAndMakeVisible (grid);
     addAndMakeVisible (notes);
-    grid.getCombo().setTooltip ("PULSE plays on this grid, in time with Cubase");
+    grid.getCombo().setTooltip ("PULSE plays on this grid, in time with the DAW");
     notes.getCombo().setTooltip ("Which notes the grains may jump to (from the note they came from)");
 
     const std::pair<const char*, const char*> list[] = { { "grain", "GRAIN" }, { "density", "DENSITY" }, { "pitch", "PITCH" }, { "scatter", "SCATTER" },

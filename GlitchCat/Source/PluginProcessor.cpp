@@ -46,7 +46,7 @@ AudioProcessorValueTreeState::ParameterLayout GlitchCatProcessor::createLayout()
     unit ("space", "Space", 0.35f);
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "volume", 1 }, "Volume", NormalisableRange<float> (-30.0f, 6.0f), -6.0f,
                                                        AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String (v, 1) + " dB"; })));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "tempo", 1 }, "Tempo (no Cubase)", NormalisableRange<float> (60.0f, 200.0f, 1.0f), 120.0f,
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "tempo", 1 }, "Tempo (no DAW)", NormalisableRange<float> (60.0f, 200.0f, 1.0f), 120.0f,
                                                        AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v)) + " BPM"; })));
     return layout;
 }

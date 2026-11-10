@@ -312,9 +312,9 @@ HumCatEditor::HumCatEditor (HumCatProcessor& p) : processor (p)
     demoButton.setTooltip ("No mic at hand? A sung demo tune to try it with");
     demoButton.onClick = [this] { processor.previewPlaying = false; processor.loadDemo(); status = "Listening to the demo tune ..."; };
     playButton.setClickingTogglesState (true);
-    playButton.setTooltip ("Play the song here (without Cubase playing)");
+    playButton.setTooltip ("Play the song here (without the DAW playing)");
     playButton.onClick = [this] { processor.previewPlaying = playButton.getToggleState(); };
-    dragSong.setTooltip ("Drag onto Cubase's project: every part on its own MIDI track");
+    dragSong.setTooltip ("Drag into your DAW's project: every part on its own MIDI track");
     dragSong.onClick = [] {};
     dragSong.addMouseListener (this, false);
     dragSong.setColour (TextButton::buttonColourId, rose.withAlpha (0.85f));
@@ -330,7 +330,7 @@ HumCatEditor::HumCatEditor (HumCatProcessor& p) : processor (p)
         s.on->setColour (TextButton::textColourOffId, partColours[i]);
         addAndMakeVisible (*s.on);
         s.drag = std::make_unique<TextButton> ("Drag");
-        s.drag->setTooltip ("Drag only the " + humcat::partNames()[i] + " into Cubase");
+        s.drag->setTooltip ("Drag only the " + humcat::partNames()[i] + " into your DAW");
         s.drag->addMouseListener (this, false);
         s.drag->getProperties().set ("part", i);
         addAndMakeVisible (*s.drag);
@@ -346,8 +346,8 @@ HumCatEditor::HumCatEditor (HumCatProcessor& p) : processor (p)
     for (auto* t : { &snap, &trim, &withHost, &ownSound }) addAndMakeVisible (*t);
     for (auto* k : { &sensitivity, &leadOct, &tempo, &volume }) addAndMakeVisible (*k);
     sensitivity.getSlider().setTooltip ("How hard it listens: higher hears quieter, breathier singing (and more noise)");
-    tempo.getSlider().setTooltip ("Tempo when Cubase doesn't send one (in Cubase it follows the project tempo)");
-    trim.setTooltip ("On: your first note is bar 1. Off: it stays where you sang it on Cubase's timeline");
+    tempo.getSlider().setTooltip ("Tempo when the DAW doesn't send one (in a DAW it follows the project tempo)");
+    trim.setTooltip ("On: your first note is bar 1. Off: it stays where you sang it on the DAW's timeline");
 
     setSize (designW, designH);
     view.refresh();
@@ -500,7 +500,7 @@ void HumCatEditor::timerCallback()
         {
             const auto sung = processor.getSung();
             status = sung.empty() ? "Didn't hear a tune - try singing louder or turn Ears up"
-                                  : "Heard " + String ((int) sung.size()) + " notes. Press Play, or drag it into Cubase";
+                                  : "Heard " + String ((int) sung.size()) + " notes. Press Play, or drag it into your DAW";
         }
         wasAnalysing = an;
     }
@@ -588,6 +588,6 @@ void HumCatEditor::mouseUp (const MouseEvent& e)
     if (! dragging)
         if (auto* b = dynamic_cast<TextButton*> (e.eventComponent))
             if (b->getProperties().contains ("part") && b->getLocalBounds().contains (e.getPosition()))
-                status = "Hold the button and drag it onto Cubase";
+                status = "Hold the button and drag it onto your DAW's track";
     dragging = false;
 }

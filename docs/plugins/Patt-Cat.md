@@ -15,9 +15,9 @@
 - The first gap is Rate (a note value at the song tempo, R.Mode Sync) or Time (ms, R.Mode Free). Curve + makes each gap shorter like a real ball (up to x0.55 per bounce), Curve - slows the bounces down. Notes = number of bounces, Fade Out = how much quieter the last bounce is, Octave / Oct Rnd move the bounces, Dur = note length, Human = random timing.
 - Play: One Shot plays every bounce; While Held stops the remaining bounces when you let go of the key.
 
-## In Cubase
+## In your DAW
 
-MIDI Cats load as **instruments** (Cubase's MIDI insert slots only take Steinberg's own plug-ins). See [Using it in Cubase](../Cubase.md) for the routing.
+MIDI Cats load as **instruments with a MIDI output**: the DAW sends that MIDI to your synth (in Cubase, MIDI insert slots only take Steinberg's own plug-ins). See [Using it in your DAW](../DAW.md) for the routing.
 
 ---
 [All plug-ins](../README.md) · [Install](../Install.md) · [Every Cat can ...](../Every-Cat.md)

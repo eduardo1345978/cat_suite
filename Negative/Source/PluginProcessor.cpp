@@ -32,7 +32,7 @@ AudioProcessorValueTreeState::ParameterLayout NegativeProcessor::createLayout()
     l.add (std::make_unique<AudioParameterChoice> (ParameterID { "scale", 1 }, "Scale", negative::scaleNames(), 1));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { "level", 1 }, "Level", NormalisableRange<float> (-60.0f, 0.0f), -12.0f,
                AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String (v, 1) + " dB"; })));
-    l.add (std::make_unique<AudioParameterBool> (ParameterID { "sync", 1 }, "Play with Cubase", true));
+    l.add (std::make_unique<AudioParameterBool> (ParameterID { "sync", 1 }, "Play with DAW", true));
     return l;
 }
 

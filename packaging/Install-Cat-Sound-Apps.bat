@@ -3,7 +3,7 @@ setlocal
 title Cat Suite - sound apps installer
 rem Installs the Cat Suite instruments that make sound:
 rem   - as standalone apps   (%LOCALAPPDATA%\Programs\Cat Suite, with Start menu + Desktop shortcuts)
-rem   - as VST3 plug-ins     (%LOCALAPPDATA%\Programs\Common\VST3, for Cubase)
+rem   - as VST3 plug-ins     (%LOCALAPPDATA%\Programs\Common\VST3, for your DAW)
 rem No administrator rights are needed.
 cd /d "%~dp0"
 set "APPS=%LOCALAPPDATA%\Programs\Cat Suite"
@@ -52,7 +52,7 @@ if errorlevel 1 echo     (could not create the shortcuts - the apps are in "%APP
 
 echo.
 if "%FAILED%"=="1" (
-    echo   Something could not be copied. Close all Cat apps and Cubase, then run this again.
+    echo   Something could not be copied. Close all Cat apps and your DAW, then run this again.
 ) else (
     echo   Done! Start Sing-Cat, Talk-Cat, Glide-Cat, Life-Cat, Muse-Cat, the Cat Hub or Cat Ocean from the Start menu or your Desktop.
     echo.
@@ -64,7 +64,7 @@ if "%FAILED%"=="1" (
     echo       Left / Right arrow = octave          Down / Up arrow = velocity
     echo   Sound card or a MIDI keyboard: click "Options" ^(top left^) ^> Audio/MIDI Settings.
     echo.
-    echo   The same instruments are also installed as VST3 plug-ins for Cubase
+    echo   The same instruments are also installed as VST3 plug-ins for your DAW
     echo   ^(Studio ^> VST Plug-in Manager ^> Rescan^).
 )
 echo.

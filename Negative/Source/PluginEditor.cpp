@@ -342,7 +342,7 @@ NegativeEditor::NegativeEditor (NegativeProcessor& p) : processor (p)
     const std::tuple<const char*, const char*, const char*> list[] = {
         { "low", "LOW", "The lowest frequency the photo uses (its bottom edge)" },
         { "high", "HIGH", "The highest frequency (its top edge). Put LOW and HIGH up high (e.g. 12 - 18 kHz) to hide the photo" },
-        { "length", "LENGTH", "How long the photo plays (in bars, at Cubase's tempo)" },
+        { "length", "LENGTH", "How long the photo plays (in bars, at the DAW's tempo)" },
         { "contrast", "CONTRAST", "More contrast: the dark parts go quiet, only the bright ones sound" },
         { "soft", "SOFT", "Blurs the photo: smoother, less hiss" },
         { "level", "LEVEL", "How loud the photo plays (low and high up = hidden in the song: you only see it in a spectrogram)" } };
@@ -407,14 +407,14 @@ NegativeEditor::NegativeEditor (NegativeProcessor& p) : processor (p)
     invertB.setClickingTogglesState (true);
     invertB.setTooltip ("Play the photo's negative (dark = loud)");
     syncB.setClickingTogglesState (true);
-    syncB.setTooltip ("Play the photo in time with Cubase, again every LENGTH (MIDI notes play it too: C4 = as it is)");
+    syncB.setTooltip ("Play the photo in time with the DAW, again every LENGTH (MIDI notes play it too: C4 = as it is)");
     playB.setClickingTogglesState (true);
     playB.onClick = [this] { processor.previewing = playB.getToggleState(); playB.setButtonText (playB.getToggleState() ? "Stop" : "Play"); };
     saveWavB.onClick = [this] { saveWav(); };
     savePicB.onClick = [this] { savePicture(); };
     saveWavB.setTooltip ("Save the sound (with the opened sound, if there is one) as a .wav");
     savePicB.setTooltip ("Save the spectrogram as a picture (.png)");
-    dragChip.setTooltip ("Drag the sound straight onto a Cubase track");
+    dragChip.setTooltip ("Drag the sound straight onto a track in your DAW");
     for (auto* c : std::initializer_list<Component*> { &openPhotoB, &openSoundB, &invertB, &playB, &saveWavB, &savePicB, &dragChip })
         addAndMakeVisible (c);
     if (! processor.isStandalone()) addAndMakeVisible (syncB);

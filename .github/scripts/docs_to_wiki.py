@@ -68,8 +68,8 @@ def group(sub):
     return sorted(n for p, n in pages.items() if os.path.dirname(p) == os.path.abspath(os.path.join(docs, sub)))
 
 
-guides = [n for n in ["Install", "Cubase", "Every-Cat", "Cat-Link", "Composer", "FAQ", "Building", "ROADMAP"] if n in names]
-titles = {"Cubase": "Using it in Cubase", "Every-Cat": "Every cat at a glance", "ROADMAP": "Roadmap"}
+guides = [n for n in ["Install", "DAW", "Every-Cat", "Cat-Link", "Composer", "FAQ", "Building", "ROADMAP"] if n in names]
+titles = {"DAW": "Using it in your DAW", "Every-Cat": "Every cat at a glance", "ROADMAP": "Roadmap"}
 side = [marker, "", "**[Home](Home)**", "", "**Start**", ""]
 side += [f"- [{titles.get(n, n.replace('-', ' '))}]({n})" for n in guides]
 side += ["", "**Plug-ins**", ""] + [f"- [{n}]({n})" for n in group("plugins")]

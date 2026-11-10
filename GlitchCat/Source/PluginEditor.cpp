@@ -398,14 +398,14 @@ GlitchCatEditor::GlitchCatEditor (GlitchCatProcessor& p) : processor (p)
     flight.getSlider().setTooltip ("How far and how fast the bugs fly round left / right");
     tape.getSlider().setTooltip ("Old tape: wobbling pitch, warmth, a softer top, a little hiss");
     shape.getSlider().setTooltip ("The synth's wave: saw -> square -> glass bells");
-    tempo.getSlider().setTooltip ("The tempo when Cubase isn't playing (in Cubase it follows the project)");
+    tempo.getSlider().setTooltip ("The tempo when the DAW isn't playing (in a DAW it follows the project)");
     for (auto* c : { &voiceType, &kit, &beatMode, &beatStyle }) addAndMakeVisible (*c);
     voiceType.getCombo().setTooltip ("Whisper, vowels, a choir, a talking mouth - or My voice: drop a recording here or record it");
     beatMode.getCombo().setTooltip ("Bug beat: it drums along to your notes. Low keys: the keys below C2 play drums. Both: the low keys take the beat over");
 
     for (auto* b : { &loadButton, &recButton, &clearButton }) addAndMakeVisible (*b);
     loadButton.setTooltip ("Load a recording of your voice (wav, aiff, flac, mp3) - or drop it anywhere on Glitch-Cat");
-    recButton.setTooltip ("Record your voice through Glitch-Cat's side-chain input (Cubase: activate Side-Chain, route your mic track there)");
+    recButton.setTooltip ("Record your voice through Glitch-Cat's side-chain input (in your DAW: turn on side-chain and route your mic track there)");
     clearButton.setTooltip ("Forget the voice");
     loadButton.onClick = [this]
     {

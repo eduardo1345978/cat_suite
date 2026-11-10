@@ -235,7 +235,7 @@ VortexEditor::VortexEditor (VortexProcessor& p) : processor (p)
     addAndMakeVisible (mode);
     addAndMakeVisible (sync);
     mode.getCombo().setTooltip ("PITCH: copies of the sound glide up an octave apart. FILTER: filters sweep through it. BOTH: one after the other");
-    sync.getCombo().setTooltip ("Free: SPIN sets the speed. Or one octave every 1 .. 16 bars, locked to Cubase (SPIN left = falling)");
+    sync.getCombo().setTooltip ("Free: SPIN sets the speed. Or one octave every 1 .. 16 bars, locked to the DAW (SPIN left = falling)");
     setSize (designW, designH);
     startTimerHz (40);
 }

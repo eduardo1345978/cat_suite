@@ -317,12 +317,12 @@ MuseCatEditor::MuseCatEditor (MuseCatProcessor& p) : processor (p)
 {
     setSize (designW, designH);
 
-    playButton.setTooltip ("Play the song here (in Cubase, Muse-Cat follows Cubase's Play)");
+    playButton.setTooltip ("Play the song here (in your DAW, Muse-Cat follows the DAW's Play)");
     playButton.onClick = [this] { processor.previewPlaying = ! processor.previewPlaying.load(); };
     playButton.setButtonText ("LAUNCH SONG");
     playButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xffd8361f));
     playButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
-    dragButton.setTooltip ("Drag the whole song into Cubase as MIDI (every part on its own channel, with the words)");
+    dragButton.setTooltip ("Drag the whole song into your DAW as MIDI (every part on its own channel, with the words)");
     dragButton.onDragOut = [this]
     {
         if (auto s = processor.getSong())
@@ -332,7 +332,7 @@ MuseCatEditor::MuseCatEditor (MuseCatProcessor& p) : processor (p)
             if (auto os = f.createOutputStream()) { toMidiFile (*s).writeTo (*os); os.reset(); cat::midiexport::dragFileOut (f, &dragButton); }
         }
     };
-    dragButton.onClick = [this] { status = "Drag this button onto a Cubase track to get the song as MIDI (drag a part's name for just that part)"; repaint(); };
+    dragButton.onClick = [this] { status = "Drag this button onto a track in your DAW to get the song as MIDI (drag a part's name for just that part)"; repaint(); };
     map.onDragPart = [this] (int part) { dragPartOut (part); };
     wordsButton.setTooltip ("Write your own words and chords for this song");
     wordsButton.onClick = [this] { showWords (! wordsPanel.isVisible()); };
@@ -349,7 +349,7 @@ MuseCatEditor::MuseCatEditor (MuseCatProcessor& p) : processor (p)
             juce::PopupMenu::Options().withTargetComponent (&map).withTargetScreenArea (juce::Rectangle<int> (screen.x, screen.y, 1, 1)),
             [sp, section] (int result) { if (sp != nullptr && result > 0) sp->arrangeSection (section, result); });
     };
-    map.setTooltip ("Click a section to arrange the song. Drag a part (its lane or name) onto a Cubase track to get just that part as MIDI");
+    map.setTooltip ("Click a section to arrange the song. Drag a part (its lane or name) onto a track in your DAW to get just that part as MIDI");
     exportButton.setTooltip ("Save the song as a WAV, as one WAV per part (stems), or as a MIDI file");
     exportButton.onClick = [this]
     {
@@ -511,7 +511,7 @@ void MuseCatEditor::mouseDown (const juce::MouseEvent& e)
     labelDragged = false;
     for (int part = 0; part < NumParts; ++part)
         if (partLabelAreas[(size_t) part].contains (e.getPosition())) labelDragPart = part;
-    if (labelDragPart >= 0) { status = "Drag " + partNames()[labelDragPart] + " onto a Cubase track to get just that part as MIDI"; repaint(); }
+    if (labelDragPart >= 0) { status = "Drag " + partNames()[labelDragPart] + " onto a track in your DAW to get just that part as MIDI"; repaint(); }
 }
 
 void MuseCatEditor::mouseDrag (const juce::MouseEvent& e)

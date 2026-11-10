@@ -12,7 +12,7 @@ You know the sound in films where the tension keeps rising and never arrives? Th
 
 - **Drag up / down on the vortex** (or SPIN): right = rising, left = falling, the middle stands still. The rings fly out of the middle while it rises and into it while it falls.
 - **PITCH**: 4 pitch-shifted copies of the sound, an octave apart, glide forever. **FILTER**: 10 filters an octave apart sweep through the sound (a "barber pole" filter, also great as an endless phaser at MIX 50%). **BOTH**: one after the other.
-- **SYNC**: one octave every 1, 2, 4, 8 or 16 bars, locked to the song position in Cubase (a riser that is always in the same place in the bar). With SYNC on, SPIN only picks the direction.
+- **SYNC**: one octave every 1, 2, 4, 8 or 16 bars, locked to the song position in your DAW (a riser that is always in the same place in the bar). With SYNC on, SPIN only picks the direction.
 - **FOCUS**: high = fewer, clearer copies; low = a thick cloud. **FEEDBACK**: what comes out goes round again an 1/8 note later and spins further (cascades, waterfalls). **WIDTH**, **TONE** (dark .. bright), **MIX**.
 - **GEN**: an endless Shepard tone of its own. It plays even when nothing comes in, so Vortex is also a riser / faller generator.
 - Auto gain keeps it as loud as what came in, and the safety limiter keeps it under 0 dB.

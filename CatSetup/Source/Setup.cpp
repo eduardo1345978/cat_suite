@@ -39,7 +39,7 @@ const std::vector<Item>& catalog()
         { "app:Talk-Cat",  "Talk-Cat app",  "Make it sing your words",         Kind::App, 0xff7dff8a, true },
         { "app:Glide-Cat", "Glide-Cat app", "The glide synth on its own",      Kind::App, 0xffff9c3a, true },
         { "app:Life-Cat",  "Life-Cat app",  "Watch the ecosystem play",        Kind::App, 0xff5cffd6, true },
-        { "app:Muse-Cat",  "Muse-Cat app",  "Write songs without Cubase",      Kind::App, 0xff4fd1ff, true },
+        { "app:Muse-Cat",  "Muse-Cat app",  "Write songs without a DAW",      Kind::App, 0xff4fd1ff, true },
         { "app:Negative",  "Negative app",  "Photos to sound, sounds to pictures", Kind::App, 0xffe8e6e1, true },
         { mtsId, "MTS-ESP library", "Lets Micro-Cat tune Vital, Surge, Serum ... (by ODDSound)", Kind::Extra, 0xffb5a98e },
     };
@@ -343,7 +343,7 @@ bool Job::installItem (const Item& i, const File& suite, const File& apps, Insta
             const auto dst = paths.vst3.getChildFile (i.id + ".vst3");
             paths.vst3.createDirectory();
             dst.deleteRecursively();
-            if (! src.copyDirectoryTo (dst)) { setStatus ("Couldn't copy " + i.name + " - is Cubase still open?"); return false; }
+            if (! src.copyDirectoryTo (dst)) { setStatus ("Couldn't copy " + i.name + " - is your DAW still open?"); return false; }
             break;
         }
         case Kind::App:
@@ -407,7 +407,7 @@ bool Job::uninstallItem (const Item& i, Installed& state)
             return true;
     }
     if (ok) state.items.erase (i.id);
-    else setStatus ("Couldn't remove " + i.name + " - close Cubase and the Cat apps first");
+    else setStatus ("Couldn't remove " + i.name + " - close your DAW and the Cat apps first");
     return ok;
 }
 
