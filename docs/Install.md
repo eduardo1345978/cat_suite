@@ -7,6 +7,13 @@
 3. Tick the Cats and apps you want and press **Install**. Close your DAW first.
 4. Later, open **Cat Suite Setup** from the Start menu: it shows what has an update and updates it with one click.
 
+What else Setup does:
+- **RECOMMENDED** at the top (a good start), then MIDI Cats, Instruments, Effects, Apps, **Pro versions** and Extras. Filter them with the chips, or search.
+- **Cards or List**: the list shows every Cat in one line with its installed build, size and folder.
+- **(i)** on a Cat: which build is installed and when, how big it is, where it is (Show in folder), what the newest build changed; for apps a Desktop shortcut on / off.
+- **Settings** (the gear): **Newest** (every change) or **Stable** builds, your own folders for the plug-ins and the apps, Start menu shortcuts, checking for updates when Windows starts.
+- **OLDER** (at the bottom, *Show*): the plug-ins as separate programs, and the **last 10 builds** - if the newest one broke something, pick the Cats and install them from an earlier build.
+
 
 ## Windows: by hand
 
@@ -24,7 +31,7 @@ Every plug-in also comes for **macOS 11 or newer**, on **Apple Silicon (M1-M4) a
 2. Quit your DAW. **Right-click** *Install Cat Suite.command* > **Open** > **Open**. macOS asks the first time because the Cats aren't from the App Store. It copies the Cats into `~/Library/Audio/Plug-Ins/VST3`.
 3. Rescan the plug-ins in your DAW (Cubase: **Studio > VST Plug-in Manager > Rescan**).
 
-The Mac download has all 20 VST3 plug-ins and the live looper **Cat Loop** (folder *Apps*: drag Cat-Loop.app into Applications, right-click > Open the first time, allow the microphone). The other apps (Cat Hub, Cat Ocean ...) are on Windows and Linux.
+The Mac download has all 21 VST3 plug-ins and the live looper **Cat Loop** (folder *Apps*: drag Cat-Loop.app into Applications, right-click > Open the first time, allow the microphone). The other apps (Cat Hub, Cat Ocean ...) are on Windows and Linux.
 
 ## Linux
 

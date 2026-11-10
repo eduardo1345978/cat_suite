@@ -15,4 +15,7 @@ cat_add_fx_plugin(Molten
         Source/LavaSim.cpp
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp)
-target_link_libraries(Molten PRIVATE juce::juce_dsp)
+cat_plugin_targets(_targets Molten)
+foreach(_t IN LISTS _targets)
+    target_link_libraries(${_t} PRIVATE juce::juce_dsp)
+endforeach()

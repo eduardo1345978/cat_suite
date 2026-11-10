@@ -1,3 +1,4 @@
+#include "ProEditor.h"
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "ScaledEditor.h"
@@ -181,5 +182,5 @@ AudioProcessorEditor* VortexProcessor::createEditor()
 
 AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new VortexProcessor();
+    return cat::makePlugin<VortexProcessor>();
 }

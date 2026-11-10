@@ -1,3 +1,4 @@
+#include "ProEditor.h"
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
@@ -305,5 +306,5 @@ juce::AudioProcessorEditor* EchoCatProcessor::createEditor()
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new EchoCatProcessor();
+    return cat::makePlugin<EchoCatProcessor>();
 }

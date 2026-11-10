@@ -4,7 +4,7 @@ The Cats are **VST3** plug-ins, so they work in any DAW that loads VST3: **Cubas
 
 ## Effects and instruments: just load them
 - **Effects** (Echo-Cat, Phase-Cat, Molten, Swarm, Vortex): put them in an insert / FX slot of an audio track.
-- **Instruments** (Sing-Cat, Talk-Cat, Glide-Cat, Glitch-Cat, Negative ...): load them on an instrument track and play.
+- **Instruments** (Sing-Cat, Talk-Cat, Glide-Cat, Glitch-Cat, Negative, Meow-Cat ...): load them on an instrument track and play.
 - Everything that goes "in time" follows the DAW's tempo and Play; every control can be automated.
 
 ## MIDI Cats: route their MIDI out

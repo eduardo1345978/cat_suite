@@ -24,4 +24,7 @@ cat_add_midi_plugin(MuseCat SOUND
         ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/Composer.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/SongRenderer.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatSounds.cpp)
-target_link_libraries(MuseCat PRIVATE juce::juce_audio_formats)
+cat_plugin_targets(_targets MuseCat)
+foreach(_t IN LISTS _targets)
+    target_link_libraries(${_t} PRIVATE juce::juce_audio_formats)
+endforeach()

@@ -67,12 +67,18 @@ jobs:
           set -e
           pkg="pkg/Cat-Suite"
           mkdir -p "$pkg/VST3" "$pkg/Apps" "$pkg/Hub Cats"
-          for b in $(find build -maxdepth 5 -type d -name "*.vst3" -path "*_artefacts/Release/VST3/*" | grep -v Contents); do
-            cp -r "$b" "$pkg/VST3/"
+          mkdir -p "$pkg/VST3 Pro"
+          find build -maxdepth 5 -type d -name "*.vst3" -path "*_artefacts/Release/VST3/*" | grep -v Contents | while read -r b; do
+            case "$(basename "$b")" in
+              *" Pro.vst3") cp -r "$b" "$pkg/VST3 Pro/" ;;     # the Pro versions: their own folder
+              *) cp -r "$b" "$pkg/VST3/" ;;
+            esac
             echo "packed $(basename "$b")"
           done
+          pros=$(find "$pkg/VST3 Pro" -maxdepth 1 -type d -name "*.vst3" | wc -l)
+          if [ "$pros" -lt 21 ]; then echo "::error::Only $pros Pro versions were packed"; exit 1; fi
           count=$(find "$pkg/VST3" -maxdepth 1 -type d -name "*.vst3" | wc -l)
-          if [ "$count" -lt 20 ]; then echo "::error::Only $count plug-ins were packed"; exit 1; fi
+          if [ "$count" -lt 21 ]; then echo "::error::Only $count plug-ins were packed"; exit 1; fi
           # the sound apps
           for p in SingCat:Sing-Cat TalkCat:Talk-Cat GlideCat:Glide-Cat LifeCat:Life-Cat MuseCat:Muse-Cat Negative:Negative; do
             t=${p%%:*}; n=${p##*:}

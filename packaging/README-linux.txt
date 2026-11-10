@@ -10,7 +10,7 @@ What is in here
 
 Install
   1. Unpack:     tar xzf Cat-Suite-Linux.tar.gz
-  2. Install:    cd Cat-Suite && ./install.sh
+  2. Install:    cd Cat-Suite && ./install.sh        (./install.sh --pro: also the Pro versions)
   3. In your DAW, rescan the plug-ins (they are in ~/.vst3).
   To update: unpack the new download and run ./install.sh again.
   To remove everything: ./install.sh --remove

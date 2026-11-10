@@ -1,6 +1,7 @@
 #!/bin/sh
 # Cat Suite for Linux: installs the plug-ins (VST3) for you and the apps with menu entries.
 #   ./install.sh            install (or update)
+#   ./install.sh --pro      also the Pro versions (a plain panel with every parameter, numbers, meters)
 #   ./install.sh --remove   take everything out again
 # Nothing needs root: everything goes into your home folder.
 set -e
@@ -12,7 +13,7 @@ bin="$HOME/.local/bin"
 names="Sing-Cat Talk-Cat Glide-Cat Life-Cat Muse-Cat Negative Cat-Hub Cat-Loop Cat-Ocean Cat-Box"
 
 if [ "$1" = "--remove" ]; then
-    for b in "$here"/VST3/*.vst3; do rm -rf "$vst/$(basename "$b")"; done
+    for b in "$here"/VST3/*.vst3 "$here"/"VST3 Pro"/*.vst3; do rm -rf "$vst/$(basename "$b")"; done
     for n in $names; do rm -f "$menu/cat-suite-$n.desktop" "$bin/$n"; done
     rm -rf "$apps"
     echo "Cat Suite is removed."
@@ -30,6 +31,13 @@ for b in "$here"/VST3/*.vst3; do
     cp -r "$b" "$vst/"
     echo "  $(basename "$b" .vst3)"
 done
+if [ "$1" = "--pro" ] && [ -d "$here/VST3 Pro" ]; then
+    for b in "$here"/"VST3 Pro"/*.vst3; do
+        rm -rf "$vst/$(basename "$b")"
+        cp -r "$b" "$vst/"
+        echo "  $(basename "$b" .vst3)"
+    done
+fi
 
 echo "Installing the apps into $apps ..."
 rm -rf "$apps/Hub Cats"

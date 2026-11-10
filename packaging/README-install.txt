@@ -9,6 +9,10 @@ How to install
 The plug-ins are copied to your own VST3 folder (no administrator rights needed):
     C:\Users\<you>\AppData\Local\Programs\Common\VST3
 
+The Pro versions (folder "VST3 Pro"): the same plug-ins with a plain panel - every parameter with its exact value,
+CPU, output meters, MIDI in / out, A / B, copy / paste. They are not installed by the .bat: copy the ones you want into
+the folder above (or tick them in Cat Suite Setup).
+
 What is inside (folder VST3):
     Chord-Cat, Patt-Cat, Bend-Cat, Drum-Cat, Orbit-Cat, Bass-Cat   - MIDI generators
     Sing-Cat   - choir of cats and people
@@ -33,3 +37,6 @@ What is inside (folder VST3):
                  glide up forever (a Shepard spiral), or filters sweep through it; in time with the song, its own endless tone
     Negative   - a photo you can hear: a photo becomes sound (its spectrogram shows the photo),
                  exact / musical / texture, paint and write text on it, hide it in a song; an instrument, and a program (Negative.exe)
+    Meow-Cat   - every note is a cat (made from scratch, no samples): play a tune and a cat meows it,
+                 a chord and a cat choir sings it; SIZE kitten .. lion, MOOD sweet .. furious, SING / CHATTER / PURR,
+                 hit a key hard and it hisses, the mod wheel purrs

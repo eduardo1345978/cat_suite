@@ -1,0 +1,40 @@
+name: Promote to stable
+
+# Makes a build the "stable" one (Cat Suite Setup > Settings > Stable): its files are copied to the release "stable".
+# Run it by hand (Actions > Promote to stable > Run workflow) with a build that has been played with.
+
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: "The build to make stable (build-123, or latest)"
+        required: true
+        default: latest
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Copy the build to "stable"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          FROM: ${{ inputs.build }}
+        run: |
+          set -e
+          mkdir files && cd files
+          gh release download "$FROM" --repo "$REPO" --pattern "Cat-Suite-Setup.exe" --pattern "Cat-Suite-Windows.zip" --pattern "Cat-Sound-Apps-Windows.zip"
+          body=$(gh release view "$FROM" --repo "$REPO" --json body --jq .body)
+          commit=$(echo "$body" | grep -o "Built from commit [0-9a-f]*" | head -1 | awk '{print $4}')
+          change=$(echo "$body" | grep -o "Change: [^<]*" | head -1)
+          build=$(echo "$body" | grep -o "Build: build-[0-9]*" | head -1)
+          notes="The stable Cat Suite build (it was $FROM). Cat Suite Setup uses it with Settings > Stable.<br><br>$change<br>$build<br>Built from commit $commit."
+          if gh release view stable --repo "$REPO" > /dev/null 2>&1; then
+            gh release upload stable *.exe *.zip --repo "$REPO" --clobber
+            gh release edit stable --repo "$REPO" --notes "$notes" --title "Cat Suite - stable ($build)"
+          else
+            gh release create stable *.exe *.zip --repo "$REPO" --target "$commit" --prerelease --title "Cat Suite - stable ($build)" --notes "$notes"
+          fi

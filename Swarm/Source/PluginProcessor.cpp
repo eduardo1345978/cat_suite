@@ -1,3 +1,4 @@
+#include "ProEditor.h"
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "ScaledEditor.h"
@@ -227,5 +228,5 @@ AudioProcessorEditor* SwarmProcessor::createEditor()
 
 AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new SwarmProcessor();
+    return cat::makePlugin<SwarmProcessor>();
 }
