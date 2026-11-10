@@ -461,7 +461,8 @@ void Job::run()
         for (size_t k = 0; k < items.size(); ++k)
         {
             setStatus ("Removing " + items[k]->name + " ...");
-            if (uninstallItem (*items[k], state)) done.add (items[k]->id); else ok = false;
+            setCurrent (items[k]->id);
+            if (uninstallItem (*items[k], state)) addDone (items[k]->id); else ok = false;
             progress = (float) (k + 1) / (float) items.size();
         }
         state.save (paths.stateFile);
@@ -494,7 +495,8 @@ void Job::run()
     for (size_t k = 0; k < items.size(); ++k)
     {
         setStatus ("Installing " + items[k]->name + " ...");
-        if (installItem (*items[k], suite, apps, state)) done.add (items[k]->id); else ok = false;
+        setCurrent (items[k]->id);
+        if (installItem (*items[k], suite, apps, state)) addDone (items[k]->id); else ok = false;
         progress = 0.9f + 0.09f * (float) (k + 1) / (float) items.size();
     }
     state.save (paths.stateFile);
@@ -513,6 +515,7 @@ void Job::run()
         }
     installSelf();
     paths.temp.deleteRecursively();
+    setCurrent ({});
     progress = 1.0f;
     if (ok) setStatus ("Done - " + String (done.size()) + (done.size() == 1 ? " item is" : " items are") + " up to date.");
     failed = ! ok;

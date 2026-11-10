@@ -10,7 +10,7 @@ using namespace setup;
 namespace
 {
 const Colour bg0 (0xff12101c), bg1 (0xff1b1830), cardBg (0xff221f38), cardHover (0xff2a2646), line (0xff35304f),
-             ink (0xfff1eefb), inkDim (0xff9d97b8), violet (0xff7c5cff), teal (0xff2ad6c8), okGreen (0xff4fd68a), orange (0xffffa94d);
+             ink (0xfff1eefb), inkDim (0xff9d97b8), violet (0xff7c5cff), teal (0xff2ad6c8), okGreen (0xff4fd68a), orange (0xffffa94d), red (0xffff6b6b);
 
 Font uiFont (float h, bool bold = false)
 {
@@ -25,21 +25,77 @@ String initials (const Item& i)
     return n.substring (0, 2).toUpperCase();
 }
 
-/** One Cat: icon, name, what it is, its state, and a tick. Click = pick / unpick. */
-class Card : public Component
+/** What a Cat is, for the sections and the filter chips. */
+enum Group { Midi = 0, Instrument, Effect, Apps, Extras, numGroups };
+const char* groupTitle (int g) { static const char* t[] { "MIDI CATS", "INSTRUMENTS", "EFFECTS", "APPS", "EXTRAS" }; return t[g]; }
+const char* groupNote (int g)
+{
+    static const char* t[] { "they write notes for your synths", "they make their own sound", "for audio tracks", "programs on their own, no DAW needed", "" };
+    return t[g];
+}
+const char* groupChip (int g) { static const char* t[] { "MIDI", "Instruments", "Effects", "Apps", "Extras" }; return t[g]; }
+int groupOf (const Item& i)
+{
+    if (i.kind == Kind::App) return Apps;
+    if (i.kind == Kind::Extra) return Extras;
+    static const StringArray fx { "Echo-Cat", "Molten", "Swarm", "Vortex" };
+    static const StringArray inst { "Sing-Cat", "Glide-Cat", "Talk-Cat", "Life-Cat", "Muse-Cat", "Glitch-Cat", "Negative" };
+    if (fx.contains (i.id)) return Effect;
+    if (inst.contains (i.id)) return Instrument;
+    return Midi;
+}
+String exeName (const Item& i) { return i.id.fromFirstOccurrenceOf ("app:", false, false) + ".exe"; }
+
+/** "2026-11-05 15:20 UTC" -> "today 16:20" / "yesterday 9:05" / "5 Nov 16:20" (local time). */
+String friendlyBuilt (const String& built)
+{
+    const auto parts = StringArray::fromTokens (built, " -:", {});
+    if (parts.size() < 5) return built;
+    const Time utc (parts[0].getIntValue(), parts[1].getIntValue() - 1, parts[2].getIntValue(), parts[3].getIntValue(), parts[4].getIntValue(), 0, 0, false);
+    const auto now = Time::getCurrentTime();
+    const auto clock = utc.formatted ("%H:%M");
+    const auto day = [] (Time x) { return x.formatted ("%Y-%m-%d"); };
+    if (day (utc) == day (now)) return "today " + clock;
+    if (day (utc) == day (now - RelativeTime::days (1))) return "yesterday " + clock;
+    return utc.formatted ("%d %b ") + clock;
+}
+
+/** One Cat: icon, name, what it is, its state, and a tick. Click = pick / unpick. Installed apps get "Open". */
+class Card : public Component, public SettableTooltipClient
 {
 public:
-    Card (const Item& i) : item (i) { setRepaintsOnMouseActivity (true); setMouseCursor (MouseCursor::PointingHandCursor); }
+    Card (const Item& i, const Paths& p) : item (i), paths (p)
+    {
+        setRepaintsOnMouseActivity (true);
+        setMouseCursor (MouseCursor::PointingHandCursor);
+        setTooltip (i.name + ": " + i.blurb);
+    }
     std::function<void()> onToggle;
     bool selected = false;
     State state = State::NotInstalled;
     bool busy = false;
+    enum class Work { none, waiting, working, done, failed } work = Work::none;
+
+    bool canOpen() const
+    {
+       #if JUCE_WINDOWS
+        return item.kind == Kind::App && state != State::NotInstalled && paths.apps.getChildFile (exeName (item)).existsAsFile();
+       #else
+        return false;
+       #endif
+    }
+    Rectangle<float> openArea() const { return getLocalBounds().toFloat().reduced (5.0f).reduced (14.0f, 12.0f).removeFromBottom (24.0f).removeFromRight (64.0f); }
 
     void paint (Graphics& g) override
     {
         auto r = getLocalBounds().toFloat().reduced (5.0f);
         g.setColour (isMouseOver() && ! busy ? cardHover : cardBg);
         g.fillRoundedRectangle (r, 14.0f);
+        if (selected)
+        {
+            g.setGradientFill (ColourGradient (violet.withAlpha (0.14f), r.getX(), r.getY(), teal.withAlpha (0.05f), r.getRight(), r.getBottom(), false));
+            g.fillRoundedRectangle (r, 14.0f);
+        }
         g.setColour (selected ? violet : line);
         g.drawRoundedRectangle (r, 14.0f, selected ? 2.0f : 1.0f);
 
@@ -70,7 +126,6 @@ public:
 
         auto text = r.reduced (14.0f, 12.0f).withTrimmedLeft (66.0f);
         auto top = text.removeFromTop (24.0f);
-        // the tick
         auto tick = top.removeFromRight (22.0f).withSizeKeepingCentre (20.0f, 20.0f);
         g.setColour (selected ? violet : Colours::transparentBlack);
         g.fillRoundedRectangle (tick, 6.0f);
@@ -92,13 +147,21 @@ public:
         g.setFont (uiFont (13.0f));
         g.drawFittedText (item.blurb, text.removeFromTop (34.0f).toNearestInt(), Justification::topLeft, 2);
 
-        // the state
+        // the state (or what Setup is doing with it right now)
         String badge; Colour bc;
         switch (state)
         {
             case State::Installed:    badge = "Installed";        bc = okGreen; break;
             case State::Update:       badge = "Update ready";     bc = orange;  break;
             case State::NotInstalled: badge = "Not installed";    bc = inkDim;  break;
+        }
+        switch (work)
+        {
+            case Work::waiting: badge = "Waiting";  bc = inkDim; break;
+            case Work::working: badge = "Working" + String ("...").substring (0, 1 + (int) (Time::getMillisecondCounter() / 300) % 3); bc = teal; break;
+            case Work::done:    badge = String::fromUTF8 ("\xe2\x9c\x93 Done"); bc = okGreen; break;
+            case Work::failed:  badge = "Didn't work"; bc = red; break;
+            case Work::none: break;
         }
         g.setFont (uiFont (12.0f, true));
         const float bw = (float) GlyphArrangement::getStringWidthInt (g.getCurrentFont(), badge) + 18.0f;
@@ -107,21 +170,36 @@ public:
         g.fillRoundedRectangle (b, 10.0f);
         g.setColour (bc);
         g.drawText (badge, b, Justification::centred);
+
+        if (canOpen() && work == Work::none)
+        {
+            const auto o = openArea();
+            const bool over = isMouseOver() && o.contains (getMouseXYRelative().toFloat());
+            g.setColour (over ? teal.withAlpha (0.3f) : teal.withAlpha (0.14f));
+            g.fillRoundedRectangle (o, 12.0f);
+            g.setColour (teal);
+            g.setFont (uiFont (12.0f, true));
+            g.drawText (String::fromUTF8 ("Open \xe2\x86\x97"), o, Justification::centred);
+        }
     }
 
     void mouseUp (const MouseEvent& e) override
     {
-        if (! busy && getLocalBounds().contains (e.getPosition()) && onToggle) onToggle();
+        if (busy || ! getLocalBounds().contains (e.getPosition())) return;
+        if (canOpen() && openArea().contains (e.position)) { paths.apps.getChildFile (exeName (item)).startAsProcess(); return; }
+        if (onToggle) onToggle();
     }
+    void mouseMove (const MouseEvent&) override { if (canOpen()) repaint(); }
 
     const Item& item;
+    const Paths& paths;
 };
 
 /** A big rounded button. */
 class Pill : public TextButton
 {
 public:
-    Pill (const String& t, bool primary_) : TextButton (t), primary (primary_) {}
+    Pill (const String& t, bool primary_, float fontH = 0.0f) : TextButton (t), primary (primary_), fh (fontH) {}
     void paintButton (Graphics& g, bool over, bool down) override
     {
         auto r = getLocalBounds().toFloat().reduced (1.0f);
@@ -135,16 +213,30 @@ public:
         }
         else
         {
-            g.setColour ((over && isEnabled() ? cardHover : cardBg).withMultipliedAlpha (isEnabled() ? 1.0f : 0.5f));
+            g.setColour (getToggleState() ? violet.withAlpha (0.28f) : (over && isEnabled() ? cardHover : cardBg).withMultipliedAlpha (isEnabled() ? 1.0f : 0.5f));
             g.fillRoundedRectangle (r, c);
-            g.setColour (line);
+            g.setColour (getToggleState() ? violet : line);
             g.drawRoundedRectangle (r, c, 1.0f);
         }
         g.setColour (isEnabled() ? ink : inkDim.withAlpha (0.5f));
-        g.setFont (uiFont (primary ? 16.0f : 14.0f, primary));
+        g.setFont (uiFont (fh > 0.0f ? fh : (primary ? 16.0f : 14.0f), primary));
         g.drawText (getButtonText(), getLocalBounds(), Justification::centred);
     }
     bool primary;
+    float fh;
+};
+
+/** A quiet text link ("Pick all"). */
+class Link : public TextButton
+{
+public:
+    explicit Link (const String& t) : TextButton (t) { setMouseCursor (MouseCursor::PointingHandCursor); }
+    void paintButton (Graphics& g, bool over, bool) override
+    {
+        g.setColour (isEnabled() ? (over ? ink : violet.brighter (0.4f)) : inkDim.withAlpha (0.4f));
+        g.setFont (uiFont (12.5f, true));
+        g.drawText (getButtonText(), getLocalBounds(), Justification::centredRight);
+    }
 };
 }
 
@@ -156,25 +248,67 @@ public:
     {
         for (auto& i : catalog())
         {
-            auto* c = cards.add (new Card (i));
+            auto* c = cards.add (new Card (i, paths));
             c->onToggle = [this, c] { c->selected = ! c->selected; c->repaint(); updateButtons(); };
             list.addAndMakeVisible (c);
+        }
+        for (int gr = 0; gr < numGroups; ++gr)
+        {
+            auto* l = sectionLinks.add (new Link ("Pick all"));
+            l->onClick = [this, gr]
+            {
+                bool all = true;
+                for (auto* c : cards) if (groupOf (c->item) == gr && c->isVisible()) all &= c->selected;
+                for (auto* c : cards) if (groupOf (c->item) == gr && c->isVisible()) c->selected = ! all;
+                repaintCards();
+            };
+            list.addAndMakeVisible (l);
         }
         viewport.setViewedComponent (&list, false);
         viewport.setScrollBarsShown (true, false);
         viewport.getVerticalScrollBar().setColour (ScrollBar::thumbColourId, line);
         addAndMakeVisible (viewport);
 
-        for (auto* b : { &installButton, &removeButton, &allButton, &updatesButton, &noneButton, &retryButton, &cubaseButton, &hubButton })
+        // filter chips: All, MIDI, Instruments, Effects, Apps
+        for (int k = -1; k < numGroups - 1; ++k)
+        {
+            auto* chip = chips.add (new Pill (k < 0 ? "All" : groupChip (k), false, 13.0f));
+            chip->setClickingTogglesState (false);
+            chip->setToggleState (k < 0, dontSendNotification);
+            chip->onClick = [this, k] { filter = k; for (int j = 0; j < chips.size(); ++j) chips[j]->setToggleState (j - 1 == k, dontSendNotification); layoutCards(); repaint(); };
+            addAndMakeVisible (chip);
+        }
+        search.setTextToShowWhenEmpty ("Search the Cats ...", inkDim.withAlpha (0.7f));
+        search.setColour (TextEditor::backgroundColourId, Colours::transparentBlack);
+        search.setColour (TextEditor::outlineColourId, Colours::transparentBlack);
+        search.setColour (TextEditor::focusedOutlineColourId, Colours::transparentBlack);
+        search.onFocusLost = [this] { repaint(); };
+        search.setColour (TextEditor::textColourId, ink);
+        search.setFont (uiFont (14.0f));
+        search.setIndents (18, 10);
+        search.onTextChange = [this] { layoutCards(); repaint(); };
+        search.onEscapeKey = [this] { search.clear(); layoutCards(); repaint(); };
+        addAndMakeVisible (search);
+
+        for (auto* b : { &installButton, &removeButton, &retryButton, &cubaseButton, &hubButton, &loopButton })
             addAndMakeVisible (b);
-        allButton.onClick = [this] { for (auto* c : cards) c->selected = c->item.kind != Kind::Extra || c->selected; repaintCards(); };
-        updatesButton.onClick = [this] { for (auto* c : cards) c->selected = c->state == State::Update; repaintCards(); };
-        noneButton.onClick = [this] { for (auto* c : cards) c->selected = false; repaintCards(); };
+        for (auto* b : { &allLink, &updatesLink, &noneLink }) addAndMakeVisible (b);
+        allLink.onClick = [this] { for (auto* c : cards) c->selected = c->item.kind != Kind::Extra || c->selected; repaintCards(); };
+        updatesLink.onClick = [this] { for (auto* c : cards) c->selected = c->state == State::Update; repaintCards(); };
+        noneLink.onClick = [this] { for (auto* c : cards) c->selected = false; repaintCards(); };
         installButton.onClick = [this] { start (Job::Install); };
-        removeButton.onClick = [this] { start (Job::Uninstall); };
+        removeButton.onClick = [this]
+        {
+            int n = 0;
+            for (auto* c : cards) n += c->selected && c->state != State::NotInstalled && c->item.kind != Kind::Extra;
+            AlertWindow::showOkCancelBox (MessageBoxIconType::QuestionIcon, "Remove " + String (n) + (n == 1 ? " Cat?" : " Cats?"),
+                                          "They are deleted from this computer. Projects that use them will miss them (you can install them again any time).",
+                                          "Remove", "Cancel", this, ModalCallbackFunction::create ([this] (int ok) { if (ok != 0) start (Job::Uninstall); }));
+        };
         retryButton.onClick = [this] { check(); };
         cubaseButton.onClick = [this] { if (cubase.existsAsFile()) cubase.startAsProcess(); };
         hubButton.onClick = [this] { paths.apps.getChildFile ("Cat-Hub.exe").startAsProcess(); };
+        loopButton.onClick = [this] { paths.apps.getChildFile ("Cat-Loop.exe").startAsProcess(); };
 
         loginToggle.setButtonText ("Check for updates when Windows starts");
         loginToggle.setColour (ToggleButton::textColourId, inkDim);
@@ -186,7 +320,7 @@ public:
        #endif
 
         cubase = findCubase();
-        setSize (1060, 760);
+        setSize (1060, 780);
         if (! offline) check();
         startTimerHz (15);
     }
@@ -196,17 +330,17 @@ public:
     /** For tests / pictures: show this release without asking GitHub. */
     void showRelease (const Release& r) { release = r; checking = false; refreshStates (true); }
     Job* currentJob() { return job.get(); }
+    void showFinished (int count) { finishedCount = count; finishedOk = true; finishedInstall = true; lastProgress = 1.0f; statusText = {}; updateButtons(); repaint(); }
 
     void paint (Graphics& g) override
     {
         g.setGradientFill (ColourGradient (bg1, 0.0f, 0.0f, bg0, 0.0f, (float) getHeight(), false));
         g.fillAll();
-        // a soft glow behind the title
         g.setGradientFill (ColourGradient (violet.withAlpha (0.25f), 160.0f, 40.0f, violet.withAlpha (0.0f), 560.0f, 260.0f, true));
         g.fillRect (getLocalBounds());
 
         auto head = getLocalBounds().reduced (32, 24).removeFromTop (78);
-        // logo
+        head.removeFromRight (300);                                  // the search box
         auto logo = head.removeFromLeft (64).withSizeKeepingCentre (60, 60).toFloat();
         g.setGradientFill (ColourGradient (violet, logo.getX(), logo.getY(), teal, logo.getRight(), logo.getBottom(), false));
         g.fillRoundedRectangle (logo, 16.0f);
@@ -226,23 +360,84 @@ public:
         g.setColour (ink);
         g.setFont (uiFont (32.0f, true));
         g.drawText ("Cat Suite", head.removeFromTop (44), Justification::bottomLeft);
+        // the headline + a coloured chip (updates / up to date)
+        auto line2 = head.removeFromTop (26);
+        auto [text, chip, chipColour] = headline();
         g.setColour (inkDim);
-        g.setFont (uiFont (15.0f));
-        g.drawText (headline(), head, Justification::topLeft);
+        g.setFont (uiFont (14.5f));
+        const int tw = GlyphArrangement::getStringWidthInt (g.getCurrentFont(), text);
+        g.drawText (text, line2, Justification::centredLeft);
+        if (chip.isNotEmpty())
+        {
+            g.setFont (uiFont (12.0f, true));
+            const float cw = (float) GlyphArrangement::getStringWidthInt (g.getCurrentFont(), chip) + 20.0f;
+            const Rectangle<float> cr ((float) line2.getX() + (float) tw + 12.0f, (float) line2.getCentreY() - 11.0f, cw, 22.0f);
+            g.setColour (chipColour.withAlpha (0.18f));
+            g.fillRoundedRectangle (cr, 11.0f);
+            g.setColour (chipColour);
+            g.drawText (chip, cr, Justification::centred);
+        }
 
-        // section titles
-        g.setFont (uiFont (13.0f, true));
-        g.setColour (inkDim);
-        for (auto& [y, t] : sectionTitles)
-            g.drawText (t, viewport.getX() + 6, viewport.getY() + y - viewport.getViewPositionY(), 600, 22, Justification::centredLeft);
+        // the search box's rounded frame, and "Select:" before the links
+        {
+            const auto sb = search.getBounds().toFloat().expanded (1.0f);
+            g.setColour (cardBg);
+            g.fillRoundedRectangle (sb, sb.getHeight() * 0.5f);
+            g.setColour (search.hasKeyboardFocus (true) ? violet : line);
+            g.drawRoundedRectangle (sb, sb.getHeight() * 0.5f, 1.0f);
+            g.setColour (inkDim);
+            g.setFont (uiFont (12.5f));
+            g.drawText ("Select:", allLink.getX() - 60, allLink.getY(), 54, allLink.getHeight(), Justification::centredRight);
+        }
 
-        // the footer: progress and what is happening
-        auto foot = footer;
+        // section titles (they scroll with the list)
+        g.saveState();
+        g.reduceClipRegion (viewport.getBounds());
+        for (auto& s : sectionTitles)
+        {
+            const int x = viewport.getX() + 8, y = viewport.getY() + s.y - viewport.getViewPositionY();
+            g.setFont (uiFont (12.5f, true));
+            g.setColour (ink.withAlpha (0.85f));
+            g.drawText (s.title, x, y, 300, 22, Justification::centredLeft);
+            int tx = x + GlyphArrangement::getStringWidthInt (g.getCurrentFont(), s.title) + 10;
+            const String n (s.count);
+            g.setFont (uiFont (11.0f, true));
+            const int nw = GlyphArrangement::getStringWidthInt (g.getCurrentFont(), n) + 14;
+            g.setColour (line);
+            g.fillRoundedRectangle ((float) tx, (float) y + 3.0f, (float) nw, 16.0f, 8.0f);
+            g.setColour (inkDim);
+            g.drawText (n, tx, y + 3, nw, 16, Justification::centred);
+            tx += nw + 12;
+            g.setFont (uiFont (13.0f));
+            g.drawText (s.note, tx, y, 500, 22, Justification::centredLeft);
+        }
+        if (sectionTitles.empty())
+        {
+            g.setColour (inkDim);
+            g.setFont (uiFont (15.0f));
+            g.drawText ("No Cat is called \"" + search.getText() + "\"", viewport.getBounds().withHeight (80), Justification::centred);
+        }
+        g.restoreState();
+
+        // the footer: progress and what is happening, or "all set"
         g.setColour (Colour (0xff17142a));
-        g.fillRect (foot);
+        g.fillRect (footer);
         g.setColour (line);
-        g.drawHorizontalLine (foot.getY(), 0.0f, (float) getWidth());
+        g.drawHorizontalLine (footer.getY(), 0.0f, (float) getWidth());
         auto bar = statusArea.toFloat().removeFromBottom (8.0f);
+        if (finishedOk && job == nullptr)
+        {
+            auto s = statusArea;
+            g.setColour (okGreen);
+            g.setFont (uiFont (21.0f, true));
+            g.drawText (String::fromUTF8 ("\xe2\x9c\x93  ") + (finishedInstall ? "All set" : "Removed") + String::fromUTF8 (" \xe2\x80\x94 ")
+                        + String (finishedCount) + (finishedCount == 1 ? " item" : " items"), s.removeFromTop (30), Justification::centredLeft);
+            g.setColour (inkDim);
+            g.setFont (uiFont (13.5f));
+            g.drawFittedText (finishedInstall ? "Open your DAW and rescan the plug-ins (Cubase: Studio > VST Plug-in Manager > Rescan). The apps are in the Start menu."
+                                              : "They are gone from this computer.", s, Justification::topLeft, 2, 1.0f);
+            return;
+        }
         if (job != nullptr || lastProgress > 0.0f)
         {
             g.setColour (line);
@@ -252,48 +447,73 @@ public:
         }
         g.setColour (statusColour);
         g.setFont (uiFont (14.0f));
-        g.drawFittedText (statusText, statusArea.withTrimmedBottom (14), Justification::centredLeft, 2);
+        g.drawFittedText (statusText.isEmpty() ? selectionSummary() : statusText, statusArea.withTrimmedBottom (14), Justification::centredLeft, 2, 1.0f);
     }
 
     void resized() override
     {
         auto r = getLocalBounds();
         footer = r.removeFromBottom (128);
-        r.removeFromTop (118);
-        auto sel = r.removeFromTop (40).reduced (32, 4);
-        allButton.setBounds (sel.removeFromLeft (110)); sel.removeFromLeft (8);
-        updatesButton.setBounds (sel.removeFromLeft (150)); sel.removeFromLeft (8);
-        noneButton.setBounds (sel.removeFromLeft (110));
-        retryButton.setBounds (sel.removeFromRight (150));
-        viewport.setBounds (r.reduced (26, 8));
+        search.setBounds (getWidth() - 32 - 280, 46, 280, 38);
+        r.removeFromTop (116);
+        auto row = r.removeFromTop (44).reduced (32, 5);
+        for (auto* c : chips)
+        {
+            const int w = GlyphArrangement::getStringWidthInt (uiFont (13.0f), c->getButtonText()) + 34;
+            c->setBounds (row.removeFromLeft (w));
+            row.removeFromLeft (8);
+        }
+        noneLink.setBounds (row.removeFromRight (40));
+        row.removeFromRight (14);
+        updatesLink.setBounds (row.removeFromRight (62));
+        row.removeFromRight (14);
+        allLink.setBounds (row.removeFromRight (24));
+        retryButton.setBounds (getWidth() - 32 - 140, 96, 140, 30);
+        viewport.setBounds (r.reduced (26, 6));
         layoutCards();
 
         auto f = footer.reduced (32, 18);
-        auto buttons = f.removeFromRight (420);
+        auto buttons = f.removeFromRight (440);
         auto row1 = buttons.removeFromTop (48);
         installButton.setBounds (row1.removeFromRight (230));
         row1.removeFromRight (10);
         removeButton.setBounds (row1);
         buttons.removeFromTop (10);
         auto row2 = buttons.removeFromTop (36);
-        hubButton.setBounds (row2.removeFromRight (180));
-        row2.removeFromRight (10);
-        cubaseButton.setBounds (row2);
+        for (auto* b : { &cubaseButton, &hubButton, &loopButton })
+            if (b->isVisible()) { b->setBounds (row2.removeFromRight (136)); row2.removeFromRight (8); }
         f.removeFromRight (24);
-        statusArea = f.removeFromTop (60);
+        statusArea = f.removeFromTop (62);
         loginToggle.setBounds (f.removeFromTop (30));
     }
 
 private:
-    String headline() const
+    std::tuple<String, String, Colour> headline() const
     {
-        if (checking) return "Looking for the newest Cats on GitHub ...";
-        if (! release.ok) return "Can't see the newest build: " + release.error;
+        if (checking) return { "Looking for the newest Cats on GitHub ...", {}, inkDim };
+        if (! release.ok) return { "Can't see the newest build", "offline?", orange };
         int updates = 0, installed = 0;
         for (auto* c : cards) { updates += c->state == State::Update; installed += c->state != State::NotInstalled; }
-        String s = "Newest build: " + release.built + "   (" + release.commit.substring (0, 7) + ")";
-        if (installed == 0) return s + "  -  pick what you want and press Install";
-        return s + (updates > 0 ? "  -  " + String (updates) + (updates == 1 ? " update ready" : " updates ready") : String ("  -  everything is up to date"));
+        const String s = "Newest build: " + friendlyBuilt (release.built);
+        if (installed == 0) return { s, "pick what you want", violet.brighter (0.4f) };
+        if (updates > 0) return { s, String (updates) + (updates == 1 ? " update ready" : " updates ready"), orange };
+        return { s, String::fromUTF8 ("\xe2\x9c\x93 everything is up to date"), okGreen };
+    }
+
+    String selectionSummary() const
+    {
+        int picked = 0;
+        for (auto* c : cards) picked += c->selected;
+        if (! release.ok) return {};
+        if (picked == 0) return "Click the Cats you want (they get a tick), then press Install.";
+        return String (picked) + (picked == 1 ? " Cat picked." : " Cats picked.") + "  Plug-ins go to your VST3 folder, apps to the Start menu. No password needed.";
+    }
+
+    bool matches (const Card& c) const
+    {
+        const auto q = search.getText().trim();
+        if (filter >= 0 && groupOf (c.item) != filter) return false;
+        return q.isEmpty() || c.item.name.containsIgnoreCase (q) || c.item.blurb.containsIgnoreCase (q);
     }
 
     void layoutCards()
@@ -302,24 +522,41 @@ private:
         const int cols = jmax (1, w / 330), cw = w / cols, ch = 104;
         int y = 0;
         sectionTitles.clear();
-        for (auto kind : { Kind::Plugin, Kind::App, Kind::Extra })
+        for (int gr = 0; gr < numGroups; ++gr)
         {
-            static const char* titles[] = { "PLUG-INS FOR CUBASE (VST3)", "APPS", "EXTRAS" };
-            sectionTitles.push_back ({ y + 4, titles[(int) kind] });
-            y += 30;
             int k = 0;
             for (auto* c : cards)
+                if (groupOf (c->item) == gr) c->setVisible (matches (*c));
+            for (auto* c : cards) k += groupOf (c->item) == gr && c->isVisible();
+            sectionLinks[gr]->setVisible (k > 1);
+            if (k == 0) continue;
+            sectionTitles.push_back ({ y + 4, groupTitle (gr), groupNote (gr), k });
+            sectionLinks[gr]->setBounds (w - 140, y + 4, 132, 22);
+            y += 30;
+            k = 0;
+            for (auto* c : cards)
             {
-                if (c->item.kind != kind) continue;
+                if (groupOf (c->item) != gr || ! c->isVisible()) continue;
                 c->setBounds ((k % cols) * cw, y + (k / cols) * ch, cw, ch);
                 ++k;
             }
             y += ((k + cols - 1) / cols) * ch + 14;
         }
-        list.setSize (w, y);
+        list.setSize (w, jmax (y, 10));
     }
 
-    void repaintCards() { for (auto* c : cards) c->repaint(); updateButtons(); }
+    void repaintCards()
+    {
+        for (int gr = 0; gr < numGroups; ++gr)
+        {
+            bool all = true;
+            for (auto* c : cards) if (groupOf (c->item) == gr && c->isVisible()) all &= c->selected;
+            sectionLinks[gr]->setButtonText (all ? "Unpick all" : "Pick all");
+        }
+        for (auto* c : cards) c->repaint();
+        updateButtons();
+        repaint (footer);
+    }
 
     void check()
     {
@@ -354,10 +591,10 @@ private:
         if (pickDefaults)
             for (auto* c : cards)
                 c->selected = any ? c->state == State::Update                                       // updating: what's out of date
-                                  : (c->item.kind == Kind::Plugin || c->item.id == "app:Cat-Hub");  // first time: every plug-in + the Hub
+                                  : (c->item.kind == Kind::Plugin || c->item.id == "app:Cat-Hub" || c->item.id == "app:Cat-Loop");  // first time
         retryButton.setVisible (! release.ok && ! checking);
-        if (! release.ok && ! checking) { statusText = "Can't reach the newest build: " + release.error; statusColour = orange; }
-        else if (job == nullptr && statusText.startsWith ("Asking")) { statusText = "Ready."; statusColour = inkDim; }
+        if (! release.ok && ! checking) { statusText = "Can't reach GitHub: " + release.error + "  -  are you online?"; statusColour = orange; }
+        else if (job == nullptr && statusText.startsWith ("Asking")) { statusText = {}; statusColour = inkDim; }
         repaintCards();
         repaint();
     }
@@ -376,17 +613,28 @@ private:
         String text = install > 0 && update > 0 ? "Install & update " + String (install + update)
                     : update > 0 ? "Update " + String (update)
                     : install > 0 ? "Install " + String (install)
-                    : String ("Reinstall");
+                    : String ("Install");
         int reinstall = 0;
         for (auto* c : cards) reinstall += c->selected && c->state == State::Installed && c->item.kind != Kind::Extra;
         if (install + update == 0 && reinstall > 0) text = "Reinstall " + String (reinstall);
+        if (! idle) text = "Working ...";
         installButton.setButtonText (text);
         installButton.setEnabled (idle && release.ok && install + update + reinstall > 0);
         removeButton.setButtonText (remove > 0 ? "Remove " + String (remove) : String ("Remove"));
         removeButton.setEnabled (idle && remove > 0);
-        for (auto* b : { &allButton, &updatesButton, &noneButton }) b->setEnabled (idle);
+        for (auto* b : { &allLink, &updatesLink, &noneLink }) b->setEnabled (idle);
+        for (auto* l : sectionLinks) l->setEnabled (idle);
+        search.setEnabled (idle);
+        const bool wasCubase = cubaseButton.isVisible(), wasHub = hubButton.isVisible(), wasLoop = loopButton.isVisible();
         cubaseButton.setVisible (cubase.existsAsFile());
+       #if JUCE_WINDOWS
         hubButton.setVisible (paths.apps.getChildFile ("Cat-Hub.exe").existsAsFile());
+        loopButton.setVisible (paths.apps.getChildFile ("Cat-Loop.exe").existsAsFile());
+       #else
+        hubButton.setVisible (false);
+        loopButton.setVisible (finishedOk);
+       #endif
+        if (wasCubase != cubaseButton.isVisible() || wasHub != hubButton.isVisible() || wasLoop != loopButton.isVisible()) resized();
         for (auto* c : cards) c->busy = ! idle;
     }
 
@@ -397,9 +645,12 @@ private:
             if (c->selected && (a == Job::Install || (c->state != State::NotInstalled && c->item.kind != Kind::Extra)))
                 ids.push_back (c->item.id);
         if (ids.empty()) return;
+        for (auto* c : cards) c->work = std::find (ids.begin(), ids.end(), c->item.id) != ids.end() ? Card::Work::waiting : Card::Work::none;
         job = std::make_unique<Job> (a, ids, release, paths);
         job->localSource = localSource;
         lastProgress = 0.0f;
+        finishedOk = false;
+        finishedInstall = a == Job::Install;
         statusColour = ink;
         job->startThread();
         updateButtons();
@@ -411,14 +662,28 @@ private:
         lastProgress = job->progress.load();
         statusText = job->getStatus();
         statusColour = job->waitingForClose.load() ? orange : ink;
+        const auto current = job->getCurrent();
+        const auto doneSoFar = job->getDone();
+        for (auto* c : cards)
+        {
+            if (c->work == Card::Work::none) continue;
+            if (doneSoFar.contains (c->item.id)) c->work = Card::Work::done;
+            else if (c->item.id == current) c->work = Card::Work::working;
+            c->repaint();
+        }
         if (job->finished.load())
         {
             const bool bad = job->failed.load();
+            const int count = job->getDone().size();
+            for (auto* c : cards)
+                if (c->work == Card::Work::waiting || c->work == Card::Work::working) c->work = bad ? Card::Work::failed : Card::Work::done;
             statusColour = bad ? orange : okGreen;
             job.reset();
             refreshStates (false);
             for (auto* c : cards) if (c->state == State::Installed) c->selected = false;
-            if (! bad) lastProgress = 1.0f;
+            if (! bad) { lastProgress = 1.0f; finishedOk = true; finishedCount = count; statusText = {}; }
+            // the badges stay a moment, then the cards show their state again
+            Timer::callAfterDelay (4000, [safe = SafePointer<SetupComponent> (this)] { if (safe != nullptr && safe->job == nullptr) { for (auto* c : safe->cards) { c->work = Card::Work::none; c->repaint(); } } });
         }
         updateButtons();
         repaint (footer);
@@ -447,16 +712,25 @@ private:
     Release release;
     bool checking = false;
     OwnedArray<Card> cards;
+    OwnedArray<Link> sectionLinks;
+    OwnedArray<Pill> chips;
+    int filter = -1;
+    TextEditor search;
     Component list;
     Viewport viewport;
-    std::vector<std::pair<int, String>> sectionTitles;
-    Pill installButton { "Install", true }, removeButton { "Remove", false }, allButton { "All", false }, updatesButton { "Updates only", false },
-         noneButton { "None", false }, retryButton { "Try again", false }, cubaseButton { "Open Cubase", false }, hubButton { "Start Cat Hub", false };
+    struct Section { int y; String title, note; int count; };
+    std::vector<Section> sectionTitles;
+    Pill installButton { "Install", true }, removeButton { "Remove", false }, retryButton { "Try again", false, 13.0f },
+         cubaseButton { "Open Cubase", false, 13.0f }, hubButton { "Start Cat Hub", false, 13.0f }, loopButton { "Start Cat Loop", false, 13.0f };
+    Link allLink { "All" }, updatesLink { "Updates" }, noneLink { "None" };
     ToggleButton loginToggle;
+    TooltipWindow tooltips { this, 600 };
     std::unique_ptr<Job> job;
-    String statusText { "Ready." };
+    String statusText;
     Colour statusColour = inkDim;
     float lastProgress = 0.0f;
+    bool finishedOk = false, finishedInstall = true;
+    int finishedCount = 0;
     Rectangle<int> footer, statusArea;
     File cubase;
 };
@@ -721,12 +995,20 @@ static int selfTest (const File& dir)
     {
         auto c = std::make_unique<SetupComponent> (paths, true);
         c->showRelease (rel2);
-        c->setSize (1060, 760);
+        c->setSize (1060, 780);
         auto img = c->createComponentSnapshot (c->getLocalBounds());
         PNGImageFormat png;
-        FileOutputStream os (dir.getChildFile ("setup.png"));
-        png.writeImageToStream (img, os);
-        check (dir.getChildFile ("setup.png").getSize() > 1000, "draws the window");
+        {
+            FileOutputStream os (dir.getChildFile ("setup.png"));
+            png.writeImageToStream (img, os);
+        }
+        c->showFinished (3);
+        auto img2 = c->createComponentSnapshot (c->getLocalBounds());
+        {
+            FileOutputStream os (dir.getChildFile ("setup-done.png"));
+            png.writeImageToStream (img2, os);
+        }
+        check (dir.getChildFile ("setup.png").getSize() > 1000 && dir.getChildFile ("setup-done.png").getSize() > 1000, "draws the window");
     }
 
     log << (fails == 0 ? "ALL PASSED" : String (fails) + " FAILED") << "\n";

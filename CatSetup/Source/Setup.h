@@ -98,6 +98,9 @@ public:
     std::atomic<bool> finished { false }, failed { false }, waitingForClose { false };
     juce::String getStatus() const { const juce::ScopedLock l (lock); return status; }
     juce::StringArray done;                         // what was installed / removed (read when finished)
+    /** While it runs (any thread): the id it works on now, and what is finished so far. */
+    juce::String getCurrent() const { const juce::ScopedLock l (lock); return current; }
+    juce::StringArray getDone() const { const juce::ScopedLock l (lock); return done; }
 
 private:
     void run() override;
@@ -114,7 +117,9 @@ private:
     Release release;
     Paths paths;
     juce::CriticalSection lock;
-    juce::String status;
+    juce::String status, current;
+    void setCurrent (const juce::String& id) { const juce::ScopedLock l (lock); current = id; }
+    void addDone (const juce::String& id) { const juce::ScopedLock l (lock); done.add (id); }
 };
 
 /** Start with Windows to check for updates (a "Run" entry for this user). */
