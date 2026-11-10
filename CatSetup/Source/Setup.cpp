@@ -33,6 +33,7 @@ const std::vector<Item>& catalog()
         { "Vortex",     "Vortex",     "The sound rises (or falls) forever", Kind::Plugin, 0xff5ef0ff },
         { "Negative",   "Negative",   "A photo you can hear",               Kind::Plugin, 0xffe8e6e1 },
         { "app:Cat-Hub",   "Cat Hub",   "Every Cat jamming together",       Kind::App, 0xff8fa3f0, true },
+        { "app:Cat-Loop",  "Cat Loop",  "A 5-track live looper",            Kind::App, 0xff5cf2a6, true },
         { "app:Cat-Ocean", "Cat Ocean", "The endless ocean for YouTube",    Kind::App, 0xff2ce8f5, true },
         { "app:Cat-Box",   "Cat Box",   "The groovebox",                    Kind::App, 0xffd9dde3, true },
         { "app:Sing-Cat",  "Sing-Cat app",  "Play the choir on your keyboard", Kind::App, 0xffff3b4e, true },
@@ -363,7 +364,7 @@ bool Job::installItem (const Item& i, const File& suite, const File& apps, Insta
                     hubCats.copyDirectoryTo (paths.apps.getChildFile ("Hub Cats"));
                 }
             }
-            shortcut (dst, i.name.replace (" app", ""), i.id == "app:Cat-Hub" || i.id == "app:Cat-Ocean" || i.id == "app:Cat-Box");
+            shortcut (dst, i.name.replace (" app", ""), i.id == "app:Cat-Hub" || i.id == "app:Cat-Loop" || i.id == "app:Cat-Ocean" || i.id == "app:Cat-Box");
             break;
         }
         case Kind::Extra:

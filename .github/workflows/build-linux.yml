@@ -78,12 +78,14 @@ jobs:
             t=${p%%:*}; n=${p##*:}
             cp "build/$t/${t}_artefacts/Release/Standalone/$n" "$pkg/Apps/"
           done
-          cp build/CatHub/CatHub_artefacts/Release/Cat-Hub build/CatOcean/CatOcean_artefacts/Release/Cat-Ocean build/CatBox/CatBox_artefacts/Release/Cat-Box "$pkg/Apps/"
+          cp build/CatHub/CatHub_artefacts/Release/Cat-Hub build/CatLoop/CatLoop_artefacts/Release/Cat-Loop build/CatOcean/CatOcean_artefacts/Release/Cat-Ocean build/CatBox/CatBox_artefacts/Release/Cat-Box "$pkg/Apps/"
           for n in Chord-Cat Bass-Cat Drum-Cat Life-Cat Patt-Cat Bend-Cat Orbit-Cat Glide-Cat Sing-Cat Talk-Cat; do cp -r "$pkg/VST3/$n.vst3" "$pkg/Hub Cats/"; done
           apps=$(ls "$pkg/Apps" | wc -l)
-          if [ "$apps" -ne 9 ]; then echo "::error::Only $apps apps were packed"; exit 1; fi
+          if [ "$apps" -ne 10 ]; then echo "::error::Only $apps apps were packed"; exit 1; fi
           # the Hub plays a jam offline with these exact files; every Cat must be heard
           xvfb-run -a "$pkg/Apps/Cat-Hub" --selftest "$PWD/$pkg/Hub Cats" "$PWD/hub-test.wav" 16 || { echo "::error::Cat Hub self test failed"; cat hub-test.txt || true; exit 1; }
+          # Cat Loop: the real window, random presses / knobs / keys / MIDI for a minute, a fake sound card
+          timeout 300 xvfb-run -a "$pkg/Apps/Cat-Loop" --uistress 60 3 || { echo "::error::Cat Loop UI stress failed"; exit 1; }
           cp packaging/install-linux.sh "$pkg/install.sh"
           chmod +x "$pkg/install.sh" "$pkg"/Apps/*
           cp packaging/README-linux.txt "$pkg/"

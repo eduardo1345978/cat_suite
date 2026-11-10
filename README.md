@@ -77,6 +77,9 @@ Step by step, the other downloads and what to do when Windows warns: **[Install]
 <table>
 <tr>
 <td width="50%" valign="top"><a href="docs/apps/Cat-Hub.md"><img src="docs/screenshots/hub.jpg" alt="Cat Hub"></a><br><b><a href="docs/apps/Cat-Hub.md">Cat Hub</a></b><br><sub>All the Cats jam together in one window; Dice and Compose write whole songs.</sub></td>
+<td width="50%" valign="top"><a href="docs/apps/Cat-Loop.md"><img src="docs/screenshots/catloop.jpg" alt="Cat Loop"></a><br><b><a href="docs/apps/Cat-Loop.md">Cat Loop</a></b><br><sub>A 5-track live looper like a Boss RC-505: big buttons, a beat, MIDI pads. Windows, Mac, Linux.</sub></td>
+</tr>
+<tr>
 <td width="50%" valign="top"><a href="CatBox/README.md"><img src="docs/screenshots/box.jpg" alt="Cat Box"></a><br><b><a href="CatBox/README.md">Cat Box</a></b><br><sub>A groovebox (drums, arp, bass), also as a Raspberry Pi box you can build.</sub></td>
 </tr>
 </table>

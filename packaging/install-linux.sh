@@ -9,7 +9,7 @@ vst="$HOME/.vst3"
 apps="$HOME/.local/share/cat-suite"
 menu="$HOME/.local/share/applications"
 bin="$HOME/.local/bin"
-names="Sing-Cat Talk-Cat Glide-Cat Life-Cat Muse-Cat Negative Cat-Hub Cat-Ocean Cat-Box"
+names="Sing-Cat Talk-Cat Glide-Cat Life-Cat Muse-Cat Negative Cat-Hub Cat-Loop Cat-Ocean Cat-Box"
 
 if [ "$1" = "--remove" ]; then
     for b in "$here"/VST3/*.vst3; do rm -rf "$vst/$(basename "$b")"; done

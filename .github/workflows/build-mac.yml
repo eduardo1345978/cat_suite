@@ -40,7 +40,7 @@ jobs:
       - name: Build all plug-ins and the test host
         run: |
           set +e
-          cmake --build build --config Release --parallel 4 --target CatSuiteHostTest MuseCat_VST3 PhaseCat_VST3 HumCat_VST3 GlitchCat_VST3 Molten_VST3 Swarm_VST3 Negative_VST3 Vortex_VST3 2>&1 | tee build.log
+          cmake --build build --config Release --parallel 4 --target CatSuiteHostTest MuseCat_VST3 PhaseCat_VST3 HumCat_VST3 GlitchCat_VST3 Molten_VST3 Swarm_VST3 Negative_VST3 Vortex_VST3 CatLoop 2>&1 | tee build.log
           code=${PIPESTATUS[0]}
           # compiler errors as annotations (readable on the run page without the full log)
           grep -E "error:|Error [0-9]+|undefined symbol|ld: " build.log | sort -u | head -40 | sed 's/^/::error::/'
@@ -81,6 +81,12 @@ jobs:
             codesign --force --deep --sign - "$b"
             codesign --verify --deep --strict "$b"
           done
+          # the Cat Loop program (universal, ad-hoc signed)
+          mkdir -p "$pkg/Apps"
+          app=$(find build -type d -name "Cat-Loop.app" -path "*_artefacts/Release/*" | head -1)
+          ditto "$app" "$pkg/Apps/Cat-Loop.app"
+          lipo -archs "$pkg/Apps/Cat-Loop.app/Contents/MacOS/Cat-Loop"
+          codesign --force --deep --sign - "$pkg/Apps/Cat-Loop.app"
           cp "packaging/Install Cat Suite.command" "$pkg/"
           chmod +x "$pkg/Install Cat Suite.command"
           cp packaging/README-mac.txt "$pkg/"

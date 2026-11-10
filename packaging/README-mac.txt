@@ -16,6 +16,10 @@ The plug-ins are copied to your own VST3 folder (no password needed):
 If macOS still says a Cat "is damaged" or "can't be opened", open Terminal and run:
     xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/*-Cat.vst3
 
+The live looper program Cat Loop (folder Apps): drag Cat-Loop.app into Applications, then right-click it >
+Open > Open the first time. Allow the microphone when it asks (that is how it records). Pick your sound card in
+SETUP > Sound card & MIDI.
+
 Install by hand instead: copy the .vst3 folders from VST3 into ~/Library/Audio/Plug-Ins/VST3
 (in Finder: Go > Go to Folder..., paste that path).
 

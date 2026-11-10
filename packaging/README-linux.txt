@@ -4,7 +4,7 @@ Cat Suite for Linux (x86_64)
 What is in here
   VST3/        every Cat Suite plug-in (20), as VST3 for Linux
   Apps/        the apps: Sing-Cat, Talk-Cat, Glide-Cat, Life-Cat, Muse-Cat, Negative,
-               the Cat Hub, Cat Ocean and Cat Box
+               the Cat Hub, Cat Loop, Cat Ocean and Cat Box
   Hub Cats/    the Cats the Cat Hub plays (its own copies)
   install.sh   installs everything into your home folder (no root needed)
 
