@@ -2,6 +2,7 @@
 juce_add_gui_app(CatLoop
     PRODUCT_NAME "Cat-Loop"
     COMPANY_NAME "Cat Suite"
+    BUNDLE_ID    com.catsuite.catloop
     ICON_BIG     "${CMAKE_CURRENT_SOURCE_DIR}/Resources/icon.png"
     ICON_SMALL   "${CMAKE_CURRENT_SOURCE_DIR}/Resources/icon_small.png"
     VERSION      1.0.0

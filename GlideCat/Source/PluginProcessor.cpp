@@ -1,3 +1,4 @@
+#include "ProEditor.h"
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "ScaledEditor.h"
@@ -323,5 +324,5 @@ juce::AudioProcessorEditor* GlideCatProcessor::createEditor()
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new GlideCatProcessor();
+    return cat::makePlugin<GlideCatProcessor>();
 }

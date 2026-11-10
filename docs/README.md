@@ -44,6 +44,7 @@
 | | |
 |---|---|
 | [**Cat Hub**](apps/Cat-Hub.md) | All the Cats jamming together in one window, writes whole songs (Windows, Linux) |
+| [**Pro versions**](Pro-versions.md) | Every plug-in also as "Name Pro": a plain panel with every parameter, numbers, meters, A / B |
 | [**Cat Loop**](apps/Cat-Loop.md) | A 5-track live looper like a Boss RC-505: tempo, click, beat, MIDI pads (Windows, Mac, Linux) |
 | [**Cat Ocean**](apps/Cat-Ocean.md) | An endless YouTube live stream: an ocean of fish your viewers make in the chat |
 | [**Cat Box**](../CatBox/README.md) | A groovebox (drums / arp / bass), also as a Raspberry Pi hardware box |

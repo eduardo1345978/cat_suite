@@ -23,4 +23,7 @@ cat_add_synth_plugin(GlitchCat
         ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatSounds.cpp)
 
 # mp3 voices can be dropped in too
-target_compile_definitions(GlitchCat PRIVATE JUCE_USE_MP3AUDIOFORMAT=1)
+cat_plugin_targets(_targets GlitchCat)
+foreach(_t IN LISTS _targets)
+    target_compile_definitions(${_t} PRIVATE JUCE_USE_MP3AUDIOFORMAT=1)
+endforeach()

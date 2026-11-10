@@ -35,7 +35,7 @@ jobs:
         run: >
           cmake -B build -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
-          -DCAT_BUILD_TESTS=ON -DCAT_PLUGIN_FORMATS=VST3 -DCAT_SOUND_STANDALONE=OFF
+          -DCAT_BUILD_TESTS=ON -DCAT_PLUGIN_FORMATS=VST3 -DCAT_SOUND_STANDALONE=OFF -DCAT_BUILD_PRO=OFF
 
       - name: Build all plug-ins and the test host
         run: |

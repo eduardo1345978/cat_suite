@@ -84,6 +84,8 @@ Step by step, the other downloads and what to do when Windows warns: **[Install]
 </tr>
 </table>
 
+Every plug-in also comes as a **[Pro version](docs/Pro-versions.md)**: the same sound with a plain panel - every parameter with its exact value, CPU and output meters, A / B.
+
 Also: **[Cat Ocean](docs/apps/Cat-Ocean.md)** (an endless YouTube live stream of fish your viewers make), and Sing-, Talk-, Glide-, Life-, Muse-Cat and Negative as programs you play with your computer keyboard.
 
 ## Documentation

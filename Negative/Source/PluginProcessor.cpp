@@ -1,3 +1,4 @@
+#include "ProEditor.h"
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "ScaledEditor.h"
@@ -448,5 +449,5 @@ AudioProcessorEditor* NegativeProcessor::createEditor()
 
 AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new NegativeProcessor();
+    return cat::makePlugin<NegativeProcessor>();
 }

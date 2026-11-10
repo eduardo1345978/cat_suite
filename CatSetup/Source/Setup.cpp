@@ -12,14 +12,14 @@ using namespace juce;
 const std::vector<Item>& catalog()
 {
     static const std::vector<Item> items {
-        { "Chord-Cat",  "Chord-Cat",  "Chords and progressions",           Kind::Plugin, 0xffff8a2a },
+        { "Chord-Cat",  "Chord-Cat",  "Chords and progressions",           Kind::Plugin, 0xffff8a2a, false, false, false, true },
         { "Patt-Cat",   "Patt-Cat",   "Patterns and arpeggios",            Kind::Plugin, 0xffffd23f },
         { "Bend-Cat",   "Bend-Cat",   "Pitch bends drawn as curves",       Kind::Plugin, 0xff9db4ff },
-        { "Drum-Cat",   "Drum-Cat",   "Drum grooves",                      Kind::Plugin, 0xffd8452c },
+        { "Drum-Cat",   "Drum-Cat",   "Drum grooves",                      Kind::Plugin, 0xffd8452c, false, false, false, true },
         { "Orbit-Cat",  "Orbit-Cat",  "Planets that play notes",           Kind::Plugin, 0xffffd27a },
-        { "Sing-Cat",   "Sing-Cat",   "A singing choir",                   Kind::Plugin, 0xffff3b4e },
-        { "Bass-Cat",   "Bass-Cat",   "Acid and bass lines",               Kind::Plugin, 0xffc1272d },
-        { "Glide-Cat",  "Glide-Cat",  "Gliding poly synth",                Kind::Plugin, 0xffff9c3a },
+        { "Sing-Cat",   "Sing-Cat",   "A singing choir",                   Kind::Plugin, 0xffff3b4e, false, false, false, true },
+        { "Bass-Cat",   "Bass-Cat",   "Acid and bass lines",               Kind::Plugin, 0xffc1272d, false, false, false, true },
+        { "Glide-Cat",  "Glide-Cat",  "Gliding poly synth",                Kind::Plugin, 0xffff9c3a, false, false, false, true },
         { "Talk-Cat",   "Talk-Cat",   "A singer with lyrics",              Kind::Plugin, 0xff7dff8a },
         { "Life-Cat",   "Life-Cat",   "A living ecosystem that plays",     Kind::Plugin, 0xff5cffd6 },
         { "Muse-Cat",   "Muse-Cat",   "Writes whole songs",                Kind::Plugin, 0xff4fd1ff },
@@ -29,19 +29,39 @@ const std::vector<Item>& catalog()
         { "Hum-Cat",    "Hum-Cat",    "Sing a tune, get a song",           Kind::Plugin, 0xffff6f4f },
         { "Glitch-Cat", "Glitch-Cat", "Every note falls apart into bugs",  Kind::Plugin, 0xff3dff9a },
         { "Molten",     "Molten",     "The sound melts (warm and fat)",    Kind::Plugin, 0xffff6a1f },
-        { "Swarm",      "Swarm",      "The sound becomes living star dust", Kind::Plugin, 0xffb9a6ff },
-        { "Vortex",     "Vortex",     "The sound rises (or falls) forever", Kind::Plugin, 0xff5ef0ff },
+        { "Swarm",      "Swarm",      "The sound becomes living star dust", Kind::Plugin, 0xffb9a6ff, false, false, false, true },
+        { "Vortex",     "Vortex",     "The sound rises (or falls) forever", Kind::Plugin, 0xff5ef0ff, false, false, false, true },
         { "Negative",   "Negative",   "A photo you can hear",               Kind::Plugin, 0xffe8e6e1 },
-        { "app:Cat-Hub",   "Cat Hub",   "Every Cat jamming together",       Kind::App, 0xff8fa3f0, true },
-        { "app:Cat-Loop",  "Cat Loop",  "A 5-track live looper",            Kind::App, 0xff5cf2a6, true },
+        { "Chord-Cat Pro", "Chord-Cat Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffff8a2a, false, true },
+        { "Patt-Cat Pro", "Patt-Cat Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffffd23f, false, true },
+        { "Bend-Cat Pro", "Bend-Cat Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xff9db4ff, false, true },
+        { "Drum-Cat Pro", "Drum-Cat Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffd8452c, false, true },
+        { "Orbit-Cat Pro", "Orbit-Cat Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffffd27a, false, true },
+        { "Sing-Cat Pro", "Sing-Cat Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffff3b4e, false, true },
+        { "Bass-Cat Pro", "Bass-Cat Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffc1272d, false, true },
+        { "Glide-Cat Pro", "Glide-Cat Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffff9c3a, false, true },
+        { "Talk-Cat Pro", "Talk-Cat Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xff7dff8a, false, true },
+        { "Life-Cat Pro", "Life-Cat Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xff5cffd6, false, true },
+        { "Muse-Cat Pro", "Muse-Cat Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xff4fd1ff, false, true },
+        { "Echo-Cat Pro", "Echo-Cat Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffc9561a, false, true },
+        { "Micro-Cat Pro", "Micro-Cat Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffd8b169, false, true },
+        { "Phase-Cat Pro", "Phase-Cat Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffb88cff, false, true },
+        { "Hum-Cat Pro", "Hum-Cat Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffff6f4f, false, true },
+        { "Glitch-Cat Pro", "Glitch-Cat Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xff3dff9a, false, true },
+        { "Molten Pro", "Molten Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffff6a1f, false, true },
+        { "Swarm Pro", "Swarm Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffb9a6ff, false, true },
+        { "Vortex Pro", "Vortex Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xff5ef0ff, false, true },
+        { "Negative Pro", "Negative Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffe8e6e1, false, true },
+        { "app:Cat-Hub",   "Cat Hub",   "Every Cat jamming together",       Kind::App, 0xff8fa3f0, true, false, false, true },
+        { "app:Cat-Loop",  "Cat Loop",  "A 5-track live looper",            Kind::App, 0xff5cf2a6, true, false, false, true },
         { "app:Cat-Ocean", "Cat Ocean", "The endless ocean for YouTube",    Kind::App, 0xff2ce8f5, true },
         { "app:Cat-Box",   "Cat Box",   "The groovebox",                    Kind::App, 0xffd9dde3, true },
-        { "app:Sing-Cat",  "Sing-Cat app",  "Play the choir on your keyboard", Kind::App, 0xffff3b4e, true },
-        { "app:Talk-Cat",  "Talk-Cat app",  "Make it sing your words",         Kind::App, 0xff7dff8a, true },
-        { "app:Glide-Cat", "Glide-Cat app", "The glide synth on its own",      Kind::App, 0xffff9c3a, true },
-        { "app:Life-Cat",  "Life-Cat app",  "Watch the ecosystem play",        Kind::App, 0xff5cffd6, true },
-        { "app:Muse-Cat",  "Muse-Cat app",  "Write songs without a DAW",      Kind::App, 0xff4fd1ff, true },
-        { "app:Negative",  "Negative app",  "Photos to sound, sounds to pictures", Kind::App, 0xffe8e6e1, true },
+        { "app:Sing-Cat",  "Sing-Cat app",  "Play the choir on your keyboard", Kind::App, 0xffff3b4e, true, false, true },
+        { "app:Talk-Cat",  "Talk-Cat app",  "Make it sing your words",         Kind::App, 0xff7dff8a, true, false, true },
+        { "app:Glide-Cat", "Glide-Cat app", "The glide synth on its own",      Kind::App, 0xffff9c3a, true, false, true },
+        { "app:Life-Cat",  "Life-Cat app",  "Watch the ecosystem play",        Kind::App, 0xff5cffd6, true, false, true },
+        { "app:Muse-Cat",  "Muse-Cat app",  "Write songs without a DAW",      Kind::App, 0xff4fd1ff, true, false, true },
+        { "app:Negative",  "Negative app",  "Photos to sound, sounds to pictures", Kind::App, 0xffe8e6e1, true, false, true },
         { mtsId, "MTS-ESP library", "Lets Micro-Cat tune Vital, Surge, Serum ... (by ODDSound)", Kind::Extra, 0xffb5a98e },
     };
     return items;
@@ -53,7 +73,48 @@ const Item* findItem (const String& id)
     return nullptr;
 }
 
-static String fileNameOf (const Item& i) { return i.id.fromFirstOccurrenceOf ("app:", false, false).isNotEmpty() ? i.id.fromFirstOccurrenceOf ("app:", false, false) : i.id; }
+String fileNameOf (const Item& i) { return i.id.fromFirstOccurrenceOf ("app:", false, false).isNotEmpty() ? i.id.fromFirstOccurrenceOf ("app:", false, false) : i.id; }
+
+//==============================================================================
+bool Settings::wantsDesktop (const Item& i) const
+{
+    if (i.kind != Kind::App) return false;
+    const auto it = desktop.find (i.id);
+    if (it != desktop.end()) return it->second;
+    return i.id == "app:Cat-Hub" || i.id == "app:Cat-Loop" || i.id == "app:Cat-Ocean" || i.id == "app:Cat-Box";
+}
+
+Settings Settings::load (const File& f)
+{
+    Settings s;
+    const auto v = JSON::parse (f.loadFileAsString());
+    if (! v.isObject()) return s;
+    s.channel = v["channel"].toString() == "stable" ? "stable" : "latest";
+    s.vst3Dir = v["vst3Dir"].toString();
+    s.appsDir = v["appsDir"].toString();
+    s.startMenu = v.hasProperty ("startMenu") ? (bool) v["startMenu"] : true;
+    s.showLegacy = (bool) v["showLegacy"];
+    s.listView = (bool) v["listView"];
+    if (auto* o = v["desktop"].getDynamicObject())
+        for (auto& p : o->getProperties()) s.desktop[p.name.toString()] = (bool) p.value;
+    return s;
+}
+
+bool Settings::save (const File& f) const
+{
+    auto* root = new DynamicObject();
+    root->setProperty ("channel", channel);
+    root->setProperty ("vst3Dir", vst3Dir);
+    root->setProperty ("appsDir", appsDir);
+    root->setProperty ("startMenu", startMenu);
+    root->setProperty ("showLegacy", showLegacy);
+    root->setProperty ("listView", listView);
+    auto* d = new DynamicObject();
+    for (auto& [k, v] : desktop) d->setProperty (k, v);
+    root->setProperty ("desktop", var (d));
+    f.getParentDirectory().createDirectory();
+    return f.replaceWithText (JSON::toString (var (root)));
+}
 
 //==============================================================================
 Paths Paths::forUser()
@@ -74,6 +135,13 @@ Paths Paths::forUser()
    #endif
     p.desktop = File::getSpecialLocation (File::userDesktopDirectory);
     p.temp = File::getSpecialLocation (File::tempDirectory).getChildFile ("Cat Suite Setup");
+    p.settingsFile = p.stateFile.getSiblingFile ("settings.json");
+    p.defaultVst3 = p.vst3;
+    p.defaultApps = p.apps;
+    // the folders the user picked in Setup's settings
+    const auto s = Settings::load (p.settingsFile);
+    if (s.vst3Dir.isNotEmpty() && File::isAbsolutePath (s.vst3Dir)) p.vst3 = File (s.vst3Dir);
+    if (s.appsDir.isNotEmpty() && File::isAbsolutePath (s.appsDir)) p.apps = File (s.appsDir);
     return p;
 }
 
@@ -86,6 +154,9 @@ Paths Paths::under (const File& root)
     p.startMenu = root.getChildFile ("Menu");
     p.desktop = root.getChildFile ("Desktop");
     p.temp = root.getChildFile ("temp");
+    p.settingsFile = root.getChildFile ("state/settings.json");
+    p.defaultVst3 = p.vst3;
+    p.defaultApps = p.apps;
     return p;
 }
 
@@ -102,14 +173,33 @@ Release parseRelease (const var& json)
     if (! json.isObject()) { r.error = "GitHub sent something unexpected"; return r; }
     if (json.hasProperty ("message") && ! json.hasProperty ("assets")) { r.error = "GitHub: " + json["message"].toString(); return r; }
     r.title = json["name"].toString();
+    r.tag = json["tag_name"].toString();
     const auto body = json["body"].toString();
+    // "Build: build-123" (the latest / stable releases say which numbered build they are)
+    if (const auto b = body.indexOf ("Build: build-"); b >= 0)
+        r.tag = "build-" + body.substring (b + 13).initialSectionContainingOnly ("0123456789");
+    // "Change: <the commit's first line>" (CI writes it)
+    if (const auto c = body.indexOf ("Change: "); c >= 0)
+    {
+        // short and readable: up to the first bracket / comma / semicolon, at most ~70 letters, cut at a word
+        auto t = body.substring (c + 8).upToFirstOccurrenceOf ("<br>", false, false).upToFirstOccurrenceOf ("\n", false, false).trim();
+        for (auto stop : { " (", ", ", "; ", " - " })
+            if (const int k = t.indexOf (stop); k > 12) t = t.substring (0, k);
+        if (t.length() > 70)
+        {
+            t = t.substring (0, 70);
+            if (const int sp = t.lastIndexOfChar (' '); sp > 30) t = t.substring (0, sp);
+            t = t.trimEnd() + "...";
+        }
+        r.change = t.trim();
+    }
     // "Built from commit <40 hex>"
     const auto at = body.indexOf ("Built from commit ");
     if (at >= 0)
         r.commit = body.substring (at + 18).initialSectionContainingOnly ("0123456789abcdef");
     if (r.commit.length() < 7) r.commit = json["target_commitish"].toString();
     // the build time from the title: "Cat Suite - latest build (2026-11-05 15:20 UTC)"
-    r.built = r.title.fromFirstOccurrenceOf ("(", false, false).upToFirstOccurrenceOf (")", false, false);
+    r.built = r.title.fromLastOccurrenceOf ("(", false, false).upToFirstOccurrenceOf (")", false, false);
     if (r.built.isEmpty()) r.built = json["published_at"].toString();
     if (auto* arr = json["assets"].getArray())
         for (auto& a : *arr)
@@ -128,9 +218,39 @@ Release parseRelease (const var& json)
     return r;
 }
 
-Release fetchRelease()
+static String getGitHub (const String& path, int& status)
 {
-    const URL url ("https://api.github.com/repos/eduardo1345978/cat_suite/releases/tags/latest");
+    const URL url ("https://api.github.com/repos/eduardo1345978/cat_suite/" + path);
+    auto stream = url.createInputStream (URL::InputStreamOptions (URL::ParameterHandling::inAddress)
+                                             .withExtraHeaders ("User-Agent: Cat-Suite-Setup\r\nAccept: application/vnd.github+json")
+                                             .withConnectionTimeoutMs (15000)
+                                             .withStatusCode (&status)
+                                             .withNumRedirectsToFollow (5));
+    if (stream == nullptr) { status = -1; return {}; }
+    return stream->readEntireStreamAsString();
+}
+
+std::vector<Release> fetchBuilds()
+{
+    std::vector<Release> out;
+    int status = 0;
+    const auto text = getGitHub ("releases?per_page=40", status);
+    if (status != 0 && status != 200) return out;
+    if (auto* arr = JSON::parse (text).getArray())
+        for (auto& j : *arr)
+            if (j["tag_name"].toString().startsWith ("build-"))
+            {
+                auto r = parseRelease (j);
+                if (r.ok) out.push_back (r);
+            }
+    std::sort (out.begin(), out.end(), [] (const Release& a, const Release& b)
+               { return a.tag.fromFirstOccurrenceOf ("build-", false, false).getIntValue() > b.tag.fromFirstOccurrenceOf ("build-", false, false).getIntValue(); });
+    return out;
+}
+
+Release fetchRelease (const String& tag)
+{
+    const URL url ("https://api.github.com/repos/eduardo1345978/cat_suite/releases/tags/" + tag);
     int status = 0;
     auto stream = url.createInputStream (URL::InputStreamOptions (URL::ParameterHandling::inAddress)
                                              .withExtraHeaders ("User-Agent: Cat-Suite-Setup\r\nAccept: application/vnd.github+json")
@@ -142,7 +262,9 @@ Release fetchRelease()
     if (status != 0 && status != 200)
     {
         Release r;
-        r.error = status == 403 ? "GitHub says: too many questions from this network - try again in an hour" : "GitHub answered " + String (status);
+        r.error = status == 403 ? "GitHub says: too many questions from this network - try again in an hour"
+                : status == 404 && tag == "stable" ? "there is no stable build yet - use Newest in the settings"
+                : "GitHub answered " + String (status);
         return r;
     }
     return parseRelease (JSON::parse (text));
@@ -155,6 +277,9 @@ Installed Installed::load (const File& f)
     const auto v = JSON::parse (f.loadFileAsString());
     if (auto* o = v["items"].getDynamicObject())
         for (auto& p : o->getProperties()) s.items[p.name.toString()] = p.value.toString();
+    for (auto [key, map] : { std::pair<const char*, std::map<String, String>*> { "when", &s.when }, { "where", &s.where }, { "build", &s.build } })
+        if (auto* o = v[key].getDynamicObject())
+            for (auto& p : o->getProperties()) (*map)[p.name.toString()] = p.value.toString();
     s.lastCheckDay = v["lastCheckDay"].toString();
     return s;
 }
@@ -165,6 +290,12 @@ bool Installed::save (const File& f) const
     for (auto& [k, v] : items) items_->setProperty (k, v);
     auto* root = new DynamicObject();
     root->setProperty ("items", var (items_));
+    for (auto [key, map] : { std::pair<const char*, const std::map<String, String>*> { "when", &when }, { "where", &where }, { "build", &build } })
+    {
+        auto* o = new DynamicObject();
+        for (auto& [k, v] : *map) o->setProperty (k, v);
+        root->setProperty (key, var (o));
+    }
     root->setProperty ("lastCheckDay", lastCheckDay);
     f.getParentDirectory().createDirectory();
     return f.replaceWithText (JSON::toString (var (root)));
@@ -186,9 +317,40 @@ bool isOnDisk (const Item& i, const Paths& p)
     return false;
 }
 
+File locate (const Item& i, const Installed& s, const Paths& p)
+{
+    File where;
+    if (const auto it = s.where.find (i.id); it != s.where.end() && File::isAbsolutePath (it->second)) where = File (it->second);
+    switch (i.kind)
+    {
+        case Kind::Plugin:
+        {
+            const auto f = (where != File() ? where : p.vst3).getChildFile (i.id + ".vst3");
+            return f.exists() ? f : p.vst3.getChildFile (i.id + ".vst3");
+        }
+        case Kind::App:
+        {
+            const auto f = (where != File() ? where : p.apps).getChildFile (fileNameOf (i) + ".exe");
+            return f.exists() ? f : p.apps.getChildFile (fileNameOf (i) + ".exe");
+        }
+        case Kind::Extra:
+            return File (SystemStats::getEnvironmentVariable ("CommonProgramFiles", "C:\\Program Files\\Common Files")).getChildFile ("MTS-ESP");
+    }
+    return {};
+}
+
+int64 sizeOnDisk (const File& f)
+{
+    if (f.existsAsFile()) return f.getSize();
+    int64 total = 0;
+    if (f.isDirectory())
+        for (const auto& e : RangedDirectoryIterator (f, true, "*", File::findFiles)) total += e.getFileSize();
+    return total;
+}
+
 State stateOf (const Item& i, const Installed& s, const Release& r, const Paths& p)
 {
-    if (! isOnDisk (i, p)) return State::NotInstalled;
+    if (! isOnDisk (i, p) && ! (i.kind != Kind::Extra && locate (i, s, p).exists())) return State::NotInstalled;
     if (i.kind == Kind::Extra) return State::Installed;          // not ours to update
     const auto it = s.items.find (i.id);
     if (! r.ok) return State::Installed;                          // offline: can't tell
@@ -311,15 +473,21 @@ bool Job::getZip (const String& name, File& unpacked, float from, float to)
     return true;
 }
 
-void Job::shortcut (const File& target, const String& name, bool alsoDesktop)
+void Job::shortcut (const File& target, const String& name, bool alsoDesktop, bool startMenu)
 {
    #if JUCE_WINDOWS
-    paths.startMenu.createDirectory();
-    target.createShortcut (name, paths.startMenu.getChildFile (name + ".lnk"));
+    if (startMenu)
+    {
+        paths.startMenu.createDirectory();
+        target.createShortcut (name, paths.startMenu.getChildFile (name + ".lnk"));
+    }
     if (alsoDesktop) target.createShortcut (name, paths.desktop.getChildFile (name + ".lnk"));
    #else
-    paths.startMenu.createDirectory();
-    paths.startMenu.getChildFile (name + ".link").replaceWithText (target.getFullPathName());
+    if (startMenu)
+    {
+        paths.startMenu.createDirectory();
+        paths.startMenu.getChildFile (name + ".link").replaceWithText (target.getFullPathName());
+    }
     if (alsoDesktop) { paths.desktop.createDirectory(); paths.desktop.getChildFile (name + ".link").replaceWithText (target.getFullPathName()); }
    #endif
 }
@@ -333,15 +501,32 @@ static File linkFile (const File& folder, const String& name)
    #endif
 }
 
+void setDesktopShortcut (const Item& i, const Installed& s, const Paths& p, bool on)
+{
+    if (i.kind != Kind::App) return;
+    const auto name = i.name.replace (" app", "");
+    const auto link = linkFile (p.desktop, name);
+    if (! on) { link.deleteFile(); return; }
+    const auto exe = locate (i, s, p);
+    if (! exe.existsAsFile()) return;
+   #if JUCE_WINDOWS
+    exe.createShortcut (name, link);
+   #else
+    p.desktop.createDirectory();
+    link.replaceWithText (exe.getFullPathName());
+   #endif
+}
+
 bool Job::installItem (const Item& i, const File& suite, const File& apps, Installed& state)
 {
     switch (i.kind)
     {
         case Kind::Plugin:
         {
-            const auto src = suite.getChildFile ("VST3").getChildFile (i.id + ".vst3");
+            const auto src = suite.getChildFile (i.pro ? "VST3 Pro" : "VST3").getChildFile (i.id + ".vst3");
             if (! src.isDirectory()) { setStatus (i.name + " is not in this build"); return false; }
             const auto dst = paths.vst3.getChildFile (i.id + ".vst3");
+            if (const auto old = locate (i, state, paths); old != dst && old.isDirectory()) old.deleteRecursively();   // it moved
             paths.vst3.createDirectory();
             dst.deleteRecursively();
             if (! src.copyDirectoryTo (dst)) { setStatus ("Couldn't copy " + i.name + " - is your DAW still open?"); return false; }
@@ -364,7 +549,12 @@ bool Job::installItem (const Item& i, const File& suite, const File& apps, Insta
                     hubCats.copyDirectoryTo (paths.apps.getChildFile ("Hub Cats"));
                 }
             }
-            shortcut (dst, i.name.replace (" app", ""), i.id == "app:Cat-Hub" || i.id == "app:Cat-Loop" || i.id == "app:Cat-Ocean" || i.id == "app:Cat-Box");
+            if (const auto old = locate (i, state, paths); old != dst && old.existsAsFile()) old.deleteFile();   // it moved
+            {
+                const auto settings = Settings::load (paths.settingsFile);
+                const auto n = i.name.replace (" app", "");
+                shortcut (dst, n, settings.wantsDesktop (i), settings.startMenu);
+            }
             break;
         }
         case Kind::Extra:
@@ -382,6 +572,9 @@ bool Job::installItem (const Item& i, const File& suite, const File& apps, Insta
         }
     }
     state.items[i.id] = release.commit;
+    state.when[i.id] = Time::getCurrentTime().toISO8601 (true);
+    state.where[i.id] = (i.kind == Kind::Plugin ? paths.vst3 : paths.apps).getFullPathName();
+    state.build[i.id] = release.tag;
     return true;
 }
 
@@ -391,11 +584,14 @@ bool Job::uninstallItem (const Item& i, Installed& state)
     switch (i.kind)
     {
         case Kind::Plugin:
-            ok = ! paths.vst3.getChildFile (i.id + ".vst3").exists() || paths.vst3.getChildFile (i.id + ".vst3").deleteRecursively();
+        {
+            const auto f = locate (i, state, paths);
+            ok = ! f.exists() || f.deleteRecursively();
             break;
+        }
         case Kind::App:
         {
-            const auto exe = paths.apps.getChildFile (fileNameOf (i) + ".exe");
+            const auto exe = locate (i, state, paths);
             ok = ! exe.exists() || exe.deleteFile();
             if (i.id == "app:Cat-Hub") paths.apps.getChildFile ("Hub Cats").deleteRecursively();
             const auto n = i.name.replace (" app", "");
@@ -407,7 +603,7 @@ bool Job::uninstallItem (const Item& i, Installed& state)
             setStatus ("The MTS-ESP library is removed in Windows Settings > Apps");
             return true;
     }
-    if (ok) state.items.erase (i.id);
+    if (ok) { state.items.erase (i.id); state.when.erase (i.id); state.where.erase (i.id); state.build.erase (i.id); }
     else setStatus ("Couldn't remove " + i.name + " - close your DAW and the Cat apps first");
     return ok;
 }

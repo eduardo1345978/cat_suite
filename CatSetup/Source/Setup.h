@@ -32,6 +32,9 @@ struct Item
     Kind kind;
     juce::uint32 colour;
     bool appVersion = false;  // an app (exe) - its id is the exe name
+    bool pro = false;         // "<Name> Pro": the plain panel with every parameter (zip folder "VST3 Pro")
+    bool legacy = false;      // shown only with "Show older"
+    bool recommended = false; // in RECOMMENDED at the top
 };
 const std::vector<Item>& catalog();
 const Item* findItem (const juce::String& id);
@@ -41,10 +44,23 @@ inline const char* const appsZip = "Cat-Sound-Apps-Windows.zip";
 inline const char* const setupExe = "Cat-Suite-Setup.exe";
 inline const char* const mtsId = "MTS-ESP";
 
+/** What the user set in Setup (settings.json next to installed.json). */
+struct Settings
+{
+    juce::String channel { "latest" };          // "latest" (every change) or "stable"
+    juce::String vst3Dir, appsDir;              // empty = the default folder
+    bool startMenu = true, showLegacy = false, listView = false;
+    std::map<juce::String, bool> desktop;       // app id -> a Desktop shortcut (default: the big apps)
+    bool wantsDesktop (const Item&) const;
+    static Settings load (const juce::File&);
+    bool save (const juce::File&) const;
+};
+
 /** Where everything goes. */
 struct Paths
 {
-    juce::File vst3, apps, stateFile, startMenu, desktop, temp;
+    juce::File vst3, apps, stateFile, settingsFile, startMenu, desktop, temp;
+    juce::File defaultVst3, defaultApps;
     static Paths forUser();
     static Paths under (const juce::File& root);   // (tests)
 };
@@ -54,18 +70,21 @@ struct Release
 {
     struct Asset { juce::String name, url, sha256; juce::int64 size = 0; };
     bool ok = false;
-    juce::String error, commit, title, built;
+    juce::String error, commit, title, built, tag, change;    // change: what the build changed (its commit's first line)
     std::vector<Asset> assets;
     const Asset* find (const juce::String& name) const;
 };
 /** The GitHub API's answer for a release -> Release. */
 Release parseRelease (const juce::var& json);
-/** Asks GitHub for the newest build (blocking, a few seconds). */
-Release fetchRelease();
+/** Asks GitHub for a build (blocking, a few seconds): "latest", "stable" or "build-123". */
+Release fetchRelease (const juce::String& tag = "latest");
+/** The older builds (tags build-N), newest first (blocking). */
+std::vector<Release> fetchBuilds();
 
 struct Installed
 {
     std::map<juce::String, juce::String> items;   // id -> commit (empty = installed some other way, version unknown)
+    std::map<juce::String, juce::String> when, where, build;   // id -> install time (ISO), folder, build tag
     juce::String lastCheckDay;
     static Installed load (const juce::File&);
     bool save (const juce::File&) const;
@@ -75,6 +94,13 @@ enum class State { NotInstalled, Installed, Update };
 /** Installed is what is on disk (also from the old .bat installers), Update = on disk but not the newest. */
 State stateOf (const Item&, const Installed&, const Release&, const Paths&);
 bool isOnDisk (const Item&, const Paths&);
+/** Where an item is on disk (where it was installed, else the default place). */
+juce::File locate (const Item&, const Installed&, const Paths&);
+/** Bytes on disk. */
+juce::int64 sizeOnDisk (const juce::File&);
+juce::String fileNameOf (const Item&);
+/** Puts / takes away an installed app's Desktop shortcut right now. */
+void setDesktopShortcut (const Item&, const Installed&, const Paths&, bool on);
 
 /** Programs that must be closed first (Cubase for plug-ins, the app itself for apps). Windows only; empty elsewhere. */
 juce::StringArray runningBlockers (const std::vector<juce::String>& ids);
@@ -109,7 +135,7 @@ private:
     bool getZip (const juce::String& name, juce::File& unpacked, float from, float to);
     bool installItem (const Item&, const juce::File& suite, const juce::File& apps, Installed&);
     bool uninstallItem (const Item&, Installed&);
-    void shortcut (const juce::File& target, const juce::String& name, bool desktop);
+    void shortcut (const juce::File& target, const juce::String& name, bool desktop, bool startMenu = true);
     void installSelf();
 
     Action action;

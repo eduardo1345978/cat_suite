@@ -9,6 +9,10 @@ How to install
 The plug-ins are copied to your own VST3 folder (no administrator rights needed):
     C:\Users\<you>\AppData\Local\Programs\Common\VST3
 
+The Pro versions (folder "VST3 Pro"): the same plug-ins with a plain panel - every parameter with its exact value,
+CPU, output meters, MIDI in / out, A / B, copy / paste. They are not installed by the .bat: copy the ones you want into
+the folder above (or tick them in Cat Suite Setup).
+
 What is inside (folder VST3):
     Chord-Cat, Patt-Cat, Bend-Cat, Drum-Cat, Orbit-Cat, Bass-Cat   - MIDI generators
     Sing-Cat   - choir of cats and people

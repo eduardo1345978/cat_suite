@@ -7,6 +7,13 @@
 3. Tick the Cats and apps you want and press **Install**. Close your DAW first.
 4. Later, open **Cat Suite Setup** from the Start menu: it shows what has an update and updates it with one click.
 
+What else Setup does:
+- **RECOMMENDED** at the top (a good start), then MIDI Cats, Instruments, Effects, Apps, **Pro versions** and Extras. Filter them with the chips, or search.
+- **Cards or List**: the list shows every Cat in one line with its installed build, size and folder.
+- **(i)** on a Cat: which build is installed and when, how big it is, where it is (Show in folder), what the newest build changed; for apps a Desktop shortcut on / off.
+- **Settings** (the gear): **Newest** (every change) or **Stable** builds, your own folders for the plug-ins and the apps, Start menu shortcuts, checking for updates when Windows starts.
+- **OLDER** (at the bottom, *Show*): the plug-ins as separate programs, and the **last 10 builds** - if the newest one broke something, pick the Cats and install them from an earlier build.
+
 
 ## Windows: by hand
 

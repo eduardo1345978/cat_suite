@@ -1,3 +1,4 @@
+#include "ProEditor.h"
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "ScaledEditor.h"
@@ -683,5 +684,5 @@ juce::AudioProcessorEditor* PattCatProcessor::createEditor()
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new PattCatProcessor();
+    return cat::makePlugin<PattCatProcessor>();
 }

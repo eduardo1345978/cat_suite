@@ -24,4 +24,7 @@ cat_add_fx_plugin(HumCat
         ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatSounds.cpp)
 
 # mp3 recordings can be dropped in too
-target_compile_definitions(HumCat PRIVATE JUCE_USE_MP3AUDIOFORMAT=1)
+cat_plugin_targets(_targets HumCat)
+foreach(_t IN LISTS _targets)
+    target_compile_definitions(${_t} PRIVATE JUCE_USE_MP3AUDIOFORMAT=1)
+endforeach()

@@ -57,7 +57,11 @@ endif()
 # Build with -DCAT_BUILD_STRESS=ON -DCMAKE_CXX_FLAGS="-fsanitize=address -D_GLIBCXX_ASSERTIONS" and run under Xvfb.
 option(CAT_BUILD_STRESS "Build the per-plug-in stress test executables" OFF)
 if(CAT_BUILD_STRESS)
-    foreach(_cat ChordCat PattCat BendCat DrumCat OrbitCat SingCat LifeCat BassCat GlideCat TalkCat MuseCat EchoCat MicroCat PhaseCat HumCat GlitchCat Molten Swarm Negative Vortex)
+    set(_stress ChordCat PattCat BendCat DrumCat OrbitCat SingCat LifeCat BassCat GlideCat TalkCat MuseCat EchoCat MicroCat PhaseCat HumCat GlitchCat Molten Swarm Negative Vortex)
+    if(CAT_BUILD_PRO)
+        list(APPEND _stress ChordCatPro GlideCatPro VortexPro NegativePro)    # the Pro panel, with few and many parameters
+    endif()
+    foreach(_cat IN LISTS _stress)
         add_executable(${_cat}Stress Tests/PluginStress.cpp)
         target_compile_definitions(${_cat}Stress PRIVATE $<TARGET_PROPERTY:${_cat},COMPILE_DEFINITIONS>)
         target_include_directories(${_cat}Stress PRIVATE $<TARGET_PROPERTY:${_cat},INCLUDE_DIRECTORIES>)
