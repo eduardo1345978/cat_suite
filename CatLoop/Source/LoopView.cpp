@@ -1,5 +1,6 @@
 #include "LoopView.h"
 #include "CatFonts.h"
+#include <algorithm>
 
 using namespace juce;
 

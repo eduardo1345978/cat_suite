@@ -1,4 +1,5 @@
 #include "LoopEngine.h"
+#include <algorithm>
 #include <cmath>
 
 using namespace juce;
