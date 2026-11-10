@@ -1,6 +1,6 @@
 # Cat Suite
 
-**Free music plug-ins and apps, each with its own cat.** Chords, patterns, drums, bass lines, choirs, singers, synths, tunings, granular clouds, lava and photos you can hear: 19 plug-ins (VST3) for Cubase and every other DAW, plus apps that jam on their own.
+**Free music plug-ins and apps, each with its own cat.** Chords, patterns, drums, bass lines, choirs, singers, synths, tunings, granular clouds, lava, endless risers and photos you can hear: 20 plug-ins (VST3) for Cubase and every other DAW, plus apps that jam on their own.
 
 [![Windows](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-windows.yml/badge.svg)](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-windows.yml)
 [![Mac](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-mac.yml/badge.svg)](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-mac.yml)
@@ -14,7 +14,7 @@
 | | | |
 |---|---|---|
 | **Windows 10 / 11** | **[Cat-Suite-Setup.exe](https://github.com/eduardo1345978/cat_suite/releases/latest/download/Cat-Suite-Setup.exe)** | installs and updates everything (plug-ins + apps) |
-| **macOS 11+** (Apple Silicon and Intel) | **[Cat-Suite-Mac.zip](https://github.com/eduardo1345978/cat_suite/releases/latest/download/Cat-Suite-Mac.zip)** | all 19 plug-ins, *Install Cat Suite.command* |
+| **macOS 11+** (Apple Silicon and Intel) | **[Cat-Suite-Mac.zip](https://github.com/eduardo1345978/cat_suite/releases/latest/download/Cat-Suite-Mac.zip)** | all 20 plug-ins, *Install Cat Suite.command* |
 | **Linux** (64-bit, 2022+) | **[Cat-Suite-Linux.tar.gz](https://github.com/eduardo1345978/cat_suite/releases/latest/download/Cat-Suite-Linux.tar.gz)** | all plug-ins + apps, `./install.sh` |
 
 Step by step, the other downloads and what to do when Windows warns: **[Install](docs/Install.md)**. Then **[Using it in Cubase](docs/Cubase.md)**.
@@ -66,6 +66,9 @@ Step by step, the other downloads and what to do when Windows warns: **[Install]
 <td width="33%" valign="top"><a href="docs/plugins/Echo-Cat.md"><img src="docs/screenshots/echo.jpg" alt="Echo-Cat"></a><br><b><a href="docs/plugins/Echo-Cat.md">Echo-Cat</a></b><br><sub>Tape echo and space: ping-pong, duck, freeze, reverse.</sub></td>
 <td width="33%" valign="top"><a href="docs/plugins/Molten.md"><img src="docs/screenshots/molten.jpg" alt="Molten"></a><br><b><a href="docs/plugins/Molten.md">Molten</a></b><br><sub>Melts any sound into something warm and fat (HEAT, DRIP, WOBBLE).</sub></td>
 <td width="33%" valign="top"><a href="docs/plugins/Swarm.md"><img src="docs/screenshots/swarm.jpg" alt="Swarm"></a><br><b><a href="docs/plugins/Swarm.md">Swarm</a></b><br><sub>A granular organism: the sound becomes a living cloud of grains.</sub></td>
+</tr>
+<tr>
+<td width="33%" valign="top"><a href="docs/plugins/Vortex.md"><img src="docs/screenshots/vortex.jpg" alt="Vortex"></a><br><b><a href="docs/plugins/Vortex.md">Vortex</a></b><br><sub>The sound rises (or falls) forever: an endless Shepard spiral.</sub></td>
 </tr>
 </table>
 

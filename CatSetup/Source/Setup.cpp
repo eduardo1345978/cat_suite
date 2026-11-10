@@ -30,6 +30,7 @@ const std::vector<Item>& catalog()
         { "Glitch-Cat", "Glitch-Cat", "Every note falls apart into bugs",  Kind::Plugin, 0xff3dff9a },
         { "Molten",     "Molten",     "The sound melts (warm and fat)",    Kind::Plugin, 0xffff6a1f },
         { "Swarm",      "Swarm",      "The sound becomes living star dust", Kind::Plugin, 0xffb9a6ff },
+        { "Vortex",     "Vortex",     "The sound rises (or falls) forever", Kind::Plugin, 0xff5ef0ff },
         { "Negative",   "Negative",   "A photo you can hear",               Kind::Plugin, 0xffe8e6e1 },
         { "app:Cat-Hub",   "Cat Hub",   "Every Cat jamming together",       Kind::App, 0xff8fa3f0, true },
         { "app:Cat-Ocean", "Cat Ocean", "The endless ocean for YouTube",    Kind::App, 0xff2ce8f5, true },

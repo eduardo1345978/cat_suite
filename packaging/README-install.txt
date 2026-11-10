@@ -29,5 +29,7 @@ What is inside (folder VST3):
                  louder - auto gain), drips that fall lower and lower, a tape-like wobble
     Swarm      - a granular effect that lives: the sound becomes a cloud of grains (dreamy, dark,
                  chopped in time, wild - drag the point on the nebula), LIFE, FREEZE, the dice
+    Vortex     - an effect that never stops rising (or falling): copies of the sound an octave apart
+                 glide up forever (a Shepard spiral), or filters sweep through it; in time with the song, its own endless tone
     Negative   - a photo you can hear: a photo becomes sound (its spectrogram shows the photo),
                  exact / musical / texture, paint and write text on it, hide it in a song; an instrument, and a program (Negative.exe)

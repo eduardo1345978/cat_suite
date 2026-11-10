@@ -37,6 +37,7 @@
 | [**Echo-Cat**](plugins/Echo-Cat.md) | Tape echo and space: ping-pong, duck, freeze, reverse. |
 | [**Molten**](plugins/Molten.md) | Melts any sound into something warm and fat (HEAT, DRIP, WOBBLE). |
 | [**Swarm**](plugins/Swarm.md) | A granular organism: the sound becomes a living cloud of grains. |
+| [**Vortex**](plugins/Vortex.md) | The sound rises (or falls) forever: an endless Shepard spiral. |
 
 ## Apps
 

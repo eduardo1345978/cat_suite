@@ -144,6 +144,13 @@ namespace
             t = make ("Tool", 0xff0b0b0c, 0xff121214, 0xff18181b, 0xff202024, 0xff2c2c31, 0xffe8e6e1, 0xff8a8884, 0xffe8e6e1);
             t.button = ButtonStyle::Flat; t.corner = 15.0f;
         }
+        else if (p.startsWith ("vortex"))     // event horizon: blue-black, electric cyan, a little magenta
+        {
+            t = make ("Event Horizon", 0xff04050c, 0xff090b18, 0xff0f1224, 0xff161a30, 0xff242a48, 0xffe6f4ff, 0xff8a98b8, 0xff5ef0ff);
+            t.knob = KnobStyle::Hardware; t.knobBody = juce::Colour (0xff0f1224); t.knobRing = juce::Colour (0xff242a48); t.knobPointer = t.accent;
+            t.button = ButtonStyle::Glow; t.corner = 12.0f;
+            font (t, MichromaRegular_ttf, MichromaRegular_ttfSize, 0.82f);
+        }
         else if (p.startsWith ("swarm"))      // deep space: black, nebula violet, star dust
         {
             t = make ("Deep Field", 0xff05050b, 0xff0b0b16, 0xff12121f, 0xff1a1a2a, 0xff2a2a40, 0xffe9e6f5, 0xff8f8aa8, 0xffb9a6ff);

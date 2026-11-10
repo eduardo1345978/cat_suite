@@ -15,6 +15,7 @@ echo Installing to %DEST% > "%LOG%"
 for %%C in (Chord Patt Bend Drum Orbit Sing Bass Glide Talk Life Muse Echo Micro Phase Hum Glitch) do call :plugin %%C
 call :fx Molten
 call :fx Swarm
+call :fx Vortex
 call :fx Negative
 echo. >> "%LOG%"
 echo Apps to %APPS% >> "%LOG%"

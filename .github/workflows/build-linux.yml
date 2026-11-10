@@ -72,7 +72,7 @@ jobs:
             echo "packed $(basename "$b")"
           done
           count=$(find "$pkg/VST3" -maxdepth 1 -type d -name "*.vst3" | wc -l)
-          if [ "$count" -lt 19 ]; then echo "::error::Only $count plug-ins were packed"; exit 1; fi
+          if [ "$count" -lt 20 ]; then echo "::error::Only $count plug-ins were packed"; exit 1; fi
           # the sound apps
           for p in SingCat:Sing-Cat TalkCat:Talk-Cat GlideCat:Glide-Cat LifeCat:Life-Cat MuseCat:Muse-Cat Negative:Negative; do
             t=${p%%:*}; n=${p##*:}

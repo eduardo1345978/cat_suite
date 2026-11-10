@@ -24,7 +24,7 @@ Every plug-in also comes for **macOS 11 or newer**, on **Apple Silicon (M1-M4) a
 2. Quit Cubase. **Right-click** *Install Cat Suite.command* > **Open** > **Open**. macOS asks the first time because the Cats aren't from the App Store. It copies the Cats into `~/Library/Audio/Plug-Ins/VST3`.
 3. In Cubase: **Studio > VST Plug-in Manager > Rescan**.
 
-The Mac download has all 19 VST3 plug-ins. The apps (Cat Hub, Cat Ocean ...) are on Windows and Linux.
+The Mac download has all 20 VST3 plug-ins. The apps (Cat Hub, Cat Ocean ...) are on Windows and Linux.
 
 ## Linux
 
