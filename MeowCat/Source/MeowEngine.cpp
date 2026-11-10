@@ -309,7 +309,7 @@ float Engine::renderCat (Cat& c, const Note& n, float& outL, float& outR) noexce
     // the voice
     float src;
     if (c.hiss)
-        src = noise (c.seed) * 1.6f;
+        src = noise (c.seed) * 0.8f;
     else
     {
         const float rough = juce::jmin (0.85f, angry * 0.7f + lion * 0.5f);
