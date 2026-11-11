@@ -29,7 +29,10 @@ call :app Negative Standalone\Negative.exe
 call :app CatLoop Cat-Loop.exe
 copy /Y "packaging\Cat-Ocean-YouTube-Description.txt" "%APPS%\" >> "%LOG%" 2>&1
 echo INSTALL FINISHED >> "%LOG%"
+rem the Pro versions, if they were built ("X Pro.vst3")
+for /d %%D in (build\*) do for /d %%A in ("%%D\*Pro_artefacts") do for /d %%P in ("%%A\Release\VST3\*.vst3") do xcopy /E /I /Y "%%P" "%DEST%\%%~nxP" >> "%LOG%" 2>&1
 exit /b 0
+
 
 :plugin
 set "SRC=build\%1Cat\%1Cat_artefacts\Release\VST3\%1-Cat.vst3"
