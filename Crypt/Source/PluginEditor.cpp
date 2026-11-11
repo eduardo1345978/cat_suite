@@ -266,7 +266,15 @@ CryptEditor::CryptEditor (CryptProcessor& p) : processor (p)
     saveAsB.onClick = [this] { saveAs(); };
     folderB.setTooltip ("FOLDER: where SAVE TO GAME puts the files (e.g. your game's sounds folder)");
     folderB.onClick = [this] { chooseFolder(); };
-    for (auto* b : { &generate, &mutate, &play, &back, &saveGame, &saveAsB, &folderB })
+    packB.setTooltip ("A WHOLE PACK: every kind, 3 different ones of each (42 .wav files) into a new folder in the game folder");
+    packB.onClick = [this]
+    {
+        const auto dir = processor.makePack();
+        const int n = dir.getNumberOfChildFiles (File::findFiles, "*.wav");
+        sfxScreen.message = n > 0 ? "Pack: " + String (n) + " files in " + dir.getFileName() : String ("Could not save - pick a folder");
+        sfxScreen.repaint();
+    };
+    for (auto* b : { &generate, &mutate, &play, &back, &saveGame, &saveAsB, &folderB, &packB })
     {
         addAndMakeVisible (*b);
         sfxParts.push_back (b);
@@ -411,9 +419,9 @@ void CryptEditor::paint (Graphics& g)
         lk::pixelText (g, "chord", 510.0f, 318.0f, 2.0f, lk::boneDim);
         lk::pixelText (g, "play", 510.0f, 368.0f, 2.0f, lk::boneDim);
         lk::pixelText (g, "speed", 510.0f, 418.0f, 2.0f, lk::boneDim);
-        lk::pixelText (g, "one key = a dark chord.", 510.0f, 486.0f, 2.0f, lk::boneDim.withAlpha (0.7f));
-        lk::pixelText (g, "1/64 + up = the old", 510.0f, 506.0f, 2.0f, lk::boneDim.withAlpha (0.7f));
-        lk::pixelText (g, "buzzing console chord", 510.0f, 526.0f, 2.0f, lk::boneDim.withAlpha (0.7f));
+        lk::pixelText (g, "one key = a chord", 510.0f, 486.0f, 2.0f, lk::boneDim.withAlpha (0.7f));
+        lk::pixelText (g, "1/64 + up = the", 510.0f, 506.0f, 2.0f, lk::boneDim.withAlpha (0.7f));
+        lk::pixelText (g, "old console buzz", 510.0f, 526.0f, 2.0f, lk::boneDim.withAlpha (0.7f));
     }
     else
     {
@@ -469,6 +477,7 @@ void CryptEditor::resized()
     saveGame.setBounds (334, 456, 240, 42);
     saveAsB.setBounds (584, 456, 180, 42);
     folderB.setBounds (774, 456, 180, 42);
+    packB.setBounds (334, 504, 300, 24);
     for (int i = 0; i < historyButtons.size(); ++i) historyButtons[i]->setBounds (420 + i * 92, 558, 88, 26);
 }
 

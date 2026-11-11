@@ -250,6 +250,19 @@ File CryptProcessor::saveSfx (const File& file)
     return tomb::saveWav (b, 44100.0, target) ? target : File();
 }
 
+File CryptProcessor::makePack()
+{
+    const auto dir = sfxFolder.getChildFile ("Crypt pack " + Time::getCurrentTime().formatted ("%Y-%m-%d %H%M%S"));
+    for (int k = 0; k < (int) tomb::Kind::count; ++k)
+        for (int v = 1; v <= 3; ++v)
+        {
+            const auto s = tomb::generate ((tomb::Kind) k, ++sfxSeed * 2654435761u, sfxDarkness);
+            const auto b = tomb::render (s, 44100.0, sfxPitch, sfxLength);
+            tomb::saveWav (b, 44100.0, dir.getChildFile (tomb::kindFileName ((tomb::Kind) k) + "_" + String (v).paddedLeft ('0', 2) + ".wav"));
+        }
+    return dir;
+}
+
 //==============================================================================
 void CryptProcessor::getStateInformation (MemoryBlock& dest)
 {

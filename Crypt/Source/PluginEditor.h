@@ -85,7 +85,7 @@ private:
     tomb::look::PixelButton generate { "Generate", tomb::look::ember }, mutate { "Mutate", tomb::look::violet },
                              play { "Play", tomb::look::poison }, back { "Back", tomb::look::boneDim },
                              saveGame { "Save to game", tomb::look::flame }, saveAsB { "Save as...", tomb::look::bone },
-                             folderB { "Folder...", tomb::look::boneDim };
+                             folderB { "Folder...", tomb::look::boneDim }, packB { "Make a whole pack (14 x 3)", tomb::look::ember };
     SfxKnob darkness { "Darkness", 0.0f, 1.0f, 0.5f, [] (float v) { return juce::String (juce::roundToInt (v * 100.0f)) + "%"; }, tomb::look::violet },
             pitch { "Pitch", -12.0f, 12.0f, 0.0f, [] (float v) { const int s = juce::roundToInt (v); return (s > 0 ? "+" : "") + juce::String (s) + " st"; }, tomb::look::poison },
             length { "Length", 0.5f, 2.0f, 1.0f, [] (float v) { return "x" + juce::String (v, 2); }, tomb::look::flame };

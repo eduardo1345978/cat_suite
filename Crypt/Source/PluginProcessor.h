@@ -73,6 +73,8 @@ public:
     void playPreview (juce::AudioBuffer<float>);
     /** Saves the current effect: into the game folder as "<kind>_NN.wav" (or to `file`). Returns the file or {}. */
     juce::File saveSfx (const juce::File& file = {});
+    /** A whole pack for the game: every kind, 3 of each, into a new folder in the game folder. Returns it. */
+    juce::File makePack();
     std::atomic<float> previewPos { -1.0f };          // 0..1 while the preview plays (for the screen)
     std::atomic<float> level { 0.0f };
 
