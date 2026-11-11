@@ -10,12 +10,19 @@ set "LOG=%~dp0build_log.txt"
 
 rem How much of the computer to use: build_and_install.bat 50  (or pick below)
 set "PCT=%~1"
-if "%PCT%"=="" (
-    echo How much CPU should the build use? You can keep using the PC with less.
-    echo   1 = 25%%   2 = 50%%   3 = 75%%   4 = 100%% ^(fastest^)
-    choice /c 1234 /n /t 15 /d 2 /m "Pick 1-4 (in 15 s it takes 2 = 50%%): "
-    if errorlevel 4 (set "PCT=100") else if errorlevel 3 (set "PCT=75") else if errorlevel 2 (set "PCT=50") else (set "PCT=25")
-)
+if not "%PCT%"=="" goto :havepct
+echo How much CPU should the build use? With less you can keep using the PC.
+echo   1 = 25%%    2 = 50%%    3 = 75%%    4 = 100%% (fastest)
+choice /c 1234 /n /t 15 /d 2 /m "Pick 1-4 (after 15 s it takes 2 = 50%%): "
+set "PCT=25"
+if errorlevel 2 set "PCT=50"
+if errorlevel 3 set "PCT=75"
+if errorlevel 4 set "PCT=100"
+:havepct
+rem only numbers 1..100
+set /a PCT=%PCT% 2>nul
+if %PCT% LSS 1 set "PCT=50"
+if %PCT% GTR 100 set "PCT=100"
 set /a JOBS=%NUMBER_OF_PROCESSORS% * %PCT% / 100
 if %JOBS% LSS 1 set "JOBS=1"
 echo Using %JOBS% of %NUMBER_OF_PROCESSORS% CPU threads (%PCT%%%), at low priority.
@@ -26,8 +33,10 @@ echo === Configure === > "%LOG%"
 
 echo === Build === >> "%LOG%"
 echo Compiling...
-rem low priority: the PC stays usable; -- /m:N limits MSBuild, /p:CL_MPCount=1 stops each compiler from taking every core
-start "" /b /wait /belownormal "%CMAKE%" --build build --config Release --parallel %JOBS% -- /p:CL_MPCount=1 >> "%LOG%" 2>&1
+rem JOBS files at once: MSBuild builds JOBS projects side by side and _CL_=/MP1 makes each compiler use one
+rem thread (JUCE asks for /MP = every core, the _CL_ options come last and win); low priority keeps the PC usable
+set "_CL_=/MP1"
+start "" /b /wait /belownormal "%CMAKE%" --build build --config Release --parallel %JOBS% >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
 
 echo === Tests === >> "%LOG%"
