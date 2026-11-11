@@ -20,7 +20,7 @@ concurrency:
 jobs:
   windows:
     runs-on: windows-latest
-    timeout-minutes: 120
+    timeout-minutes: 240   # 21 plug-ins + 21 Pro versions + apps: about 2 h 15 min
 
     steps:
       - name: Get the code
