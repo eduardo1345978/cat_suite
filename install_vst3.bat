@@ -17,6 +17,9 @@ call :fx Molten
 call :fx Swarm
 call :fx Vortex
 call :fx Negative
+call :fx Crypt
+set "SRC=build\CryptFX\CryptFX_artefacts\Release\VST3\Crypt-FX.vst3"
+if exist "%SRC%" (xcopy /E /I /Y "%SRC%" "%DEST%\Crypt-FX.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Crypt-FX >> "%LOG%") else (echo NOT BUILT: Crypt-FX >> "%LOG%")
 echo. >> "%LOG%"
 echo Apps to %APPS% >> "%LOG%"
 call :app CatHub Cat-Hub.exe

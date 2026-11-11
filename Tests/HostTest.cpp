@@ -1947,6 +1947,53 @@ void testVortex()
     }
 }
 
+/** Crypt: an instrument that plays; Crypt FX: an effect that turns a sine into steps. */
+void testCrypt()
+{
+    std::cout << "\n== Crypt / Crypt FX ==" << std::endl;
+    auto syn = loadPlugin (CRYPT_VST3);
+    if (syn == nullptr) { ++failures; return; }
+    check (syn->getPluginDescription().isInstrument && syn->getTotalNumOutputChannels() == 2, "Crypt is a stereo instrument");
+    check (syn->getNumPrograms() == 20 && syn->getProgramName (0) == "Crypt Lead", "Crypt has its 20 presets");
+    for (int prog : { 0, 2, 7, 11 })
+    {
+        syn->setCurrentProgram (prog);
+        syn->prepareToPlay (sampleRate, blockSize);
+        juce::AudioBuffer<float> audio (2, blockSize);
+        float peakLevel = 0.0f;
+        bool finite = true;
+        for (int b = 0; b < 150; ++b)
+        {
+            juce::MidiBuffer midi;
+            if (b == 0) midi.addEvent (juce::MidiMessage::noteOn (1, 57, 0.8f), 0);
+            if (b == 100) midi.addEvent (juce::MidiMessage::noteOff (1, 57), 0);
+            audio.clear();
+            syn->processBlock (audio, midi);
+            peakLevel = juce::jmax (peakLevel, audio.getMagnitude (0, blockSize));
+            for (int i = 0; i < blockSize; ++i) finite &= std::isfinite (audio.getSample (0, i)) && std::isfinite (audio.getSample (1, i));
+        }
+        check (finite && peakLevel > 0.01f && peakLevel <= 1.0f, "Crypt '" + syn->getProgramName (prog) + "' plays (peak " + juce::String (peakLevel, 2) + ")");
+        syn->releaseResources();
+    }
+    auto fx = loadPlugin (CRYPTFX_VST3);
+    if (fx == nullptr) { ++failures; return; }
+    check (! fx->getPluginDescription().isInstrument && fx->getTotalNumInputChannels() == 2, "Crypt FX is a stereo effect");
+    fx->setCurrentProgram (5);      // Broken Cartridge: 3 bits
+    fx->prepareToPlay (sampleRate, blockSize);
+    juce::AudioBuffer<float> audio (2, blockSize);
+    float peakLevel = 0.0f;
+    double ph = 0.0;
+    for (int b = 0; b < 100; ++b)
+    {
+        for (int i = 0; i < blockSize; ++i) { const float x = 0.5f * (float) std::sin (ph); ph += 0.03; audio.setSample (0, i, x); audio.setSample (1, i, x); }
+        juce::MidiBuffer midi;
+        fx->processBlock (audio, midi);
+        peakLevel = juce::jmax (peakLevel, audio.getMagnitude (0, blockSize));
+    }
+    check (peakLevel > 0.01f && peakLevel <= 1.0f, "Crypt FX lets the sound through, crushed (peak " + juce::String (peakLevel, 2) + ")");
+    fx->releaseResources();
+}
+
 /** Meow-Cat: loads as a VST3 instrument, a note meows, a hard note hisses, a held note in PURR mode purrs. */
 void testMeowCat()
 {
@@ -2032,6 +2079,7 @@ int main()
     testNegative();
     testVortex();
     testMeowCat();
+    testCrypt();
 
     std::cout << "\n" << (failures == 0 ? "ALL TESTS PASSED" : juce::String (failures) + " TEST(S) FAILED") << std::endl;
     return failures == 0 ? 0 : 1;
