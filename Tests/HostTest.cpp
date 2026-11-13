@@ -1947,6 +1947,33 @@ void testVortex()
     }
 }
 
+/** Poly Board: a stereo effect; every preset passes a saw through, clean. */
+void testPolyBoard()
+{
+    std::cout << "\n== Poly Board ==" << std::endl;
+    auto fx = loadPlugin (POLYBOARD_VST3);
+    if (fx == nullptr) { ++failures; return; }
+    check (! fx->getPluginDescription().isInstrument && fx->getTotalNumInputChannels() == 2, "Poly Board is a stereo effect");
+    check (fx->getNumPrograms() == 12, "Poly Board has its 12 presets");
+    for (int prog : { 0, 1, 9 })
+    {
+        fx->setCurrentProgram (prog);
+        fx->prepareToPlay (sampleRate, blockSize);
+        juce::AudioBuffer<float> audio (2, blockSize);
+        float pk = 0.0f;
+        double ph = 0.0;
+        for (int b = 0; b < 100; ++b)
+        {
+            for (int i = 0; i < blockSize; ++i) { const float x = (float) (0.4 * (2.0 * std::fmod (ph, 1.0) - 1.0)); ph += 110.0 / sampleRate; audio.setSample (0, i, x); audio.setSample (1, i, x); }
+            juce::MidiBuffer midi;
+            fx->processBlock (audio, midi);
+            pk = juce::jmax (pk, audio.getMagnitude (0, blockSize));
+        }
+        check (pk > 0.01f && pk <= 1.0f, "Poly Board '" + fx->getProgramName (prog) + "' passes the sound (peak " + juce::String (pk, 2) + ")");
+        fx->releaseResources();
+    }
+}
+
 /** Crypt: an instrument that plays; Crypt FX: an effect that turns a sine into steps. */
 void testCrypt()
 {
@@ -2080,6 +2107,7 @@ int main()
     testVortex();
     testMeowCat();
     testCrypt();
+    testPolyBoard();
 
     std::cout << "\n" << (failures == 0 ? "ALL TESTS PASSED" : juce::String (failures) + " TEST(S) FAILED") << std::endl;
     return failures == 0 ? 0 : 1;

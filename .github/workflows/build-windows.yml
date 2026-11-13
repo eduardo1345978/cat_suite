@@ -36,7 +36,7 @@ jobs:
         run: cmake -B build -A x64 -DCAT_BUILD_TESTS=ON -DCAT_PLUGIN_FORMATS=VST3 -DCAT_SOUND_STANDALONE=ON -DCAT_COMMIT=${{ github.sha }}
 
       - name: Build all plug-ins, the sound apps and the test host
-        run: cmake --build build --config Release --parallel --target CatSuiteHostTest PhaseCat_VST3 HumCat_VST3 GlitchCat_VST3 Molten_VST3 Swarm_VST3 Negative_VST3 Vortex_VST3 MeowCat_VST3 Crypt_VST3 CryptFX_VST3 SingCat_Standalone TalkCat_Standalone GlideCat_Standalone LifeCat_Standalone MuseCat_Standalone MuseCat_VST3 Negative_Standalone CatHub CatLoop CatOcean CatBox CatSetup ChordCatPro_VST3 PattCatPro_VST3 BendCatPro_VST3 DrumCatPro_VST3 OrbitCatPro_VST3 SingCatPro_VST3 BassCatPro_VST3 GlideCatPro_VST3 TalkCatPro_VST3 LifeCatPro_VST3 MuseCatPro_VST3 EchoCatPro_VST3 MicroCatPro_VST3 PhaseCatPro_VST3 HumCatPro_VST3 GlitchCatPro_VST3 MoltenPro_VST3 SwarmPro_VST3 VortexPro_VST3 MeowCatPro_VST3 CryptPro_VST3 CryptFXPro_VST3 NegativePro_VST3
+        run: cmake --build build --config Release --parallel --target CatSuiteHostTest PhaseCat_VST3 HumCat_VST3 GlitchCat_VST3 Molten_VST3 Swarm_VST3 Negative_VST3 Vortex_VST3 MeowCat_VST3 Crypt_VST3 CryptFX_VST3 PolyBoard_VST3 SingCat_Standalone TalkCat_Standalone GlideCat_Standalone LifeCat_Standalone MuseCat_Standalone MuseCat_VST3 Negative_Standalone PolyBoard_Standalone CatHub CatLoop CatOcean CatBox CatSetup ChordCatPro_VST3 PattCatPro_VST3 BendCatPro_VST3 DrumCatPro_VST3 OrbitCatPro_VST3 SingCatPro_VST3 BassCatPro_VST3 GlideCatPro_VST3 TalkCatPro_VST3 LifeCatPro_VST3 MuseCatPro_VST3 EchoCatPro_VST3 MicroCatPro_VST3 PhaseCatPro_VST3 HumCatPro_VST3 GlitchCatPro_VST3 MoltenPro_VST3 SwarmPro_VST3 VortexPro_VST3 MeowCatPro_VST3 CryptPro_VST3 CryptFXPro_VST3 PolyBoardPro_VST3 NegativePro_VST3
 
       - name: Run the tests
         run: build\Tests\CatSuiteHostTest_artefacts\Release\CatSuiteHostTest.exe
@@ -56,7 +56,7 @@ jobs:
               New-Item -ItemType Directory $to -Force | Out-Null
               Copy-Item $_.FullName "$to\" -Recurse; Write-Host "packed $($_.Name) -> $to"
             }
-          if ((Get-ChildItem "$pkg\VST3 Pro" -Directory).Count -lt 23) { throw "Pro versions missing" }
+          if ((Get-ChildItem "$pkg\VST3 Pro" -Directory).Count -lt 24) { throw "Pro versions missing" }
           Copy-Item packaging\Install-Cat-Suite.bat $pkg
           New-Item -ItemType Directory -Force "$pkg\MTS-ESP" | Out-Null
           Copy-Item ThirdParty\MTS-ESP\libMTS\Win\libMTSWin_v1.03.exe "$pkg\MTS-ESP\"
@@ -68,12 +68,12 @@ jobs:
           Copy-Item licenses "$pkg\licenses" -Recurse
           Compress-Archive -Path "$pkg\*" -DestinationPath Cat-Suite-Windows.zip -Force
           $count = (Get-ChildItem "$pkg\VST3" -Directory).Count
-          if ($count -lt 23) { throw "Only $count plug-ins were packed" }
+          if ($count -lt 24) { throw "Only $count plug-ins were packed" }
 
           # Only the instruments that make sound: standalone apps + their VST3s
           $snd = "pkg\Cat-Sound-Apps"
           New-Item -ItemType Directory "$snd\Apps", "$snd\VST3" -Force | Out-Null
-          foreach ($p in @("SingCat:Sing-Cat", "TalkCat:Talk-Cat", "GlideCat:Glide-Cat", "LifeCat:Life-Cat", "MuseCat:Muse-Cat", "Negative:Negative")) {
+          foreach ($p in @("SingCat:Sing-Cat", "TalkCat:Talk-Cat", "GlideCat:Glide-Cat", "LifeCat:Life-Cat", "MuseCat:Muse-Cat", "Negative:Negative", "PolyBoard:Poly-Board")) {
             $t, $n = $p.Split(":")
             Copy-Item "build\$t\${t}_artefacts\Release\Standalone\$n.exe" "$snd\Apps\"
             Copy-Item "$pkg\VST3\$n.vst3" "$snd\VST3\" -Recurse

@@ -1,6 +1,6 @@
 # Cat Suite
 
-**Free music plug-ins and apps, each with its own cat.** Chords, patterns, drums, bass lines, choirs, singers, synths, tunings, granular clouds, lava, endless risers, photos you can hear and a choir of cats: 21 plug-ins (VST3) for any DAW (Cubase, FL Studio, Ableton, Reaper, Bitwig, Studio One ...), plus apps that jam on their own.
+**Free music plug-ins and apps, each with its own cat.** Chords, patterns, drums, bass lines, choirs, singers, synths, tunings, granular clouds, lava, endless risers, photos you can hear and a choir of cats: 24 plug-ins (VST3) for any DAW (Cubase, FL Studio, Ableton, Reaper, Bitwig, Studio One ...), plus apps that jam on their own.
 
 [![Windows](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-windows.yml/badge.svg)](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-windows.yml)
 [![Mac](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-mac.yml/badge.svg)](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-mac.yml)
@@ -14,7 +14,7 @@
 | | | |
 |---|---|---|
 | **Windows 10 / 11** | **[Cat-Suite-Setup.exe](https://github.com/eduardo1345978/cat_suite/releases/latest/download/Cat-Suite-Setup.exe)** | installs and updates everything (plug-ins + apps) |
-| **macOS 11+** (Apple Silicon and Intel) | **[Cat-Suite-Mac.zip](https://github.com/eduardo1345978/cat_suite/releases/latest/download/Cat-Suite-Mac.zip)** | all 21 plug-ins, *Install Cat Suite.command* |
+| **macOS 11+** (Apple Silicon and Intel) | **[Cat-Suite-Mac.zip](https://github.com/eduardo1345978/cat_suite/releases/latest/download/Cat-Suite-Mac.zip)** | all 24 plug-ins, *Install Cat Suite.command* |
 | **Linux** (64-bit, 2022+) | **[Cat-Suite-Linux.tar.gz](https://github.com/eduardo1345978/cat_suite/releases/latest/download/Cat-Suite-Linux.tar.gz)** | all plug-ins + apps, `./install.sh` |
 
 Step by step, the other downloads and what to do when Windows warns: **[Install](docs/Install.md)**. Then **[Using it in your DAW](docs/DAW.md)**.
@@ -70,6 +70,7 @@ Step by step, the other downloads and what to do when Windows warns: **[Install]
 </tr>
 <tr>
 <td width="33%" valign="top"><a href="docs/plugins/Vortex.md"><img src="docs/screenshots/vortex.jpg" alt="Vortex"></a><br><b><a href="docs/plugins/Vortex.md">Vortex</a></b><br><sub>The sound rises (or falls) forever: an endless Shepard spiral.</sub></td>
+<td width="33%" valign="top"><a href="docs/plugins/Poly-Board.md"><img src="docs/screenshots/polyboard.jpg" alt="Poly Board"></a><br><b><a href="docs/plugins/Poly-Board.md">Poly Board</a></b><br><sub>A pedalboard for your synth: 7 boutique pedals in any order, a tuner, MIDI footswitch.</sub></td>
 </tr>
 </table>
 

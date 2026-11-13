@@ -32,6 +32,7 @@ const std::vector<Item>& catalog()
         { "Swarm",      "Swarm",      "The sound becomes living star dust", Kind::Plugin, 0xffb9a6ff, false, false, false, true },
         { "Vortex",     "Vortex",     "The sound rises (or falls) forever", Kind::Plugin, 0xff5ef0ff, false, false, false, true },
         { "Negative",   "Negative",   "A photo you can hear",               Kind::Plugin, 0xffe8e6e1 },
+        { "Poly-Board", "Poly Board",  "A pedalboard for your synth",        Kind::Plugin, 0xffd35400, false, false, false, true },
         { "Crypt",      "Crypt",      "Dark chip music + game sound effects", Kind::Plugin, 0xffff7a2e },
         { "Crypt-FX",   "Crypt FX",   "Any sound into dark 8-bit",          Kind::Plugin, 0xff7dff9a },
         { "Meow-Cat",   "Meow-Cat",   "Every note is a cat",                Kind::Plugin, 0xffff6fae, false, false, false, true },
@@ -55,6 +56,7 @@ const std::vector<Item>& catalog()
         { "Swarm Pro", "Swarm Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffb9a6ff, false, true },
         { "Vortex Pro", "Vortex Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xff5ef0ff, false, true },
         { "Negative Pro", "Negative Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffe8e6e1, false, true },
+        { "Poly-Board Pro", "Poly Board Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffd35400, false, true },
         { "Crypt Pro", "Crypt Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffff7a2e, false, true },
         { "Crypt-FX Pro", "Crypt FX Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xff7dff9a, false, true },
         { "Meow-Cat Pro", "Meow-Cat Pro", "Every parameter, exact numbers, meters, A / B", Kind::Plugin, 0xffff6fae, false, true },
@@ -67,6 +69,7 @@ const std::vector<Item>& catalog()
         { "app:Glide-Cat", "Glide-Cat app", "The glide synth on its own",      Kind::App, 0xffff9c3a, true, false, true },
         { "app:Life-Cat",  "Life-Cat app",  "Watch the ecosystem play",        Kind::App, 0xff5cffd6, true, false, true },
         { "app:Muse-Cat",  "Muse-Cat app",  "Write songs without a DAW",      Kind::App, 0xff4fd1ff, true, false, true },
+        { "app:Poly-Board", "Poly Board app", "Pedals for your synth, live (no DAW)", Kind::App, 0xffd35400, true, false, false, true },
         { "app:Negative",  "Negative app",  "Photos to sound, sounds to pictures", Kind::App, 0xffe8e6e1, true, false, true },
         { mtsId, "MTS-ESP library", "Lets Micro-Cat tune Vital, Surge, Serum ... (by ODDSound)", Kind::Extra, 0xffb5a98e },
     };

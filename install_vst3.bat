@@ -26,6 +26,9 @@ call :app CatHub Cat-Hub.exe
 call :app CatOcean Cat-Ocean.exe
 call :app MuseCat Standalone\Muse-Cat.exe
 call :app Negative Standalone\Negative.exe
+call :app PolyBoard Standalone\Poly-Board.exe
+set "SRC=build\PolyBoard\PolyBoard_artefacts\Release\VST3\Poly-Board.vst3"
+if exist "%SRC%" (xcopy /E /I /Y "%SRC%" "%DEST%\Poly-Board.vst3" >> "%LOG%" 2>&1 || echo COPY FAILED: Poly-Board >> "%LOG%") else (echo NOT BUILT: Poly-Board >> "%LOG%")
 call :app CatLoop Cat-Loop.exe
 copy /Y "packaging\Cat-Ocean-YouTube-Description.txt" "%APPS%\" >> "%LOG%" 2>&1
 echo INSTALL FINISHED >> "%LOG%"

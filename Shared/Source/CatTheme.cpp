@@ -151,6 +151,12 @@ namespace
             t.button = ButtonStyle::Glow; t.corner = 12.0f;
             font (t, MichromaRegular_ttf, MichromaRegular_ttfSize, 0.82f);
         }
+        else if (p.startsWith ("poly"))       // Poly Board: a boutique pedalboard - warm dark brown, cream, script names
+        {
+            t = make ("Boutique", 0xff1a1612, 0xff221d18, 0xff2a241e, 0xff332c25, 0xff3a332b, 0xfffff8e8, 0xff8a8072, 0xffd35400);
+            t.button = ButtonStyle::Glow; t.corner = 8.0f;
+            font (t, PlayfairDisplayBoldItalic_ttf, PlayfairDisplayBoldItalic_ttfSize, 1.0f);
+        }
         else if (p.startsWith ("meow"))       // a rooftop at night: plum sky, moonlight, a pink neon sign
         {
             t = make ("Rooftop Night", 0xff140c24, 0xff1c1230, 0xff24173b, 0xff2e1d48, 0xff3a2850, 0xfffff1e0, 0xffb39fb8, 0xffff6fae);

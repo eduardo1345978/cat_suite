@@ -76,11 +76,11 @@ jobs:
             echo "packed $(basename "$b")"
           done
           pros=$(find "$pkg/VST3 Pro" -maxdepth 1 -type d -name "*.vst3" | wc -l)
-          if [ "$pros" -lt 23 ]; then echo "::error::Only $pros Pro versions were packed"; exit 1; fi
+          if [ "$pros" -lt 24 ]; then echo "::error::Only $pros Pro versions were packed"; exit 1; fi
           count=$(find "$pkg/VST3" -maxdepth 1 -type d -name "*.vst3" | wc -l)
-          if [ "$count" -lt 23 ]; then echo "::error::Only $count plug-ins were packed"; exit 1; fi
+          if [ "$count" -lt 24 ]; then echo "::error::Only $count plug-ins were packed"; exit 1; fi
           # the sound apps
-          for p in SingCat:Sing-Cat TalkCat:Talk-Cat GlideCat:Glide-Cat LifeCat:Life-Cat MuseCat:Muse-Cat Negative:Negative; do
+          for p in SingCat:Sing-Cat TalkCat:Talk-Cat GlideCat:Glide-Cat LifeCat:Life-Cat MuseCat:Muse-Cat Negative:Negative PolyBoard:Poly-Board; do
             t=${p%%:*}; n=${p##*:}
             cp "build/$t/${t}_artefacts/Release/Standalone/$n" "$pkg/Apps/"
           done
