@@ -1,0 +1,6 @@
+title: Cat Suite
+description: Free VST3 plug-ins and music apps for any DAW - MIDI generators, instruments, effects, a looper and dark chiptune with sound effects for games. Windows, Mac and Linux.
+theme: jekyll-theme-cayman
+plugins:
+  - jekyll-seo-tag
+  - jekyll-sitemap
