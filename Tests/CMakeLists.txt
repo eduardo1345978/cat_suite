@@ -30,15 +30,14 @@ target_compile_definitions(CatSuiteHostTest PRIVATE
     VORTEX_VST3="$<TARGET_FILE_DIR:Vortex_VST3>/../../../Vortex.vst3"
     CRYPT_VST3="$<TARGET_FILE_DIR:Crypt_VST3>/../../../Crypt.vst3"
     CRYPTFX_VST3="$<TARGET_FILE_DIR:CryptFX_VST3>/../../../Crypt-FX.vst3"
-    POLYBOARD_VST3="$<TARGET_FILE_DIR:PolyBoard_VST3>/../../../Poly-Board.vst3"
-    MEOWCAT_VST3="$<TARGET_FILE_DIR:MeowCat_VST3>/../../../Meow-Cat.vst3")
+    POLYBOARD_VST3="$<TARGET_FILE_DIR:PolyBoard_VST3>/../../../Poly-Board.vst3")
 
 target_link_libraries(CatSuiteHostTest PRIVATE
     juce::juce_audio_processors
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 
-add_dependencies(CatSuiteHostTest ChordCat_VST3 PattCat_VST3 BendCat_VST3 DrumCat_VST3 OrbitCat_VST3 SingCat_VST3 BassCat_VST3 GlideCat_VST3 TalkCat_VST3 LifeCat_VST3 EchoCat_VST3 MicroCat_VST3 HumCat_VST3 GlitchCat_VST3 Molten_VST3 Swarm_VST3 Negative_VST3 Vortex_VST3 MeowCat_VST3 Crypt_VST3 CryptFX_VST3 PolyBoard_VST3)
+add_dependencies(CatSuiteHostTest ChordCat_VST3 PattCat_VST3 BendCat_VST3 DrumCat_VST3 OrbitCat_VST3 SingCat_VST3 BassCat_VST3 GlideCat_VST3 TalkCat_VST3 LifeCat_VST3 EchoCat_VST3 MicroCat_VST3 HumCat_VST3 GlitchCat_VST3 Molten_VST3 Swarm_VST3 Negative_VST3 Vortex_VST3 Crypt_VST3 CryptFX_VST3 PolyBoard_VST3)
 
 if(MSVC)
     target_compile_options(CatSuiteHostTest PRIVATE /utf-8)

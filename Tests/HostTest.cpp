@@ -2021,36 +2021,6 @@ void testCrypt()
     fx->releaseResources();
 }
 
-/** Meow-Cat: loads as a VST3 instrument, a note meows, a hard note hisses, a held note in PURR mode purrs. */
-void testMeowCat()
-{
-    std::cout << "\n== Meow-Cat ==" << std::endl;
-    auto cat = loadPlugin (MEOWCAT_VST3);
-    if (cat == nullptr) { ++failures; return; }
-    check (cat->getPluginDescription().isInstrument && cat->getTotalNumOutputChannels() == 2 && cat->acceptsMidi(), "Meow-Cat is a stereo instrument");
-    check (cat->getNumPrograms() == 22 && cat->getProgramName (0) == "House Cat", "Meow-Cat has its 22 presets");
-    for (int pass = 0; pass < 3; ++pass)
-    {
-        cat->setCurrentProgram (pass == 0 ? 0 : pass == 1 ? 8 : 12);      // House Cat, Hiss!, Purring on Your Lap
-        cat->prepareToPlay (sampleRate, blockSize);
-        juce::AudioBuffer<float> audio (2, blockSize);
-        float peakLevel = 0.0f;
-        bool finite = true;
-        for (int b = 0; b < 200; ++b)
-        {
-            juce::MidiBuffer midi;
-            if (b == 0) midi.addEvent (juce::MidiMessage::noteOn (1, 69, pass == 1 ? 1.0f : 0.7f), 0);
-            if (b == 150) midi.addEvent (juce::MidiMessage::noteOff (1, 69), 0);
-            audio.clear();
-            cat->processBlock (audio, midi);
-            peakLevel = juce::jmax (peakLevel, audio.getMagnitude (0, blockSize));
-            for (int i = 0; i < blockSize; ++i) finite &= std::isfinite (audio.getSample (0, i)) && std::isfinite (audio.getSample (1, i));
-        }
-        const char* what[] = { "a note meows", "a hard note hisses", "a held note purrs" };
-        check (finite && peakLevel > 0.01f && peakLevel <= 1.0f, juce::String ("Meow-Cat: ") + what[pass] + " (peak " + juce::String (peakLevel, 2) + ")");
-        cat->releaseResources();
-    }
-}
 
 /** Negative: loads as a VST3 instrument; a MIDI note plays the photo. */
 void testNegative()
@@ -2105,7 +2075,6 @@ int main()
     testSwarm();
     testNegative();
     testVortex();
-    testMeowCat();
     testCrypt();
     testPolyBoard();
 

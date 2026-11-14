@@ -157,13 +157,6 @@ namespace
             t.button = ButtonStyle::Glow; t.corner = 8.0f;
             font (t, PlayfairDisplayBoldItalic_ttf, PlayfairDisplayBoldItalic_ttfSize, 1.0f);
         }
-        else if (p.startsWith ("meow"))       // a rooftop at night: plum sky, moonlight, a pink neon sign
-        {
-            t = make ("Rooftop Night", 0xff140c24, 0xff1c1230, 0xff24173b, 0xff2e1d48, 0xff3a2850, 0xfffff1e0, 0xffb39fb8, 0xffff6fae);
-            t.knob = KnobStyle::Hardware; t.knobBody = juce::Colour (0xff24173b); t.knobRing = juce::Colour (0xff3a2850); t.knobPointer = t.accent;
-            t.button = ButtonStyle::Glow; t.corner = 14.0f;
-            font (t, ArchivoBlackRegular_ttf, ArchivoBlackRegular_ttfSize, 0.95f);
-        }
         else if (p.startsWith ("swarm"))      // deep space: black, nebula violet, star dust
         {
             t = make ("Deep Field", 0xff05050b, 0xff0b0b16, 0xff12121f, 0xff1a1a2a, 0xff2a2a40, 0xffe9e6f5, 0xff8f8aa8, 0xffb9a6ff);

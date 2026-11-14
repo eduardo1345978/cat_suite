@@ -51,7 +51,7 @@ int homeOf (const Item& i)
     if (i.kind == Kind::Extra) return Extras;
     if (i.pro) return ProVersions;
     static const StringArray fx { "Echo-Cat", "Molten", "Swarm", "Vortex", "Crypt-FX", "Poly-Board" };
-    static const StringArray inst { "Sing-Cat", "Glide-Cat", "Talk-Cat", "Life-Cat", "Muse-Cat", "Glitch-Cat", "Negative", "Meow-Cat", "Crypt" };
+    static const StringArray inst { "Sing-Cat", "Glide-Cat", "Talk-Cat", "Life-Cat", "Muse-Cat", "Glitch-Cat", "Negative", "Crypt" };
     if (fx.contains (i.id)) return Effect;
     if (inst.contains (i.id)) return Instrument;
     return Midi;
