@@ -1981,7 +1981,7 @@ void testCrypt()
     auto syn = loadPlugin (CRYPT_VST3);
     if (syn == nullptr) { ++failures; return; }
     check (syn->getPluginDescription().isInstrument && syn->getTotalNumOutputChannels() == 2, "Crypt is a stereo instrument");
-    check (syn->getNumPrograms() == 20 && syn->getProgramName (0) == "Crypt Lead", "Crypt has its 20 presets");
+    check (syn->getNumPrograms() == 31 && syn->getProgramName (0) == "Zone: Krypty", "Crypt has its 31 presets (the game zones first)");
     for (int prog : { 0, 2, 7, 11 })
     {
         syn->setCurrentProgram (prog);
