@@ -55,27 +55,28 @@ build/Tests/CatSuiteHostTest_artefacts/Release/CatSuiteHostTest
 
 ## Project layout
 
+The plug-ins are sorted into folders by what they do (the build folders keep the short names, e.g. `build/ChordCat`).
+
 ```
-CMakeLists.txt            suite root (JUCE fetch, three plug-ins, optional tests)
-cmake/                    JuceSetup.cmake, CatPlugin.cmake (shared juce_add_plugin settings)
-Shared/Source/            look & feel, scalable editor window, widgets with MIDI Learn, MIDI scheduler, host sync, MIDI export
-ChordCat/Source/          ChordFormulas, Scales, ChordEngine, ProgressionGenerator, PatternPlayer,
-                          FactoryPresets, PluginProcessor, PluginEditor
-PattCat/Source/           PattCatEngine, EuclideanGenerator, PatternGridUI, PluginProcessor, PluginEditor
-BendCat/Source/           BendCatEngine, MPEAllocator, ScalaParser, EnvelopeEditorUI, BendVisualizer,
-                          PluginProcessor, PluginEditor
-DrumCat/Source/           DrumCatEngine (style models + generator), PluginProcessor, PluginEditor
-OrbitCat/Source/          OrbitEngine (orbital model + presets), PluginProcessor, PluginEditor
-SingCat/Source/           VoiceModel (glottis + vocal tract + nose), TalkEngine (singers, casts, styles, stage, room),
-                          PluginProcessor (parameters, 54 presets), PluginEditor (vowel chart, stage with faces)
-BassCat/Source/           BassEngine (style models, chord analysis), PluginProcessor, PluginEditor (degree grid)
-TalkCat/Source/           Phonetics (EN / SK / JA / Cat -> syllables), Vocal (tract), VoiceEngine (singer, pitch model, harmonies, FX),
-                          Score (notes, lyrics, curves), PluginProcessor (score player, live), PluginEditor (piano roll, lanes, tabs)
-GlideCat/Source/          GlideSynth (voice leading, glides, autopilot, 2-layer voices, modulation), GlideFX (Ensemble, Prism, Rooms),
-                          PluginProcessor (parameters, 42 sound + 32 glide presets), PluginEditor (Glide View + tabs)
-Tests/                    headless VST3 host test
-docs/reference/           UI reference screenshots
+CMakeLists.txt            suite root (JUCE, every plug-in and app, optional tests)
+cmake/                    JuceSetup.cmake, CatPlugin.cmake (shared plug-in settings, Pro versions)
+Shared/Source/            look & feel, themes, scalable editor, widgets with MIDI Learn, MIDI scheduler, host sync, Pro panel
+
+midi/                     MIDI generators - they write notes for your synths
+  ChordCat PattCat BendCat DrumCat OrbitCat BassCat MicroCat PhaseCat HumCat
+instruments/              instruments - they make the sound
+  SingCat GlideCat TalkCat LifeCat MuseCat GlitchCat Negative Crypt
+effects/                  effects - for audio tracks
+  EchoCat Molten Swarm Vortex CryptFX PolyBoard
+apps/                     programs
+  CatHub (every Cat jamming)  CatLoop (live looper)  CatSetup (installer + updater)
+
+CatBox/ CatBoxPocket/ CatOcean/   the Cat Box hardware projects
+Tests/                    host test, per-plug-in checks, stress tests
+packaging/ tools/ docs/   installers, scripts, documentation
 ```
+
+Inside each plug-in folder: `Source/` (engine, PluginProcessor, PluginEditor), `CMakeLists.txt`, sometimes `Resources/`.
 
 ## How it works
 

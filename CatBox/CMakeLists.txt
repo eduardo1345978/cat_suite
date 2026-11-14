@@ -2,8 +2,8 @@
 juce_add_gui_app(CatBox
     PRODUCT_NAME "Cat-Box"
     COMPANY_NAME "Cat Suite"
-    ICON_BIG     "${CMAKE_CURRENT_SOURCE_DIR}/../CatHub/Resources/icon.png"
-    ICON_SMALL   "${CMAKE_CURRENT_SOURCE_DIR}/../CatHub/Resources/icon_small.png"
+    ICON_BIG     "${CMAKE_CURRENT_SOURCE_DIR}/../apps/CatHub/Resources/icon.png"
+    ICON_SMALL   "${CMAKE_CURRENT_SOURCE_DIR}/../apps/CatHub/Resources/icon_small.png"
     VERSION      2.0.0)
 
 target_sources(CatBox PRIVATE
@@ -36,20 +36,20 @@ target_sources(CatBox PRIVATE
     Source/BoxLink.cpp
     Source/LinkPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source/CatSounds.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../GlideCat/Source/GlideSynth.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../GlideCat/Source/GlideFX.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../GlideCat/Source/GlideData.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../OrbitCat/Source/OrbitEngine.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../SingCat/Source/ChoirEngine.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../SingCat/Source/VoiceModel.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../SingCat/Source/Lyrics.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../instruments/GlideCat/Source/GlideSynth.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../instruments/GlideCat/Source/GlideFX.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../instruments/GlideCat/Source/GlideData.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../midi/OrbitCat/Source/OrbitEngine.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../instruments/SingCat/Source/ChoirEngine.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../instruments/SingCat/Source/VoiceModel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../instruments/SingCat/Source/Lyrics.cpp)
 
 target_include_directories(CatBox PRIVATE
     Source
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/Source
-    ${CMAKE_CURRENT_SOURCE_DIR}/../GlideCat/Source
-    ${CMAKE_CURRENT_SOURCE_DIR}/../OrbitCat/Source
-    ${CMAKE_CURRENT_SOURCE_DIR}/../SingCat/Source)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../instruments/GlideCat/Source
+    ${CMAKE_CURRENT_SOURCE_DIR}/../midi/OrbitCat/Source
+    ${CMAKE_CURRENT_SOURCE_DIR}/../instruments/SingCat/Source)
 
 target_compile_features(CatBox PRIVATE cxx_std_20)
 if(MSVC)

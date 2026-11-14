@@ -2,7 +2,7 @@
 // sound-effect maker makes every kind (the same seed = the same sound), saves real .wav files with numbered names;
 // Crypt FX crushes to few levels and its MIX 0 is the dry sound.   CryptCheck --render <dir>  writes demo .wav files.
 #include "PluginProcessor.h"
-#include "../CryptFX/Source/PluginProcessor.h"
+#include "../effects/CryptFX/Source/PluginProcessor.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <cstdio>
 #include <set>
