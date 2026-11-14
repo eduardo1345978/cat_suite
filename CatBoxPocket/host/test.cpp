@@ -33,7 +33,7 @@ static std::vector<float> run (float secs, const float* in = nullptr) {
 }
 static float rms (const std::vector<float>& o, int a = 0, int b = -1) {
     if (b < 0) b = (int) o.size () / 2;
-    double s = 0; for (int i = a; i < b; ++i) s += (double) o[2 * i] * o[2 * i];
+    double s = 0; for (int i = a; i < b; ++i) s += (double) o[2 * (size_t) i] * o[2 * (size_t) i];
     return (float) std::sqrt (s / std::max (1, b - a));
 }
 // frequency by interpolated zero crossings of the left channel
@@ -49,11 +49,11 @@ static float freq (const std::vector<float>& o, int a, int b) {
 static float pitchAC (const std::vector<float>& o, int a) {
     const int N = 4096; double best = -1; int lag = 0;
     for (int L = SR / 2000; L < SR / 50; ++L) {
-        double s = 0; for (int i = 0; i < N; ++i) s += (double) o[2 * (a + i)] * o[2 * (a + i + L)];
+        double s = 0; for (int i = 0; i < N; ++i) s += (double) o[2 * (size_t) (a + i)] * o[2 * (size_t) (a + i + L)];
         if (s > best) { best = s; lag = L; }
     }
     // parabolic peak
-    auto ac = [&] (int L) { double s = 0; for (int i = 0; i < N; ++i) s += (double) o[2 * (a + i)] * o[2 * (a + i + L)]; return s; };
+    auto ac = [&] (int L) { double s = 0; for (int i = 0; i < N; ++i) s += (double) o[2 * (size_t) (a + i)] * o[2 * (size_t) (a + i + L)]; return s; };
     const double y0 = ac (lag - 1), y1 = ac (lag), y2 = ac (lag + 1);
     const double d = 0.5 * (y0 - y2) / (y0 - 2 * y1 + y2);
     return (float) (SR / (lag + d));
