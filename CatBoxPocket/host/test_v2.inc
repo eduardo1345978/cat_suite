@@ -12,7 +12,7 @@ static std::vector<int16_t> click (float hz = 200, int n = 2000, float amp = 0.5
     return s;
 }
 static int countOn (const std::vector<float>& o, float thr = 0.05f) { return (int) onsets (o, thr).size (); }
-static float rmsR (const std::vector<float>& o, int a, int b) { double s = 0; for (int i = a; i < b; ++i) s += o[2 * i + 1] * o[2 * i + 1]; return (float) std::sqrt (s / std::max (1, b - a)); }
+static float rmsR (const std::vector<float>& o, int a, int b) { double s = 0; for (int i = a; i < b; ++i) s += (double) o[2 * i + 1] * o[2 * i + 1]; return (float) std::sqrt (s / std::max (1, b - a)); }
 
 // a block device seen through a partition (for formatting a card with a partition table)
 struct Part : BlockDev {

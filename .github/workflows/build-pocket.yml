@@ -9,6 +9,9 @@ on:
       - '.github/workflows/build-pocket.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   pocket:
     name: Pocket (tests + Pico firmware)

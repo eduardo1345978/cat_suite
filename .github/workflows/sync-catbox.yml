@@ -20,6 +20,9 @@ on:
       - '.github/workflows/sync-catbox.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   sync:
     name: Copy Cat Box to cat-box

@@ -14,6 +14,9 @@ on:
       - '.github/workflows/build-catbox.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   raspberry-pi:
     name: Raspberry Pi (Linux ARM64)
