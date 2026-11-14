@@ -6,6 +6,7 @@ cat_add_synth_plugin(Crypt
     SOURCES
         Source/CryptDsp.cpp
         Source/CryptSynth.cpp
+        Source/CryptDark.cpp
         Source/CryptSfx.cpp
         Source/CryptLook.cpp
         Source/PluginProcessor.cpp

@@ -58,7 +58,7 @@ void Synth::noteOn (int note, float velocity)
     v.arpClock = 0.0; v.arpIndex = 0; v.arpDir = 1;
     v.age = clock;
     v.seed = clock * 2654435761u + (uint32_t) note;
-    if (! retrigger) { v.env = 0.0f; for (auto& o : v.osc) o.phase = 0.0; v.detuned.phase = 0.25; }
+    if (! retrigger) { v.env = 0.0f; for (auto& o : v.osc) o.phase = 0.0; v.detuned.phase = 0.25; v.bells = {}; }
 }
 
 void Synth::noteOff (int note)
@@ -111,6 +111,19 @@ float Synth::renderVoice (Voice& v) noexcept
     double semis = (double) (v.note + 12 * s.octave - 69) + (double) bend * 2.0;
     if (std::abs (s.sweep) > 0.001f) semis += (double) s.sweep * 24.0 * std::exp (-v.time / (0.02 + 0.25 * (1.0 - std::abs (s.sweep))));
     if (s.vibrato > 0.001f && v.time > 0.18) semis += (double) s.vibrato * 0.7 * std::sin (juce::MathConstants<double>::twoPi * 5.5 * (v.time - 0.18));
+    if (s.madness > 0.001f)
+    {
+        // MADNESS: each voice slowly drifts out of tune on its own (two slow waves that never line up)
+        const double off = (double) (v.seed % 1000u) * 0.001 * juce::MathConstants<double>::twoPi;
+        semis += (double) s.madness * (0.45 * std::sin (juce::MathConstants<double>::twoPi * 0.13 * v.time + off)
+                                     + 0.25 * std::sin (juce::MathConstants<double>::twoPi * 0.047 * v.time + 2.0 * off));
+    }
+    const float detune = juce::jmin (1.0f, s.detune + s.madness * 0.7f);
+    const bool bell = s.wave == Wave::FmBell;
+    auto tone = [&] (int slot, double hz)
+    {
+        return bell ? v.bells[(size_t) slot].tick (hz, sr, v.time, s.crack) : (slot == 5 ? v.detuned : v.osc[(size_t) slot]).tick (s.wave, hz, sr);
+    };
 
     const auto tones = chordIntervals (s.chord);
     const int count = (int) tones.size();
@@ -138,19 +151,19 @@ float Synth::renderVoice (Voice& v) noexcept
         }
         const int k = s.arp == Arp::Down && v.time < stepSecs ? count - 1 : v.arpIndex;
         const double hz = 440.0 * std::exp2 ((semis + tones[(size_t) k]) / 12.0);
-        out = v.osc[0].tick (s.wave, hz, sr);
-        if (s.detune > 0.001f) out = 0.6f * out + 0.4f * v.detuned.tick (s.wave, hz * std::exp2 (s.detune * 0.4 / 12.0), sr);
+        out = tone (0, hz);
+        if (detune > 0.001f) out = 0.6f * out + 0.4f * tone (5, hz * std::exp2 (detune * 0.4 / 12.0));
     }
     else
     {
         for (int k = 0; k < juce::jmin (count, 4); ++k)
         {
             const double hz = 440.0 * std::exp2 ((semis + tones[(size_t) k]) / 12.0);
-            out += v.osc[(size_t) k].tick (s.wave, hz, sr);
+            out += tone (k, hz);
         }
         out /= std::sqrt ((float) count);
-        if (s.detune > 0.001f)
-            out = 0.6f * out + 0.4f * v.detuned.tick (s.wave, 440.0 * std::exp2 ((semis + s.detune * 0.4) / 12.0), sr);
+        if (detune > 0.001f)
+            out = 0.6f * out + 0.4f * tone (5, 440.0 * std::exp2 ((semis + detune * 0.4) / 12.0));
     }
     if (s.sub > 0.001f)
         out += s.sub * 0.8f * v.osc[4].tick (Wave::Triangle, 440.0 * std::exp2 ((semis - 12.0) / 12.0), sr);

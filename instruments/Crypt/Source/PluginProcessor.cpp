@@ -52,6 +52,24 @@ AudioProcessorValueTreeState::ParameterLayout CryptProcessor::createLayout()
     f ("gloom", "Gloom", 0.0f, 1.0f, 0.25f, percent());
     f ("crypt", "Crypt", 0.0f, 1.0f, 0.35f, percent());
     f ("echo", "Echo", 0.0f, 1.0f, 0.15f, percent());
+    // the dark arts
+    f ("madness", "Madness", 0.0f, 1.0f, 0.0f, percent());
+    f ("crack", "Crack", 0.0f, 1.0f, 0.3f, percent());
+    f ("formant", "Choir", 0.0f, 1.0f, 0.0f, percent());
+    f ("vowel", "Vowel", 0.0f, 1.0f, 0.0f, AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int)
+        {
+            const char* n[] = { "A", "E", "I", "O", "U" };
+            const float x = v * 4.0f; const int a = jlimit (0, 4, roundToInt (x));
+            return std::abs (x - (float) a) < 0.15f ? String (n[a]) : String (n[jlimit (0, 4, (int) x)]) + "-" + n[jlimit (0, 4, (int) x + 1)];
+        }));
+    f ("vowelLfo", "Vowel LFO", 0.0f, 1.0f, 0.0f, percent());
+    f ("hiss", "Hiss", 0.0f, 1.0f, 0.0f, percent());
+    f ("wow", "Wow", 0.0f, 1.0f, 0.0f, percent());
+    f ("damp", "Damp", 0.0f, 1.0f, 0.0f, percent());
+    f ("drone", "Drone", 0.0f, 1.0f, 0.0f, AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int)
+        { return v < 0.005f ? String ("off") : String (roundToInt (v * 100.0f)) + "%"; }));
+    l.add (std::make_unique<AudioParameterChoice> (ParameterID { "droneNote", 1 }, "Drone Note", tomb::droneNoteNames(), 9));
+    f ("droneMove", "Drone Move", 0.0f, 1.0f, 0.3f, percent());
     f ("output", "Output", -12.0f, 12.0f, 0.0f, AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int)
         { return (v > 0.05f ? "+" : "") + String (v, 1) + " dB"; }));
     return l;
@@ -61,8 +79,30 @@ const std::vector<CryptProcessor::Preset>& CryptProcessor::presets()
 {
     // wave: 0 p12, 1 p25, 2 square, 3 tri, 4 organ, 5 bells, 6 ghost, 7 noise, 8 metal
     // chord: 0 single, 1 minor, 2 dim, 3 power, 4 phrygian, 5 octaves, 6 sus; arp: 0 at once, 1 up, 2 down, 3 updown, 4 random
-    // arpRate: 0 1/8, 1 1/16, 2 1/32, 3 1/64
+    // arpRate: 0 1/8, 1 1/16, 2 1/32, 3 1/64; wave 9 = FM Bell; droneNote 0 C .. 9 A .. 11 B
+    // the first 7 are the game's zones (turn MADNESS up for the mad version of the same zone)
     static const std::vector<Preset> list {
+        { "Zone: Krypty",              { { "wave", 4 }, { "chord", 1 }, { "arp", 0 }, { "attack", 0.4f }, { "sustain", 0.85f }, { "release", 0.6f }, { "detune", 0.3f },
+                                         { "drone", 0.5f }, { "droneNote", 9 }, { "droneMove", 0.2f }, { "crypt", 0.75f }, { "gloom", 0.45f }, { "echo", 0.2f } } },
+        { "Zone: Zatopene jaskyne",    { { "wave", 3 }, { "chord", 4 }, { "arp", 3 }, { "arpRate", 0 }, { "decay", 0.55f }, { "sustain", 0.4f }, { "release", 0.6f },
+                                         { "wow", 0.45f }, { "damp", 0.55f }, { "drone", 0.35f }, { "droneNote", 2 }, { "droneMove", 0.45f }, { "crypt", 0.8f }, { "echo", 0.45f }, { "gloom", 0.5f } } },
+        { "Zone: Kostena katedrala",   { { "wave", 6 }, { "chord", 1 }, { "arp", 0 }, { "attack", 0.5f }, { "sustain", 0.9f }, { "release", 0.7f }, { "detune", 0.4f }, { "vibrato", 0.3f },
+                                         { "formant", 0.85f }, { "vowel", 0.75f }, { "vowelLfo", 0.35f }, { "drone", 0.3f }, { "droneNote", 4 }, { "crypt", 0.95f }, { "gloom", 0.3f } } },
+        { "Zone: Zamrznute hrobky",    { { "wave", 9 }, { "crack", 0.25f }, { "octave", 1 }, { "chord", 6 }, { "arp", 1 }, { "arpRate", 0 }, { "decay", 0.8f }, { "sustain", 0.0f }, { "release", 0.8f },
+                                         { "hiss", 0.25f }, { "drone", 0.25f }, { "droneNote", 7 }, { "droneMove", 0.1f }, { "crypt", 0.85f }, { "echo", 0.4f }, { "gloom", 0.1f } } },
+        { "Zone: Masita hlbka",        { { "wave", 6 }, { "octave", -1 }, { "sub", 0.6f }, { "chord", 4 }, { "arp", 0 }, { "attack", 0.3f }, { "sustain", 0.8f }, { "release", 0.5f },
+                                         { "madness", 0.35f }, { "formant", 0.5f }, { "vowel", 1.0f }, { "vowelLfo", 0.7f }, { "drive", 0.35f }, { "drone", 0.55f }, { "droneNote", 1 }, { "droneMove", 0.7f },
+                                         { "crypt", 0.55f }, { "gloom", 0.6f } } },
+        { "Zone: Dedina",              { { "wave", 1 }, { "chord", 6 }, { "arp", 1 }, { "arpRate", 1 }, { "decay", 0.4f }, { "sustain", 0.5f }, { "vibrato", 0.2f },
+                                         { "hiss", 0.3f }, { "wow", 0.2f }, { "damp", 0.3f }, { "bits", 10.0f }, { "crypt", 0.25f }, { "echo", 0.15f }, { "gloom", 0.15f } } },
+        { "Zone: Boss",                { { "wave", 2 }, { "chord", 2 }, { "arp", 1 }, { "arpRate", 3 }, { "sustain", 0.8f }, { "sub", 0.5f }, { "drive", 0.5f }, { "bits", 7.0f },
+                                         { "madness", 0.25f }, { "drone", 0.45f }, { "droneNote", 0 }, { "droneMove", 0.9f }, { "crypt", 0.3f }, { "gloom", 0.2f } } },
+        { "Cracked Funeral Bell",      { { "wave", 9 }, { "crack", 0.85f }, { "octave", -1 }, { "decay", 0.9f }, { "sustain", 0.0f }, { "release", 0.9f }, { "crypt", 0.8f }, { "echo", 0.3f } } },
+        { "Monks Below",               { { "wave", 4 }, { "chord", 3 }, { "arp", 0 }, { "octave", -1 }, { "attack", 0.5f }, { "sustain", 0.9f }, { "release", 0.6f }, { "detune", 0.35f },
+                                         { "formant", 1.0f }, { "vowel", 0.75f }, { "vowelLfo", 0.5f }, { "crypt", 0.85f } } },
+        { "Found on a VHS",            { { "wave", 3 }, { "chord", 1 }, { "arp", 3 }, { "arpRate", 1 }, { "decay", 0.5f }, { "sustain", 0.5f }, { "hiss", 0.6f }, { "wow", 0.6f }, { "damp", 0.6f },
+                                         { "bits", 9.0f }, { "rate", 0.55f }, { "crypt", 0.4f } } },
+        { "Lost Mind",                 { { "wave", 6 }, { "chord", 1 }, { "arp", 0 }, { "attack", 0.35f }, { "sustain", 0.8f }, { "release", 0.6f }, { "madness", 0.9f }, { "crypt", 0.7f }, { "echo", 0.35f } } },
         { "Crypt Lead",          { { "wave", 1 }, { "vibrato", 0.3f }, { "decay", 0.4f }, { "sustain", 0.6f } } },
         { "Dungeon Bass",        { { "wave", 3 }, { "octave", -1 }, { "sub", 0.6f }, { "decay", 0.3f }, { "sustain", 0.5f }, { "crypt", 0.15f }, { "echo", 0.0f } } },
         { "Torch Arp",           { { "wave", 0 }, { "chord", 1 }, { "arp", 1 }, { "arpRate", 2 }, { "decay", 0.5f }, { "sustain", 0.4f }, { "echo", 0.3f } } },
@@ -124,6 +164,10 @@ void CryptProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     synth.prepare (sampleRate);
     crusher.prepare (sampleRate);
     space.prepare (sampleRate, samplesPerBlock);
+    drone.prepare (sampleRate);
+    madness.prepare (sampleRate);
+    formant.prepare (sampleRate);
+    vhs.prepare (sampleRate);
     limiter.prepare (sampleRate);
     keyboard.reset();
     monoSpare.assign ((size_t) jmax (1, samplesPerBlock), 0.0f);
@@ -150,6 +194,8 @@ void CryptProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& midi)
     s.arpRate = jlimit (0, 3, roundToInt (p ("arpRate")));
     s.octave = jlimit (-2, 2, roundToInt (p ("octave")));
     s.bpm = lastBpm;
+    s.madness = p ("madness");
+    s.crack = p ("crack");
     synth.setSettings (s);
 
     float* l = buffer.getWritePointer (0);
@@ -176,8 +222,15 @@ void CryptProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& midi)
         else if (m.isAllNotesOff() || m.isAllSoundOff()) synth.allNotesOff();
     }
     if (at < n) synth.render (l + at, r + at, n - at);
+    drone.process (l, r, n, p ("drone"), roundToInt (p ("droneNote")), p ("droneMove"));
+
+    // the dark arts, in the order a tape would hear them: the madness, the choir, the chip, the worn tape, the room
+    madness.process (l, r, n, p ("madness"));
+    formant.process (l, r, n, p ("formant"), p ("vowel"), p ("vowelLfo"));
+    vowelNow = formant.now();
 
     crusher.process (l, r, n, p ("bits"), p ("rate") >= 0.995f ? (float) getSampleRate() : rateHz (p ("rate")));
+    vhs.process (l, r, n, p ("hiss"), p ("wow"), p ("damp"));
     space.process (l, r, n, p ("gloom"), p ("drive"), p ("crypt"), p ("echo"), lastBpm);
     const float gain = Decibels::decibelsToGain (p ("output"));
     for (int i = 0; i < n; ++i) { l[i] *= gain; r[i] *= gain; }
@@ -288,7 +341,7 @@ void CryptProcessor::setStateInformation (const void* data, int size)
         sfxPitch = jlimit (-12.0f, 12.0f, (float) state.getProperty ("sfxPitch", 0.0f));
         sfxLength = jlimit (0.5f, 2.0f, (float) state.getProperty ("sfxLength", 1.0f));
         if (const String f = state.getProperty ("sfxFolder").toString(); f.isNotEmpty() && File::isAbsolutePath (f)) sfxFolder = File (f);
-        tab = jlimit (0, 1, (int) state.getProperty ("tab", 0));
+        tab = jlimit (0, 2, (int) state.getProperty ("tab", 0));
         for (auto id : { "preset", "sfx", "sfxDark", "sfxPitch", "sfxLength", "sfxFolder", "tab" }) state.removeProperty (id, nullptr);
         apvts.replaceState (state);
     }

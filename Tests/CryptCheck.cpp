@@ -62,6 +62,15 @@ static float rms (const Sig& s, double a, double b)
     double e = 0.0; for (int i = i0; i < i1; ++i) e += (double) s[(size_t) i] * s[(size_t) i];
     return i1 > i0 ? (float) std::sqrt (e / (i1 - i0)) : 0.0f;
 }
+/** how strong one frequency is (Goertzel) between a and b seconds */
+static float band (const Sig& s, double hz, double a, double b)
+{
+    const double w = MathConstants<double>::twoPi * hz / sr, c = 2.0 * std::cos (w);
+    double s1 = 0.0, s2 = 0.0;
+    const int i0 = (int) (a * sr), i1 = jmin ((int) s.size(), (int) (b * sr));
+    for (int i = i0; i < i1; ++i) { const double v = s[(size_t) i] + c * s1 - s2; s2 = s1; s1 = v; }
+    return (float) std::sqrt (jmax (0.0, s1 * s1 + s2 * s2 - c * s1 * s2)) / (float) jmax (1, i1 - i0);
+}
 static float peak (const Sig& s) { float m = 0.0f; for (float x : s) m = jmax (m, std::abs (x)); return m; }
 static bool finite (const Sig& s) { for (float x : s) if (! std::isfinite (x)) return false; return true; }
 
@@ -85,7 +94,11 @@ static std::unique_ptr<CryptProcessor> makeSynth()
 
 static void clean (CryptProcessor& p)
 {
-    for (auto [id, v] : { std::pair { "crypt", 0.0f }, { "echo", 0.0f }, { "gloom", 0.0f }, { "drive", 0.0f }, { "vibrato", 0.0f }, { "detune", 0.0f }, { "sub", 0.0f } })
+    // everything back to its default first (the first preset is a zone with a chord and a drone)
+    for (auto* prm : p.getParameters())
+        if (auto* rp = dynamic_cast<RangedAudioParameter*> (prm)) rp->setValueNotifyingHost (rp->getDefaultValue());
+    for (auto [id, v] : { std::pair { "crypt", 0.0f }, { "echo", 0.0f }, { "gloom", 0.0f }, { "drive", 0.0f }, { "vibrato", 0.0f }, { "detune", 0.0f }, { "sub", 0.0f },
+                              { "madness", 0.0f }, { "formant", 0.0f }, { "hiss", 0.0f }, { "wow", 0.0f }, { "damp", 0.0f }, { "drone", 0.0f } })
         set (p, p.apvts, id, v);
 }
 
@@ -118,13 +131,13 @@ int main (int argc, char** argv)
         check (std::abs (hz / 220.0f - 1.0f) < 0.02f, "a square wave in tune (" + String (hz, 1) + " Hz, want 220)");
         check (rms (l, 0.2, 0.6) > 0.03f && finite (l), "loud enough and clean");
         check (rms (l, 0.95, 1.0) < 1.0e-4f, "it stops after the release");
-        for (int w = 0; w < 9; ++w)
+        for (int w = 0; w < 10; ++w)
         {
             set (*p, p->apvts, "wave", (float) w);
             auto [lw, rw] = run (*p, 0.5, { on (0.0, 60), off (0.3, 60) });
             if (! finite (lw) || rms (lw, 0.05, 0.3) < 0.01f) check (false, "wave " + tomb::waveNames()[w] + " sounds");
         }
-        check (true, "all 9 waves sound");
+        check (true, "all 10 waves sound (with the FM bell)");
     }
 
     {   // the arpeggio: up a minor chord in 1/16 at 120 BPM = a new note every 125 ms
@@ -148,6 +161,80 @@ int main (int argc, char** argv)
         auto [l, r] = run (*p, 0.8, { on (0.0, 57), off (0.6, 57) });
         const float early = pitch (l, 0.0, 0.03), late = pitch (l, 0.4, 0.55);
         check (early > late * 1.5f && std::abs (late / 220.0f - 1.0f) < 0.03f, "SWEEP falls into the note (" + String (early, 0) + " -> " + String (late, 0) + " Hz)");
+    }
+
+    {   // the dark arts
+        auto p = makeSynth();
+        clean (*p);
+        set (*p, p->apvts, "wave", 2.0f);
+        // the drone: sound with no keys, silence when off
+        set (*p, p->apvts, "drone", 0.7f);
+        auto [d, dr] = run (*p, 3.0, {});
+        check (rms (d, 1.0, 3.0) > 0.01f && finite (d) && peak (d) <= 1.0f, "DRONE: sounds with no keys (" + String (rms (d, 1.0, 3.0), 3) + ")");
+        check (std::abs (rms (d, 1.0, 1.5) - rms (d, 2.5, 3.0)) > 1.0e-4f, "DRONE: it slowly changes");
+        set (*p, p->apvts, "drone", 0.0f);
+        run (*p, 2.0, {});
+        auto [d0, d0r] = run (*p, 0.5, {});
+        check (peak (d0) < 1.0e-4f, "DRONE off: silence again");
+
+        // madness: the same long note drifts out of tune
+        auto spread = [&] (float mad)
+        {
+            set (*p, p->apvts, "madness", mad);
+            set (*p, p->apvts, "sustain", 1.0f);
+            auto [l, r] = run (*p, 4.2, { on (0.0, 57), off (4.0, 57) });
+            float lo = 1.0e9f, hi = 0.0f;
+            for (double t = 0.5; t < 3.8; t += 0.3) { const float h = pitch (l, t, t + 0.12); lo = jmin (lo, h); hi = jmax (hi, h); }
+            run (*p, 4.0, {});
+            return std::pair { hi / lo, finite (l) && peak (l) <= 1.0f };
+        };
+        const auto still = spread (0.0f), mad = spread (1.0f);
+        check (still.first < 1.01f && mad.first > 1.015f && mad.second, "MADNESS: the note drifts (" + String ((still.first - 1.0f) * 100.0f, 1) + "% -> " + String ((mad.first - 1.0f) * 100.0f, 1) + "%), clean");
+        set (*p, p->apvts, "madness", 0.0f);
+
+        // the choir: A has its first resonance low (730 Hz), I high (2250 Hz)
+        auto vowel = [&] (float v)
+        {
+            set (*p, p->apvts, "formant", 1.0f);
+            set (*p, p->apvts, "vowel", v);
+            auto [l, r] = run (*p, 1.0, { on (0.0, 33), off (0.8, 33) });   // a low square: many harmonics (55 Hz)
+            run (*p, 2.0, {});
+            return band (l, 2255.0, 0.2, 0.7) / jmax (1.0e-9f, band (l, 715.0, 0.2, 0.7));
+        };
+        const float va = vowel (0.0f), vi = vowel (0.5f);
+        check (vi > va * 3.0f, "CHOIR: A and I sound different (2.2k/0.7k: " + String (va, 2) + " vs " + String (vi, 2) + ")");
+        set (*p, p->apvts, "formant", 0.0f);
+
+        // the bell: rings long, CRACK changes it
+        set (*p, p->apvts, "wave", 9.0f);
+        set (*p, p->apvts, "sustain", 0.0f); set (*p, p->apvts, "decay", 1.0f); set (*p, p->apvts, "release", 1.0f);
+        set (*p, p->apvts, "crack", 0.0f);
+        auto [b0, b0r] = run (*p, 2.5, { on (0.0, 69), off (0.1, 69) });
+        run (*p, 4.0, {});
+        set (*p, p->apvts, "crack", 1.0f);
+        auto [b1, b1r] = run (*p, 2.5, { on (0.0, 69), off (0.1, 69) });
+        run (*p, 4.0, {});
+        check (rms (b0, 1.5, 2.5) > 0.004f && finite (b0) && finite (b1), "BELL: still rings after 2 s (" + String (rms (b0, 1.5, 2.5), 4) + ")");
+        // a cracked bell has a partial that does not fit the note: 2.76 x 440 + crack -> around 1350 Hz
+        check (band (b1, 1350.0, 0.05, 0.6) > 3.0f * band (b0, 1350.0, 0.05, 0.6), "BELL: CRACK adds tones that do not fit");
+
+        // the old tape
+        set (*p, p->apvts, "wave", 2.0f); set (*p, p->apvts, "sustain", 1.0f); set (*p, p->apvts, "decay", 0.3f); set (*p, p->apvts, "release", 0.2f);
+        auto [t0, t0r] = run (*p, 1.0, { on (0.0, 57), off (0.8, 57) });
+        set (*p, p->apvts, "damp", 1.0f);
+        auto [t1, t1r] = run (*p, 1.0, { on (0.0, 57), off (0.8, 57) });
+        check (band (t1, 6380.0, 0.2, 0.7) < 0.3f * band (t0, 6380.0, 0.2, 0.7), "TAPE: DAMP takes the highs away");
+        set (*p, p->apvts, "damp", 0.0f);
+        set (*p, p->apvts, "hiss", 1.0f);
+        run (*p, 1.0, {});
+        auto [h, hr] = run (*p, 0.5, {});
+        check (rms (h, 0.0, 0.5) > 0.002f && peak (h) < 0.2f, "TAPE: HISS with no notes (" + String (rms (h, 0.0, 0.5), 4) + ")");
+        set (*p, p->apvts, "hiss", 0.0f);
+        set (*p, p->apvts, "wow", 1.0f);
+        float lo = 1.0e9f, hi = 0.0f;
+        auto [w, wr] = run (*p, 3.0, { on (0.0, 57), off (2.9, 57) });
+        for (double t = 0.3; t < 2.7; t += 0.15) { const float hz = pitch (w, t, t + 0.1); lo = jmin (lo, hz); hi = jmax (hi, hz); }
+        check (hi / lo > 1.01f && finite (w), "TAPE: WOW bends the pitch (" + String ((hi / lo - 1.0f) * 100.0f, 1) + "%)");
     }
 
     {   // 12 notes on 8 voices, and every preset is safe

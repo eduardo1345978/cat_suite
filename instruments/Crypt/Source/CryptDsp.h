@@ -12,7 +12,7 @@
 */
 namespace tomb
 {
-enum class Wave { Pulse12 = 0, Pulse25, Square, Triangle, Organ, Bells, Ghost, Noise, Metal };
+enum class Wave { Pulse12 = 0, Pulse25, Square, Triangle, Organ, Bells, Ghost, Noise, Metal, FmBell };
 juce::StringArray waveNames();
 
 /** A Game Boy style table: 32 steps, 4 bits (0..15). */

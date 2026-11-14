@@ -1,6 +1,6 @@
 #pragma once
 
-#include "CryptDsp.h"
+#include "CryptDark.h"
 
 /**
     Crypt's synth: 8 voices of chip waves. Each note can be a dark chord - played at once, or as a fast
@@ -25,6 +25,8 @@ struct SynthSettings
     Arp arp = Arp::Off;
     int arpRate = 1;              // 0 = 1/8, 1 = 1/16, 2 = 1/32, 3 = 1/64
     int octave = 0;
+    float madness = 0.0f;         // slow drift + more detune (the rest of MADNESS is after the synth)
+    float crack = 0.3f;           // the FM bell: 0 clean .. 1 cracked
     bool steps = true;
     double bpm = 120.0;
 };
@@ -59,6 +61,7 @@ private:
         uint32_t age = 0;
         std::array<ChipOsc, 5> osc;    // up to 4 chord tones + the sub
         ChipOsc detuned;
+        std::array<Bell, 6> bells;     // the FM bell, when the wave is FM Bell (4 tones, the detune, the sub unused)
         uint32_t seed = 1;
     };
     float renderVoice (Voice&) noexcept;

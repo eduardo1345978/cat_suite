@@ -158,7 +158,7 @@ CryptEditor::CryptEditor (CryptProcessor& p) : processor (p)
 {
     setLookAndFeel (&laf);
     addAndMakeVisible (presetBar);
-    for (auto* t : { &synthTab, &sfxTab })
+    for (auto* t : { &synthTab, &sfxTab, &darkTab })
     {
         t->setClickingTogglesState (false);
         t->textPx = 3.0f;
@@ -166,7 +166,9 @@ CryptEditor::CryptEditor (CryptProcessor& p) : processor (p)
     }
     synthTab.onClick = [this] { showTab (0); };
     sfxTab.onClick = [this] { showTab (1); };
+    darkTab.onClick = [this] { showTab (2); };
     synthTab.setTooltip ("The synth: play dark chip music with the keys or your MIDI keyboard");
+    darkTab.setTooltip ("The dark arts: madness, a singing choir, the cracked bell, an old tape and the drone");
     sfxTab.setTooltip ("The sound-effect maker: swords, spells, doors, traps ... saved as .wav for the game");
 
     // ---- synth
@@ -228,6 +230,31 @@ CryptEditor::CryptEditor (CryptProcessor& p) : processor (p)
     keys.setWantsKeyboardFocus (false);
     addAndMakeVisible (keys);
     synthParts.push_back (&keys);
+
+    // ---- the dark arts
+    {
+        struct D { const char* id; const char* cap; Colour c; const char* tip; };
+        const D dd[] = {
+            { "madness", "Madness", lk::blood, "MADNESS: one knob for the mad version of the same music - slow drift out of tune, more detune, hiss and pieces played backwards" },
+            { "formant", "Choir", lk::flame, "CHOIR: a filter like a mouth - the sound sings a vowel (a pad becomes monks)" },
+            { "vowel", "Vowel", lk::flame, "VOWEL: A - E - I - O - U" },
+            { "vowelLfo", "Vowel LFO", lk::flame, "VOWEL LFO: the vowel slowly walks back and forth by itself" },
+            { "crack", "Crack", lk::bone, "CRACK: the FM bell (pick the wave FM BELL) - left a clean bell, right a cracked one with tones that do not fit" },
+            { "hiss", "Hiss", lk::poison, "HISS: the noise of an old tape" },
+            { "wow", "Wow", lk::poison, "WOW + FLUTTER: the tape speed wobbles - the pitch bends slowly and shakes a little" },
+            { "damp", "Damp", lk::poison, "DAMP: the highs are worn away, like a tape copied ten times" },
+            { "drone", "Drone", lk::violet, "DRONE: one low tone that never stops and slowly changes - the crypt breathing (0 = off)" },
+            { "droneNote", "Note", lk::violet, "NOTE: the drone's note (put it on the key of your song)" },
+            { "droneMove", "Move", lk::violet, "MOVE: how fast the drone changes its colour and tuning" },
+        };
+        for (auto& d : dd)
+        {
+            auto* s = darkSliders.add (new lk::PixelSlider (processor.apvts, d.id, d.cap, d.c));
+            s->getSlider().setTooltip (d.tip);
+            addAndMakeVisible (s);
+            darkParts.push_back (s);
+        }
+    }
 
     // ---- sound effects
     addAndMakeVisible (sfxScreen);
@@ -314,9 +341,12 @@ void CryptEditor::showTab (int t)
     processor.tab = t;
     synthTab.setToggleState (t == 0, dontSendNotification);
     sfxTab.setToggleState (t == 1, dontSendNotification);
+    darkTab.setToggleState (t == 2, dontSendNotification);
     for (auto* c : synthParts) c->setVisible (t == 0);
     for (auto* c : sfxParts) c->setVisible (t == 1);
-    presetBar.setVisible (t == 0);
+    for (auto* c : darkParts) c->setVisible (t == 2);
+    keys.setVisible (t != 1);
+    presetBar.setVisible (t != 1);
     for (auto* b : historyButtons) b->setVisible (t == 1);
     for (int k = 0; k < kinds.size(); ++k) kinds[k]->setToggleState (k == (int) processor.sfx.kind, dontSendNotification);
     repaint();
@@ -423,6 +453,31 @@ void CryptEditor::paint (Graphics& g)
         lk::pixelText (g, "1/64 + up = the", 510.0f, 506.0f, 2.0f, lk::boneDim.withAlpha (0.7f));
         lk::pixelText (g, "old console buzz", 510.0f, 526.0f, 2.0f, lk::boneDim.withAlpha (0.7f));
     }
+    else if (processor.tab == 2)
+    {
+        const char* heads[] = { "Madness", "Choir", "Bell", "Old tape", "Drone" };
+        const Colour hc[] = { lk::blood, lk::flame, lk::bone, lk::poison, lk::violet };
+        const char* notes[5][3] = { { "the same zone", "but it lost", "its mind" },
+                                    { "a e i o u", "pads become", "singing monks" },
+                                    { "wave: FM Bell", "crack: tones", "out of tune" },
+                                    { "with bits +", "rate (synth)", "= old vhs" },
+                                    { "never stops,", "it breathes", "slowly" } };
+        for (int i = 0; i < 5; ++i)
+        {
+            const float x = 40.0f + (float) i * 188.0f;
+            lk::panel (g, { x - 10.0f, 132.0f, 180.0f, 450.0f }, 3.0f);
+            lk::pixelText (g, heads[i], x, 146.0f, 3.0f, hc[i]);
+            for (int k = 0; k < 3; ++k) lk::pixelText (g, notes[i][k], x, 500.0f + (float) k * 20.0f, 2.0f, lk::boneDim.withAlpha (0.7f));
+        }
+        // the vowel the choir is singing right now
+        const char* v[] = { "A", "E", "I", "O", "U" };
+        const float now = processor.vowelNow.load();
+        if (*processor.apvts.getRawParameterValue ("formant") > 0.01f)
+            lk::pixelText (g, v[jlimit (0, 4, roundToInt (now))], 40.0f + 188.0f + 120.0f, 400.0f, 6.0f, lk::flame);
+        // madness: the skull's eyes glow
+        const float m = *processor.apvts.getRawParameterValue ("madness");
+        lk::pixelText (g, m > 0.66f ? "MAD" : m > 0.33f ? "uneasy" : m > 0.01f ? "twitch" : "calm", 40.0f, 260.0f, 3.0f, lk::blood.withAlpha (0.4f + 0.6f * m));
+    }
     else
     {
         lk::panel (g, { 30.0f, 128.0f, 270.0f, 470.0f }, 3.0f);
@@ -444,6 +499,17 @@ void CryptEditor::resized()
     presetBar.setBounds (getWidth() - 400, 30, 300, 34);
     synthTab.setBounds (92, 92, 130, 30);
     sfxTab.setBounds (228, 92, 150, 30);
+    darkTab.setBounds (384, 92, 172, 30);
+    {
+        // 5 columns: madness | choir | bell | tape | drone
+        const int col[] = { 0, 1, 1, 1, 2, 3, 3, 3, 4, 4, 4 };
+        int row[5] = {};
+        for (int i = 0; i < darkSliders.size(); ++i)
+        {
+            const int c = col[i];
+            darkSliders[i]->setBounds (40 + c * 188, 190 + row[c]++ * 48, 166, 38);
+        }
+    }
 
     // synth
     screen.setBounds (30, 130, 940, 142);
@@ -490,6 +556,7 @@ void CryptEditor::timerCallback()
     screen.time = time;
     screen.jaw += (jlimit (0.0f, 1.0f, processor.level.load() * 3.0f) - screen.jaw) * jmin (1.0f, dt * 20.0f);
     if (processor.tab == 0) screen.repaint();
+    else if (processor.tab == 2) { repaint (30, 240, 180, 50); repaint (330, 380, 80, 60); }
     else if (processor.previewPos.load() >= 0.0f) sfxScreen.repaint();
     repaint (0, 0, 110, 130);
     repaint (getWidth() - 110, 0, 110, 130);

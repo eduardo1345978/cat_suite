@@ -68,7 +68,8 @@ private:
     tomb::look::Laf laf;
     juce::TooltipWindow tips { this, 600 };
     cat::PresetBar presetBar { processor.presetManager, "" };
-    tomb::look::PixelButton synthTab { "Synth", tomb::look::ember }, sfxTab { "Sound FX", tomb::look::poison };
+    tomb::look::PixelButton synthTab { "Synth", tomb::look::ember }, sfxTab { "Sound FX", tomb::look::poison },
+                             darkTab { "Dark arts", tomb::look::blood };
 
     // synth
     CryptScreen screen { processor };
@@ -94,7 +95,8 @@ private:
 
     float time = 0.0f;
     juce::uint32 lastTick = 0;
-    std::vector<juce::Component*> synthParts, sfxParts;
+    std::vector<juce::Component*> synthParts, sfxParts, darkParts;
+    juce::OwnedArray<tomb::look::PixelSlider> darkSliders;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CryptEditor)
 };

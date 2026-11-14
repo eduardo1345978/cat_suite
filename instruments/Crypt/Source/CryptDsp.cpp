@@ -4,7 +4,7 @@ namespace tomb
 {
 juce::StringArray waveNames()
 {
-    return { "Pulse 12%", "Pulse 25%", "Square", "Triangle", "Organ", "Bells", "Ghost", "Noise", "Metal" };
+    return { "Pulse 12%", "Pulse 25%", "Square", "Triangle", "Organ", "Bells", "Ghost", "Noise", "Metal", "FM Bell" };
 }
 
 namespace
@@ -56,7 +56,7 @@ float ChipOsc::tick (Wave w, double hz, double sampleRate, float duty) noexcept
         case Wave::Pulse12: return phase < (duty > 0.0f ? duty : 0.125f) ? 1.0f : -1.0f;
         case Wave::Pulse25: return phase < (duty > 0.0f ? duty : 0.25f) ? 1.0f : -1.0f;
         case Wave::Square:  return phase < (duty > 0.0f ? duty : 0.5f) ? 1.0f : -1.0f;
-        case Wave::Triangle: case Wave::Organ: case Wave::Bells: case Wave::Ghost:
+        case Wave::Triangle: case Wave::FmBell: case Wave::Organ: case Wave::Bells: case Wave::Ghost:
             return (float) tableFor (w)[(size_t) juce::jlimit (0, 31, (int) (phase * 32.0))] / 7.5f - 1.0f;
         case Wave::Noise: case Wave::Metal:
         {

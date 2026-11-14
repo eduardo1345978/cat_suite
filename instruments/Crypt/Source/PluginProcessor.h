@@ -77,6 +77,7 @@ public:
     juce::File makePack();
     std::atomic<float> previewPos { -1.0f };          // 0..1 while the preview plays (for the screen)
     std::atomic<float> level { 0.0f };
+    std::atomic<float> vowelNow { 0.0f };              // the vowel the choir sings now, 0..4 (A..U)
 
     static float rateHz (float v);                    // the RATE knob 0..1 -> Hz
 
@@ -87,6 +88,10 @@ private:
     tomb::Synth synth;
     tomb::Crusher crusher;
     tomb::Space space;
+    tomb::Drone drone;
+    tomb::Madness madness;
+    tomb::Formant formant;
+    tomb::Vhs vhs;
     cat::SafetyLimiter limiter;
     double lastBpm = 120.0;
     std::vector<float> monoSpare;
