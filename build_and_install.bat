@@ -109,26 +109,33 @@ rem Faster builds at home: Ninja (spreads single files over the cores, instead o
 rem link-time optimisation (CAT_LTO=OFF: the plug-ins are a few % slower, the build much faster).
 rem Ninja and the compiler come with Visual Studio; vcvars64.bat puts them on the PATH.
 set "GEN=-A x64"
-set "VCVARS="
-for %%v in ("C:\Program Files\Microsoft Visual Studio\18\Community" "C:\Program Files\Microsoft Visual Studio\2022\Community") do (
-    if not defined VCVARS if exist "%%~v\VC\Auxiliary\Build\vcvars64.bat" if exist "%%~v\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe" (
-        set "VCVARS=%%~v\VC\Auxiliary\Build\vcvars64.bat"
-        set "NINJA=%%~v\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
-    )
-)
-if defined VCVARS (
-    call "!VCVARS!" >> "%LOG%" 2>&1
-    set "GEN=-G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_MAKE_PROGRAM=!NINJA!""
-    rem a build folder made by the other (Visual Studio) generator can't be reused: start it fresh, once
-    if exist "build\CMakeCache.txt" findstr /c:"CMAKE_GENERATOR:INTERNAL=Visual Studio" "build\CMakeCache.txt" >nul && (
-        echo %CM%   switching to the faster Ninja build: the first build starts from scratch%C0%
-        rmdir /s /q build
-    )
-    echo %CM%   fast mode: Ninja, no link-time optimisation%C0%
+set "NINJAARG="
+set "VS="
+if exist "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" set "VS=C:\Program Files\Microsoft Visual Studio\18\Community"
+if not defined VS if exist "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" set "VS=C:\Program Files\Microsoft Visual Studio\2022\Community"
+set "NINJA=%VS%\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
+if not defined VS goto :vsgen
+if not exist "%NINJA%" goto :vsgen
+call "%VS%\VC\Auxiliary\Build\vcvars64.bat" >> "%LOG%" 2>&1
+set "GEN=-G Ninja -DCMAKE_BUILD_TYPE=Release"
+set "NINJAARG=-DCMAKE_MAKE_PROGRAM=%NINJA%"
+rem a build folder made by the other (Visual Studio) generator can't be reused: start it fresh, once
+if not exist "build\CMakeCache.txt" goto :fastmsg
+findstr /c:"CMAKE_GENERATOR:INTERNAL=Visual Studio" "build\CMakeCache.txt" >nul || goto :fastmsg
+echo %CM%   switching to the faster Ninja build: this first build starts from scratch%C0%
+rmdir /s /q build
+:fastmsg
+echo %CM%   fast mode: Ninja, no link-time optimisation%C0%
+goto :configure
+:vsgen
+echo %CM%   Ninja not found - the normal Visual Studio build%C0%
+:configure
+echo cmake -B build %GEN% "%NINJAARG%" >> "%LOG%"
+if defined NINJAARG (
+    "%CMAKE%" -B build %GEN% "%NINJAARG%" -DCAT_BUILD_TESTS=ON -DCAT_BUILD_PRO=%PROFLAG% -DCAT_LTO=OFF >> "%LOG%" 2>&1 || goto :fail
 ) else (
-    echo %CM%   Ninja not found - the normal Visual Studio build%C0%
+    "%CMAKE%" -B build %GEN% -DCAT_BUILD_TESTS=ON -DCAT_BUILD_PRO=%PROFLAG% -DCAT_LTO=OFF >> "%LOG%" 2>&1 || goto :fail
 )
-"%CMAKE%" -B build !GEN! -DCAT_BUILD_TESTS=ON -DCAT_BUILD_PRO=%PROFLAG% -DCAT_LTO=OFF >> "%LOG%" 2>&1 || goto :fail
 
 echo === Build === >> "%LOG%"
 echo %CT%[2/4]%C0% Compiling...  %CM%(the first time takes long; next time only what changed)%C0%
