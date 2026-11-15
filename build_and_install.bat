@@ -74,7 +74,8 @@ echo %CT%[2/4]%C0% Compiling...  %CD%(the first time takes long; next time only 
 rem JOBS files at once: MSBuild builds JOBS projects side by side and _CL_=/MP1 makes each compiler use one
 rem thread (JUCE asks for /MP = every core; the _CL_ options come last and win). Low priority keeps the PC usable.
 set "_CL_=/MP1"
-start "" /b /wait /belownormal "%CMAKE%" --build build --config Release --parallel %JOBS% >> "%LOG%" 2>&1
+rem the progress bar: tools\build_progress.ps1 runs the build (low priority) and counts the finished parts
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\build_progress.ps1" -Cmake "%CMAKE%" -Jobs %JOBS% -Log "%LOG%"
 if errorlevel 1 goto :fail
 set "_CL_="
 
