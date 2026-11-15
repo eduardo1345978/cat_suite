@@ -116,7 +116,12 @@ if not defined VS if exist "C:\Program Files\Microsoft Visual Studio\2022\Commun
 set "NINJA=%VS%\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
 if not defined VS goto :vsgen
 if not exist "%NINJA%" goto :vsgen
+rem vcvars64 may change the current folder (to %USERPROFILE%\source) - keep ours, and our log name
+set "VSCMD_START_DIR=%~dp0"
+set "KEEPLOG=%LOG%"
 call "%VS%\VC\Auxiliary\Build\vcvars64.bat" >> "%LOG%" 2>&1
+cd /d "%~dp0"
+set "LOG=%KEEPLOG%"
 echo [step] vcvars done >> "%LOG%"
 set "GEN=-G Ninja -DCMAKE_BUILD_TYPE=Release"
 set "NINJAARG=-DCMAKE_MAKE_PROGRAM=%NINJA%"
