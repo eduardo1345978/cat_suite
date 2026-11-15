@@ -4,15 +4,17 @@
 
 ## Plug-ins
 
+⭐ = recommended: the best ones to start with.
+
 ### MIDI Cats (they write notes)
 
 | | |
 |---|---|
-| [**Chord-Cat**](plugins/Chord-Cat.md) | One-finger chord progressions: 16 pads, voice leading, strum, a progression generator. |
-| [**Patt-Cat**](plugins/Patt-Cat.md) | A 4-layer step sequencer for held chords, plus bouncing notes. |
+| [**Chord-Cat**](plugins/Chord-Cat.md) ⭐ | One-finger chord progressions: 16 pads, voice leading, strum, a progression generator. |
+| [**Patt-Cat**](plugins/Patt-Cat.md) ⭐ | A 4-layer step sequencer for held chords, plus bouncing notes. |
 | [**Bend-Cat**](plugins/Bend-Cat.md) | Per-voice pitch bends over MPE: glides, shapes, LFOs, human drift. |
 | [**Drum-Cat**](plugins/Drum-Cat.md) | Drum patterns in 13 styles with hand-played timing and ghost notes. |
-| [**Orbit-Cat**](plugins/Orbit-Cat.md) | An arpeggiator where every note is a planet on an orbit. |
+| [**Orbit-Cat**](plugins/Orbit-Cat.md) ⭐ | An arpeggiator where every note is a planet on an orbit. |
 | [**Bass-Cat**](plugins/Bass-Cat.md) | Bass lines that follow your chords, in 18 styles. |
 | [**Micro-Cat**](plugins/Micro-Cat.md) | Microtonal tunings: 37 tunings, its own sound, MPE and MTS-ESP. |
 | [**Hum-Cat**](plugins/Hum-Cat.md) | Sing or hum a tune and get lead, chords, bass and drums. |
@@ -22,8 +24,8 @@
 
 | | |
 |---|---|
-| [**Sing-Cat**](plugins/Sing-Cat.md) | A physically modelled choir of people and cats. |
-| [**Glide-Cat**](plugins/Glide-Cat.md) | A poly synth whose voices glide from chord to chord. |
+| [**Sing-Cat**](plugins/Sing-Cat.md) ⭐ | A physically modelled choir of people and cats. |
+| [**Glide-Cat**](plugins/Glide-Cat.md) ⭐ | A poly synth whose voices glide from chord to chord. |
 | [**Talk-Cat**](plugins/Talk-Cat.md) | A vocaloid-style singer with lyrics (English, Slovak, Japanese, cat). |
 | [**Life-Cat**](plugins/Life-Cat.md) | A living ecosystem of animals that makes music. |
 | [**Muse-Cat**](plugins/Muse-Cat.md) | Writes whole songs (or endless music) and plays them. |
@@ -36,9 +38,10 @@
 |---|---|
 | [**Echo-Cat**](plugins/Echo-Cat.md) | Tape echo and space: ping-pong, duck, freeze, reverse. |
 | [**Molten**](plugins/Molten.md) | Melts any sound into something warm and fat (HEAT, DRIP, WOBBLE). |
-| [**Swarm**](plugins/Swarm.md) | A granular organism: the sound becomes a living cloud of grains. |
+| [**Swarm**](plugins/Swarm.md) ⭐ | A granular organism: the sound becomes a living cloud of grains. |
 | [**Vortex**](plugins/Vortex.md) | The sound rises (or falls) forever: an endless Shepard spiral. |
 | [**Poly Board**](plugins/Poly-Board.md) | A pedalboard for your synth: drive, compressor, filter, phaser, chorus, delay, reverb - in any order. Also a program. |
+| [**Gate-Cat**](plugins/Gate-Cat.md) | Chops any sound into a rhythm: 16 steps you draw, swing, a filter that opens with the steps. |
 
 ## Apps
 

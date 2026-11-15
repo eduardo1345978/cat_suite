@@ -789,6 +789,15 @@ void MicroCatEditor::paint (juce::Graphics& g)
     g.setColour (parchment);
     g.setFont (cat::catFont (14.0f).italicised());
     juce::String sub = t.description.isNotEmpty() ? t.description : t.category;
+    // the normal tuning (or bypass) sounds just like any keyboard: say so, or it seems broken
+    const bool normal = processor.apvts.getRawParameterValue ("bypass")->load() > 0.5f || t.name.startsWith ("12-EDO");
+    if (normal)
+    {
+        g.setColour (juce::Colour (0xffffb35c));
+        sub = processor.apvts.getRawParameterValue ("bypass")->load() > 0.5f
+                  ? "BYPASS is on: normal tuning. Switch it off to hear the microtones"
+                  : "This is the NORMAL tuning - pick another one in the list to hear microtones";
+    }
     g.drawFittedText (juce::String (t.notesPerPeriod()) + " notes  -  " + sub, a.removeFromTop (38), juce::Justification::topLeft, 2);
     a.removeFromTop (4);
     rule (a.getY(), a);

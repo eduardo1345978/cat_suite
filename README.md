@@ -1,6 +1,6 @@
 # Cat Suite
 
-**Free music plug-ins and apps, each with its own cat.** Chords, patterns, drums, bass lines, choirs, singers, synths, tunings, granular clouds, lava, endless risers, photos you can hear: 23 plug-ins (VST3) for any DAW (Cubase, FL Studio, Ableton, Reaper, Bitwig, Studio One ...), plus apps that jam on their own.
+**Free music plug-ins and apps, each with its own cat.** Chords, patterns, drums, bass lines, choirs, singers, synths, tunings, granular clouds, lava, endless risers, photos you can hear: 24 plug-ins (VST3) for any DAW (Cubase, FL Studio, Ableton, Reaper, Bitwig, Studio One ...), plus apps that jam on their own.
 
 [![Windows](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-windows.yml/badge.svg)](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-windows.yml)
 [![Mac](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-mac.yml/badge.svg)](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-mac.yml)
@@ -14,24 +14,26 @@
 | | | |
 |---|---|---|
 | **Windows 10 / 11** | **[Cat-Suite-Setup.exe](https://github.com/eduardo1345978/cat_suite/releases/latest/download/Cat-Suite-Setup.exe)** | installs and updates everything (plug-ins + apps) |
-| **macOS 11+** (Apple Silicon and Intel) | **[Cat-Suite-Mac.zip](https://github.com/eduardo1345978/cat_suite/releases/latest/download/Cat-Suite-Mac.zip)** | all 23 plug-ins, *Install Cat Suite.command* |
+| **macOS 11+** (Apple Silicon and Intel) | **[Cat-Suite-Mac.zip](https://github.com/eduardo1345978/cat_suite/releases/latest/download/Cat-Suite-Mac.zip)** | all 24 plug-ins, *Install Cat Suite.command* |
 | **Linux** (64-bit, 2022+) | **[Cat-Suite-Linux.tar.gz](https://github.com/eduardo1345978/cat_suite/releases/latest/download/Cat-Suite-Linux.tar.gz)** | all plug-ins + apps, `./install.sh` |
 
 Step by step, the other downloads and what to do when Windows warns: **[Install](docs/Install.md)**. Then **[Using it in your DAW](docs/DAW.md)**.
 
 ## Plug-ins
 
+⭐ = recommended: the best ones to start with (Chord-Cat, Patt-Cat, Orbit-Cat, Sing-Cat, Glide-Cat, Swarm).
+
 ### MIDI Cats <sub>(they write notes for your synths)</sub>
 
 <table>
 <tr>
-<td width="33%" valign="top"><a href="docs/plugins/Chord-Cat.md"><img src="docs/screenshots/chord.jpg" alt="Chord-Cat"></a><br><b><a href="docs/plugins/Chord-Cat.md">Chord-Cat</a></b><br><sub>One-finger chord progressions: 16 pads, voice leading, strum, a progression generator.</sub></td>
-<td width="33%" valign="top"><a href="docs/plugins/Patt-Cat.md"><img src="docs/screenshots/patt.jpg" alt="Patt-Cat"></a><br><b><a href="docs/plugins/Patt-Cat.md">Patt-Cat</a></b><br><sub>A 4-layer step sequencer for held chords, plus bouncing notes.</sub></td>
+<td width="33%" valign="top"><a href="docs/plugins/Chord-Cat.md"><img src="docs/screenshots/chord.jpg" alt="Chord-Cat"></a><br><b><a href="docs/plugins/Chord-Cat.md">Chord-Cat</a></b> ⭐<br><sub>One-finger chord progressions: 16 pads, voice leading, strum, a progression generator.</sub></td>
+<td width="33%" valign="top"><a href="docs/plugins/Patt-Cat.md"><img src="docs/screenshots/patt.jpg" alt="Patt-Cat"></a><br><b><a href="docs/plugins/Patt-Cat.md">Patt-Cat</a></b> ⭐<br><sub>A 4-layer step sequencer for held chords, plus bouncing notes.</sub></td>
 <td width="33%" valign="top"><a href="docs/plugins/Bend-Cat.md"><img src="docs/screenshots/bend.jpg" alt="Bend-Cat"></a><br><b><a href="docs/plugins/Bend-Cat.md">Bend-Cat</a></b><br><sub>Per-voice pitch bends over MPE: glides, shapes, LFOs, human drift.</sub></td>
 </tr>
 <tr>
 <td width="33%" valign="top"><a href="docs/plugins/Drum-Cat.md"><img src="docs/screenshots/drum.jpg" alt="Drum-Cat"></a><br><b><a href="docs/plugins/Drum-Cat.md">Drum-Cat</a></b><br><sub>Drum patterns in 13 styles with hand-played timing and ghost notes.</sub></td>
-<td width="33%" valign="top"><a href="docs/plugins/Orbit-Cat.md"><img src="docs/screenshots/orbit.jpg" alt="Orbit-Cat"></a><br><b><a href="docs/plugins/Orbit-Cat.md">Orbit-Cat</a></b><br><sub>An arpeggiator where every note is a planet on an orbit.</sub></td>
+<td width="33%" valign="top"><a href="docs/plugins/Orbit-Cat.md"><img src="docs/screenshots/orbit.jpg" alt="Orbit-Cat"></a><br><b><a href="docs/plugins/Orbit-Cat.md">Orbit-Cat</a></b> ⭐<br><sub>An arpeggiator where every note is a planet on an orbit.</sub></td>
 <td width="33%" valign="top"><a href="docs/plugins/Bass-Cat.md"><img src="docs/screenshots/bass.jpg" alt="Bass-Cat"></a><br><b><a href="docs/plugins/Bass-Cat.md">Bass-Cat</a></b><br><sub>Bass lines that follow your chords, in 18 styles.</sub></td>
 </tr>
 <tr>
@@ -45,8 +47,8 @@ Step by step, the other downloads and what to do when Windows warns: **[Install]
 
 <table>
 <tr>
-<td width="33%" valign="top"><a href="docs/plugins/Sing-Cat.md"><img src="docs/screenshots/sing.jpg" alt="Sing-Cat"></a><br><b><a href="docs/plugins/Sing-Cat.md">Sing-Cat</a></b><br><sub>A physically modelled choir of people and cats.</sub></td>
-<td width="33%" valign="top"><a href="docs/plugins/Glide-Cat.md"><img src="docs/screenshots/glide.jpg" alt="Glide-Cat"></a><br><b><a href="docs/plugins/Glide-Cat.md">Glide-Cat</a></b><br><sub>A poly synth whose voices glide from chord to chord.</sub></td>
+<td width="33%" valign="top"><a href="docs/plugins/Sing-Cat.md"><img src="docs/screenshots/sing.jpg" alt="Sing-Cat"></a><br><b><a href="docs/plugins/Sing-Cat.md">Sing-Cat</a></b> ⭐<br><sub>A physically modelled choir of people and cats.</sub></td>
+<td width="33%" valign="top"><a href="docs/plugins/Glide-Cat.md"><img src="docs/screenshots/glide.jpg" alt="Glide-Cat"></a><br><b><a href="docs/plugins/Glide-Cat.md">Glide-Cat</a></b> ⭐<br><sub>A poly synth whose voices glide from chord to chord.</sub></td>
 <td width="33%" valign="top"><a href="docs/plugins/Talk-Cat.md"><img src="docs/screenshots/talk.jpg" alt="Talk-Cat"></a><br><b><a href="docs/plugins/Talk-Cat.md">Talk-Cat</a></b><br><sub>A vocaloid-style singer with lyrics (English, Slovak, Japanese, cat).</sub></td>
 </tr>
 <tr>
@@ -66,11 +68,12 @@ Step by step, the other downloads and what to do when Windows warns: **[Install]
 <tr>
 <td width="33%" valign="top"><a href="docs/plugins/Echo-Cat.md"><img src="docs/screenshots/echo.jpg" alt="Echo-Cat"></a><br><b><a href="docs/plugins/Echo-Cat.md">Echo-Cat</a></b><br><sub>Tape echo and space: ping-pong, duck, freeze, reverse.</sub></td>
 <td width="33%" valign="top"><a href="docs/plugins/Molten.md"><img src="docs/screenshots/molten.jpg" alt="Molten"></a><br><b><a href="docs/plugins/Molten.md">Molten</a></b><br><sub>Melts any sound into something warm and fat (HEAT, DRIP, WOBBLE).</sub></td>
-<td width="33%" valign="top"><a href="docs/plugins/Swarm.md"><img src="docs/screenshots/swarm.jpg" alt="Swarm"></a><br><b><a href="docs/plugins/Swarm.md">Swarm</a></b><br><sub>A granular organism: the sound becomes a living cloud of grains.</sub></td>
+<td width="33%" valign="top"><a href="docs/plugins/Swarm.md"><img src="docs/screenshots/swarm.jpg" alt="Swarm"></a><br><b><a href="docs/plugins/Swarm.md">Swarm</a></b> ⭐<br><sub>A granular organism: the sound becomes a living cloud of grains.</sub></td>
 </tr>
 <tr>
 <td width="33%" valign="top"><a href="docs/plugins/Vortex.md"><img src="docs/screenshots/vortex.jpg" alt="Vortex"></a><br><b><a href="docs/plugins/Vortex.md">Vortex</a></b><br><sub>The sound rises (or falls) forever: an endless Shepard spiral.</sub></td>
 <td width="33%" valign="top"><a href="docs/plugins/Poly-Board.md"><img src="docs/screenshots/polyboard.jpg" alt="Poly Board"></a><br><b><a href="docs/plugins/Poly-Board.md">Poly Board</a></b><br><sub>A pedalboard for your synth: 7 boutique pedals in any order, a tuner, MIDI footswitch.</sub></td>
+<td width="33%" valign="top"><a href="docs/plugins/Gate-Cat.md"><img src="docs/screenshots/gate.jpg" alt="Gate-Cat"></a><br><b><a href="docs/plugins/Gate-Cat.md">Gate-Cat</a></b><br><sub>Chops any sound into a rhythm: 16 steps you draw, swing, a filter that opens with the steps.</sub></td>
 </tr>
 </table>
 

@@ -1948,6 +1948,29 @@ void testVortex()
 }
 
 /** Poly Board: a stereo effect; every preset passes a saw through, clean. */
+/** Gate-Cat: a stereo effect that chops a steady sound into on / off steps. */
+void testGateCat()
+{
+    std::cout << "\n== Gate-Cat ==" << std::endl;
+    auto fx = loadPlugin (GATECAT_VST3);
+    if (fx == nullptr) { ++failures; return; }
+    check (! fx->getPluginDescription().isInstrument && fx->getTotalNumInputChannels() == 2, "Gate-Cat is a stereo effect");
+    check (fx->getNumPrograms() == 16 && fx->getProgramName (0) == "Trance Pulse", "Gate-Cat has its 16 presets");
+    fx->setCurrentProgram (0);
+    fx->prepareToPlay (sampleRate, blockSize);
+    juce::AudioBuffer<float> audio (2, blockSize);
+    float lo = 1.0f, hi = 0.0f;
+    for (int b = 0; b < 200; ++b)
+    {
+        for (int i = 0; i < blockSize; ++i) { audio.setSample (0, i, 0.4f); audio.setSample (1, i, 0.4f); }
+        juce::MidiBuffer midi;
+        fx->processBlock (audio, midi);
+        if (b > 20) { lo = juce::jmin (lo, audio.getMagnitude (0, blockSize)); hi = juce::jmax (hi, audio.getMagnitude (0, blockSize)); }
+    }
+    check (hi > 0.2f && hi <= 1.0f && lo < hi * 0.5f, "Gate-Cat chops a steady sound (" + juce::String (lo, 2) + " .. " + juce::String (hi, 2) + ")");
+    fx->releaseResources();
+}
+
 void testPolyBoard()
 {
     std::cout << "\n== Poly Board ==" << std::endl;
@@ -2077,6 +2100,7 @@ int main()
     testVortex();
     testCrypt();
     testPolyBoard();
+    testGateCat();
 
     std::cout << "\n" << (failures == 0 ? "ALL TESTS PASSED" : juce::String (failures) + " TEST(S) FAILED") << std::endl;
     return failures == 0 ? 0 : 1;
