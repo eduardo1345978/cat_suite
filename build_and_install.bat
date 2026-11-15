@@ -12,21 +12,21 @@ if not exist "%CMAKE%" set "CMAKE=cmake"
 set "LOG=%~dp0build_log.txt"
 set "SETTINGS=%~dp0build_settings.txt"
 
-rem colours (Windows 10+)
+rem colours (Windows 10+). Not "CD": that name is the current folder, which Visual Studio's set-up reads
 for /f %%a in ('echo prompt $E^| cmd') do set "E=%%a"
-set "C0=%E%[0m" & set "CT=%E%[38;5;215m" & set "CD=%E%[38;5;245m" & set "CG=%E%[38;5;114m" & set "CR=%E%[38;5;203m" & set "CY=%E%[38;5;222m"
+set "C0=%E%[0m" & set "CT=%E%[38;5;215m" & set "CM=%E%[38;5;245m" & set "CG=%E%[38;5;114m" & set "CR=%E%[38;5;203m" & set "CY=%E%[38;5;222m"
 
 echo.
 echo %CT%      /\_/\    %C0%  CAT SUITE  -  build ^& install
-echo %CT%     ( o.o )   %C0%%CD%  every Cat, compiled on your PC%C0%
+echo %CT%     ( o.o )   %C0%%CM%  every Cat, compiled on your PC%C0%
 echo %CT%      ^> ^^ ^<    %C0%
 echo.
 
 rem ---- the newest code from GitHub (when this folder is a git clone)
 if exist ".git\" (
     where git >nul 2>&1 && (
-        echo %CD%Getting the newest code from GitHub...%C0%
-        git pull --ff-only > "%TEMP%\cat_git.txt" 2>&1 && (findstr /c:"Already up to date" "%TEMP%\cat_git.txt" >nul && echo %CD%   already up to date%C0% || echo %CG%   updated%C0%) || (echo %CY%   could not update ^(changed files here?^) - building what is here%C0%)
+        echo %CM%Getting the newest code from GitHub...%C0%
+        git pull --ff-only > "%TEMP%\cat_git.txt" 2>&1 && (findstr /c:"Already up to date" "%TEMP%\cat_git.txt" >nul && echo %CM%   already up to date%C0% || echo %CG%   updated%C0%) || (echo %CY%   could not update ^(changed files here?^) - building what is here%C0%)
         echo.
     )
 )
@@ -43,7 +43,7 @@ if not "%~1"=="" (
     goto :answered
 )
 
-echo %CY%How much of the CPU?%C0%  %CD%less = you can keep using the PC, it just takes longer%C0%
+echo %CY%How much of the CPU?%C0%  %CM%less = you can keep using the PC, it just takes longer%C0%
 echo    1 = 25%%    2 = 50%%    3 = 75%%    4 = 100%%  (fastest)
 set "DEF=2"
 if "%PCT%"=="25" set "DEF=1"
@@ -55,13 +55,13 @@ if errorlevel 2 set "PCT=50"
 if errorlevel 3 set "PCT=75"
 if errorlevel 4 set "PCT=100"
 echo.
-echo %CY%Build the Pro versions too?%C0%  %CD%Y = twice as long (every Cat again with the Pro panel), N = only the Cats%C0%
+echo %CY%Build the Pro versions too?%C0%  %CM%Y = twice as long (every Cat again with the Pro panel), N = only the Cats%C0%
 set "DEFP=N"
 if /i "%PRO%"=="yes" set "DEFP=Y"
 choice /c YN /n /t 15 /d %DEFP% /m "   Y / N (15 s, then %DEFP%): "
 if errorlevel 2 (set "PRO=no") else (set "PRO=yes")
 echo.
-echo %CY%Which Cats?%C0%  %CD%only one = much faster when you are fixing one%C0%
+echo %CY%Which Cats?%C0%  %CM%only one = much faster when you are fixing one%C0%
 echo    1 = all    2 = only the recommended (Chord, Patt, Orbit, Sing, Glide, Swarm)    3 = only one (type its name)
 set "DEFW=1"
 if /i "%WHAT%"=="recommended" set "DEFW=2"
@@ -98,8 +98,8 @@ if /i not "%WHAT%"=="all" (
 )
 
 echo.
-echo %CD%  CPU:%C0% %JOBS% of %NUMBER_OF_PROCESSORS% threads (%PCT%%%), low priority   %CD%Pro versions:%C0% %PRO%   %CD%Cats:%C0% %WHAT%
-echo %CD%  log:%C0% %LOG%
+echo %CM%  CPU:%C0% %JOBS% of %NUMBER_OF_PROCESSORS% threads (%PCT%%%), low priority   %CM%Pro versions:%C0% %PRO%   %CM%Cats:%C0% %WHAT%
+echo %CM%  log:%C0% %LOG%
 echo.
 for /f %%s in ('powershell -NoProfile -Command "[DateTimeOffset]::Now.ToUnixTimeSeconds()"') do set "T0=%%s"
 
@@ -121,17 +121,17 @@ if defined VCVARS (
     set "GEN=-G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_MAKE_PROGRAM=!NINJA!""
     rem a build folder made by the other (Visual Studio) generator can't be reused: start it fresh, once
     if exist "build\CMakeCache.txt" findstr /c:"CMAKE_GENERATOR:INTERNAL=Visual Studio" "build\CMakeCache.txt" >nul && (
-        echo %CD%   switching to the faster Ninja build: the first build starts from scratch%C0%
+        echo %CM%   switching to the faster Ninja build: the first build starts from scratch%C0%
         rmdir /s /q build
     )
-    echo %CD%   fast mode: Ninja, no link-time optimisation%C0%
+    echo %CM%   fast mode: Ninja, no link-time optimisation%C0%
 ) else (
-    echo %CD%   Ninja not found - the normal Visual Studio build%C0%
+    echo %CM%   Ninja not found - the normal Visual Studio build%C0%
 )
 "%CMAKE%" -B build !GEN! -DCAT_BUILD_TESTS=ON -DCAT_BUILD_PRO=%PROFLAG% -DCAT_LTO=OFF >> "%LOG%" 2>&1 || goto :fail
 
 echo === Build === >> "%LOG%"
-echo %CT%[2/4]%C0% Compiling...  %CD%(the first time takes long; next time only what changed)%C0%
+echo %CT%[2/4]%C0% Compiling...  %CM%(the first time takes long; next time only what changed)%C0%
 rem JOBS files at once: MSBuild builds JOBS projects side by side and _CL_=/MP1 makes each compiler use one
 rem thread (JUCE asks for /MP = every core; the _CL_ options come last and win). Low priority keeps the PC usable.
 set "_CL_=/MP1"
@@ -142,7 +142,7 @@ set "_CL_="
 
 echo === Tests === >> "%LOG%"
 if /i not "%WHAT%"=="all" (
-    echo %CT%[3/4]%C0% %CD%Tests skipped ^(they need every Cat - build all to run them^)%C0%
+    echo %CT%[3/4]%C0% %CM%Tests skipped ^(they need every Cat - build all to run them^)%C0%
     goto :install
 )
 echo %CT%[3/4]%C0% Testing every Cat in a pretend DAW...
