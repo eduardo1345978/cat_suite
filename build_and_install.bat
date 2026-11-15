@@ -105,7 +105,30 @@ for /f %%s in ('powershell -NoProfile -Command "[DateTimeOffset]::Now.ToUnixTime
 
 echo === Configure === > "%LOG%"
 echo %CT%[1/4]%C0% Preparing...
-"%CMAKE%" -B build -A x64 -DCAT_BUILD_TESTS=ON -DCAT_BUILD_PRO=%PROFLAG% >> "%LOG%" 2>&1 || goto :fail
+rem Faster builds at home: Ninja (spreads single files over the cores, instead of whole projects) and no
+rem link-time optimisation (CAT_LTO=OFF: the plug-ins are a few % slower, the build much faster).
+rem Ninja and the compiler come with Visual Studio; vcvars64.bat puts them on the PATH.
+set "GEN=-A x64"
+set "VCVARS="
+for %%v in ("C:\Program Files\Microsoft Visual Studio\18\Community" "C:\Program Files\Microsoft Visual Studio\2022\Community") do (
+    if not defined VCVARS if exist "%%~v\VC\Auxiliary\Build\vcvars64.bat" if exist "%%~v\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe" (
+        set "VCVARS=%%~v\VC\Auxiliary\Build\vcvars64.bat"
+        set "NINJA=%%~v\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
+    )
+)
+if defined VCVARS (
+    call "!VCVARS!" >> "%LOG%" 2>&1
+    set "GEN=-G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_MAKE_PROGRAM=!NINJA!""
+    rem a build folder made by the other (Visual Studio) generator can't be reused: start it fresh, once
+    if exist "build\CMakeCache.txt" findstr /c:"CMAKE_GENERATOR:INTERNAL=Visual Studio" "build\CMakeCache.txt" >nul && (
+        echo %CD%   switching to the faster Ninja build: the first build starts from scratch%C0%
+        rmdir /s /q build
+    )
+    echo %CD%   fast mode: Ninja, no link-time optimisation%C0%
+) else (
+    echo %CD%   Ninja not found - the normal Visual Studio build%C0%
+)
+"%CMAKE%" -B build !GEN! -DCAT_BUILD_TESTS=ON -DCAT_BUILD_PRO=%PROFLAG% -DCAT_LTO=OFF >> "%LOG%" 2>&1 || goto :fail
 
 echo === Build === >> "%LOG%"
 echo %CT%[2/4]%C0% Compiling...  %CD%(the first time takes long; next time only what changed)%C0%

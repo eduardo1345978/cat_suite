@@ -33,7 +33,10 @@ if ($Errors) {
         # D:\...\Source\File.cpp(123,5): error C2065: 'x': undeclared identifier [D:\...\build\GateCat\GateCat.vcxproj]
         if ($l -match '([^\\/]+\.(cpp|h|c|mm))\((\d+)(,\d+)?\):\s*(fatal\s+)?error\s+\w+:\s*(.+?)\s*(\[(.+\\)?([^\\]+?)\.vcxproj\])?\s*$') {
             $cat = if ($Matches[9]) { $Matches[9] -replace '_(VST3|Standalone|SharedCode)$', '' } else { '?' }
-            $msg = "{0,-14} {1} line {2}: {3}" -f $cat, $Matches[1], $Matches[3], $Matches[6]
+            $what = "{0} line {1}: {2}" -f $Matches[1], $Matches[3], $Matches[6]
+            # Ninja doesn't name the project: take the Cat from the folder (effects\GateCat\Source\...)
+            if ($cat -eq '?' -and $l -match '[\\/](midi|instruments|effects|apps|Shared|Tests)[\\/](\w+)') { $cat = if ($Matches[1] -in 'Shared', 'Tests') { $Matches[1] } else { $Matches[2] } }
+            $msg = "{0,-14} {1}" -f $cat, $what
         }
         elseif ($l -match 'error LNK\d+:\s*(.+?)\s*(\[(.+\\)?([^\\]+?)\.vcxproj\])?\s*$') {
             $cat = if ($Matches[4]) { $Matches[4] } else { '?' }
@@ -91,16 +94,23 @@ $start = Get-Date
 $width = 28
 $seen = @{}
 $file = ''
+$ninjaDone = 0; $ninjaTotal = 0
 while (-not $p.HasExited) {
     Start-Sleep -Milliseconds 700
     if (Test-Path $out) {
         foreach ($l in (Get-Content -LiteralPath $out -ErrorAction SilentlyContinue)) {
-            if ($l -match '^\s*(\S+)\.vcxproj -> ') { $seen[$Matches[1]] = 1 }
+            # Ninja: "[12/340] Building CXX object GateCat/.../PluginEditor.cpp.obj" - the exact count
+            if ($l -match '^\[(\d+)/(\d+)\]\s*(.*)$') {
+                $ninjaDone = [int]$Matches[1]; $ninjaTotal = [int]$Matches[2]
+                if ($Matches[3] -match '([\w\-]+\.(cpp|c|mm))\.(obj|o)\b') { $file = $Matches[1] }
+            }
+            # Visual Studio: "Name.vcxproj -> ..." when a project is finished, the file names while compiling
+            elseif ($l -match '^\s*(\S+)\.vcxproj -> ') { $seen[$Matches[1]] = 1 }
             elseif ($l -match '^\s+([\w\-]+\.(cpp|c|mm))\s*$') { $file = $Matches[1] }
         }
     }
-    $done = [math]::Min($seen.Count, $total)
-    $pct = [math]::Min(99, [int](100 * $done / $total))
+    if ($ninjaTotal -gt 0) { $pct = [math]::Min(99, [int](100 * $ninjaDone / $ninjaTotal)) }
+    else { $pct = [math]::Min(99, [int](100 * [math]::Min($seen.Count, $total) / $total)) }
     $el = ((Get-Date) - $start).TotalSeconds
     # the time left: from the last build of the same kind, and (once it is under way) from the speed so far
     $eta = 'estimating...'

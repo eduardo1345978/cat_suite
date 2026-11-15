@@ -11,6 +11,14 @@ set(CAT_PLUGIN_FORMATS VST3 Standalone CACHE STRING "Plug-in formats to build")
 option(CAT_SOUND_STANDALONE "Always build the sound-making plug-ins as standalone apps too" ON)
 # Every plug-in also as "<Name> Pro" (target <Target>Pro): the same sound, a plain panel with every parameter,
 # exact numbers, meters, CPU and A/B (Shared/Source/ProEditor.h). VST3 only.
+# Link-time optimisation: a few % faster plug-ins, but every plug-in's last step (the link) takes much longer.
+# The releases (CI) keep it ON; build_and_install.bat turns it OFF for quick builds at home.
+option(CAT_LTO "Link-time optimisation (slower builds)" ON)
+if(CAT_LTO)
+    set(CAT_LTO_FLAGS juce::juce_recommended_lto_flags)
+else()
+    set(CAT_LTO_FLAGS "")
+endif()
 option(CAT_BUILD_PRO "Also build the Pro version of every plug-in" ON)
 
 # The targets of a plug-in: itself, and its Pro version when that is built (for per-plug-in extras in CMakeLists).
@@ -115,7 +123,7 @@ function(cat_add_midi_plugin target)
                 juce::juce_audio_utils
             PUBLIC
                 juce::juce_recommended_config_flags
-                juce::juce_recommended_lto_flags
+                ${CAT_LTO_FLAGS}
                 juce::juce_recommended_warning_flags)
     endforeach()
 endfunction()
@@ -171,7 +179,7 @@ function(cat_add_synth_plugin target)
                 juce::juce_audio_utils
             PUBLIC
                 juce::juce_recommended_config_flags
-                juce::juce_recommended_lto_flags
+                ${CAT_LTO_FLAGS}
                 juce::juce_recommended_warning_flags)
     endforeach()
 endfunction()
@@ -238,7 +246,7 @@ function(cat_add_fx_plugin target)
                 juce::juce_audio_utils
             PUBLIC
                 juce::juce_recommended_config_flags
-                juce::juce_recommended_lto_flags
+                ${CAT_LTO_FLAGS}
                 juce::juce_recommended_warning_flags)
     endforeach()
 endfunction()

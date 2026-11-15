@@ -60,6 +60,6 @@ foreach(_t IN LISTS _variants)
             juce::juce_dsp
         PUBLIC
             juce::juce_recommended_config_flags
-            juce::juce_recommended_lto_flags
+            ${CAT_LTO_FLAGS}
             juce::juce_recommended_warning_flags)
 endforeach()
