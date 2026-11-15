@@ -9,3 +9,5 @@ out/
 .DS_Store
 CatBox/library/
 _catbox_key/
+build_settings.txt
+build_times.txt
