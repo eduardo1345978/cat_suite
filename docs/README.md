@@ -31,6 +31,7 @@
 | [**Muse-Cat**](plugins/Muse-Cat.md) | Writes whole songs (or endless music) and plays them. |
 | [**Glitch-Cat**](plugins/Glitch-Cat.md) | Every note falls apart into a swarm of glitching bugs. |
 | [**Negative**](plugins/Negative.md) | A photo you can hear: photo to spectrogram to sound. |
+| [**Halo-Cat**](plugins/Halo-Cat.md) | A singing choir with planets that ring bells: hold one key for a whole progression. |
 
 ### Effects
 

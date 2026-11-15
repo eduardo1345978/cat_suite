@@ -1971,6 +1971,30 @@ void testGateCat()
     fx->releaseResources();
 }
 
+/** Halo-Cat: an instrument - one key held sings a chord with bells. */
+void testHaloCat()
+{
+    std::cout << "\n== Halo-Cat ==" << std::endl;
+    auto syn = loadPlugin (HALOCAT_VST3);
+    if (syn == nullptr) { ++failures; return; }
+    check (syn->getPluginDescription().isInstrument && syn->getTotalNumOutputChannels() == 2, "Halo-Cat is a stereo instrument");
+    check (syn->getNumPrograms() == 12 && syn->getProgramName (0) == "Halo", "Halo-Cat has its 12 presets");
+    syn->setCurrentProgram (0);
+    syn->prepareToPlay (sampleRate, blockSize);
+    juce::AudioBuffer<float> audio (2, blockSize);
+    float pk = 0.0f;
+    for (int b = 0; b < 300; ++b)
+    {
+        juce::MidiBuffer midi;
+        if (b == 0) midi.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+        audio.clear();
+        syn->processBlock (audio, midi);
+        pk = juce::jmax (pk, audio.getMagnitude (0, blockSize));
+    }
+    check (pk > 0.01f && pk <= 1.0f, "Halo-Cat sings a held key (peak " + juce::String (pk, 2) + ")");
+    syn->releaseResources();
+}
+
 void testPolyBoard()
 {
     std::cout << "\n== Poly Board ==" << std::endl;
@@ -2101,6 +2125,7 @@ int main()
     testCrypt();
     testPolyBoard();
     testGateCat();
+    testHaloCat();
 
     std::cout << "\n" << (failures == 0 ? "ALL TESTS PASSED" : juce::String (failures) + " TEST(S) FAILED") << std::endl;
     return failures == 0 ? 0 : 1;
