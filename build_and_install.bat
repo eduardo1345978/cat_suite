@@ -117,14 +117,18 @@ set "NINJA=%VS%\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
 if not defined VS goto :vsgen
 if not exist "%NINJA%" goto :vsgen
 call "%VS%\VC\Auxiliary\Build\vcvars64.bat" >> "%LOG%" 2>&1
+echo [step] vcvars done >> "%LOG%"
 set "GEN=-G Ninja -DCMAKE_BUILD_TYPE=Release"
 set "NINJAARG=-DCMAKE_MAKE_PROGRAM=%NINJA%"
 rem a build folder made by the other (Visual Studio) generator can't be reused: start it fresh, once
 if not exist "build\CMakeCache.txt" goto :fastmsg
+echo [step] build folder checked >> "%LOG%"
 findstr /c:"CMAKE_GENERATOR:INTERNAL=Visual Studio" "build\CMakeCache.txt" >nul || goto :fastmsg
+echo [step] build folder checked >> "%LOG%"
 echo %CM%   switching to the faster Ninja build: this first build starts from scratch%C0%
 rmdir /s /q build
 :fastmsg
+echo [step] build folder checked >> "%LOG%"
 echo %CM%   fast mode: Ninja, no link-time optimisation%C0%
 goto :configure
 :vsgen
