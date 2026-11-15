@@ -15,6 +15,7 @@ if ($total -lt 1) { $total = 1 }
 
 $p = Start-Process -FilePath $Cmake -ArgumentList @('--build', 'build', '--config', 'Release', '--parallel', "$Jobs") `
                    -NoNewWindow -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+$null = $p.Handle                     # keeps the exit code readable later (a PowerShell quirk)
 try { $p.PriorityClass = 'BelowNormal' } catch {}
 
 $start = Get-Date
@@ -41,6 +42,7 @@ while (-not $p.HasExited) {
 }
 $p.WaitForExit()
 $code = $p.ExitCode
+if ($null -eq $code) { $code = 1 }
 $done = $seen.Count
 if ($code -eq 0) {
     [Console]::Write("`r   [{0}] 100%  {1}/{1} parts  {2:mm\:ss}  {3,-28}" -f ('#' * $width), [math]::Max($done, $total), ((Get-Date) - $start), 'done')
