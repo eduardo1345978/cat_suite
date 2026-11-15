@@ -178,9 +178,10 @@ endfunction()
 
 # An audio effect (Echo-Cat): audio in -> audio out, no MIDI.
 # MIDI_OUT: the effect also sends MIDI (Hum-Cat: the notes it heard).
+# STANDALONE: the effect is also an app of its own (Poly Board: plug the synth into the sound card).
 function(cat_add_fx_plugin target)
-    cmake_parse_arguments(ARG "MIDI_OUT" "PRODUCT_NAME;PLUGIN_CODE;DESCRIPTION;CATEGORIES" "SOURCES" ${ARGN})
-    _cat_formats(_formats FALSE)
+    cmake_parse_arguments(ARG "MIDI_OUT;STANDALONE" "PRODUCT_NAME;PLUGIN_CODE;DESCRIPTION;CATEGORIES" "SOURCES" ${ARGN})
+    _cat_formats(_formats ${ARG_STANDALONE})
     if(ARG_MIDI_OUT)
         set(_midi_out TRUE)
         set(_cats Fx Analyzer)

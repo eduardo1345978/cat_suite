@@ -1,5 +1,5 @@
 # Poly Board: a pedalboard for a synth (Behringer Poly D): drive, compressor, filter, phaser, chorus, delay, reverb
-cat_add_fx_plugin(PolyBoard
+cat_add_fx_plugin(PolyBoard STANDALONE
     PRODUCT_NAME "Poly-Board"
     PLUGIN_CODE  Pbd1
     DESCRIPTION  "A pedalboard for your synth: drive, compressor, filter, phaser, chorus, delay, reverb - in any order"
