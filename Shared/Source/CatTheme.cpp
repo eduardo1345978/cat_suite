@@ -157,6 +157,12 @@ namespace
             t.button = ButtonStyle::Glow; t.corner = 8.0f;
             font (t, PlayfairDisplayBoldItalic_ttf, PlayfairDisplayBoldItalic_ttfSize, 1.0f);
         }
+        else if (p.startsWith ("gate"))       // Gate-Cat: a path of torii gates at night - ink black, one vermilion
+        {
+            t = make ("Torii", 0xff0c0b0f, 0xff121116, 0xff17151c, 0xff1d1b22, 0xff2f2b36, 0xffece6dc, 0xff7d7688, 0xffe3482f);
+            t.button = ButtonStyle::Flat; t.corner = 6.0f;
+            font (t, CormorantSCBold_ttf, CormorantSCBold_ttfSize, 1.1f);
+        }
         else if (p.startsWith ("swarm"))      // deep space: black, nebula violet, star dust
         {
             t = make ("Deep Field", 0xff05050b, 0xff0b0b16, 0xff12121f, 0xff1a1a2a, 0xff2a2a40, 0xffe9e6f5, 0xff8f8aa8, 0xffb9a6ff);

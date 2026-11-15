@@ -78,6 +78,27 @@ void GateCatProcessor::applyPreset (int index)
         if (auto* prm = apvts.getParameter (id)) prm->setValueNotifyingHost (prm->convertTo0to1 (v));
 }
 
+void GateCatProcessor::switchAB (int slot)
+{
+    if (slot == abSlot) return;
+    auto now = apvts.copyState();
+    if (abOther.isValid())
+    {
+        for (auto* prm : getParameters())
+            if (auto* rp = dynamic_cast<RangedAudioParameter*> (prm))
+            {
+                auto child = abOther.getChildWithProperty ("id", rp->getParameterID());
+                if (child.isValid())
+                {
+                    const float v = (float) child.getProperty ("value");
+                    rp->beginChangeGesture(); rp->setValueNotifyingHost (rp->convertTo0to1 (v)); rp->endChangeGesture();
+                }
+            }
+    }
+    abOther = now;
+    abSlot = slot;
+}
+
 const String GateCatProcessor::getProgramName (int i)
 {
     return isPositiveAndBelow (i, (int) presets().size()) ? String (presets()[(size_t) i].name) : String();

@@ -52,6 +52,11 @@ public:
           [this] (int i) { applyPreset (i); updateHostDisplay (ChangeDetails().withProgramChanged (true)); },
           [this] { return currentPreset.load(); } } };
 
+    /** A / B: two settings to compare; the one not shown is kept here */
+    int abSlot = 0;
+    juce::ValueTree abOther;
+    void switchAB (int slot);
+
     static juce::String stepId (int k) { return "step" + juce::String (k + 1); }
     gate::Settings currentSettings() const;
 

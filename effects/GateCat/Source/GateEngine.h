@@ -46,6 +46,7 @@ public:
     /** where the gate is now (for the screen) */
     std::atomic<int> stepNow { 0 };
     std::atomic<float> gainNow { 1.0f };
+    std::atomic<float> peakL { 0.0f }, peakR { 0.0f };   // the output level of the last block (for the meters)
 
     /** the step index and how far into it (0..1) at a position in beats, with swing */
     static std::pair<int, double> stepAt (double beats, const Settings&) noexcept;

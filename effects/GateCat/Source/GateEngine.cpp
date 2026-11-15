@@ -93,6 +93,8 @@ void Engine::process (juce::AudioBuffer<float>& buffer, const Settings& s)
         if (chans > 1) r[i] = (x[1] + (y[1] - x[1]) * m) * o;
     }
     if (! s.playing) ownBeats = beats;
+    peakL = buffer.getMagnitude (0, 0, n);
+    peakR = buffer.getMagnitude (chans - 1, 0, n);
     stepNow = lastStep;
     gainNow = env;
 }
