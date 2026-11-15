@@ -119,7 +119,10 @@ if not exist "%NINJA%" goto :vsgen
 rem vcvars64 may change the current folder (to %USERPROFILE%\source) - keep ours, and our log name
 set "VSCMD_START_DIR=%~dp0"
 set "KEEPLOG=%LOG%"
-call "%VS%\VC\Auxiliary\Build\vcvars64.bat" >> "%LOG%" 2>&1
+rem not into the log: vcvars64 leaves a helper running in the background that keeps holding the file it
+rem writes to ("The process cannot access the file because it is being used by another process")
+call "%VS%\VC\Auxiliary\Build\vcvars64.bat" > nul 2>&1
+where cl >nul 2>&1 || (echo %CR%   the Visual Studio compiler was not found%C0% & goto :fail)
 cd /d "%~dp0"
 set "LOG=%KEEPLOG%"
 echo [step] vcvars done >> "%LOG%"
