@@ -42,6 +42,7 @@ if ($Errors) {
             $cat = if ($Matches[4]) { $Matches[4] } else { '?' }
             $msg = "{0,-14} linking: {1}" -f $cat, $Matches[1]
         }
+        elseif ($l -match "ninja: error: unknown target '([^']+)'") { $msg = "No Cat called '" + ($Matches[1] -replace '(Pro)?_VST3$', '') + "' - check the spelling (e.g. Gate-Cat, Crypt, Poly Board)" }
         elseif ($l -match 'MSB1009|Project file does not exist') { $msg = "No Cat with that name - check the spelling (e.g. Gate-Cat, Crypt, Poly Board)" }
         elseif ($l -match '^\s*\[FAIL\]\s*(.+)$') { $msg = "test failed:    " + $Matches[1] }
         elseif ($l -match '^FAIL\s+(.+)$') { $msg = "test failed:    " + $Matches[1] }
@@ -63,6 +64,16 @@ $timesFile = Join-Path $root 'build_times.txt'
 
 # how many parts: all = every project CMake made (not its helpers); some Cats = about 2 each + the shared parts
 $targetList = @($Targets -split '\s+' | Where-Object { $_ })
+# Ninja's target names are case-sensitive ("gate-cat" -> GateCat_VST3): take the spelling of the plug-in's folder
+if ($targetList.Count -gt 0) {
+    $folders = @{}
+    foreach ($d in Get-ChildItem -Path (Join-Path $root 'midi'), (Join-Path $root 'instruments'), (Join-Path $root 'effects') -Directory -ErrorAction SilentlyContinue) {
+        $folders[$d.Name.ToLower()] = $d.Name
+    }
+    $targetList = @($targetList | ForEach-Object {
+        if ($_ -match '^(.+?)(Pro)?_VST3$' -and $folders.ContainsKey($Matches[1].ToLower())) { $folders[$Matches[1].ToLower()] + $Matches[2] + '_VST3' } else { $_ }
+    })
+}
 if ($targetList.Count -gt 0) {
     $total = 2 * $targetList.Count + 2
 } else {
