@@ -15,14 +15,17 @@
 class BoxArt : public juce::Component
 {
 public:
+    explicit BoxArt (HeroCatProcessor& p) : processor (p) {}
     void paint (juce::Graphics&) override;
     void tick();
     void forge();                  // the CRAFT animation: a flash and sparks from the sword
 
 private:
+    HeroCatProcessor& processor;
     struct Spark { float x, y, vx, vy, life; };
-    std::vector<Spark> sparks;
-    int frame = 0;
+    std::vector<Spark> sparks, coins;
+    int frame = 0, seenLog = 0;
+    float scroll = 0.0f, jump = 0.0f, jumpV = 0.0f;
     float flash = 0.0f;
     juce::Random rng;
 };
@@ -107,9 +110,10 @@ private:
     HeroCatProcessor& processor;
     int tab = 0;
     cat::PresetBar presetBar { processor.presetManager, "" };
-    BoxArt art;
+    BoxArt art { processor };
     CraftButton craftButton;
-    RetroButton undo { "UNDO" }, dice { "DICE" }, clear { "CLEAR" };
+    RetroButton undo { "UNDO" }, dice { "DICE" }, clear { "CLEAR" }, quest { "QUEST" }, newSong { "NEW SONG" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> questAttach;
     std::array<std::unique_ptr<DesktopIcon>, 4> icons;
     std::array<std::unique_ptr<RetroButton>, 4> tabs;
     LcdScreen lcd { processor };

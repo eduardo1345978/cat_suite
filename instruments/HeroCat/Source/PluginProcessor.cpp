@@ -53,6 +53,7 @@ AudioProcessorValueTreeState::ParameterLayout HeroCatProcessor::createLayout()
         AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v * v * 120.0f)) + " ms"; })));
     toggle ("voiceLead", "Voice Leading", true);
     toggle ("midiOut", "Send MIDI", true);
+    toggle ("quest", "Quest", false);
     // the arp
     choice ("arpMode", "Arp", hero::arpModeNames(), 0);
     choice ("rate", "Arp Rate", hero::rateNames(), 2);
@@ -114,7 +115,7 @@ void HeroCatProcessor::applyPreset (int index)
     const auto& pr = presets()[(size_t) index];
     for (auto* prm : getParameters())
         if (auto* rp = dynamic_cast<RangedAudioParameter*> (prm))
-            if (rp->getParameterID() != "output" && rp->getParameterID() != "midiOut") rp->setValueNotifyingHost (rp->getDefaultValue());
+            if (rp->getParameterID() != "output" && rp->getParameterID() != "midiOut" && rp->getParameterID() != "quest") rp->setValueNotifyingHost (rp->getDefaultValue());
     for (auto& [id, v] : pr.values)
         if (auto* prm = apvts.getParameter (id)) prm->setValueNotifyingHost (prm->convertTo0to1 (v));
     if (pr.pattern != nullptr)
@@ -259,6 +260,7 @@ hero::Settings HeroCatProcessor::settings() const
     s.lfoShape = c ("lfoShape"); s.lfoTarget = c ("lfoTarget"); s.lfoRate = p ("lfoRate"); s.lfoDepth = p ("lfoDepth");
     s.drive = p ("drive"); s.crush = p ("crush"); s.chorus = p ("chorus"); s.delay = p ("delay"); s.reverb = p ("reverb"); s.width = p ("width");
     s.outDb = p ("output");
+    s.quest = p ("quest") > 0.5f; s.questSeed = questSeed.load();
     s.bpm = lastBpm;
     return s;
 }
@@ -293,6 +295,7 @@ void HeroCatProcessor::getStateInformation (MemoryBlock& dest)
     for (auto& x : engine.pattern) pat << String (x.load(), 2) << " ";
     state.setProperty ("pattern", pat.trim(), nullptr);
     state.setProperty ("craftName", craftName, nullptr);
+    state.setProperty ("questSeed", questSeed.load(), nullptr);
     if (auto xml = state.createXml()) copyXmlToBinary (*xml, dest);
 }
 
@@ -308,6 +311,8 @@ void HeroCatProcessor::setStateInformation (const void* data, int size)
         state.removeProperty ("pattern", nullptr);
         craftName = state.getProperty ("craftName", "").toString();
         state.removeProperty ("craftName", nullptr);
+        questSeed = (int) state.getProperty ("questSeed", 1);
+        state.removeProperty ("questSeed", nullptr);
         apvts.replaceState (state);
     }
 }

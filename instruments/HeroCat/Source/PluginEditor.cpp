@@ -72,6 +72,25 @@ constexpr int heroY = horizon - 12 - 14 * heroPx;
 void BoxArt::tick()
 {
     ++frame;
+    // QUEST: the world scrolls by, the hero jumps on every melody note and a coin pops out
+    const bool questOn = processor.apvts.getRawParameterValue ("quest")->load() > 0.5f;
+    const int pos = processor.engine.logPos.load();
+    if (questOn)
+    {
+        scroll += 2.0f;
+        bool newNote = false;
+        for (int k = jmax (seenLog, pos - 8); k < pos; ++k)
+        {
+            const int n = processor.engine.noteLog[(size_t) (k & 63)].load() & 0xff;
+            if (n >= 60) newNote = true;               // a melody note (the chords are lower)
+        }
+        if (newNote && jump < 4.0f) { jumpV = 4.2f; coins.push_back ({ (float) (heroX + 22), (float) heroY - 10.0f, 0.0f, -1.6f, 1.0f }); }
+    }
+    seenLog = pos;
+    jump += jumpV; jumpV -= 0.7f;
+    if (jump <= 0.0f) { jump = 0.0f; jumpV = 0.0f; }
+    for (auto& c : coins) { c.y += c.vy; c.life -= 0.035f; }
+    coins.erase (std::remove_if (coins.begin(), coins.end(), [] (const Spark& c) { return c.life <= 0.0f; }), coins.end());
     flash *= 0.85f;
     for (auto& s : sparks) { s.x += s.vx; s.y += s.vy; s.vy += 0.25f; s.life -= 0.025f; }
     sparks.erase (std::remove_if (sparks.begin(), sparks.end(), [] (const Spark& s) { return s.life <= 0.0f; }), sparks.end());
@@ -81,7 +100,7 @@ void BoxArt::tick()
 void BoxArt::forge()
 {
     flash = 1.0f;
-    const float tipX = (float) (heroX + 12 * heroPx + 2), tipY = (float) heroY + 2.0f;     // the sword's tip
+    const float tipX = (float) (heroX + 12 * heroPx + 2), tipY = (float) heroY + 2.0f - jump;     // the sword's tip
     for (int i = 0; i < 70; ++i)
     {
         const float a = rng.nextFloat() * MathConstants<float>::twoPi, sp = 1.5f + rng.nextFloat() * 6.0f;
@@ -117,11 +136,12 @@ void BoxArt::paint (Graphics& g)
     g.setColour (Colour (0xff2a0f3d));
     for (int x = 0; x < W; x += px)
     {
-        const int h = 30 + (int) (22.0f * std::sin ((float) x * 0.021f) + 14.0f * std::sin ((float) x * 0.057f + 1.0f));
+        const float wx = (float) x + scroll * 0.3f;
+        const int h = 30 + (int) (22.0f * std::sin (wx * 0.021f) + 14.0f * std::sin (wx * 0.057f + 1.0f));
         g.fillRect (x, horizon - h, px, h);
     }
     g.setColour (Colour (0xff1a0828));
-    const int cx = 228;
+    const int cx = (int) std::fmod (298.0f - scroll * 0.6f + 10000.0f * (float) (W + 140), (float) (W + 140)) - 70;   // (it scrolls by in QUEST)
     g.fillRect (cx, horizon - 64, 52, 64);
     for (int t : { -6, 22, 46 }) { g.fillRect (cx + t, horizon - 92, 14, 92); for (int k = 0; k < 3; ++k) g.fillRect (cx + t + k * 5, horizon - 98, 3, 6); }
     g.setColour (yellow.withAlpha (0.8f));
@@ -130,10 +150,11 @@ void BoxArt::paint (Graphics& g)
     g.setColour (Colour (0xff12052a)); g.fillRect (0, horizon, W, H - horizon);
     g.setColour (cyan.withAlpha (0.45f));
     for (int i = 0; i < 6; ++i) { const int y = horizon + (int) std::pow (2.0f, (float) i + 1.4f) + ((frame / 3) % 4); if (y < H) g.fillRect (0, y, W, 1); }
-    for (int i = -8; i <= 8; ++i) g.drawLine ((float) W * 0.5f + (float) i * 14.0f, (float) horizon, (float) W * 0.5f + (float) i * 90.0f, (float) H, 1.0f);
+    const float slide = std::fmod (scroll * 1.5f, 90.0f);
+    for (int i = -9; i <= 9; ++i) g.drawLine ((float) W * 0.5f + (float) i * 14.0f - slide * 14.0f / 90.0f, (float) horizon, (float) W * 0.5f + (float) i * 90.0f - slide, (float) H, 1.0f);
     // the rock and the hero on it, sword up
     g.setColour (Colour (0xff1a0828)); g.fillRect (44, horizon - 6, 90, 10); g.fillRect (52, horizon - 12, 70, 8);
-    pixelMap (g, heroMap, 14, heroX, heroY, heroPx, [this] (char c)
+    pixelMap (g, heroMap, 14, heroX, heroY - (int) jump / 2 * 2, heroPx, [this] (char c)
     {
         if (c == 'O') return yellow;
         if (c == 'Y') return Colour (0xffbff6ff).interpolatedWith (Colours::white, flash);
@@ -153,6 +174,21 @@ void BoxArt::paint (Graphics& g)
     // the publisher's badge in the corner
     g.setColour (Colour (0xffff3d3d)); g.fillRect (W - 74, H - 26, 66, 18);
     g.setColour (Colours::white); g.setFont (cat::lcdFont (16.0f)); g.drawText ("CAT SUITE", W - 74, H - 26, 66, 18, Justification::centred);
+
+    // the coins (QUEST)
+    for (auto& c : coins)
+    {
+        const int x = (int) c.x, y = (int) c.y;
+        g.setColour (Colour (0xffffd84a).withAlpha (jmin (1.0f, c.life * 1.5f))); g.fillRect (x, y, 8, 10);
+        g.setColour (Colour (0xffb07a00).withAlpha (jmin (1.0f, c.life * 1.5f))); g.fillRect (x + 3, y + 2, 2, 6);
+    }
+    if (processor.apvts.getRawParameterValue ("quest")->load() > 0.5f)
+    {
+        const int st = processor.engine.questStep.load();
+        g.setFont (cat::lcdFont (20.0f));
+        g.setColour (Colours::white);
+        g.drawText ("STAGE 1-" + String (st < 0 ? 1 : st / 8 + 1), 8, H - 26, 120, 20, Justification::centredLeft);
+    }
 
     // sparks and the flash of the CRAFT
     for (auto& s : sparks)
@@ -235,10 +271,11 @@ void RetroButton::paintButton (Graphics& g, bool over, bool down)
         bevel (g, r.withHeight (r.getHeight() + 2), true, selected ? winGrey : Colour (0xffa9a9a9));
         if (selected) { g.setColour (winGrey); g.fillRect (r.getX() + 2, r.getBottom() - 1, r.getWidth() - 4, 3); }
     }
-    else bevel (g, b, ! down, over ? Colour (0xffd2d2d2) : winGrey);
+    else bevel (g, b, ! (down || getToggleState()), getToggleState() ? Colour (0xffb8e8c0) : over ? Colour (0xffd2d2d2) : winGrey);
     g.setColour (isEnabled() ? Colours::black : winDark);
     g.setFont (cat::catFont (12.0f, true));
-    g.drawText (getName(), b.translated (down && ! tab ? 1 : 0, down && ! tab ? 1 : 0), Justification::centred);
+    const bool in = (down || getToggleState()) && ! tab;
+    g.drawText (getButtonText().isNotEmpty() ? getButtonText() : getName(), b.translated (in ? 1 : 0, in ? 1 : 0), Justification::centred);
 }
 
 //==============================================================================
@@ -292,6 +329,11 @@ void LcdScreen::paint (Graphics& g)
     }
     g.setFont (cat::lcdFont (22.0f));
     g.setColour (phosphor);
+    if (processor.apvts.getRawParameterValue ("quest")->load() > 0.5f)
+    {
+        const int st = processor.engine.questStep.load();
+        name = "QUEST  BAR " + String (st < 0 ? 1 : st / 8 + 1) + "/8  " + name;
+    }
     g.drawText ("> " + name.toUpperCase() + ((frame / 15) % 2 == 0 ? "_" : " "), 12, 4, (int) sc.getWidth() + 60, 24, Justification::centredLeft);
     const auto chord = processor.chordName();
     const auto right = Rectangle<int> ((int) sc.getRight() + 10, 18, b.getWidth() - (int) sc.getRight() - 20, b.getHeight() - 44);
@@ -391,6 +433,13 @@ HeroCatEditor::HeroCatEditor (HeroCatProcessor& p) : processor (p)
     addAndMakeVisible (undo);
     undo.setTooltip ("UNDO: back to the sound before the last CRAFT");
     undo.onClick = [this] { if (processor.undoCraft()) { lcd.message = "UNDONE"; lcd.messageFrames = 40; } };
+
+    quest.setClickingTogglesState (true);
+    quest.setTooltip ("QUEST: Hero-Cat plays a whole game theme by itself (8 bars: chords + a melody from a motif), with this sound, in the key and scale of the CHORD tab. Play along!");
+    questAttach = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, "quest", quest);
+    newSong.setTooltip ("NEW SONG: QUEST makes up another theme");
+    newSong.onClick = [this] { processor.newSong (rng); lcd.message = "NEW SONG!"; lcd.messageFrames = 40; };
+    for (auto* b : { &quest, &newSong }) addAndMakeVisible (*b);
 
     const char* tabNames[] = { "SOUND", "CHORD + ARP", "TEXTURE", "FX" };
     const char* iconNames[] = { "SOUND", "CHORDS", "TEXTURE", "FX" };
@@ -527,7 +576,9 @@ void HeroCatEditor::resized()
     presetBar.setBounds (684, 32, 410, 30);
     art.setBounds (90, 38, 304, 304);
     craftButton.setBounds (88, 352, 308, 86);
-    undo.setBounds (88, 446, 308, 28);
+    undo.setBounds (88, 446, 96, 28);
+    quest.setBounds (190, 446, 96, 28);
+    newSong.setBounds (292, 446, 104, 28);
     for (int i = 0; i < 4; ++i)
     {
         icons[(size_t) i]->setBounds (6, 40 + i * 96, 78, 72);

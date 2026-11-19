@@ -441,6 +441,91 @@ void Engine::arpTick (const Settings& s, MidiBuffer* out, int pos, int stepSampl
 }
 
 //==============================================================================
+std::vector<Engine::SongNote> Engine::makeSong (int seed, int key, int scale)
+{
+    // A tiny composer, like an old game's: a chord progression, and a melody built from a motif.
+    //   bars 1-2: the motif (A)      bars 3-4: A again, moved to fit the new chords
+    //   bars 5-6: something new (B)  bars 7-8: A, then a long note home (the cadence)
+    // Melody notes on the strong eighths (1 and 3 of the bar) are chord notes; the others step up or down the scale.
+    Random r (seed * 7919 + 13);
+    const auto& sc = scales()[(size_t) jlimit (0, (int) scales().size() - 1, scale)];
+    const int n = (int) sc.size();
+    auto noteOf = [&] (int deg, int base) { const int o = (int) std::floor ((double) deg / n); return base + key + 12 * o + sc[(size_t) (deg - o * n)]; };
+
+    static const int progs[][4] = { { 0, 4, 5, 3 }, { 3, 4, 2, 5 }, { 5, 3, 0, 4 }, { 0, 5, 3, 4 }, { 0, 3, 4, 0 }, { 5, 4, 3, 4 } };
+    const auto& pr = progs[r.nextInt (6)];
+    int bars[8];
+    for (int b = 0; b < 8; ++b) bars[b] = pr[b % 4] % n;
+    bars[7] = 0;                                                       // the last bar goes home
+
+    static const char* rhythms[] = { "x.x.xx.x", "x..xx.x.", "x.xxx.x.", "xx.x.x..", "x.x.x.x.", "x...x.xx", "x.x..xx." };
+    std::vector<SongNote> out;
+    std::vector<int> motifDeg;          // the motif's notes (scale steps), to repeat later
+    const char* motifR[2] = { rhythms[r.nextInt (7)], rhythms[r.nextInt (7)] };
+    const char* bR[2] = { rhythms[r.nextInt (7)], rhythms[r.nextInt (7)] };
+    int prev = n + 2;                   // start around the 3rd above middle
+    for (int b = 0; b < 8; ++b)
+    {
+        // the chord: 3 notes low, played on the bar
+        const int d = bars[b];
+        for (int k = 0; k < 3; ++k) out.push_back ({ b * 8, noteOf (d + 2 * k, 48), 8, 0.42f, true });
+
+        const bool isA = b == 0 || b == 1 || b == 2 || b == 3 || b == 6;
+        const char* rh = (b == 7) ? "x......." : isA ? motifR[b % 2] : bR[b % 2];
+        int idx = 0;
+        for (int st = 0; st < 8; ++st)
+        {
+            if (rh[st] != 'x') continue;
+            int deg;
+            const bool strong = st == 0 || st == 4;
+            if (b == 7) deg = n;                                           // home: the key note, an octave up
+            else if (isA && b != 0 && b != 1 && idx < (int) motifDeg.size() / 2 + 4 && ! motifDeg.empty())
+            {
+                // the motif again: the same shape, nudged to the nearest chord note on strong beats
+                deg = motifDeg[(size_t) ((b % 2) * 4 + idx) % motifDeg.size()];
+                if (strong)
+                {
+                    int best = deg, bestD = 99;
+                    for (int c = -n; c <= 2 * n; ++c)
+                        if (((c - d) % n + n) % n == 0 || ((c - d - 2) % n + n) % n == 0 || ((c - d - 4) % n + n) % n == 0)
+                            if (std::abs (c - deg) < bestD) { bestD = std::abs (c - deg); best = c; }
+                    deg = best;
+                }
+            }
+            else if (strong)
+            {
+                int best = prev, bestD = 99;                               // the chord note nearest the last note
+                for (int c = 0; c <= 2 * n; ++c)
+                    if (((c - d) % n + n) % n == 0 || ((c - d - 2) % n + n) % n == 0 || ((c - d - 4) % n + n) % n == 0)
+                    {
+                        const int dd = std::abs (c - prev) + (r.nextInt (3) == 0 ? 1 : 0);
+                        if (dd < bestD && c != prev) { bestD = dd; best = c; }
+                    }
+                deg = best;
+            }
+            else deg = prev + (r.nextBool() ? 1 : -1) * (r.nextInt (4) == 0 ? 2 : 1);
+            deg = jlimit (1, 2 * n, deg);
+            if (b < 2) motifDeg.push_back (deg);
+            int len = 1;
+            while (st + len < 8 && rh[st + len] != 'x') ++len;
+            out.push_back ({ b * 8 + st, noteOf (deg, 60), len, strong ? 0.95f : 0.75f, false });
+            prev = deg;
+            ++idx;
+        }
+    }
+    return out;
+}
+
+void Engine::questTick (const Settings& s, MidiBuffer* out, int pos, int stepSamples)
+{
+    const int step = (int) (qStep % 64);
+    questStep = step;
+    for (auto& n : song)
+        if (n.step == step)
+            start (n.note, n.vel * (n.chord ? 1.0f : arpVel), -3, jmax (64, (int) (n.len * stepSamples * (n.chord ? 0.95f : 0.85f))), 1.0f, s, out, pos);
+}
+
+//==============================================================================
 float Engine::texture (const Settings& s, float& r)
 {
     float l = 0.0f; r = 0.0f;
@@ -555,6 +640,12 @@ void Engine::process (AudioBuffer<float>& buffer, const MidiBuffer& midiIn, Midi
     const int delaySamples = jlimit (1, (int) delayL.size() - 2, (int) (0.75 * 60.0 / s.bpm * sr));
     const float fb = 0.3f + 0.4f * s.delay;
 
+    if (s.quest && (songSeed != s.questSeed || songKey != s.key || songScale != s.scale))
+    {
+        song = makeSong (s.questSeed, s.key, s.scale);     // (only when the seed, key or scale change)
+        songSeed = s.questSeed; songKey = s.key; songScale = s.scale;
+    }
+
     auto it = midiIn.cbegin();
     float peak = 0.0f;
     for (int i = 0; i < numSamples; ++i)
@@ -597,6 +688,31 @@ void Engine::process (AudioBuffer<float>& buffer, const MidiBuffer& midiIn, Midi
                 nextStep = stepTime (stepIndex);
                 if (nextStep < beats) { stepIndex = (long long) std::ceil (beats / stepBeats); nextStep = stepTime (stepIndex); }
             }
+        }
+
+        // 3b. QUEST: it plays its own game theme (in time with the DAW, or on its own)
+        if (s.quest)
+        {
+            if (! questWas) { qBeats = 0.0; qStep = 0; qNext = 0.0; questWas = true; }
+            if (s.playing)
+            {
+                const double host = s.ppq + i * beatInc;
+                if (std::abs (host - qBeats - beatInc) > 0.02) { qStep = (long long) std::ceil (host / 0.5 - 1e-6); qNext = qStep * 0.5; }
+                qBeats = host;
+            }
+            else qBeats += beatInc;
+            if (qBeats + 1e-9 >= qNext)
+            {
+                questTick (s, out, i, (int) (0.5 / beatInc));
+                ++qStep;
+                qNext = qStep * 0.5;
+                if (qNext < qBeats) { qStep = (long long) std::ceil (qBeats / 0.5); qNext = qStep * 0.5; }
+            }
+        }
+        else if (questWas)
+        {
+            questWas = false; questStep = -1;
+            for (auto& v : voices) if (v.active && v.owner == -3) release (v, out, i);
         }
 
         // 4. the LFO (and CHAOS's slow wander)

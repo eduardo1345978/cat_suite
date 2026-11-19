@@ -3,6 +3,7 @@
 #include "PluginProcessor.h"
 #include <cstdio>
 #include <set>
+#include <algorithm>
 
 using namespace juce;
 
@@ -80,6 +81,30 @@ static String list (const std::vector<int>& v) { String s; for (int x : v) s << 
 int main()
 {
     ScopedJuceInitialiser_GUI gui;
+
+    // HERO_WAV=<file> [HERO_PRESET=n] [HERO_SEED=n]: write 2 rounds of a QUEST song to a WAV (to listen to) and stop
+    if (auto wav = SystemStats::getEnvironmentVariable ("HERO_WAV", {}); wav.isNotEmpty())
+    {
+        auto p = make (SystemStats::getEnvironmentVariable ("HERO_PRESET", "0").getIntValue());
+        p->questSeed = SystemStats::getEnvironmentVariable ("HERO_SEED", "1").getIntValue();
+        set (*p, "quest", 1.0f);
+        File f (wav); f.deleteFile();
+        WavAudioFormat fmt;
+        std::unique_ptr<AudioFormatWriter> w (fmt.createWriterFor (f.createOutputStream().release(), sr, 2, 16, {}, 0));
+        AudioBuffer<float> buf (2, block);
+        Head head;
+        p->setPlayHead (&head);
+        for (int pos = 0; pos < (int) (34.0 * sr); pos += block)
+        {
+            head.ppq = pos / sr * 2.0;
+            MidiBuffer midi;
+            p->processBlock (buf, midi);
+            w->writeFromAudioSampleBuffer (buf, 0, block);
+        }
+        p->setPlayHead (nullptr);
+        std::printf ("wrote %s\n", wav.toRawUTF8());
+        return 0;
+    }
 
     // --- Chord Lock
     {
@@ -207,6 +232,39 @@ int main()
         const auto name = p->craftName;
         p->craft (r);
         check (p->undoCraft() && p->settings().srcA == before && p->craftName == name && ! p->canUndo(), "UNDO brings back the sound before the CRAFT");
+    }
+
+    // --- QUEST: a whole theme by itself, in the scale, the same seed = the same song, another seed = another song
+    {
+        int inScale = 0, total = 0;
+        for (int seed = 1; seed <= 40; ++seed)
+            for (int scale : { 0, 1, 6 })
+            {
+                const auto song = hero::Engine::makeSong (seed, 2, scale);
+                for (auto& n : song)
+                {
+                    static const std::vector<std::vector<int>> sc { { 0, 2, 4, 5, 7, 9, 11 }, { 0, 2, 3, 5, 7, 8, 10 }, {}, {}, {}, {}, { 0, 1, 5, 7, 8 } };
+                    const int pc = ((n.note - 2) % 12 + 12) % 12;
+                    ++total; inScale += std::find (sc[(size_t) scale].begin(), sc[(size_t) scale].end(), pc) != sc[(size_t) scale].end() ? 1 : 0;
+                }
+            }
+        check (total > 0 && inScale == total, "QUEST songs: every note is in the scale (" + String (inScale) + " / " + String (total) + ")");
+        auto a = hero::Engine::makeSong (5, 0, 0), b = hero::Engine::makeSong (5, 0, 0), c = hero::Engine::makeSong (6, 0, 0);
+        auto same = [] (const std::vector<hero::Engine::SongNote>& x, const std::vector<hero::Engine::SongNote>& y)
+        { if (x.size() != y.size()) return false; for (size_t i = 0; i < x.size(); ++i) if (x[i].note != y[i].note || x[i].step != y[i].step) return false; return true; };
+        check (same (a, b) && ! same (a, c), "QUEST: the same seed makes the same song, another seed another one");
+        int melody = 0, lastStep = -1; bool endsHome = false;
+        for (auto& n : a) if (! n.chord) { ++melody; if (n.step > lastStep) { lastStep = n.step; endsHome = n.note % 12 == 0; } }
+        check (melody >= 24 && endsHome, "QUEST: a real melody (" + String (melody) + " notes) that ends on the key note");
+
+        auto p = make();
+        set (*p, "quest", 1.0f); set (*p, "reverb", 0.0f);
+        const auto r = run (*p, 16.0, {});                              // 8 bars at 120 BPM
+        check (r.finite && r.peak > 0.02f && r.peak <= 1.0f && r.noteOns.size() >= 40, "QUEST plays by itself: " + String ((int) r.noteOns.size()) + " notes in 8 bars");
+        set (*p, "quest", 0.0f);
+        run (*p, 1.0, {});
+        const auto quiet = run (*p, 1.0, {});
+        check (quiet.noteOns.empty(), "QUEST off: it stops");
     }
 
     // --- the state comes back, with the pattern

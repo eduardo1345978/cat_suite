@@ -61,6 +61,9 @@ public:
     bool undoCraft();
     bool canUndo() const { return undoState.isValid(); }
     juce::String craftName;
+    /** QUEST: a new made-up game theme (the seed of its tiny composer) */
+    void newSong (juce::Random& r) { questSeed = 1 + r.nextInt (99999); }
+    std::atomic<int> questSeed { 1 };
 
     /** the settings as the engine sees them (for tests) */
     hero::Settings settings() const;

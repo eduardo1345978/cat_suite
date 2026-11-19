@@ -61,6 +61,7 @@ struct Settings
     float outDb = 0.0f;
     double bpm = 120.0, ppq = 0.0;
     bool playing = false;
+    bool quest = false; int questSeed = 1;   // QUEST: Hero-Cat plays a whole made-up game theme by itself
 };
 
 class Engine
@@ -90,6 +91,12 @@ public:
     int voicesSounding() const;
 
     static constexpr int numVoices = 16;
+
+    /** QUEST: the song it made (8 bars of 8 eighth notes), for tests and the screen */
+    struct SongNote { int step, note, len; float vel; bool chord; };
+    std::vector<SongNote> song;
+    static std::vector<SongNote> makeSong (int seed, int key, int scale);
+    std::atomic<int> questStep { -1 };      // 0..63 while QUEST plays
 
 private:
     static constexpr int ksSize = 4096;
@@ -125,6 +132,7 @@ private:
     std::vector<int> arpSequence (const Settings&) const;
     void schedule (int wait, int note, float vel, int owner, int gate, float longRelease);
     void logNote (int note, float vel);
+    void questTick (const Settings&, juce::MidiBuffer* out, int pos, int stepSamples);
     void nameChord (const std::vector<int>&);
     float texture (const Settings&, float& r);
 
@@ -140,6 +148,8 @@ private:
     double beats = 0.0, nextStep = 0.0; long long stepIndex = 0; bool clockOn = false; double lastPpq = -1.0;
     int voiceCounter = 0;
     double lastHz = 0.0; float arpVel = 0.85f;
+    int songSeed = -1, songKey = -1, songScale = -1;
+    double qBeats = 0.0, qNext = 0.0; long long qStep = 0; bool questWas = false;
     juce::Random rng { 4242 };
 
     // modulation
