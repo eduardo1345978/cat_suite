@@ -53,6 +53,7 @@ String chordKindName (int k) { return isPositiveAndBelow (k, (int) kinds().size(
 Engine::Engine()
 {
     for (auto& a : noteLog) a = 0;
+    for (auto& a : scope) a = 0.0f;
     const float def[16] = { 1, 0, 0.6f, 0.6f, 1, 0, 0.6f, 0, 1, 0, 0.6f, 0.6f, 1, 0.6f, 0, 0.8f };
     for (int i = 0; i < 16; ++i) pattern[(size_t) i] = def[i];
 }
@@ -728,6 +729,9 @@ void Engine::process (AudioBuffer<float>& buffer, const MidiBuffer& midiIn, Midi
         }
         else { L[i] *= g; peak = jmax (peak, std::abs (L[i])); }
     }
+    int sp = scopePos.load();
+    for (int i = 0; i < numSamples; ++i, ++sp) scope[(size_t) (sp & 2047)].store (R != nullptr ? 0.5f * (L[i] + R[i]) : L[i], std::memory_order_relaxed);
+    scopePos = sp & 0x3fffffff;
     level = peak;
     lfoNow = (float) std::sin (twoPi * lfoPh) * s.lfoDepth;
     if (keysDown.empty() && pool.empty() && voicesSounding() == 0) chordRoot = -1;

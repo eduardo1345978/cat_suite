@@ -2,6 +2,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "ScaledEditor.h"
+#include <map>
 
 using namespace juce;
 
@@ -109,6 +110,7 @@ void HeroCatProcessor::applyPreset (int index)
 {
     if (! isPositiveAndBelow (index, (int) presets().size())) return;
     currentPreset = index;
+    craftName = {};
     const auto& pr = presets()[(size_t) index];
     for (auto* prm : getParameters())
         if (auto* rp = dynamic_cast<RangedAudioParameter*> (prm))
@@ -129,6 +131,99 @@ String HeroCatProcessor::chordName() const
     const int root = engine.chordRoot.load();
     if (root < 0) return {};
     return hero::keyNames()[root] + hero::chordKindName (engine.chordKind.load());
+}
+
+String HeroCatProcessor::craft (Random& r)
+{
+    // keep the sound from before, for UNDO
+    undoState = apvts.copyState();
+    for (int i = 0; i < 16; ++i) undoPattern[(size_t) i] = engine.pattern[(size_t) i].load();
+    undoName = craftName;
+
+    std::map<String, float> v;
+    auto between = [&r] (float a, float b) { return a + (b - a) * r.nextFloat(); };
+    auto chance = [&r] (float x) { return r.nextFloat() < x; };
+
+    // 1. the sounds: what kind of sound decides the envelope (plucks fall, pads swell, leads sing)
+    const int a = r.nextInt (hero::numSources);
+    v["srcA"] = (float) a;
+    const bool pluck = a == hero::Guitar || a == hero::Bell, pad = a == hero::Strings || a == hero::Choir;
+    v["srcB"] = chance (0.5f) ? 0.0f : (float) (1 + r.nextInt (hero::numSources));
+    v["mix"] = between (0.2f, 0.55f);
+    v["octB"] = chance (0.6f) ? 1.0f : chance (0.7f) ? 2.0f : chance (0.5f) ? 3.0f : 0.0f;
+    v["detune"] = between (0.15f, 0.6f);
+    v["cutoff"] = between (0.55f, 0.9f);
+    v["reso"] = between (0.0f, 0.4f);
+    v["envAmt"] = between (0.1f, 0.6f);
+    v["vibrato"] = pluck ? between (0.0f, 0.2f) : between (0.15f, 0.6f);
+    v["glide"] = ! pluck && ! pad && chance (0.3f) ? between (0.15f, 0.35f) : 0.0f;
+    v["attack"] = pad ? between (0.25f, 0.45f) : pluck ? between (0.0f, 0.04f) : between (0.02f, 0.12f);
+    v["decay"] = between (0.25f, 0.55f);
+    v["sustain"] = pluck ? between (0.1f, 0.5f) : between (0.55f, 0.9f);
+    v["release"] = pad ? between (0.45f, 0.7f) : between (0.25f, 0.55f);
+
+    // 2. chords: from a scale most of the time (it always fits the song)
+    v["chordMode"] = chance (0.35f) ? 0.0f : chance (0.7f) ? (float) (1 + r.nextInt (3)) : (float) (4 + r.nextInt (6));
+    v["key"] = (float) r.nextInt (12);
+    v["scale"] = chance (0.6f) ? (float) r.nextInt (2) : (float) r.nextInt (7);
+    v["strum"] = a == hero::Guitar ? between (0.3f, 0.6f) : chance (0.25f) ? between (0.1f, 0.35f) : 0.0f;
+
+    // 3. the arp: off half of the time, the waterfall more often than the others
+    if (chance (0.5f))
+    {
+        const int modes[] = { hero::ArpUp, hero::ArpUpDown, hero::ArpWaterfall, hero::ArpWaterfall, hero::ArpPattern, hero::ArpDown, hero::ArpRandom };
+        const int m = modes[r.nextInt (7)];
+        v["arpMode"] = (float) m;
+        static const int rates[] = { 1, 2, 2, 4, 5 };    // 1/8, 1/16 (twice as likely), 1/8T, 1/16T
+        v["rate"] = (float) (m == hero::ArpWaterfall ? 1 + r.nextInt (2) : rates[r.nextInt (5)]);
+        v["octaves"] = (float) r.nextInt (2);
+        v["gate"] = between (0.3f, 0.8f);
+        v["swing"] = chance (0.3f) ? between (0.15f, 0.45f) : 0.0f;
+        v["chaos"] = chance (0.6f) ? 0.0f : chance (0.75f) ? between (0.1f, 0.35f) : between (0.4f, 0.7f);
+        if (m == hero::ArpPattern) engine.randomisePattern (r);
+        if (v["chordMode"] < 0.5f) v["chordMode"] = 1.0f;          // an arp needs more than one note
+    }
+    else v["arpMode"] = 0.0f;
+
+    // 4. texture, LFO, effects
+    v["texture"] = chance (0.5f) ? (float) (1 + r.nextInt (5)) : 0.0f;
+    v["texLevel"] = between (0.3f, 0.6f);
+    if (chance (0.4f))
+    {
+        v["lfoShape"] = (float) r.nextInt (6);
+        static const int targets[] = { 0, 0, 1, 2, 3, 4 };   // cutoff twice as likely, never volume (it would pump)
+        v["lfoTarget"] = (float) targets[r.nextInt (6)];
+        v["lfoRate"] = between (0.2f, 6.0f);
+        v["lfoDepth"] = between (0.1f, 0.4f);
+    }
+    else v["lfoDepth"] = 0.0f;
+    v["drive"] = chance (0.25f) ? between (0.3f, 0.6f) : between (0.0f, 0.15f);
+    v["crush"] = chance (0.25f) ? between (0.1f, 0.35f) : 0.0f;
+    v["chorus"] = between (0.0f, 0.5f);
+    v["delay"] = between (0.1f, 0.45f);
+    v["reverb"] = between (0.2f, 0.65f);
+    v["width"] = between (0.2f, 0.6f);
+
+    for (auto& [id, x] : v)
+        if (auto* prm = apvts.getParameter (id)) prm->setValueNotifyingHost (prm->convertTo0to1 (x));
+    currentPreset = -1;
+
+    // 5. a name, like a track on a game's soundtrack
+    static const char* first[] = { "Crystal", "Neon", "Midnight", "Pixel", "Sakura", "Final", "Hidden", "Lost", "Turbo", "Sky", "Moon", "Sunset", "Frozen", "Golden", "Secret", "Haunted" };
+    static const char* second[] = { "Cave", "Castle", "Highway", "Garden", "Shrine", "Arcade", "Ocean", "Tower", "Forest", "Dungeon", "Station", "Village", "Temple", "Harbor" };
+    static const char* third[] = { "Theme", "Battle", "Ending", "Stage 2", "Loop", "Overture", "Save Room", "Credits", "Boss", "Waltz", "Chase", "Lullaby" };
+    craftName = String (first[r.nextInt (16)]) + " " + second[r.nextInt (14)] + " " + third[r.nextInt (12)];
+    return craftName;
+}
+
+bool HeroCatProcessor::undoCraft()
+{
+    if (! undoState.isValid()) return false;
+    apvts.replaceState (undoState);
+    for (int i = 0; i < 16; ++i) engine.pattern[(size_t) i] = undoPattern[(size_t) i];
+    craftName = undoName;
+    undoState = {};
+    return true;
 }
 
 HeroCatProcessor::HeroCatProcessor()
@@ -197,6 +292,7 @@ void HeroCatProcessor::getStateInformation (MemoryBlock& dest)
     String pat;
     for (auto& x : engine.pattern) pat << String (x.load(), 2) << " ";
     state.setProperty ("pattern", pat.trim(), nullptr);
+    state.setProperty ("craftName", craftName, nullptr);
     if (auto xml = state.createXml()) copyXmlToBinary (*xml, dest);
 }
 
@@ -210,6 +306,8 @@ void HeroCatProcessor::setStateInformation (const void* data, int size)
         for (int i = 0; i < 16 && i < pat.size(); ++i) engine.pattern[(size_t) i] = jlimit (0.0f, 1.0f, pat[i].getFloatValue());
         state.removeProperty ("preset", nullptr);
         state.removeProperty ("pattern", nullptr);
+        craftName = state.getProperty ("craftName", "").toString();
+        state.removeProperty ("craftName", nullptr);
         apvts.replaceState (state);
     }
 }

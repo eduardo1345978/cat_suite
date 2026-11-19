@@ -11,6 +11,8 @@
 - **Two sounds per note (A and B)**, mixed with **A / B**, B can be an octave lower or higher:
   - synth waves: **Saw Lead**, **Square**, **Supersaw**, **Chip Pulse**;
   - small physical models, no samples: **Guitar** (a plucked string), **Strings** (a bowed string), **Flute** (breath and a "chiff"), **Choir** ("Ah"), **Bell** (FM).
+- **CRAFT**: the big green button makes a whole new sound (sounds, chords, arp, texture, effects, all in combinations that work) with a made-up soundtrack name; **UNDO** goes back.
+- Looks like an old PC running a game: desktop icons open the tabs, the box art, a green LCD with an oscilloscope.
 - Filter with its own envelope, ADSR, **glide** and a **delayed vibrato** (the singer's wobble that comes in after a moment, like an anime lead).
 - **Chord Lock**: one key becomes a chord:
   - from the song's **key and scale** (Major, Minor, Dorian, Mixolydian, Harmonic minor, Pentatonic, Japanese In): triads, 7ths or the **anime add9**; keys outside the scale snap into it;

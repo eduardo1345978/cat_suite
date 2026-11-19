@@ -55,6 +55,13 @@ public:
 
     /** "Am7" - the chord sounding now, for the screen */
     juce::String chordName() const;
+    /** CRAFT: a whole new sound - every part picked at random, but only from combinations that sound good.
+        Returns its made-up name. undoCraft() goes back to the sound before it. (Message thread.) */
+    juce::String craft (juce::Random&);
+    bool undoCraft();
+    bool canUndo() const { return undoState.isValid(); }
+    juce::String craftName;
+
     /** the settings as the engine sees them (for tests) */
     hero::Settings settings() const;
 
@@ -64,6 +71,9 @@ private:
     int c (const char* id) const { return juce::roundToInt (p (id)); }
     cat::SafetyLimiter limiter;
     double lastBpm = 120.0;
+    juce::ValueTree undoState;
+    std::array<float, 16> undoPattern {};
+    juce::String undoName;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HeroCatProcessor)
 };

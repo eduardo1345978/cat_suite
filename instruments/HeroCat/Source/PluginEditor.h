@@ -5,25 +5,78 @@
 #include "CatWidgets.h"
 #include "PresetBar.h"
 
-/** The game screen: the chord's name, the notes falling as pixels, an "MP" bar for the level. */
-class ScreenView : public juce::Component
+/**
+    Hero-Cat's window looks like an old PC (Windows 98 era) running a game:
+    a desktop with icons (they open the tabs), the game's box art, a big green CRAFT button,
+    a red-framed window with tabs and a green LCD (oscilloscope, chord, the sound's name), keys at the bottom.
+*/
+
+/** The box art: a pixel sunset with a castle and the cat hero; sparks fly when you CRAFT. */
+class BoxArt : public juce::Component
 {
 public:
-    explicit ScreenView (HeroCatProcessor&);
     void paint (juce::Graphics&) override;
     void tick();
+    void forge();                  // the CRAFT animation: a flash and sparks from the sword
+
+private:
+    struct Spark { float x, y, vx, vy, life; };
+    std::vector<Spark> sparks;
+    int frame = 0;
+    float flash = 0.0f;
+    juce::Random rng;
+};
+
+/** The big glossy green button. */
+class CraftButton : public juce::Button
+{
+public:
+    CraftButton() : juce::Button ("CRAFT") {}
+    void paintButton (juce::Graphics&, bool over, bool down) override;
+};
+
+/** A desktop icon: a little pixel picture and its name; clicking it opens a tab. */
+class DesktopIcon : public juce::Button
+{
+public:
+    DesktopIcon (const juce::String& name, int kind) : juce::Button (name), kind (kind) {}
+    void paintButton (juce::Graphics&, bool over, bool down) override;
+    bool selected = false;
+
+private:
+    int kind;
+};
+
+/** A Windows 98 style tab or button (grey, bevelled). */
+class RetroButton : public juce::Button
+{
+public:
+    explicit RetroButton (const juce::String& name, bool isTab = false) : juce::Button (name), tab (isTab) {}
+    void paintButton (juce::Graphics&, bool over, bool down) override;
+    bool selected = false;
+
+private:
+    bool tab;
+};
+
+/** The green LCD: the oscilloscope, the chord, the sound's name, what the arp does. */
+class LcdScreen : public juce::Component
+{
+public:
+    explicit LcdScreen (HeroCatProcessor& p) : processor (p) {}
+    void paint (juce::Graphics&) override;
+    void tick();
+    juce::String message;          // a short line shown for a while (e.g. "CRAFTED!")
+    int messageFrames = 0;
 
 private:
     HeroCatProcessor& processor;
-    struct Pixel { float x, y, vy, life; juce::Colour c; int size; };
-    std::vector<Pixel> pixels;
-    struct Star { float x, y; int phase; };
-    std::vector<Star> stars;
-    int seenLog = 0, frame = 0;
+    std::array<float, 400> wave {};
     float meter = 0.0f;
+    int frame = 0;
 };
 
-/** The drawn arp pattern: 16 pixel columns, drag up / down for loudness, double-click on / off. */
+/** The drawn arp pattern on a small LCD: 16 columns, drag up / down for loudness, double-click on / off. */
 class PatternView : public juce::Component
 {
 public:
@@ -32,7 +85,6 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseDoubleClick (const juce::MouseEvent&) override;
-    void tick() { repaint(); }
 
 private:
     void setFrom (juce::Point<float>);
@@ -49,21 +101,29 @@ public:
 
 private:
     void timerCallback() override;
+    void showTab (int);
+    void doCraft();
 
     HeroCatProcessor& processor;
+    int tab = 0;
     cat::PresetBar presetBar { processor.presetManager, "" };
-    ScreenView screen { processor };
+    BoxArt art;
+    CraftButton craftButton;
+    RetroButton undo { "UNDO" }, dice { "DICE" }, clear { "CLEAR" };
+    std::array<std::unique_ptr<DesktopIcon>, 4> icons;
+    std::array<std::unique_ptr<RetroButton>, 4> tabs;
+    LcdScreen lcd { processor };
     PatternView pattern { processor };
-    juce::TextButton dice { "DICE" }, clear { "CLEAR" };
+    std::array<std::vector<juce::Component*>, 4> pages;
 
-    cat::ParamCombo srcA { processor.apvts, "srcA", "A", nullptr, 22 }, srcB { processor.apvts, "srcB", "B", nullptr, 22 },
-                    octB { processor.apvts, "octB", "oct", nullptr, 30 },
-                    chordMode { processor.apvts, "chordMode", "chord", nullptr, 50 }, key { processor.apvts, "key", "key", nullptr, 34 },
-                    scale { processor.apvts, "scale", "scale", nullptr, 42 },
-                    arpMode { processor.apvts, "arpMode", "arp", nullptr, 50 }, rate { processor.apvts, "rate", "rate", nullptr, 34 },
+    cat::ParamCombo srcA { processor.apvts, "srcA", "sound A", nullptr, 56 }, srcB { processor.apvts, "srcB", "sound B", nullptr, 56 },
+                    octB { processor.apvts, "octB", "B oct", nullptr, 42 },
+                    chordMode { processor.apvts, "chordMode", "chord", nullptr, 44 }, key { processor.apvts, "key", "key", nullptr, 30 },
+                    scale { processor.apvts, "scale", "scale", nullptr, 38 },
+                    arpMode { processor.apvts, "arpMode", "arp", nullptr, 44 }, rate { processor.apvts, "rate", "rate", nullptr, 34 },
                     octaves { processor.apvts, "octaves", "oct", nullptr, 30 },
-                    texture { processor.apvts, "texture", "texture", nullptr, 56 }, lfoShape { processor.apvts, "lfoShape", "lfo", nullptr, 34 },
-                    lfoTarget { processor.apvts, "lfoTarget", "to", nullptr, 22 };
+                    texture { processor.apvts, "texture", "texture", nullptr, 56 }, lfoShape { processor.apvts, "lfoShape", "LFO shape", nullptr, 70 },
+                    lfoTarget { processor.apvts, "lfoTarget", "LFO moves", nullptr, 70 };
     cat::LineSlider mix { processor.apvts, "mix", "A / B" }, detune { processor.apvts, "detune", "DETUNE" },
                     cutoff { processor.apvts, "cutoff", "CUTOFF" }, reso { processor.apvts, "reso", "RESO" },
                     envAmt { processor.apvts, "envAmt", "F.ENV" }, vibrato { processor.apvts, "vibrato", "VIBRATO" },
@@ -72,7 +132,7 @@ private:
                     glide { processor.apvts, "glide", "GLIDE" },
                     strum { processor.apvts, "strum", "STRUM" }, gate { processor.apvts, "gate", "GATE" },
                     swing { processor.apvts, "swing", "SWING" }, chaos { processor.apvts, "chaos", "CHAOS" },
-                    texLevel { processor.apvts, "texLevel", "TEXTURE" }, lfoRate { processor.apvts, "lfoRate", "LFO RATE" },
+                    texLevel { processor.apvts, "texLevel", "TEXTURE LEVEL" }, lfoRate { processor.apvts, "lfoRate", "LFO RATE" },
                     lfoDepth { processor.apvts, "lfoDepth", "LFO DEPTH" }, drive { processor.apvts, "drive", "DRIVE" },
                     crush { processor.apvts, "crush", "CRUSH" }, chorus { processor.apvts, "chorus", "CHORUS" },
                     delay { processor.apvts, "delay", "DELAY" }, reverb { processor.apvts, "reverb", "REVERB" },

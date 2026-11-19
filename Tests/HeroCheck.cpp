@@ -2,6 +2,7 @@
 // pattern rests, latch, in time with the DAW), MIDI out, every preset is safe, the state (with the pattern) comes back.
 #include "PluginProcessor.h"
 #include <cstdio>
+#include <set>
 
 using namespace juce;
 
@@ -184,6 +185,28 @@ int main()
         if (t == 4) run (*p, 0.3, { { 0.0, 60, true }, { 0.1, 60, false } });
         const auto r = run (*p, 20.0, {});
         check (r.finite && r.peak > 0.002f && r.peak < 1.0f, "texture " + hero::textureNames()[t] + " (peak " + String (r.peak, 3) + ")");
+    }
+
+    // --- CRAFT: many new sounds, every one plays safely; UNDO goes back
+    {
+        auto p = make();
+        Random r (77);
+        int good = 0, n = 60;
+        std::set<String> names;
+        for (int i = 0; i < n; ++i)
+        {
+            names.insert (p->craft (r));
+            p->engine.reset();
+            const auto res = run (*p, 1.2, { { 0.0, 60, true }, { 0.0, 64, true }, { 1.0, 60, false }, { 1.0, 64, false } });
+            if (res.finite && res.peak > 0.01f && res.peak <= 1.0f) ++good;
+            else std::printf ("     craft %d: %s peak %.3f\n", i, p->craftName.toRawUTF8(), res.peak);
+        }
+        check (good == n, "CRAFT: " + String (good) + " of " + String (n) + " new sounds play safely");
+        check ((int) names.size() > n / 2, "CRAFT names differ (" + String ((int) names.size()) + " names)");
+        const auto before = p->settings().srcA;
+        const auto name = p->craftName;
+        p->craft (r);
+        check (p->undoCraft() && p->settings().srcA == before && p->craftName == name && ! p->canUndo(), "UNDO brings back the sound before the CRAFT");
     }
 
     // --- the state comes back, with the pattern

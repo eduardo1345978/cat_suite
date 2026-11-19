@@ -82,6 +82,8 @@ public:
     std::atomic<float> level { 0.0f }, lfoNow { 0.0f };
     std::array<std::atomic<int>, 64> noteLog;   // note | velocity << 8, newest at logPos - 1
     std::atomic<int> logPos { 0 };
+    std::array<std::atomic<float>, 2048> scope;  // the last output samples (mono), for the oscilloscope
+    std::atomic<int> scopePos { 0 };
 
     /** the notes one key becomes (with the settings), for tests */
     std::vector<int> chordFor (int key, const Settings&, const std::vector<int>& previous) const;
