@@ -1,6 +1,6 @@
 # Cat Suite
 
-**Free music plug-ins and apps, each with its own cat.** Chords, patterns, drums, bass lines, choirs, singers, synths, tunings, granular clouds, lava, endless risers, photos you can hear: 25 plug-ins (VST3) for any DAW (Cubase, FL Studio, Ableton, Reaper, Bitwig, Studio One ...), plus apps that jam on their own.
+**Free music plug-ins and apps, each with its own cat.** Chords, patterns, drums, bass lines, choirs, singers, synths, tunings, granular clouds, lava, endless risers, photos you can hear, game-style leads: 26 plug-ins (VST3) for any DAW (Cubase, FL Studio, Ableton, Reaper, Bitwig, Studio One ...), plus apps that jam on their own.
 
 [![Windows](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-windows.yml/badge.svg)](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-windows.yml)
 [![Mac](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-mac.yml/badge.svg)](https://github.com/eduardo1345978/cat_suite/actions/workflows/build-mac.yml)
@@ -14,7 +14,7 @@
 | | | |
 |---|---|---|
 | **Windows 10 / 11** | **[Cat-Suite-Setup.exe](https://github.com/eduardo1345978/cat_suite/releases/latest/download/Cat-Suite-Setup.exe)** | installs and updates everything (plug-ins + apps) |
-| **macOS 11+** (Apple Silicon and Intel) | **[Cat-Suite-Mac.zip](https://github.com/eduardo1345978/cat_suite/releases/latest/download/Cat-Suite-Mac.zip)** | all 25 plug-ins, *Install Cat Suite.command* |
+| **macOS 11+** (Apple Silicon and Intel) | **[Cat-Suite-Mac.zip](https://github.com/eduardo1345978/cat_suite/releases/latest/download/Cat-Suite-Mac.zip)** | all 26 plug-ins, *Install Cat Suite.command* |
 | **Linux** (64-bit, 2022+) | **[Cat-Suite-Linux.tar.gz](https://github.com/eduardo1345978/cat_suite/releases/latest/download/Cat-Suite-Linux.tar.gz)** | all plug-ins + apps, `./install.sh` |
 
 Step by step, the other downloads and what to do when Windows warns: **[Install](docs/Install.md)**. Then **[Using it in your DAW](docs/DAW.md)**.
@@ -59,6 +59,7 @@ Step by step, the other downloads and what to do when Windows warns: **[Install]
 <tr>
 <td width="33%" valign="top"><a href="docs/plugins/Negative.md"><img src="docs/screenshots/negative.jpg" alt="Negative"></a><br><b><a href="docs/plugins/Negative.md">Negative</a></b><br><sub>A photo you can hear: photo to spectrogram to sound.</sub></td>
 <td width="33%" valign="top"><a href="docs/plugins/Halo-Cat.md"><img src="docs/screenshots/halo.jpg" alt="Halo-Cat"></a><br><b><a href="docs/plugins/Halo-Cat.md">Halo-Cat</a></b><br><sub>A singing choir with planets that ring bells: hold one key for a whole progression.</sub></td>
+<td width="33%" valign="top"><a href="docs/plugins/Hero-Cat.md"><img src="docs/screenshots/hero.jpg" alt="Hero-Cat"></a><br><b><a href="docs/plugins/Hero-Cat.md">Hero-Cat</a></b><br><sub>A lead synth for game and anime melodies: chord lock, a waterfall arp, chaos.</sub></td>
 
 </tr>
 </table>

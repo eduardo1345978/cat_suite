@@ -130,7 +130,11 @@ endfunction()
 
 # Sing-Cat makes sound: a real VST3 instrument (MIDI in, stereo audio out, no MIDI out).
 function(cat_add_synth_plugin target)
-    cmake_parse_arguments(ARG "" "PRODUCT_NAME;PLUGIN_CODE;DESCRIPTION" "SOURCES" ${ARGN})
+    cmake_parse_arguments(ARG "MIDI_OUT" "PRODUCT_NAME;PLUGIN_CODE;DESCRIPTION" "SOURCES" ${ARGN})
+    set(_midi_out FALSE)
+    if(ARG_MIDI_OUT)
+        set(_midi_out TRUE)    # it also sends the notes it plays (chords, arp) to the DAW
+    endif()
     _cat_formats(_formats TRUE)
 
     _cat_variants(_variants ${target})
@@ -151,7 +155,7 @@ function(cat_add_synth_plugin target)
             IS_SYNTH                   TRUE
             IS_MIDI_EFFECT             FALSE
             NEEDS_MIDI_INPUT           TRUE
-            NEEDS_MIDI_OUTPUT          FALSE
+            NEEDS_MIDI_OUTPUT          ${_midi_out}
             EDITOR_WANTS_KEYBOARD_FOCUS FALSE
             VST3_CATEGORIES            Instrument Synth
             COPY_PLUGIN_AFTER_BUILD    ${CAT_COPY_AFTER_BUILD})

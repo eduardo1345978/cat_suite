@@ -1995,6 +1995,34 @@ void testHaloCat()
     syn->releaseResources();
 }
 
+/** Hero-Cat: an instrument that also sends notes - one key with Chord Lock plays a chord and sends it as MIDI. */
+void testHeroCat()
+{
+    std::cout << "\n== Hero-Cat ==" << std::endl;
+    auto syn = loadPlugin (HEROCAT_VST3);
+    if (syn == nullptr) { ++failures; return; }
+    check (syn->getPluginDescription().isInstrument && syn->getTotalNumOutputChannels() == 2, "Hero-Cat is a stereo instrument");
+    check (syn->producesMidi(), "Hero-Cat can send MIDI");
+    check (syn->getNumPrograms() == 16 && syn->getProgramName (0) == "Hero Theme", "Hero-Cat has its 16 presets");
+    syn->setCurrentProgram (4);    // Rainy Tokyo Guitar: Chord Lock (7ths) + strum
+    syn->prepareToPlay (sampleRate, blockSize);
+    juce::AudioBuffer<float> audio (2, blockSize);
+    float pk = 0.0f;
+    int sent = 0;
+    for (int b = 0; b < 300; ++b)
+    {
+        juce::MidiBuffer midi;
+        if (b == 0) midi.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+        audio.clear();
+        syn->processBlock (audio, midi);
+        for (const auto m : midi) sent += m.getMessage().isNoteOn() ? 1 : 0;
+        pk = juce::jmax (pk, audio.getMagnitude (0, blockSize));
+    }
+    check (pk > 0.01f && pk <= 1.0f, "Hero-Cat plays a held key (peak " + juce::String (pk, 2) + ")");
+    check (sent == 4, "Hero-Cat sends the 4-note chord as MIDI (" + juce::String (sent) + ")");
+    syn->releaseResources();
+}
+
 void testPolyBoard()
 {
     std::cout << "\n== Poly Board ==" << std::endl;
@@ -2126,6 +2154,7 @@ int main()
     testPolyBoard();
     testGateCat();
     testHaloCat();
+    testHeroCat();
 
     std::cout << "\n" << (failures == 0 ? "ALL TESTS PASSED" : juce::String (failures) + " TEST(S) FAILED") << std::endl;
     return failures == 0 ? 0 : 1;
