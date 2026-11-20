@@ -192,7 +192,7 @@ endfunction()
 # MIDI_OUT: the effect also sends MIDI (Hum-Cat: the notes it heard).
 # STANDALONE: the effect is also an app of its own (Poly Board: plug the synth into the sound card).
 function(cat_add_fx_plugin target)
-    cmake_parse_arguments(ARG "MIDI_OUT;STANDALONE" "PRODUCT_NAME;PLUGIN_CODE;DESCRIPTION;CATEGORIES" "SOURCES" ${ARGN})
+    cmake_parse_arguments(ARG "MIDI_OUT;MIDI_IN;STANDALONE" "PRODUCT_NAME;PLUGIN_CODE;DESCRIPTION;CATEGORIES" "SOURCES" ${ARGN})
     _cat_formats(_formats ${ARG_STANDALONE})
     if(ARG_MIDI_OUT)
         set(_midi_out TRUE)
@@ -200,6 +200,10 @@ function(cat_add_fx_plugin target)
     else()
         set(_midi_out FALSE)
         set(_cats Fx Delay Reverb)
+    endif()
+    set(_midi_in FALSE)
+    if(ARG_MIDI_IN)
+        set(_midi_in TRUE)     # MIDI keys can play it (e.g. trigger effects)
     endif()
     if(ARG_CATEGORIES)
         set(_cats ${ARG_CATEGORIES})
@@ -222,7 +226,7 @@ function(cat_add_fx_plugin target)
             FORMATS                    ${_fmt}
             IS_SYNTH                   FALSE
             IS_MIDI_EFFECT             FALSE
-            NEEDS_MIDI_INPUT           FALSE
+            NEEDS_MIDI_INPUT           ${_midi_in}
             NEEDS_MIDI_OUTPUT          ${_midi_out}
             EDITOR_WANTS_KEYBOARD_FOCUS FALSE
             VST3_CATEGORIES            ${_cats}

@@ -1971,6 +1971,36 @@ void testGateCat()
     fx->releaseResources();
 }
 
+/** Chop-Cat: an effect that takes MIDI keys - a held key (D = REPEAT 1/32) glitches the sound. */
+void testChopCat()
+{
+    std::cout << "\n== Chop-Cat ==" << std::endl;
+    auto fx = loadPlugin (CHOPCAT_VST3);
+    if (fx == nullptr) { ++failures; return; }
+    check (! fx->getPluginDescription().isInstrument && fx->getTotalNumInputChannels() == 2, "Chop-Cat is a stereo effect");
+    check (fx->acceptsMidi(), "Chop-Cat takes MIDI (its pads)");
+    check (fx->getNumPrograms() == 24 && fx->getProgramName (0) == "Clean (pads only)", "Chop-Cat has its 24 presets");
+    fx->setCurrentProgram (0);
+    fx->prepareToPlay (sampleRate, blockSize);
+    juce::AudioBuffer<float> audio (2, blockSize);
+    float changed = 0.0f, through = 0.0f;
+    juce::Random r (4);
+    for (int b = 0; b < 400; ++b)
+    {
+        float in[2048];
+        for (int i = 0; i < blockSize; ++i) { in[i] = (r.nextFloat() - 0.5f) * 0.5f; audio.setSample (0, i, in[i]); audio.setSample (1, i, in[i]); }
+        juce::MidiBuffer midi;
+        if (b == 200) midi.addEvent (juce::MidiMessage::noteOn (1, 62, (juce::uint8) 100), 0);
+        fx->processBlock (audio, midi);
+        float d = 0.0f;
+        for (int i = 0; i < blockSize; ++i) d = juce::jmax (d, std::abs (audio.getSample (0, i) - in[i]));
+        if (b > 20 && b < 190) through = juce::jmax (through, d);
+        if (b > 240) changed = juce::jmax (changed, d);
+    }
+    check (through < 0.05f && changed > 0.1f, "Chop-Cat passes the sound, then a MIDI key glitches it (" + juce::String (through, 3) + " / " + juce::String (changed, 2) + ")");
+    fx->releaseResources();
+}
+
 /** Halo-Cat: an instrument - one key held sings a chord with bells. */
 void testHaloCat()
 {
@@ -2155,6 +2185,7 @@ int main()
     testGateCat();
     testHaloCat();
     testHeroCat();
+    testChopCat();
 
     std::cout << "\n" << (failures == 0 ? "ALL TESTS PASSED" : juce::String (failures) + " TEST(S) FAILED") << std::endl;
     return failures == 0 ? 0 : 1;

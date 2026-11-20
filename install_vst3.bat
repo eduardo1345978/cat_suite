@@ -12,7 +12,7 @@ if not exist "%DEST%" mkdir "%DEST%"
 if not exist "%APPS%\Hub Cats" mkdir "%APPS%\Hub Cats"
 set "LOG=%~dp0install_log.txt"
 echo Installing to %DEST% > "%LOG%"
-for %%C in (Chord Patt Bend Drum Orbit Sing Bass Glide Talk Life Muse Echo Micro Phase Hum Glitch Gate Halo Hero) do call :plugin %%C
+for %%C in (Chord Patt Bend Drum Orbit Sing Bass Glide Talk Life Muse Echo Micro Phase Hum Glitch Gate Halo Hero Chop) do call :plugin %%C
 call :fx Molten
 call :fx Swarm
 call :fx Vortex

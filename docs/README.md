@@ -33,6 +33,7 @@
 | [**Negative**](plugins/Negative.md) | A photo you can hear: photo to spectrogram to sound. |
 | [**Halo-Cat**](plugins/Halo-Cat.md) | A singing choir with planets that ring bells: hold one key for a whole progression. |
 | [**Hero-Cat**](plugins/Hero-Cat.md) | A lead synth for game and anime melodies: chord lock, a waterfall arp, chaos, textures. |
+| [**Chop-Cat**](plugins/Chop-Cat.md) | Glitches drums in time: stutter, rolls, reverse, tape stop, scatter - live pads, a sequencer and chaos. |
 
 ### Effects
 
